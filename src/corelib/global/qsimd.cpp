@@ -18,7 +18,7 @@
 #include <assert.h>
 
 #ifdef Q_OS_LINUX
-#  include "../testlib/3rdparty/valgrind_p.h"
+#  include "../testlib/3rdparty/valgrind/valgrind_p.h"
 #endif
 
 #define QT_FUNCTION_TARGET_BASELINE
@@ -103,12 +103,7 @@ static const int features_indices[] = { 0 };
 #endif
 // end generated
 
-#if defined (Q_OS_NACL)
-static inline uint detectProcessorFeatures()
-{
-    return 0;
-}
-#elif defined(Q_PROCESSOR_ARM)
+#if defined(Q_PROCESSOR_ARM)
 static inline quint64 detectProcessorFeatures()
 {
     quint64 features = 0;
@@ -156,7 +151,7 @@ static inline quint64 detectProcessorFeatures()
         features |= CpuFeatureAES;
     return features;
 #endif
-#if defined(__ARM_NEON__) || defined(__ARM_NEON)
+#if defined(__ARM_NEON__)
     features |= CpuFeatureNEON;
 #endif
 #if defined(__ARM_FEATURE_CRC32)
@@ -566,11 +561,6 @@ QT_FUNCTION_TARGET_BASELINE
 uint64_t QT_MANGLE_NAMESPACE(qDetectCpuFeatures)()
 {
     auto minFeatureTest = minFeature;
-#if defined(Q_OS_LINUX) && defined(Q_PROCESSOR_ARM_64)
-    // Yocto hard-codes CRC32+AES on. Since they are unlikely to be used
-    // automatically by compilers, we can just add runtime check.
-    minFeatureTest &= ~(CpuFeatureAES|CpuFeatureCRC32);
-#endif
 #if defined(Q_PROCESSOR_X86_64) && defined(cpu_feature_shstk)
     // Controlflow Enforcement Technology (CET) is an OS-assisted
     // hardware-feature, meaning the CPUID bit may be disabled if the OS
@@ -766,7 +756,7 @@ QT_FUNCTION_TARGET(RDRND) qsizetype qRandomCpu(void *buffer, qsizetype count) no
     ptr = qt_random_rdrnd(ptr, end);
     return ptr - reinterpret_cast<unsigned *>(buffer);
 }
-#elif defined(Q_PROCESSOR_X86) && !defined(Q_OS_NACL) && !defined(Q_PROCESSOR_ARM)
+#elif defined(Q_PROCESSOR_X86) && !defined(Q_PROCESSOR_ARM)
 static bool checkRdrndWorks() noexcept { return false; }
 #endif // Q_PROCESSOR_X86 && RDRND
 

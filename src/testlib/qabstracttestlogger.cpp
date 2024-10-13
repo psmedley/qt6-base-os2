@@ -9,6 +9,8 @@
 #include <QtCore/qbytearray.h>
 #include <QtCore/qstring.h>
 
+#include <cstdio>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -145,6 +147,19 @@ QAbstractTestLogger::~QAbstractTestLogger()
     if (stream != stdout)
         fclose(stream);
     stream = nullptr;
+}
+
+/*!
+    Returns true if the logger supports repeated test runs.
+
+    Repetition of test runs is disabled by default, and can be enabled only for
+    test loggers that support it. Even if the logger may create syntactically
+    correct test reports, log-file analyzers may assume that test names are
+    unique within one report file.
+*/
+bool QAbstractTestLogger::isRepeatSupported() const
+{
+    return false;
 }
 
 /*!
@@ -392,7 +407,7 @@ int qt_asprintf(QTestCharBuffer *str, const char *format, ...)
 
     do {
         va_start(ap, format);
-        res = qvsnprintf(str->data(), size, format, ap);
+        res = std::vsnprintf(str->data(), size, format, ap);
         va_end(ap);
         // vsnprintf() reliably '\0'-terminates
         Q_ASSERT(res < 0 || str->data()[res < size ? res : size - 1] == '\0');

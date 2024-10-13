@@ -10,6 +10,7 @@
 #endif
 #include "private/qgregoriancalendar_p.h"
 #include "private/qnumeric_p.h"
+#include "private/qtenvironmentvariables_p.h"
 #if QT_CONFIG(timezone)
 #include "private/qtimezoneprivate_p.h"
 #endif
@@ -17,6 +18,11 @@
 #include <time.h>
 #ifdef Q_OS_WIN
 #  include <qt_windows.h>
+#endif
+
+#ifdef __GLIBC__ // Extends struct tm with some extra fields:
+#define HAVE_TM_GMTOFF // tm_gmtoff is the UTC offset.
+#define HAVE_TM_ZONE // tm_zone is the zone abbreviation.
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -37,6 +43,35 @@ constexpr inline qint64 tmSecsWithinDay(const struct tm &when)
     return (when.tm_hour * MINS_PER_HOUR + when.tm_min) * SECS_PER_MIN + when.tm_sec;
 }
 
+/* Call mktime() and make sense of the result.
+
+   This packages the call to mktime() with the needed determination of whether
+   that succeeded and whether the call has materially perturbed, including
+   normalizing, the struct tm it was passed (as opposed to merely filling in
+   details).
+*/
+class MkTimeResult
+{
+    // mktime()'s return on error; or last second of 1969 UTC:
+    static constexpr time_t maybeError = -1;
+    inline bool meansEnd1969();
+    bool changed(const struct tm &prior) const;
+
+public:
+    struct tm local = {}; // Describes the local time in familiar form.
+    time_t utcSecs = maybeError; // Seconds since UTC epoch.
+    bool good = false; // Ignore the rest unless this is true.
+    bool adjusted = true; // Is local at odds with prior ?
+    MkTimeResult() { local.tm_isdst = -1; }
+
+    // Note: the calls to qMkTime() and meansEnd1969() potentially modify local.
+    explicit MkTimeResult(const struct tm &prior)
+    : local(prior), utcSecs(qMkTime(&local)),
+      good(utcSecs != maybeError || meansEnd1969()),
+      adjusted(changed(prior))
+    {}
+};
+
 /* If mktime() returns -1, is it really an error ?
 
    It might return -1 because we're looking at the last second of 1969 and
@@ -48,110 +83,62 @@ constexpr inline qint64 tmSecsWithinDay(const struct tm &when)
    check errno, but we call mktime from within a qt_scoped_lock(QBasicMutex),
    whose unlocking and destruction of the locker might frob errno.)
 
-   We can assume the zone offset is a multiple of five minutes and less than a
-   day, so this can only arise for the last second of a minute that differs from
-   59 by a multiple of 5 on the last day of 1969 or the first day of 1970.  That
-   makes for a cheap pre-test; if it holds, we can ask mktime about the first
-   second of the same minute; if it gives us -60, then the -1 we originally saw
-   is not an error (or was an error, but needn't have been).
+   We can assume time-zone offsets are less than a day, so this can only arise
+   if the struct tm describes either the last day of 1969 or the first day of
+   1970. When we do know the offset (a glibc extension supplies it as a member
+   of struct tm), we can determine whether we're on the last second of the day,
+   refining that check. That makes for a cheap pre-test; if it holds, we can ask
+   mktime() about the preceding second; if it gives us -2, then the -1 we
+   originally saw is not (or at least didn't need to be) an error. We can then
+   synthesize a corrected value for local using the -2 result.
 */
-inline bool meansEnd1969(tm *local)
+inline bool MkTimeResult::meansEnd1969()
 {
 #ifdef Q_OS_WIN
-    Q_UNUSED(local);
     return false;
 #else
-    if (local->tm_sec < 59 || local->tm_year < 69 || local->tm_year > 70
-        || local->tm_min % 5 != 4 // Assume zone offset is a multiple of 5 mins
-        || (local->tm_year == 69
-            ? local->tm_mon < 11 || local->tm_mday < 31
-            : local->tm_mon > 0 || local->tm_mday > 1)) {
+    if (local.tm_year < 69 || local.tm_year > 70
+#  ifdef HAVE_TM_GMTOFF
+        // Africa/Monrovia had offset 00:44:30 at the epoch, so (although all
+        // other zones' offsets were round multiples of five minutes) we need
+        // the offset to determine whether the time might match:
+        || (tmSecsWithinDay(local) - local.tm_gmtoff + 1) % SECS_PER_DAY
+#  endif
+        || (local.tm_year == 69 // ... and less than a day:
+            ? local.tm_mon < 11 || local.tm_mday < 31
+            : local.tm_mon > 0 || local.tm_mday > 1)) {
         return false;
     }
-    tm copy = *local;
+    struct tm copy = local;
     copy.tm_sec--; // Preceding second should get -2, not -1
     if (qMkTime(&copy) != -2)
         return false;
     // The original call to qMkTime() may have returned -1 as failure, not
     // updating local, even though it could have; so fake it here. Assumes there
     // was no transition in the last minute of the day !
-    *local = copy;
-    local->tm_sec++; // Advance back to the intended second
+    local = copy;
+    local.tm_sec++; // Advance back to the intended second
     return true;
 #endif
 }
 
-/*
-    Call mktime but bypass its fixing of denormal times.
-
-    The POSIX spec says mktime() accepts a struct tm whose fields lie outside
-    the usual ranges; the parameter is not const-qualified and will be updated
-    to have values in those ranges. However, MS's implementation doesn't do that
-    (or hasn't always done it); and the only member we actually want updated is
-    the tm_isdst flag.  (Aside: MS's implementation also only works for tm_year
-    >= 70; this is, in fact, in accordance with the POSIX spec; but all known
-    UNIX libc implementations in fact have a signed time_t and Do The Sensible
-    Thing, to the best of their ability, at least for 0 <= tm_year < 70; see
-    meansEnd1969 for the handling of the last second of UTC's 1969.)
-
-    If we thought we knew tm_isdst and mktime() disagrees, it'll let us know
-    either by correcting it - in which case it adjusts the struct tm to reflect
-    the same time, but represented using the right tm_isdst, so typically an
-    hour earlier or later - or by returning -1. When this happens, the way we
-    actually use mktime(), we don't want a revised time with corrected DST, we
-    want the original time with its corrected DST; so we retry the call, this
-    time not claiming to know the DST-ness.
-
-    POSIX doesn't actually say what to do if the specified struct tm describes a
-    time in a spring-forward gap: read literally, this is an unrepresentable
-    time and it could return -1, setting errno to EOVERFLOW. However, actual
-    implementations chose a time one side or the other of the gap. For example,
-    if we claim to know DST, glibc pushes to the other side of the gap (changing
-    tm_isdst), but stays on the indicated branch of a repetition (no change to
-    tm_isdst); this matches how QTimeZonePrivate::dataForLocalTime() uses its
-    hint; in either case, if we don't claim to know DST, glibc picks the DST
-    candidate. (Experiments conducted with glibc 2.31-9.)
-*/
-inline bool callMkTime(tm *local, time_t *secs)
+bool MkTimeResult::changed(const struct tm &prior) const
 {
-    constexpr time_t maybeError = -1; // mktime()'s return on error; or last second of 1969 UTC.
-    const tm copy = *local;
-    *secs = qMkTime(local);
-    bool good = *secs != maybeError || meansEnd1969(local);
-    if (copy.tm_isdst >= 0 && (!good || local->tm_isdst != copy.tm_isdst)) {
-        // We thought we knew DST-ness, but were wrong:
-        *local = copy;
-        local->tm_isdst = -1;
-        *secs = qMkTime(local);
-        good = *secs != maybeError || meansEnd1969(local);
-    }
-#if defined(Q_OS_WIN)
-    // Windows mktime for the missing hour backs up 1 hour instead of advancing
-    // 1 hour. If time differs and is standard time then this has happened, so
-    // add 2 hours to the time and 1 hour to the secs
-    if (local->tm_isdst == 0 && local->tm_hour != copy.tm_hour) {
-        local->tm_hour += 2;
-        if (local->tm_hour > 23) {
-            local->tm_hour -= 24;
-            if (++local->tm_mday > QGregorianCalendar::monthLength(
-                    local->tm_mon + 1, qYearFromTmYear(local->tm_year))) {
-                local->tm_mday = 1;
-                if (++local->tm_mon > 11) {
-                    local->tm_mon = 0;
-                    ++local->tm_year;
-                }
-            }
-        }
-        *secs += 3600;
-        local->tm_isdst = 1;
-    }
-#endif // Q_OS_WIN
-    return good;
+    // If mktime() has been passed a copy of prior and local is its value on
+    // return, this checks whether mktime() has made a material change
+    // (including normalization) to the value, as opposed to merely filling in
+    // the fields that it's specified to fill in. It returns true if there has
+    // been any material change.
+    return !(prior.tm_year == local.tm_year && prior.tm_mon == local.tm_mon
+             && prior.tm_mday == local.tm_mday && prior.tm_hour == local.tm_hour
+             && prior.tm_min == local.tm_min && prior.tm_sec == local.tm_sec
+             && (prior.tm_isdst == -1
+                 ? local.tm_isdst >= 0 : prior.tm_isdst == local.tm_isdst));
 }
 
-struct tm timeToTm(qint64 localDay, int secs, QDateTimePrivate::DaylightStatus dst)
+struct tm timeToTm(qint64 localDay, int secs)
 {
-    Q_ASSERT(0 <= secs && secs < 3600 * 24);
+    Q_ASSERT(0 <= secs && secs < SECS_PER_DAY);
     const auto ymd = QGregorianCalendar::partsFromJulian(JULIAN_DAY_FOR_EPOCH + localDay);
     struct tm local = {};
     local.tm_year = tmYearFromQYear(ymd.year);
@@ -160,135 +147,299 @@ struct tm timeToTm(qint64 localDay, int secs, QDateTimePrivate::DaylightStatus d
     local.tm_hour = secs / 3600;
     local.tm_min = (secs % 3600) / 60;
     local.tm_sec = (secs % 60);
-    local.tm_isdst = int(dst);
+    local.tm_isdst = -1;
     return local;
 }
 
-bool qtLocalTime(time_t utc, struct tm *local)
+// Transitions account for a small fraction of 1% of the time.
+// So mark functions only used in handling them as cold.
+Q_DECL_COLD_FUNCTION
+struct tm matchYearMonth(struct tm when, const struct tm &base)
 {
-    // This should really be done under the environmentMutex wrapper qglobal.cpp
-    // uses in qTzSet() and friends. However, the only sane way to do that would
-    // be to move this whole function there (and replace its qTzSet() with a
-    // naked tzset(), since it'd already be mutex-protected).
-#if defined(Q_OS_WIN)
-    // The doc of localtime_s() says that localtime_s() corrects for the same
-    // things _tzset() sets the globals for, but doesn't explicitly say that it
-    // calls _tzset(), and QTBUG-109974 reveals the need for a _tzset() call.
-    qTzSet();
-    return !localtime_s(local, &utc);
-#elif QT_CONFIG(thread) && defined(_POSIX_THREAD_SAFE_FUNCTIONS)
-    // Use the reentrant version of localtime() where available, as it is
-    // thread-safe and doesn't use a shared static data area.
-    // As localtime() is specified to work as if it called tzset(), but
-    // localtime_r() does not have this constraint, make an explicit call.
-    // The explicit call should also request a re-parse of timezone info.
-    qTzSet();
-    if (tm *res = localtime_r(&utc, local)) {
-        Q_ASSERT(res == local);
-        return true;
+    // Adjust *when to be a denormal representation of the same point in time
+    // but with tm_year and tm_mon the same as base. In practice this will
+    // represent an adjacent month, so don't worry too much about optimising for
+    // any other case; we almost certainly run zero or one iteration of one of
+    // the year loops then zero or one iteration of one of the month loops.
+    while (when.tm_year > base.tm_year) {
+        --when.tm_year;
+        when.tm_mon += 12;
     }
-    return false;
-#else
-    // POSIX mandates that localtime() behaves as if it called tzset().
-    // Returns shared static data which may be overwritten at any time
-    // So copy the result asap:
-    if (tm *res = localtime(&utc)) {
-        *local = *res;
-        return true;
+    while (when.tm_year < base.tm_year) {
+        ++when.tm_year;
+        when.tm_mon -= 12;
     }
-    return false;
+    Q_ASSERT(when.tm_year == base.tm_year);
+    while (when.tm_mon > base.tm_mon) {
+        const auto yearMon = QRoundingDown::qDivMod<12>(when.tm_mon);
+        int year = yearMon.quotient;
+        // We want the month before's Qt month number, which is the tm_mon mod 12:
+        int month = yearMon.remainder;
+        if (month == 0) {
+            --year;
+            month = 12;
+        }
+        year += when.tm_year;
+        when.tm_mday += QGregorianCalendar::monthLength(month, qYearFromTmYear(year));
+        --when.tm_mon;
+    }
+    while (when.tm_mon < base.tm_mon) {
+        const auto yearMon = QRoundingDown::qDivMod<12>(when.tm_mon);
+        // Qt month number is offset from tm_mon by one:
+        when.tm_mday -= QGregorianCalendar::monthLength(
+            yearMon.remainder + 1, qYearFromTmYear(yearMon.quotient + when.tm_year));
+        ++when.tm_mon;
+    }
+    Q_ASSERT(when.tm_mon == base.tm_mon);
+    return when;
+}
+
+Q_DECL_COLD_FUNCTION
+struct tm adjacentDay(struct tm when, int dayStep)
+{
+    // Before we adjust it, when is a return from timeToTm(), so in normal form.
+    Q_ASSERT(dayStep * dayStep == 1);
+    when.tm_mday += dayStep;
+    // That may have bumped us across a month boundary or even a year one.
+    // So now we normalize it.
+
+    if (dayStep < 0) {
+        if (when.tm_mday <= 0) {
+            // Month before's day-count; but tm_mon's value is one less than Qt's
+            // month numbering so, before we decrement it, it has the value we need,
+            // unless it's 0.
+            int daysInMonth = when.tm_mon
+                ? QGregorianCalendar::monthLength(when.tm_mon, qYearFromTmYear(when.tm_year))
+                : QGregorianCalendar::monthLength(12, qYearFromTmYear(when.tm_year - 1));
+            when.tm_mday += daysInMonth;
+            if (--when.tm_mon < 0) {
+                --when.tm_year;
+                when.tm_mon = 11;
+            }
+            Q_ASSERT(when.tm_mday >= 1);
+        }
+    } else if (when.tm_mday > 28) {
+        // We have to wind through months one at a time, since their lengths vary.
+        int daysInMonth = QGregorianCalendar::monthLength(
+            when.tm_mon + 1, qYearFromTmYear(when.tm_year));
+        if (when.tm_mday > daysInMonth) {
+            when.tm_mday -= daysInMonth;
+            if (++when.tm_mon > 11) {
+                ++when.tm_year;
+                when.tm_mon = 0;
+            }
+            Q_ASSERT(when.tm_mday <= QGregorianCalendar::monthLength(
+                         when.tm_mon + 1, qYearFromTmYear(when.tm_year)));
+        }
+    }
+    return when;
+}
+
+Q_DECL_COLD_FUNCTION
+qint64 secondsBetween(const struct tm &start, const struct tm &stop)
+{
+    // Nominal difference between start and stop, in seconds (negative if start
+    // is after stop); may differ from actual UTC difference if there's a
+    // transition between them.
+    struct tm from = matchYearMonth(start, stop);
+    qint64 diff = stop.tm_mday - from.tm_mday; // in days
+    diff = diff * 24 + stop.tm_hour - from.tm_hour; // in hours
+    diff = diff * 60 + stop.tm_min - from.tm_min; // in minutes
+    return diff * 60 + stop.tm_sec - from.tm_sec; // in seconds
+}
+
+Q_DECL_COLD_FUNCTION
+MkTimeResult hopAcrossGap(const MkTimeResult &outside, const struct tm &base)
+{
+    // base fell in a gap; outside is one resolution
+    // This returns the other resolution, if possible.
+    const qint64 shift = secondsBetween(outside.local, base);
+    struct tm across;
+    // Shift is the nominal time adjustment between outside and base; now obtain
+    // the actual time that far from outside:
+    if (qLocalTime(outside.utcSecs + shift, &across)) {
+        const qint64 wider = secondsBetween(outside.local, across);
+        // That should be bigger than shift (typically by a factor of two), in
+        // the same direction:
+        if (shift > 0 ? wider > shift : wider < shift) {
+            MkTimeResult result(across);
+            if (result.good && !result.adjusted)
+                return result;
+        }
+    }
+    // This can surely only arise if the other resolution lies outside the
+    // time_t-range supported by the system functions.
+    return {};
+}
+
+Q_DECL_COLD_FUNCTION
+MkTimeResult resolveRejected(struct tm base, MkTimeResult result,
+                             QDateTimePrivate::TransitionOptions resolve)
+{
+    // May result from a time outside the supported range of system time_t
+    // functions, or from a gap (on a platform where mktime() rejects them).
+    // QDateTime filters on times well outside the supported range, but may
+    // pass values only slightly outside the range.
+
+    // The easy case - no need to find a resolution anyway:
+    if (!resolve.testAnyFlags(QDateTimePrivate::GapMask))
+        return {};
+
+    constexpr time_t twoDaysInSeconds = 2 * 24 * 60 * 60;
+    // Bracket base, one day each side (in case the zone skipped a whole day):
+    MkTimeResult early(adjacentDay(base, -1));
+    MkTimeResult later(adjacentDay(base, +1));
+    if (!early.good || !later.good) // Assume out of range, rather than gap.
+        return {};
+
+    // OK, looks like a gap.
+    Q_ASSERT(twoDaysInSeconds + early.utcSecs > later.utcSecs);
+    result.adjusted = true;
+
+    // Extrapolate backwards from later if this option is set:
+    QDateTimePrivate::TransitionOption beforeLater = QDateTimePrivate::GapUseBefore;
+    if (resolve.testFlag(QDateTimePrivate::FlipForReverseDst)) {
+        // Reverse DST has DST before a gap and not after:
+        if (early.local.tm_isdst == 1 && !later.local.tm_isdst)
+            beforeLater = QDateTimePrivate::GapUseAfter;
+    }
+    if (resolve.testFlag(beforeLater)) // Result will be before the gap:
+        result.utcSecs = later.utcSecs - secondsBetween(base, later.local);
+    else // Result will be after the gap:
+        result.utcSecs = early.utcSecs + secondsBetween(early.local, base);
+
+    if (!qLocalTime(result.utcSecs, &result.local)) // Abandon hope.
+        return {};
+
+    return result;
+}
+
+Q_DECL_COLD_FUNCTION
+bool preferAlternative(QDateTimePrivate::TransitionOptions resolve,
+                       // is_dst flags of incumbent and an alternative:
+                       int gotDst, int altDst,
+                       // True precisely if alternative selects a later UTC time:
+                       bool altIsLater,
+                       // True for a gap, false for a fold:
+                       bool inGap)
+{
+    // If resolve has this option set, prefer the later candidate, else the earlier:
+    QDateTimePrivate::TransitionOption preferLater = inGap ? QDateTimePrivate::GapUseAfter
+                                                           : QDateTimePrivate::FoldUseAfter;
+    if (resolve.testFlag(QDateTimePrivate::FlipForReverseDst)) {
+        // gotDst and altDst are {-1: unknown, 0: standard, 1: daylight-saving}
+        // So gotDst ^ altDst is 1 precisely if exactly one candidate thinks it's DST.
+        if ((altDst ^ gotDst) == 1) {
+            // In this case, we can tell whether we have reversed DST: that's a
+            // gap with DST before it or a fold with DST after it.
+#if 1
+            const bool isReversed = (altDst == 1) != (altIsLater == inGap);
+#else // Pedagogic version of the same thing:
+            bool isReversed;
+            if (altIsLater == inGap) // alt is after a gap or before a fold, so summer-time
+                isReversed = altDst != 1; // flip if summer-time isn't DST
+            else // alt is before a gap or after a fold, so winter-time
+                isReversed = altDst == 1; // flip if winter-time is DST
 #endif
+            if (isReversed) {
+                preferLater = inGap ? QDateTimePrivate::GapUseBefore
+                                    : QDateTimePrivate::FoldUseBefore;
+            }
+        } // Otherwise, we can't tell, so assume not.
+    }
+    return resolve.testFlag(preferLater) == altIsLater;
 }
 
-// Returns the tzname, assume tzset has been called already
-QString qt_tzname(QDateTimePrivate::DaylightStatus daylightStatus)
-{
-    int isDst = (daylightStatus == QDateTimePrivate::DaylightTime) ? 1 : 0;
-#if defined(Q_CC_MSVC)
-    size_t s = 0;
-    char name[512];
-    if (_get_tzname(&s, name, 512, isDst))
-        return QString();
-    return QString::fromLocal8Bit(name);
-#else
-    return QString::fromLocal8Bit(tzname[isDst]);
-#endif // Q_OS_WIN
-}
-
-} // namespace
-
-#if QT_CONFIG(datetimeparser)
 /*
-  \internal
-  Implemented here to share qt_tzname()
+    Determine UTC time and offset, if possible, at a given local time.
+
+    The local time is specified as a number of seconds since the epoch (so, in
+    effect, a time_t, albeit delivered as qint64). If the specified local time
+    falls in a transition, resolve determines what to do.
+
+    If the specified local time is outside what the system time_t APIs will
+    handle, this fails.
 */
-int QDateTimeParser::startsWithLocalTimeZone(QStringView name, const QDateTime &when)
+MkTimeResult resolveLocalTime(qint64 local, QDateTimePrivate::TransitionOptions resolve)
 {
-    QDateTimePrivate::DaylightStatus zones[2] = {
-        QDateTimePrivate::StandardTime,
-        QDateTimePrivate::DaylightTime
-    };
-    // On MS-Win, at least when system zone is UTC, the tzname[]s may be empty.
-    for (const auto z : zones) {
-        QString zone(qt_tzname(z));
-        if (!zone.isEmpty() && name.startsWith(zone))
-            return zone.size();
+    const auto localDaySecs = QRoundingDown::qDivMod<SECS_PER_DAY>(local);
+    struct tm base = timeToTm(localDaySecs.quotient, localDaySecs.remainder);
+
+    // Get provisional result (correct > 99.9 % of the time):
+    MkTimeResult result(base);
+
+    // Our callers (mostly) deal with questions of being within the range that
+    // system time_t functions can handle, and timeToTm() gave us data in
+    // normalized form, so the only excuse for !good or a change to the HH:mm:ss
+    // fields (aside from being at the boundary of time_t's supported range) is
+    // that we hit a gap, although we have to handle these cases differently:
+    if (!result.good) {
+        // Rejected. The tricky case: maybe mktime() doesn't resolve gaps.
+        return resolveRejected(base, result, resolve);
+    } else if (result.local.tm_isdst < 0) {
+        // Apparently success without knowledge of whether this is DST or not.
+        // Should not happen, but that means our usual understanding of what the
+        // system is up to has gone out the window. So just let it be.
+    } else if (result.adjusted) {
+        // Shunted out of a gap.
+        if (!resolve.testAnyFlags(QDateTimePrivate::GapMask)) {
+            result = {};
+            return result;
+        }
+
+        // Try to obtain a matching point on the other side of the gap:
+        const MkTimeResult flipped = hopAcrossGap(result, base);
+        // Even if that failed, result may be the correct resolution
+
+        if (preferAlternative(resolve, result.local.tm_isdst, flipped.local.tm_isdst,
+                              flipped.utcSecs > result.utcSecs, true)) {
+            // If hopAcrossGap() failed and we do need its answer, give up.
+            if (!flipped.good || flipped.adjusted)
+                return {};
+
+            // As resolution of local, flipped involves adjustment (across gap):
+            result = flipped;
+            result.adjusted = true;
+        }
+    } else if (resolve.testFlag(QDateTimePrivate::FlipForReverseDst)
+               // In fold, DST counts as before and standard as after -
+               // we may not need to check whether we're in a transition:
+               && resolve.testFlag(result.local.tm_isdst ? QDateTimePrivate::FoldUseBefore
+                                                         : QDateTimePrivate::FoldUseAfter)) {
+        // We prefer DST or standard and got what we wanted, so we're good.
+        // As below, but we don't need to check, because we're on the side of
+        // the transition that it would select as valid, if we were near one.
+        // NB: this branch is routinely exercised, when QDT::Data::isShort()
+        // obliges us to rediscover an offsetFromUtc that ShortData has no space
+        // to store, as it does remember the DST status we got before.
+    } else {
+        // What we gave was valid. However, it might have been in a fall-back.
+        // If so, the same input but with tm_isdst flipped should also be valid.
+        struct tm copy = base;
+        copy.tm_isdst = !result.local.tm_isdst;
+        const MkTimeResult flipped(copy);
+        if (flipped.good && !flipped.adjusted) {
+            // We're in a fall-back
+            if (!resolve.testAnyFlags(QDateTimePrivate::FoldMask)) {
+                result = {};
+                return result;
+            }
+
+            // Work out which repeat to use:
+            if (preferAlternative(resolve, result.local.tm_isdst, flipped.local.tm_isdst,
+                                  flipped.utcSecs > result.utcSecs, false)) {
+                result = flipped;
+            }
+        } // else: not in a transition, nothing to worry about.
     }
-    // Mimic what QLocale::toString() would have used, to ensure round-trips work:
-    const QString local = QDateTime(when.date(), when.time()).timeZoneAbbreviation();
-    if (name.startsWith(local))
-        return local.size();
-    return 0;
+    return result;
 }
-#endif // datetimeparser
 
-namespace QLocalTime {
-
-#ifndef QT_BOOTSTRAPPED
-// Even if local time is currently in DST, this returns the standard time offset
-// (in seconds) nominally in effect at present:
-int getCurrentStandardUtcOffset()
+inline std::optional<qint64> tmToJd(const struct tm &date)
 {
-#ifdef Q_OS_WIN
-    TIME_ZONE_INFORMATION tzInfo;
-    GetTimeZoneInformation(&tzInfo);
-    return -tzInfo.Bias * SECS_PER_MIN;
-#else
-    qTzSet();
-    const time_t curr = time(nullptr);
-    /* Set t to the UTC representation of curr; the time whose local standard
-       time representation coincides with that differs from curr by local time's
-       standard offset.  Note that gmtime() leaves the tm_isdst flag set to 0,
-       so mktime() will, even if local time is currently using DST, return the
-       time since epoch at which local standard time would have the same
-       representation as UTC's representation of curr. The fact that mktime()
-       also flips tm_isdst and updates the time fields to the DST-equivalent
-       time needn't concern us here; all that matters is that it returns the
-       time after epoch at which standard time's representation would have
-       matched UTC's, had it been in effect.
-    */
-#  if defined(_POSIX_THREAD_SAFE_FUNCTIONS)
-    struct tm t;
-    if (gmtime_r(&curr, &t))
-        return curr - qMkTime(&t);
-#  else
-    if (struct tm *tp = gmtime(&curr)) {
-        struct tm t = *tp; // Copy it quick, hopefully before it can get stomped
-        return curr - qMkTime(&t);
-    }
-#  endif
-    // We can't tell, presume UTC.
-    return 0;
-#endif // Platform choice
+    return QGregorianCalendar::julianFromParts(qYearFromTmYear(date.tm_year),
+                                               date.tm_mon + 1, date.tm_mday);
 }
-
-// This is local time's offset (in seconds), at the specified time, including
-// any DST part.
-int getUtcOffset(qint64 atMSecsSinceEpoch)
-{
-    return QDateTimePrivate::expressUtcAsLocal(atMSecsSinceEpoch).offset;
-}
-#endif // QT_BOOTSTRAPPED
 
 #define IC(N) std::integral_constant<qint64, N>()
 
@@ -308,29 +459,96 @@ inline bool secondsAndMillisOverflow(qint64 epochSeconds, qint64 millis, qint64 
 
 #undef IC
 
+} // namespace
+
+namespace QLocalTime {
+
+#ifndef QT_BOOTSTRAPPED
+// Even if local time is currently in DST, this returns the standard time offset
+// (in seconds) nominally in effect at present:
+int getCurrentStandardUtcOffset()
+{
+#ifdef Q_OS_WIN
+    TIME_ZONE_INFORMATION tzInfo;
+    if (GetTimeZoneInformation(&tzInfo) != TIME_ZONE_ID_INVALID) {
+        int bias = tzInfo.Bias; // In minutes.
+        // StandardBias is usually zero, but include it if given:
+        if (tzInfo.StandardDate.wMonth) // Zero month means ignore StandardBias.
+            bias += tzInfo.StandardBias;
+        // MS's bias is +ve in the USA, so minutes *behind* UTC - we want seconds *ahead*:
+        return -bias * SECS_PER_MIN;
+    }
+#else
+    qTzSet();
+    const time_t curr = time(nullptr);
+    if (curr != -1) {
+        /* Set t to the UTC representation of curr; the time whose local
+           standard time representation coincides with that differs from curr by
+           local time's standard offset.  Note that gmtime() leaves the tm_isdst
+           flag set to 0, so mktime() will, even if local time is currently
+           using DST, return the time since epoch at which local standard time
+           would have the same representation as UTC's representation of
+           curr. The fact that mktime() also flips tm_isdst and updates the time
+           fields to the DST-equivalent time needn't concern us here; all that
+           matters is that it returns the time after epoch at which standard
+           time's representation would have matched UTC's, had it been in
+           effect.
+        */
+#  if defined(_POSIX_THREAD_SAFE_FUNCTIONS)
+        struct tm t;
+        if (gmtime_r(&curr, &t)) {
+            time_t mkt = qMkTime(&t);
+            int offset = int(curr - mkt);
+            Q_ASSERT(std::abs(offset) <= SECS_PER_DAY);
+            return offset;
+        }
+#  else
+        if (struct tm *tp = gmtime(&curr)) {
+            struct tm t = *tp; // Copy it quick, hopefully before it can get stomped
+            time_t mkt = qMkTime(&t);
+            int offset = int(curr - mkt);
+            Q_ASSERT(std::abs(offset) <= SECS_PER_DAY);
+            return offset;
+        }
+#  endif
+    } // else, presumably: errno == EOVERFLOW
+#endif // Platform choice
+    qDebug("Unable to determine current standard time offset from UTC");
+    // We can't tell, presume UTC.
+    return 0;
+}
+
+// This is local time's offset (in seconds), at the specified time, including
+// any DST part.
+int getUtcOffset(qint64 atMSecsSinceEpoch)
+{
+    return QDateTimePrivate::expressUtcAsLocal(atMSecsSinceEpoch).offset;
+}
+#endif // QT_BOOTSTRAPPED
+
 // Calls the platform variant of localtime() for the given utcMillis, and
 // returns the local milliseconds, offset from UTC and DST status.
 QDateTimePrivate::ZoneState utcToLocal(qint64 utcMillis)
 {
-    const time_t epochSeconds = QRoundingDown::qDiv(utcMillis, MSECS_PER_SEC);
-    const int msec = utcMillis - epochSeconds * MSECS_PER_SEC;
+    const auto epoch = QRoundingDown::qDivMod<MSECS_PER_SEC>(utcMillis);
+    const time_t epochSeconds = epoch.quotient;
+    const int msec = epoch.remainder;
     Q_ASSERT(msec >= 0 && msec < MSECS_PER_SEC);
     if (qint64(epochSeconds) * MSECS_PER_SEC + msec != utcMillis) // time_t range too narrow
         return {utcMillis};
 
     tm local;
-    if (!qtLocalTime(epochSeconds, &local))
+    if (!qLocalTime(epochSeconds, &local))
         return {utcMillis};
 
-    qint64 jd;
-    if (Q_UNLIKELY(!QGregorianCalendar::julianFromParts(qYearFromTmYear(local.tm_year),
-                                                        local.tm_mon + 1, local.tm_mday, &jd))) {
+    auto jd = tmToJd(local);
+    if (Q_UNLIKELY(!jd))
         return {utcMillis};
-    }
+
     const qint64 daySeconds = tmSecsWithinDay(local);
     Q_ASSERT(0 <= daySeconds && daySeconds < SECS_PER_DAY);
     qint64 localSeconds, localMillis;
-    if (Q_UNLIKELY(daysAndSecondsOverflow(jd, daySeconds, &localSeconds)
+    if (Q_UNLIKELY(daysAndSecondsOverflow(*jd, daySeconds, &localSeconds)
                    || secondsAndMillisOverflow(localSeconds, qint64(msec), &localMillis))) {
         return {utcMillis};
     }
@@ -339,61 +557,65 @@ QDateTimePrivate::ZoneState utcToLocal(qint64 utcMillis)
     return { localMillis, int(localSeconds - epochSeconds), dst };
 }
 
-QString localTimeAbbbreviationAt(qint64 local, QDateTimePrivate::DaylightStatus dst)
+QString localTimeAbbbreviationAt(qint64 local, QDateTimePrivate::TransitionOptions resolve)
 {
-    const qint64 localDays = QRoundingDown::qDiv(local, MSECS_PER_DAY);
-    qint64 millis = local - localDays * MSECS_PER_DAY;
-    Q_ASSERT(0 <= millis && millis < MSECS_PER_DAY); // Definition of QRD::qDiv.
-    struct tm tmLocal = timeToTm(localDays, int(millis / MSECS_PER_SEC), dst);
-    time_t utcSecs;
-    if (!callMkTime(&tmLocal, &utcSecs))
+    auto use = resolveLocalTime(QRoundingDown::qDiv<MSECS_PER_SEC>(local), resolve);
+    if (!use.good)
         return {};
-    return qt_tzname(tmLocal.tm_isdst > 0 ? QDateTimePrivate::DaylightTime
-                                          : QDateTimePrivate::StandardTime);
+#ifdef HAVE_TM_ZONE
+    if (use.local.tm_zone)
+        return QString::fromLocal8Bit(use.local.tm_zone);
+#endif
+    return qTzName(use.local.tm_isdst > 0 ? 1 : 0);
 }
 
-QDateTimePrivate::ZoneState mapLocalTime(qint64 local, QDateTimePrivate::DaylightStatus dst)
+QDateTimePrivate::ZoneState mapLocalTime(qint64 local, QDateTimePrivate::TransitionOptions resolve)
 {
+    // Revised later to match what use.local tells us:
     qint64 localSecs = local / MSECS_PER_SEC;
-    qint64 millis = local - localSecs * MSECS_PER_SEC; // 0 or with same sign as local
-    const qint64 localDays = QRoundingDown::qDiv(localSecs, SECS_PER_DAY);
-    qint64 daySecs = localSecs - localDays * SECS_PER_DAY;
-    Q_ASSERT(0 <= daySecs && daySecs < SECS_PER_DAY); // Definition of QRD::qDiv.
-
-    struct tm tmLocal = timeToTm(localDays, daySecs, dst);
-    time_t utcSecs;
-    if (!callMkTime(&tmLocal, &utcSecs))
+    auto use = resolveLocalTime(localSecs, resolve);
+    if (!use.good)
         return {local};
 
-    // TODO: for glibc, we could use tmLocal.tm_gmtoff
-    // That would give us offset directly, hence localSecs = offset + utcSecs
-    // Provisional offset, until we have a revised localSeconds:
-    int offset = QRoundingDown::qDiv(local, MSECS_PER_SEC) - utcSecs;
-    dst = tmLocal.tm_isdst > 0 ? QDateTimePrivate::DaylightTime : QDateTimePrivate::StandardTime;
-    qint64 jd;
-    if (Q_UNLIKELY(!QGregorianCalendar::julianFromParts(
-                       qYearFromTmYear(tmLocal.tm_year), tmLocal.tm_mon + 1, tmLocal.tm_mday,
-                       &jd))) {
-        return {local, offset, dst, false};
-    }
-    daySecs = tmSecsWithinDay(tmLocal);
-    Q_ASSERT(0 <= daySecs && daySecs < SECS_PER_DAY);
-    if (daySecs > 0 && jd < JULIAN_DAY_FOR_EPOCH) {
-        ++jd;
-        daySecs -= SECS_PER_DAY;
-    }
-    if (Q_UNLIKELY(daysAndSecondsOverflow(jd, daySecs, &localSecs)))
+    qint64 millis = local - localSecs * MSECS_PER_SEC;
+    // Division is defined to round towards zero:
+    Q_ASSERT(local < 0 ? (millis <= 0 && millis > -MSECS_PER_SEC)
+                       : (millis >= 0 && millis < MSECS_PER_SEC));
+
+    QDateTimePrivate::DaylightStatus dst =
+        use.local.tm_isdst > 0 ? QDateTimePrivate::DaylightTime : QDateTimePrivate::StandardTime;
+
+#ifdef HAVE_TM_GMTOFF
+    const int offset = use.local.tm_gmtoff;
+    localSecs = offset + use.utcSecs;
+#else
+    // Provisional offset, until we have a revised localSecs:
+    int offset = localSecs - use.utcSecs;
+    auto jd = tmToJd(use.local);
+    if (Q_UNLIKELY(!jd))
         return {local, offset, dst, false};
 
-    offset = localSecs - utcSecs;
+    qint64 daySecs = tmSecsWithinDay(use.local);
+    Q_ASSERT(0 <= daySecs && daySecs < SECS_PER_DAY);
+    if (daySecs > 0 && *jd < JULIAN_DAY_FOR_EPOCH) {
+        jd = *jd + 1;
+        daySecs -= SECS_PER_DAY;
+    }
+    if (Q_UNLIKELY(daysAndSecondsOverflow(*jd, daySecs, &localSecs)))
+        return {local, offset, dst, false};
+
+    // Use revised localSecs to refine offset:
+    offset = localSecs - use.utcSecs;
+#endif // HAVE_TM_GMTOFF
 
     // The only way localSecs and millis can now have opposite sign is for
     // resolution of the local time to have kicked us across the epoch, in which
     // case there's no danger of overflow. So if overflow is in danger of
     // happening, we're already doing the best we can to avoid it.
     qint64 revised;
-    const bool overflow = secondsAndMillisOverflow(localSecs, millis, &revised);
-    return {overflow ? local : revised, offset, dst, !overflow};
+    if (secondsAndMillisOverflow(localSecs, millis, &revised))
+        return {local, offset, QDateTimePrivate::UnknownDaylightTime, false};
+    return {revised, offset, dst, true};
 }
 
 /*!
@@ -427,9 +649,7 @@ QDateTimePrivate::ZoneState mapLocalTime(qint64 local, QDateTimePrivate::Dayligh
 SystemMillisRange computeSystemMillisRange()
 {
     // Assert this here, as this is called just once, in a static initialization.
-    [[maybe_unused]] qint64 epochJd;
-    Q_ASSERT(QGregorianCalendar::julianFromParts(1970, 1, 1, &epochJd)
-             && epochJd == JULIAN_DAY_FOR_EPOCH);
+    Q_ASSERT(QGregorianCalendar::julianFromParts(1970, 1, 1) == JULIAN_DAY_FOR_EPOCH);
 
     constexpr qint64 TIME_T_MAX = std::numeric_limits<time_t>::max();
     using Bounds = std::numeric_limits<qint64>;

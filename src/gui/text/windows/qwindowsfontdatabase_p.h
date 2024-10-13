@@ -21,6 +21,7 @@
 #include <QtCore/QSharedPointer>
 #include <QtCore/QLoggingCategory>
 #include <QtCore/qhashfunctions.h>
+#include <QtCore/qmutex.h>
 #include <QtCore/qt_windows.h>
 
 QT_BEGIN_NAMESPACE
@@ -44,6 +45,7 @@ public:
 
     void populateFontDatabase() override;
     void invalidate() override;
+    void removeApplicationFonts();
 
     void populateFamily(const QString &familyName) override;
     bool populateFamilyAliases(const QString &missingFamily) override;
@@ -73,8 +75,16 @@ public:
     static void debugFormat(QDebug &d, const LOGFONT &lf);
 #endif // !QT_NO_DEBUG_STREAM
 
+    struct FontHandle {
+        FontHandle(const QString &name) : faceName(name) {}
+        FontHandle(IDWriteFontFace *face, const QString &name);
+        ~FontHandle();
+
+        IDWriteFontFace *fontFace = nullptr;
+        QString faceName;
+    };
+
 private:
-    void removeApplicationFonts();
     void addDefaultEUDCFont();
 
     struct WinApplicationFont {
@@ -86,9 +96,10 @@ private:
 
     struct UniqueFontData {
         HANDLE handle;
-        QAtomicInt refCount;
+        int refCount;
     };
 
+    QMutex m_uniqueFontDataMutex; // protects m_uniqueFontData
     QMap<QString, UniqueFontData> m_uniqueFontData;
 
     static unsigned m_fontOptions;

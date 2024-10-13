@@ -34,6 +34,8 @@ QHostAddressPrivate::QHostAddressPrivate()
     memset(&a6, 0, sizeof(a6));
 }
 
+QT_DEFINE_QESDP_SPECIALIZATION_DTOR(QHostAddressPrivate)
+
 void QHostAddressPrivate::setAddress(quint32 a_)
 {
     a = a_;
@@ -164,8 +166,12 @@ AddressClassification QHostAddressPrivate::classify() const
                 return BroadcastAddress;
             return UnknownAddress;
         }
+        if (((a & 0xff000000U) == 0x0a000000U)      // 10.0.0.0/8
+            || ((a & 0xfff00000U) == 0xac100000U)   // 172.16.0.0/12
+            || ((a & 0xffff0000U) == 0xc0a80000U))  // 192.168.0.0/16
+            return PrivateNetworkAddress;
 
-        // Not testing for PrivateNetworkAddress and TestNetworkAddress
+        // Not testing for TestNetworkAddress
         // since we don't need them yet.
         return GlobalAddress;
     }
@@ -448,6 +454,18 @@ QHostAddress::QHostAddress(const QHostAddress &address)
 }
 
 /*!
+    \fn QHostAddress::QHostAddress(QHostAddress &&other)
+
+    \since 6.8
+
+    Move-constructs a new QHostAddress from \a other.
+
+    \note The moved-from object \a other is placed in a partially-formed state,
+    in which the only valid operations are destruction and assignment of a new
+    value.
+*/
+
+/*!
     Constructs a QHostAddress object for \a address.
 */
 QHostAddress::QHostAddress(SpecialAddress address)
@@ -677,7 +695,7 @@ QHostAddress::NetworkLayerProtocol QHostAddress::protocol() const
     \l{QAbstractSocket::}{IPv6Protocol}.
     If the protocol is
     \l{QAbstractSocket::}{IPv4Protocol},
-    then the address is returned an an IPv4 mapped IPv6 address. (RFC4291)
+    then the address is returned as an IPv4 mapped IPv6 address. (RFC4291)
 
     \sa toString()
 */
@@ -706,7 +724,7 @@ QString QHostAddress::toString() const
     } else if (d->protocol == QHostAddress::IPv6Protocol) {
         QIPAddressUtils::toString(s, d->a6.c);
         if (!d->scopeId.isEmpty())
-            s.append(u'%' + d->scopeId);
+            s += u'%' + d->scopeId;
     }
     return s;
 }
@@ -1117,7 +1135,7 @@ bool QHostAddress::isLoopback() const
     considered as global in new applications. This function returns true for
     site-local addresses too.
 
-    \sa isLoopback(), isSiteLocal(), isUniqueLocalUnicast()
+    \sa isLoopback(), isSiteLocal(), isUniqueLocalUnicast(), isPrivateUse()
 */
 bool QHostAddress::isGlobal() const
 {
@@ -1135,7 +1153,7 @@ bool QHostAddress::isGlobal() const
     \l{https://www.iana.org/assignments/ipv6-address-space/ipv6-address-space.xhtml}{IANA
     IPv6 Address Space} registry for more information.
 
-    \sa isLoopback(), isGlobal(), isMulticast(), isSiteLocal(), isUniqueLocalUnicast()
+    \sa isLoopback(), isGlobal(), isMulticast(), isSiteLocal(), isUniqueLocalUnicast(), isPrivateUse()
 */
 bool QHostAddress::isLinkLocal() const
 {
@@ -1158,7 +1176,7 @@ bool QHostAddress::isLinkLocal() const
     isGlobal() also returns true). Site-local addresses were replaced by Unique
     Local Addresses (ULA).
 
-    \sa isLoopback(), isGlobal(), isMulticast(), isLinkLocal(), isUniqueLocalUnicast()
+    \sa isLoopback(), isGlobal(), isMulticast(), isLinkLocal(), isUniqueLocalUnicast(), isPrivateUse()
 */
 bool QHostAddress::isSiteLocal() const
 {
@@ -1179,7 +1197,7 @@ bool QHostAddress::isSiteLocal() const
     4193 says that, in practice, "applications may treat these addresses like
     global scoped addresses." Only routers need care about the distinction.
 
-    \sa isLoopback(), isGlobal(), isMulticast(), isLinkLocal(), isUniqueLocalUnicast()
+    \sa isLoopback(), isGlobal(), isMulticast(), isLinkLocal(), isUniqueLocalUnicast(), isPrivateUse()
 */
 bool QHostAddress::isUniqueLocalUnicast() const
 {
@@ -1192,7 +1210,7 @@ bool QHostAddress::isUniqueLocalUnicast() const
     Returns \c true if the address is an IPv4 or IPv6 multicast address, \c
     false otherwise.
 
-    \sa isLoopback(), isGlobal(), isLinkLocal(), isSiteLocal(), isUniqueLocalUnicast()
+    \sa isLoopback(), isGlobal(), isLinkLocal(), isSiteLocal(), isUniqueLocalUnicast(), isPrivateUse()
 */
 bool QHostAddress::isMulticast() const
 {
@@ -1209,11 +1227,25 @@ bool QHostAddress::isMulticast() const
     broadcast address. For that, please use \l QNetworkInterface to obtain the
     broadcast addresses of the local machine.
 
-    \sa isLoopback(), isGlobal(), isMulticast(), isLinkLocal(), isUniqueLocalUnicast()
+    \sa isLoopback(), isGlobal(), isMulticast(), isLinkLocal(), isUniqueLocalUnicast(), isPrivateUse()
 */
 bool QHostAddress::isBroadcast() const
 {
     return d->classify() == BroadcastAddress;
+}
+
+/*!
+    \since 6.6
+
+    Returns \c true if the address is an IPv6 unique local unicast address or
+    IPv4 address reserved for local networks by \l {RFC 1918}, \c false otherwise.
+
+    \sa isLoopback(), isGlobal(), isMulticast(), isLinkLocal(), isUniqueLocalUnicast(), isBroadcast()
+*/
+bool QHostAddress::isPrivateUse() const
+{
+    const AddressClassification classification = d->classify();
+    return (classification == PrivateNetworkAddress) || (classification == UniqueLocalAddress);
 }
 
 #ifndef QT_NO_DEBUG_STREAM

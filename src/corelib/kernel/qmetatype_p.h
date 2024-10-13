@@ -38,20 +38,21 @@ QT_BEGIN_NAMESPACE
             assign_and_return \
         }
 
-class QMetaTypeModuleHelper
+class Q_CORE_EXPORT QMetaTypeModuleHelper
 {
     Q_DISABLE_COPY_MOVE(QMetaTypeModuleHelper)
 protected:
     QMetaTypeModuleHelper() = default;
     ~QMetaTypeModuleHelper() = default;
 public:
+    Q_WEAK_OVERLOAD // prevent it from entering the ABI and rendering constexpr useless
     static constexpr auto makePair(int from, int to) -> quint64
     {
         return (quint64(from) << 32) + quint64(to);
     }
 
     virtual const QtPrivate::QMetaTypeInterface *interfaceForType(int) const = 0;
-    virtual bool convert(const void *, int, void *, int) const { return false; }
+    virtual bool convert(const void *, int, void *, int) const;
 };
 
 extern Q_CORE_EXPORT const QMetaTypeModuleHelper *qMetaTypeGuiHelper;
@@ -174,6 +175,15 @@ inline void copyConstruct(const QtPrivate::QMetaTypeInterface *iface, void *wher
     Q_ASSERT(isCopyConstructible(iface));
     if (iface->copyCtr)
         iface->copyCtr(iface, where, copy);
+    else
+        memcpy(where, copy, iface->size);
+}
+
+inline void moveConstruct(const QtPrivate::QMetaTypeInterface *iface, void *where, void *copy)
+{
+    Q_ASSERT(isMoveConstructible(iface));
+    if (iface->moveCtr)
+        iface->moveCtr(iface, where, copy);
     else
         memcpy(where, copy, iface->size);
 }

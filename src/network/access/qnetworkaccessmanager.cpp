@@ -68,6 +68,7 @@
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 Q_LOGGING_CATEGORY(lcQnam, "qt.network.access.manager")
 
@@ -780,6 +781,46 @@ QNetworkReply *QNetworkAccessManager::get(const QNetworkRequest &request)
 }
 
 /*!
+   \since 6.7
+
+   \overload
+
+   \note A GET request with a message body is not cached.
+
+   \note If the request is redirected, the message body will be kept only if the status code is
+   307 or 308.
+*/
+
+QNetworkReply *QNetworkAccessManager::get(const QNetworkRequest &request, QIODevice *data)
+{
+    QNetworkRequest newRequest(request);
+    return d_func()->postProcess(
+            createRequest(QNetworkAccessManager::GetOperation, newRequest, data));
+}
+
+/*!
+   \since 6.7
+
+   \overload
+
+   \note A GET request with a message body is not cached.
+
+   \note If the request is redirected, the message body will be kept only if the status code is
+   307 or 308.
+*/
+
+QNetworkReply *QNetworkAccessManager::get(const QNetworkRequest &request, const QByteArray &data)
+{
+    QBuffer *buffer = new QBuffer;
+    buffer->setData(data);
+    buffer->open(QIODevice::ReadOnly);
+
+    QNetworkReply *reply = get(request, buffer);
+    buffer->setParent(reply);
+    return reply;
+}
+
+/*!
     Sends an HTTP POST request to the destination specified by \a request
     and returns a new QNetworkReply object opened for reading that will
     contain the reply sent by the server. The contents of  the \a data
@@ -814,6 +855,17 @@ QNetworkReply *QNetworkAccessManager::post(const QNetworkRequest &request, const
     buffer->setParent(reply);
     return reply;
 }
+
+/*!
+    \fn QNetworkReply *QNetworkAccessManager::post(const QNetworkRequest &request, std::nullptr_t nptr)
+
+    \since 6.8
+
+    \overload
+
+    Sends the POST request specified by \a request without a body and returns
+    a new QNetworkReply object.
+*/
 
 #if QT_CONFIG(http) || defined(Q_OS_WASM)
 /*!
@@ -897,6 +949,17 @@ QNetworkReply *QNetworkAccessManager::put(const QNetworkRequest &request, const 
     buffer->setParent(reply);
     return reply;
 }
+
+/*!
+    \since 6.8
+
+    \overload
+
+    \fn QNetworkReply *QNetworkAccessManager::put(const QNetworkRequest &request, std::nullptr_t nptr)
+
+    Sends the PUT request specified by \a request without a body and returns
+    a new QNetworkReply object.
+*/
 
 /*!
     \since 4.6
@@ -1132,8 +1195,8 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
     }
 
 #if QT_CONFIG(http) || defined (Q_OS_WASM)
-    if (!req.transferTimeout())
-      req.setTransferTimeout(transferTimeout());
+    if (req.transferTimeoutAsDuration() == 0ms)
+        req.setTransferTimeout(transferTimeoutAsDuration());
 #endif
 
     if (autoDeleteReplies()
@@ -1144,6 +1207,13 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
     bool isLocalFile = req.url().isLocalFile();
     QString scheme = req.url().scheme();
 
+    // Remap local+http to unix+http to make further processing easier
+    if (scheme == "local+http"_L1) {
+        scheme = u"unix+http"_s;
+        QUrl url = req.url();
+        url.setScheme(scheme);
+        req.setUrl(url);
+    }
 
     // fast path for GET on file:// URLs
     // The QNetworkAccessFileBackend will right now only be used for PUT
@@ -1179,12 +1249,14 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
         }
     }
     QNetworkRequest request = req;
+    auto h = request.headers();
 #ifndef Q_OS_WASM // Content-length header is not allowed to be set by user in wasm
-    if (!request.header(QNetworkRequest::ContentLengthHeader).isValid() &&
+    if (!h.contains(QHttpHeaders::WellKnownHeader::ContentLength) &&
         outgoingData && !outgoingData->isSequential()) {
         // request has no Content-Length
         // but the data that is outgoing is random-access
-        request.setHeader(QNetworkRequest::ContentLengthHeader, outgoingData->size());
+        h.append(QHttpHeaders::WellKnownHeader::ContentLength,
+                 QByteArray::number(outgoingData->size()));
     }
 #endif
     if (static_cast<QNetworkRequest::LoadControl>
@@ -1193,9 +1265,11 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
         if (d->cookieJar) {
             QList<QNetworkCookie> cookies = d->cookieJar->cookiesForUrl(request.url());
             if (!cookies.isEmpty())
-                request.setHeader(QNetworkRequest::CookieHeader, QVariant::fromValue(cookies));
+                h.replaceOrAppend(QHttpHeaders::WellKnownHeader::Cookie,
+                                  QNetworkHeadersPrivate::fromCookieList(cookies));
         }
     }
+    request.setHeaders(std::move(h));
 #ifdef Q_OS_WASM
     Q_UNUSED(isLocalFile);
     // Support http, https, and relative urls
@@ -1216,11 +1290,15 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
         u"https",
         u"preconnect-https",
 #endif
+        u"unix+http",
     };
     // Since Qt 5 we use the new QNetworkReplyHttpImpl
     if (std::find(std::begin(httpSchemes), std::end(httpSchemes), scheme) != std::end(httpSchemes)) {
+
 #ifndef QT_NO_SSL
-        if (isStrictTransportSecurityEnabled() && d->stsCache.isKnownHost(request.url())) {
+        const bool isLocalSocket = scheme.startsWith("unix"_L1);
+        if (!isLocalSocket && isStrictTransportSecurityEnabled()
+            && d->stsCache.isKnownHost(request.url())) {
             QUrl stsUrl(request.url());
             // RFC6797, 8.3:
             // The UA MUST replace the URI scheme with "https" [RFC2818],
@@ -1311,6 +1389,8 @@ QStringList QNetworkAccessManager::supportedSchemesImplementation() const
     // Those ones don't exist in backends
 #if QT_CONFIG(http)
     schemes << QStringLiteral("http");
+    schemes << QStringLiteral("unix+http");
+    schemes << QStringLiteral("local+http");
 #ifndef QT_NO_SSL
     if (QSslSocket::supportsSsl())
         schemes << QStringLiteral("https");
@@ -1384,38 +1464,59 @@ void QNetworkAccessManager::setAutoDeleteReplies(bool shouldAutoDelete)
 }
 
 /*!
+    \fn int QNetworkAccessManager::transferTimeout() const
     \since 5.15
 
     Returns the timeout used for transfers, in milliseconds.
 
-    This timeout is zero if setTransferTimeout() hasn't been
-    called, which means that the timeout is not used.
+    \sa setTransferTimeout()
 */
-int QNetworkAccessManager::transferTimeout() const
+
+/*!
+    \fn void QNetworkAccessManager::setTransferTimeout(int timeout)
+    \since 5.15
+
+    Sets \a timeout as the transfer timeout in milliseconds.
+
+    \sa setTransferTimeout(std::chrono::milliseconds),
+        transferTimeout(), transferTimeoutAsDuration()
+*/
+
+/*!
+    \since 6.7
+
+    Returns the timeout duration after which the transfer is aborted if no
+    data is exchanged.
+
+    The default duration is zero, which means that the timeout is not used.
+
+    \sa setTransferTimeout(std::chrono::milliseconds)
+ */
+std::chrono::milliseconds QNetworkAccessManager::transferTimeoutAsDuration() const
 {
     return d_func()->transferTimeout;
 }
 
 /*!
-    \since 5.15
+    \since 6.7
 
-    Sets \a timeout as the transfer timeout in milliseconds.
+    Sets the timeout \a duration to abort the transfer if no data is exchanged.
 
     Transfers are aborted if no bytes are transferred before
     the timeout expires. Zero means no timer is set. If no
     argument is provided, the timeout is
-    QNetworkRequest::DefaultTransferTimeoutConstant. If this function
+    QNetworkRequest::DefaultTransferTimeout. If this function
     is not called, the timeout is disabled and has the
     value zero. The request-specific non-zero timeouts set for
     the requests that are executed override this value. This means
     that if QNetworkAccessManager has an enabled timeout, it needs
     to be disabled to execute a request without a timeout.
 
-    \sa transferTimeout()
-*/
-void QNetworkAccessManager::setTransferTimeout(int timeout)
+    \sa transferTimeoutAsDuration()
+ */
+void QNetworkAccessManager::setTransferTimeout(std::chrono::milliseconds duration)
 {
-    d_func()->transferTimeout = timeout;
+    d_func()->transferTimeout = duration;
 }
 
 void QNetworkAccessManagerPrivate::_q_replyFinished(QNetworkReply *reply)
@@ -1649,9 +1750,10 @@ QNetworkRequest QNetworkAccessManagerPrivate::prepareMultipart(const QNetworkReq
 {
     // copy the request, we probably need to add some headers
     QNetworkRequest newRequest(request);
+    auto h = newRequest.headers();
 
     // add Content-Type header if not there already
-    if (!request.header(QNetworkRequest::ContentTypeHeader).isValid()) {
+    if (!h.contains(QHttpHeaders::WellKnownHeader::ContentType)) {
         QByteArray contentType;
         contentType.reserve(34 + multiPart->d_func()->boundary.size());
         contentType += "multipart/";
@@ -1671,14 +1773,15 @@ QNetworkRequest QNetworkAccessManagerPrivate::prepareMultipart(const QNetworkReq
         }
         // putting the boundary into quotes, recommended in RFC 2046 section 5.1.1
         contentType += "; boundary=\"" + multiPart->d_func()->boundary + '"';
-        newRequest.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(contentType));
+        h.append(QHttpHeaders::WellKnownHeader::ContentType, contentType);
     }
 
     // add MIME-Version header if not there already (we must include the header
     // if the message conforms to RFC 2045, see section 4 of that RFC)
-    QByteArray mimeHeader("MIME-Version");
-    if (!request.hasRawHeader(mimeHeader))
-        newRequest.setRawHeader(mimeHeader, QByteArray("1.0"));
+    if (!h.contains(QHttpHeaders::WellKnownHeader::MIMEVersion))
+        h.append(QHttpHeaders::WellKnownHeader::MIMEVersion, "1.0"_ba);
+
+    newRequest.setHeaders(std::move(h));
 
     QIODevice *device = multiPart->d_func()->device;
     if (!device->isReadable()) {

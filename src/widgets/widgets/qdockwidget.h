@@ -20,7 +20,7 @@ class Q_WIDGETS_EXPORT QDockWidget : public QWidget
 {
     Q_OBJECT
 
-    Q_PROPERTY(bool floating READ isFloating WRITE setFloating)
+    Q_PROPERTY(bool floating READ isFloating WRITE setFloating NOTIFY topLevelChanged)
     Q_PROPERTY(DockWidgetFeatures features READ features WRITE setFeatures NOTIFY featuresChanged)
     Q_PROPERTY(Qt::DockWidgetAreas allowedAreas READ allowedAreas
                WRITE setAllowedAreas NOTIFY allowedAreasChanged)
@@ -64,6 +64,10 @@ public:
     inline bool isAreaAllowed(Qt::DockWidgetArea area) const
     { return (allowedAreas() & area) == area; }
 
+#ifndef QT_NO_DEBUG_STREAM
+    friend Q_WIDGETS_EXPORT QDebug operator<<(QDebug dbg, const QDockWidget *dockWidget);
+#endif
+
 #ifndef QT_NO_ACTION
     QAction *toggleViewAction() const;
 #endif
@@ -72,7 +76,7 @@ Q_SIGNALS:
     void featuresChanged(QDockWidget::DockWidgetFeatures features);
     void topLevelChanged(bool topLevel);
     void allowedAreasChanged(Qt::DockWidgetAreas allowedAreas);
-    void visibilityChanged(bool visible); //TODO depricate in Qt7: Better listen to hide/show events
+    void visibilityChanged(bool visible); // ### Qt7: Deprecate this. Better listen to hide/show events
     void dockLocationChanged(Qt::DockWidgetArea area);
 
 protected:
@@ -85,8 +89,6 @@ protected:
 private:
     Q_DECLARE_PRIVATE(QDockWidget)
     Q_DISABLE_COPY(QDockWidget)
-    Q_PRIVATE_SLOT(d_func(), void _q_toggleView(bool))
-    Q_PRIVATE_SLOT(d_func(), void _q_toggleTopLevel())
     friend class QDockAreaLayout;
     friend class QDockWidgetItem;
     friend class QMainWindowLayout;

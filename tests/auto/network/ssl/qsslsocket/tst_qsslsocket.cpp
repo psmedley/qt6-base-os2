@@ -1,6 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // Copyright (C) 2014 Governikus GmbH & Co. KG.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtNetwork/private/qtnetworkglobal_p.h>
 
@@ -42,6 +42,8 @@
 
 #include "private/qsslsocket_p.h"
 #include "private/qsslconfiguration_p.h"
+
+using namespace std::chrono_literals;
 
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
@@ -164,9 +166,7 @@ private slots:
     void protocol();
     void protocolServerSide_data();
     void protocolServerSide();
-#if QT_CONFIG(openssl)
     void serverCipherPreferences();
-#endif
     void setCaCertificates();
     void setLocalCertificate();
     void localCertificateChain();
@@ -1661,8 +1661,6 @@ void tst_QSslSocket::protocolServerSide()
     QCOMPARE(client.isEncrypted(), works);
 }
 
-#if QT_CONFIG(openssl)
-
 void tst_QSslSocket::serverCipherPreferences()
 {
     if (!isTestingOpenSsl)
@@ -1756,8 +1754,6 @@ void tst_QSslSocket::serverCipherPreferences()
         QCOMPARE(client.sessionCipher().name(), testedCiphers[1].name());
     }
 }
-
-#endif // Feature 'openssl'.
 
 
 void tst_QSslSocket::setCaCertificates()
@@ -2840,7 +2836,7 @@ void tst_QSslSocket::closeWhileEmittingSocketError()
     // Make sure we have some data buffered so that close will try to flush:
     clientSocket.write(QByteArray(1000000, Qt::Uninitialized));
 
-    QTestEventLoop::instance().enterLoopMSecs(1000);
+    QTestEventLoop::instance().enterLoop(1s);
     QVERIFY(!QTestEventLoop::instance().timeout());
 
     QCOMPARE(socketErrorSpy.size(), 1);
@@ -3100,7 +3096,14 @@ void tst_QSslSocket::blacklistedCertificates()
     QList<QSslError> sslErrors = receiver->sslHandshakeErrors();
     QVERIFY(sslErrors.size() > 0);
     // there are more errors (self signed cert and hostname mismatch), but we only care about the blacklist error
-    QCOMPARE(sslErrors.at(0).error(), QSslError::CertificateBlacklisted);
+    std::optional<QSslError> blacklistedError;
+    for (const QSslError &error : sslErrors) {
+        if (error.error() == QSslError::CertificateBlacklisted) {
+            blacklistedError = error;
+            break;
+        }
+    }
+    QVERIFY2(blacklistedError, "CertificateBlacklisted error not found!");
 }
 
 void tst_QSslSocket::versionAccessors()
@@ -3473,7 +3476,13 @@ void tst_QSslSocket::dhServer()
         return;
 
     SslServer server;
-    server.ciphers = {QSslCipher("DHE-RSA-AES256-SHA"), QSslCipher("DHE-DSS-AES256-SHA")};
+    QSslCipher rsaCipher("DHE-RSA-AES256-SHA");
+    QSslCipher dssCipher("DHE-DSS-AES256-SHA");
+    if (rsaCipher.isNull())
+        QSKIP("The current backend doesn't support DHE-RSA-AES256-SHA");
+    if (dssCipher.isNull())
+        QSKIP("The current backend doesn't support DHE-DSS-AES256-SHA");
+    server.ciphers = { rsaCipher, dssCipher };
     QVERIFY(server.listen());
 
     QEventLoop loop;
@@ -3501,9 +3510,10 @@ void tst_QSslSocket::dhServerCustomParamsNull()
     if (setProxy)
         return;
 
+    const QSslCipher cipherWithDH("DHE-RSA-AES256-SHA256");
     SslServer server;
-    server.ciphers = {QSslCipher("DHE-RSA-AES256-SHA"), QSslCipher("DHE-DSS-AES256-SHA")};
-    server.protocol = Test::TlsV1_0;
+    server.ciphers = {cipherWithDH};
+    server.protocol = QSsl::TlsV1_2;
 
     QSslConfiguration cfg = server.config;
     cfg.setDiffieHellmanParameters(QSslDiffieHellmanParameters());
@@ -3516,7 +3526,6 @@ void tst_QSslSocket::dhServerCustomParamsNull()
 
     QSslSocket client;
     QSslConfiguration config = client.sslConfiguration();
-    config.setProtocol(Test::TlsV1_0);
     client.setSslConfiguration(config);
     socket = &client;
     connect(socket, SIGNAL(errorOccurred(QAbstractSocket::SocketError)), &loop, SLOT(quit()));
@@ -3527,7 +3536,8 @@ void tst_QSslSocket::dhServerCustomParamsNull()
 
     loop.exec();
 
-    QVERIFY(client.state() != QAbstractSocket::ConnectedState);
+    QCOMPARE(client.state(), QAbstractSocket::ConnectedState);
+    QCOMPARE(client.sessionCipher(), cipherWithDH);
 }
 
 void tst_QSslSocket::dhServerCustomParams()
@@ -3542,7 +3552,9 @@ void tst_QSslSocket::dhServerCustomParams()
         return;
 
     SslServer server;
-    server.ciphers = {QSslCipher("DHE-RSA-AES256-SHA"), QSslCipher("DHE-DSS-AES256-SHA")};
+    const QSslCipher cipherWithDH("DHE-RSA-AES256-SHA256");
+    server.ciphers = {cipherWithDH};
+    server.protocol = QSsl::TlsV1_2;
 
     QSslConfiguration cfg = server.config;
 
@@ -3572,7 +3584,8 @@ void tst_QSslSocket::dhServerCustomParams()
 
     loop.exec();
 
-    QVERIFY(client.state() == QAbstractSocket::ConnectedState);
+    QCOMPARE(client.state(), QAbstractSocket::ConnectedState);
+    QCOMPARE(client.sessionCipher(), cipherWithDH);
 }
 #endif // QT_CONFIG(openssl)
 
@@ -3588,7 +3601,10 @@ void tst_QSslSocket::ecdhServer()
         return;
 
     SslServer server;
-    server.ciphers = {QSslCipher("ECDHE-RSA-AES128-SHA")};
+    QSslCipher cipher("ECDHE-RSA-AES128-SHA");
+    if (cipher.isNull())
+        QSKIP("The current backend doesn't support ECDHE-RSA-AES128-SHA");
+    server.ciphers = {cipher};
     QVERIFY(server.listen());
 
     QEventLoop loop;
@@ -4577,7 +4593,7 @@ void tst_QSslSocket::unsupportedProtocols()
         return;
 
     QFETCH(const QSsl::SslProtocol, unsupportedProtocol);
-    const int timeoutMS = 500;
+    constexpr auto timeout = 500ms;
     // Test a client socket.
     {
         // 0. connectToHostEncrypted: client-side, non-blocking API, error is discovered
@@ -4599,7 +4615,7 @@ void tst_QSslSocket::unsupportedProtocols()
         QCOMPARE(socket.error(), QAbstractSocket::UnknownSocketError);
 
         socket.connectToHost(QHostAddress::LocalHost, server.serverPort());
-        QVERIFY(socket.waitForConnected(timeoutMS));
+        QVERIFY(socket.waitForConnected(int(timeout.count())));
 
         socket.setProtocol(unsupportedProtocol);
         socket.startClientEncryption();
@@ -4624,7 +4640,7 @@ void tst_QSslSocket::unsupportedProtocols()
 
         QTcpSocket client;
         client.connectToHost(QHostAddress::LocalHost, server.serverPort());
-        loop.enterLoopMSecs(timeoutMS);
+        loop.enterLoop(timeout);
         QVERIFY(!loop.timeout());
         QVERIFY(server.socket);
         QCOMPARE(server.socket->error(), QAbstractSocket::SslInvalidUserDataError);
@@ -4731,7 +4747,7 @@ void tst_QSslSocket::alertMissingCertificate()
     connect(&clientSocket, &QAbstractSocket::errorOccurred, earlyQuitter);
     connect(&server, &SslServer::socketError, earlyQuitter);
 
-    runner.enterLoopMSecs(1000);
+    runner.enterLoop(1s);
 
     if (clientSocket.isEncrypted()) {
         // When using TLS 1.3 the client side thinks it is connected very
@@ -4739,7 +4755,7 @@ void tst_QSslSocket::alertMissingCertificate()
         // inevitable disconnect.
         QCOMPARE(clientSocket.sessionProtocol(), QSsl::TlsV1_3);
         connect(&clientSocket, &QSslSocket::disconnected, &runner, &QTestEventLoop::exitLoop);
-        runner.enterLoopMSecs(10000);
+        runner.enterLoop(10s);
     }
 
     QVERIFY(serverSpy.size() > 0);
@@ -4794,7 +4810,7 @@ void tst_QSslSocket::alertInvalidCertificate()
     connect(&clientSocket, &QAbstractSocket::errorOccurred, earlyQuitter);
     connect(&server, &SslServer::socketError, earlyQuitter);
 
-    runner.enterLoopMSecs(1000);
+    runner.enterLoop(1s);
 
     QVERIFY(serverSpy.size() > 0);
     QVERIFY(clientSpy.size() > 0);
@@ -4922,7 +4938,7 @@ void tst_QSslSocket::selfSignedCertificates()
     connect(&clientSocket, &QAbstractSocket::errorOccurred, earlyQuitter);
     connect(&server, &SslServer::socketError, earlyQuitter);
 
-    runner.enterLoopMSecs(1000);
+    runner.enterLoop(1s);
 
     if (clientKnown) {
         QCOMPARE(serverSpy.size(), 0);
@@ -5060,7 +5076,7 @@ void tst_QSslSocket::pskHandshake()
     connect(&clientSocket, &QAbstractSocket::errorOccurred, earlyQuitter);
     connect(&server, &SslServer::socketError, earlyQuitter);
 
-    runner.enterLoopMSecs(1000);
+    runner.enterLoop(1s);
 
     if (pskRight) {
         QCOMPARE(serverSpy.size(), 0);

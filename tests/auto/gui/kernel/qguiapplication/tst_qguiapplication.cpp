@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -47,6 +47,7 @@ private slots:
     void changeFocusWindow();
     void keyboardModifiers();
     void palette();
+    void paletteNoCrash();
     void font();
     void modalWindow();
     void quitOnLastWindowClosed();
@@ -59,6 +60,8 @@ private slots:
     void testSetPaletteAttribute();
 
     void staticFunctions();
+
+    void topLevelAt();
 
     void settableStyleHints_data();
     void settableStyleHints(); // Needs to run last as it changes style hints.
@@ -457,16 +460,12 @@ void tst_QGuiApplication::keyboardModifiers()
     QCOMPARE(QGuiApplication::keyboardModifiers(), Qt::ControlModifier);
 
     // wheel events
-    QPoint global = window->mapToGlobal(center);
     QPoint delta(0, 1);
-    QWindowSystemInterface::handleWheelEvent(window.data(), center, global, delta, delta, Qt::NoModifier);
-    QWindowSystemInterface::sendWindowSystemEvents(QEventLoop::AllEvents);
+    QTest::wheelEvent(window.data(), center, delta, delta, Qt::NoModifier);
     QCOMPARE(QGuiApplication::keyboardModifiers(), Qt::NoModifier);
-    QWindowSystemInterface::handleWheelEvent(window.data(), center, global, delta, delta, Qt::AltModifier);
-    QWindowSystemInterface::sendWindowSystemEvents(QEventLoop::AllEvents);
+    QTest::wheelEvent(window.data(), center, delta, delta, Qt::AltModifier);
     QCOMPARE(QGuiApplication::keyboardModifiers(), Qt::AltModifier);
-    QWindowSystemInterface::handleWheelEvent(window.data(), center, global, delta, delta, Qt::ControlModifier);
-    QWindowSystemInterface::sendWindowSystemEvents(QEventLoop::AllEvents);
+    QTest::wheelEvent(window.data(), center, delta, delta, Qt::ControlModifier);
     QCOMPARE(QGuiApplication::keyboardModifiers(), Qt::ControlModifier);
 
     // touch events
@@ -550,6 +549,15 @@ void tst_QGuiApplication::palette()
     QCOMPARE(signalSpy.size(), 2);
 #endif
     QCOMPARE(QGuiApplication::palette(), QPalette());
+}
+
+void tst_QGuiApplication::paletteNoCrash()
+{
+    QGuiApplication::setDesktopSettingsAware(false);
+    int argc = 1;
+    char *argv[] = { const_cast<char*>("tst_qguiapplication") };
+    // this would crash on windows (QTBUG-111527)
+    QGuiApplication a(argc, argv);
 }
 
 void tst_QGuiApplication::font()
@@ -996,8 +1004,8 @@ void tst_QGuiApplication::quitOnLastWindowClosedWithEventLoopLocker()
     });
 
     {
-        // Disabling QEventLoopLocker support should not affect
-        // quitting when last window is closed.
+        // Disabling QEventLoopLocker automatic quit should not affect
+        // quitting when last window is closed if there are no lockers.
         app.setQuitLockEnabled(false);
 
         QuitSpy quitSpy;
@@ -1011,8 +1019,40 @@ void tst_QGuiApplication::quitOnLastWindowClosedWithEventLoopLocker()
     }
 
     {
-        // Disabling quitOnLastWindowClosed support should not affect
-        // quitting when last QEventLoopLocker goes out of scope.
+        // Disabling QEventLoopLocker automatic quit should still block
+        // quitting when last window is closed if there is a locker alive.
+        app.setQuitLockEnabled(false);
+
+        QScopedPointer<QEventLoopLocker> locker(new QEventLoopLocker);
+
+        QuitSpy quitSpy;
+        QWindow window;
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTimer::singleShot(0, &window, &QWindow::close);
+        QTimer::singleShot(200, &app, []{ QCoreApplication::exit(0); });
+        app.exec();
+        QCOMPARE(quitSpy.quits, 0);
+    }
+
+    {
+        // Disabling quitOnLastWindowClosed automatic quit should not affect
+        // quitting when last QEventLoopLocker goes out of scope if
+        // there are no windows.
+        app.setQuitLockEnabled(true);
+        app.setQuitOnLastWindowClosed(false);
+
+        QuitSpy quitSpy;
+        QScopedPointer<QEventLoopLocker> locker(new QEventLoopLocker);
+        QTimer::singleShot(0, [&]{ locker.reset(nullptr); });
+        QTimer::singleShot(200, &app, []{ QCoreApplication::exit(0); });
+        app.exec();
+        QCOMPARE(quitSpy.quits, 1);
+    }
+
+    {
+        // Disabling quitOnLastWindowClosed automatic quit should still block
+        // quitting via QEventLoopLocker if there's a window alive.
         app.setQuitLockEnabled(true);
         app.setQuitOnLastWindowClosed(false);
 
@@ -1024,7 +1064,7 @@ void tst_QGuiApplication::quitOnLastWindowClosedWithEventLoopLocker()
         QTimer::singleShot(0, [&]{ locker.reset(nullptr); });
         QTimer::singleShot(200, &app, []{ QCoreApplication::exit(0); });
         app.exec();
-        QCOMPARE(quitSpy.quits, 1);
+        QCOMPARE(quitSpy.quits, 0);
     }
 
     {
@@ -1313,6 +1353,40 @@ void tst_QGuiApplication::staticFunctions()
 
     QTest::ignoreMessage(QtWarningMsg, "QPixmap: QGuiApplication must be created before calling defaultDepth().");
     QPixmap::defaultDepth();
+}
+
+void tst_QGuiApplication::topLevelAt()
+{
+    int argc = 1;
+    char *argv[] = { const_cast<char*>("tst_qguiapplication") };
+    QGuiApplication app(argc, argv);
+
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("QGuiApplication::topLevelAt() is not Wayland compliant, see also QTBUG-121015");
+
+    QWindow bottom;
+    bottom.setObjectName("Bottom");
+    bottom.setFlag(Qt::FramelessWindowHint);
+    bottom.setGeometry(200, 200, 200, 200);
+    bottom.showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(&bottom));
+    QTRY_COMPARE(app.topLevelAt(QPoint(300, 300)), &bottom);
+
+    QWindow top;
+    top.setObjectName("Top");
+    top.setFlag(Qt::FramelessWindowHint);
+    top.setGeometry(200, 200, 200, 200);
+    top.showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(&top));
+    top.raise();
+    QTRY_COMPARE(app.topLevelAt(QPoint(300, 300)), &top);
+
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowMasks))
+        QSKIP("QWindow::setMask() is not supported.");
+
+    top.setMask(QRect(0, 0, 50, 50));
+    QTRY_COMPARE(app.topLevelAt(QPoint(300, 300)), &bottom);
+    QTRY_COMPARE(app.topLevelAt(QPoint(225, 225)), &top);
 }
 
 void tst_QGuiApplication::settableStyleHints_data()

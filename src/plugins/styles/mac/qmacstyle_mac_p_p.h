@@ -12,7 +12,6 @@
 #include <QtCore/qlist.h>
 #include <QtCore/qmap.h>
 #include <QtCore/qmath.h>
-#include <QtCore/qpair.h>
 #include <QtCore/qpointer.h>
 #include <QtCore/qtextstream.h>
 
@@ -264,7 +263,6 @@ public:
 
     std::optional<QFont> smallSystemFont;
 
-    QMacKeyValueObserver appearanceObserver;
 };
 
 QT_END_NAMESPACE

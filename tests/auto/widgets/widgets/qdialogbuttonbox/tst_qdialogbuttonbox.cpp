@@ -1,11 +1,12 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #include <QTest>
 #include <QSignalSpy>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QStyle>
 #include <QtWidgets/QLayout>
 #include <QtWidgets/QDialog>
+#include <QtWidgets/QLineEdit>
 #include <QtGui/QAction>
 #include <QtGui/QStyleHints>
 #include <qdialogbuttonbox.h>
@@ -81,6 +82,9 @@ private slots:
 
     void task191642_default();
     void testDeletedStandardButton();
+    void automaticDefaultButton();
+    void initialFocus_data();
+    void initialFocus();
 
 private:
     qint64 timeStamp;
@@ -907,6 +911,88 @@ void tst_QDialogButtonBox::testDeletedStandardButton()
     // setStanderdButton should delete previous buttons
     QVERIFY(!buttonA);
     QVERIFY(!buttonC);
+}
+
+void tst_QDialogButtonBox::automaticDefaultButton()
+{
+    // Having a QDialogButtonBox inside a QDialog triggers Qt to
+    // enable autoDefault for QPushButtons inside the button box.
+    // Check that the logic for resolving a default button based
+    // on the Accept role is not overridden by the first button
+    // in the dialog (the focus proxy) taking focus, and hence
+    // stealing the default button state.
+
+    {
+        QDialog dialog;
+        QDialogButtonBox *bb = new QDialogButtonBox(&dialog);
+        // Force horizontal orientation, where we know the order between
+        // Reset and Accept roles are always the same for all layouts.
+        bb->setOrientation(Qt::Horizontal);
+        auto *okButton = bb->addButton(QDialogButtonBox::Ok);
+        auto *resetButton = bb->addButton(QDialogButtonBox::Reset);
+        // Double check our assumption about Reset being first
+        QCOMPARE(bb->layout()->itemAt(0)->widget(), resetButton);
+
+        dialog.show();
+        QVERIFY(QTest::qWaitForWindowActive(&dialog));
+
+        QVERIFY(okButton->isDefault());
+        QSignalSpy buttonClicked(okButton, &QPushButton::clicked);
+        QTest::keyPress(&dialog, Qt::Key_Enter);
+        QCOMPARE(buttonClicked.count(), 1);
+    }
+
+    // However, if an explicit button has been focused, we respect that.
+
+    {
+        QDialog dialog;
+        QDialogButtonBox *bb = new QDialogButtonBox(&dialog);
+        bb->setOrientation(Qt::Horizontal);
+        bb->addButton(QDialogButtonBox::Ok);
+        auto *resetButton = bb->addButton(QDialogButtonBox::Reset);
+        resetButton->setFocus();
+        dialog.show();
+        QVERIFY(QTest::qWaitForWindowActive(&dialog));
+
+        QVERIFY(resetButton->isDefault());
+        QSignalSpy buttonClicked(resetButton, &QPushButton::clicked);
+        QTest::keyPress(&dialog, Qt::Key_Enter);
+        QCOMPARE(buttonClicked.count(), 1);
+    }
+}
+
+void tst_QDialogButtonBox::initialFocus_data()
+{
+    QTest::addColumn<Qt::FocusPolicy>("focusPolicy");
+    QTest::addColumn<bool>("lineEditHasFocus");
+
+    QTest::addRow("TabFocus") << Qt::FocusPolicy::TabFocus << false;
+    QTest::addRow("StrongFocus") << Qt::FocusPolicy::StrongFocus << true;
+    QTest::addRow("NoFocus") << Qt::FocusPolicy::NoFocus << false;
+    QTest::addRow("ClickFocus") << Qt::FocusPolicy::ClickFocus << false;
+    QTest::addRow("WheelFocus") << Qt::FocusPolicy::WheelFocus << false;
+}
+
+void tst_QDialogButtonBox::initialFocus()
+{
+    QFETCH(const Qt::FocusPolicy, focusPolicy);
+    QFETCH(const bool, lineEditHasFocus);
+    QDialog dialog;
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QLineEdit *lineEdit = new QLineEdit(&dialog);
+    lineEdit->setFocusPolicy(focusPolicy);
+    layout->addWidget(lineEdit);
+    QDialogButtonBox *dialogButtonBox = new QDialogButtonBox(&dialog);
+    layout->addWidget(dialogButtonBox);
+    dialogButtonBox->addButton(QDialogButtonBox::Reset);
+    const auto *firstAcceptButton = dialogButtonBox->addButton(QDialogButtonBox::Ok);
+    dialogButtonBox->addButton(QDialogButtonBox::Cancel);
+    dialog.show();
+    dialog.activateWindow();
+    if (lineEditHasFocus)
+        QTRY_VERIFY(lineEdit->hasFocus());
+    else
+        QTRY_VERIFY(firstAcceptButton->hasFocus());
 }
 
 QTEST_MAIN(tst_QDialogButtonBox)

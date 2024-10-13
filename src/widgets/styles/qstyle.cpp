@@ -129,8 +129,6 @@ static int unpackControlTypes(QSizePolicy::ControlTypes controls, QSizePolicy::C
 
     Topics:
 
-    \tableofcontents
-
     \section1 Setting a Style
 
     The style of the entire application can be set using the
@@ -1494,8 +1492,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     Returns the value of the given pixel \a metric.
 
     The specified \a option and \a widget can be used for calculating
-    the metric. In general, the \a widget argument is not used. The \a
-    option can be cast to the appropriate type using the
+    the metric. The \a option can be cast to the appropriate type using the
     qstyleoption_cast() function. Note that the \a option may be zero
     even for PixelMetrics that can make use of it. See the table below
     for the appropriate \a option casts:

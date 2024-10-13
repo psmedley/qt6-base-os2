@@ -41,6 +41,9 @@ Q_MOC_INCLUDE(<QtNetwork/QNetworkProxy>)
 Q_MOC_INCLUDE(<QtNetwork/QAuthenticator>)
 
 #include <private/qdecompresshelper_p.h>
+#include <QtNetwork/qhttpheaders.h>
+
+#include <QtCore/qpointer.h>
 
 QT_REQUIRE_CONFIG(http);
 
@@ -51,7 +54,7 @@ class QHttpNetworkConnectionChannel;
 class QHttpNetworkRequest;
 class QHttpNetworkConnectionPrivate;
 class QHttpNetworkReplyPrivate;
-class Q_AUTOTEST_EXPORT QHttpNetworkReply : public QObject, public QHttpNetworkHeader
+class Q_NETWORK_EXPORT QHttpNetworkReply : public QObject, public QHttpNetworkHeader
 {
     Q_OBJECT
 public:
@@ -70,11 +73,11 @@ public:
     qint64 contentLength() const override;
     void setContentLength(qint64 length) override;
 
-    QList<QPair<QByteArray, QByteArray> > header() const override;
-    QByteArray headerField(const QByteArray &name, const QByteArray &defaultValue = QByteArray()) const override;
+    QHttpHeaders header() const override;
+    QByteArray headerField(QByteArrayView name, const QByteArray &defaultValue = QByteArray()) const override;
     void setHeaderField(const QByteArray &name, const QByteArray &data) override;
     void appendHeaderField(const QByteArray &name, const QByteArray &data);
-    void parseHeader(const QByteArray &header); // used for testing
+    void parseHeader(QByteArrayView header); // used for testing
 
     QHttpNetworkRequest request() const;
     void setRequest(const QHttpNetworkRequest &request);
@@ -169,21 +172,20 @@ class Q_AUTOTEST_EXPORT QHttpNetworkReplyPrivate : public QObjectPrivate, public
 public:
     QHttpNetworkReplyPrivate(const QUrl &newUrl = QUrl());
     ~QHttpNetworkReplyPrivate();
-    qint64 readStatus(QAbstractSocket *socket);
-    bool parseStatus(const QByteArray &status);
-    qint64 readHeader(QAbstractSocket *socket);
-    void parseHeader(const QByteArray &header);
+    qint64 readStatus(QIODevice *socket);
+    bool parseStatus(QByteArrayView status);
+    qint64 readHeader(QIODevice *socket);
+    void parseHeader(QByteArrayView header);
     void appendHeaderField(const QByteArray &name, const QByteArray &data);
-    qint64 readBody(QAbstractSocket *socket, QByteDataBuffer *out);
-    qint64 readBodyVeryFast(QAbstractSocket *socket, char *b);
-    qint64 readBodyFast(QAbstractSocket *socket, QByteDataBuffer *rb);
-    bool findChallenge(bool forProxy, QByteArray &challenge) const;
+    qint64 readBody(QIODevice *socket, QByteDataBuffer *out);
+    qint64 readBodyVeryFast(QIODevice *socket, char *b);
+    qint64 readBodyFast(QIODevice *socket, QByteDataBuffer *rb);
     void clear();
     void clearHttpLayerInformation();
 
-    qint64 readReplyBodyRaw(QAbstractSocket *in, QByteDataBuffer *out, qint64 size);
-    qint64 readReplyBodyChunked(QAbstractSocket *in, QByteDataBuffer *out);
-    qint64 getChunkSize(QAbstractSocket *in, qint64 *chunkSize);
+    qint64 readReplyBodyRaw(QIODevice *in, QByteDataBuffer *out, qint64 size);
+    qint64 readReplyBodyChunked(QIODevice *in, QByteDataBuffer *out);
+    qint64 getChunkSize(QIODevice *in, qint64 *chunkSize);
 
     bool isRedirecting() const;
     bool shouldEmitSignals();

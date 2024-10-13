@@ -1,3 +1,5 @@
+# Copyright (C) 2024 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 qt_internal_add_manual_test(promise_auto
     SOURCES
         promise_main.cpp
@@ -70,3 +72,27 @@ add_custom_command(
             ${CMAKE_CURRENT_BINARY_DIR}/qtwasmtestlib.js)
 
 target_link_options(qwasmcompositor_auto PRIVATE -sASYNCIFY -Os)
+
+qt_internal_add_manual_test(iodevices_auto
+    SOURCES
+        iodevices_main.cpp
+        ../qtwasmtestlib/qtwasmtestlib.cpp
+    LIBRARIES
+        Qt::Core
+        Qt::CorePrivate
+        Qt::GuiPrivate
+)
+
+add_custom_command(
+    TARGET iodevices_auto POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+            ${CMAKE_CURRENT_SOURCE_DIR}/iodevices_auto.html
+            ${CMAKE_CURRENT_BINARY_DIR}/iodevices_auto.html)
+
+add_custom_command(
+    TARGET iodevices_auto POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+            ${CMAKE_CURRENT_SOURCE_DIR}/../qtwasmtestlib/qtwasmtestlib.js
+            ${CMAKE_CURRENT_BINARY_DIR}/qtwasmtestlib.js)
+
+target_link_options(iodevices_auto PRIVATE -sASYNCIFY -Os)

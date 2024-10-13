@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qbaselinetest.h>
 #include <qwidgetbaselinetest.h>
@@ -17,6 +17,7 @@ public:
 private slots:
     void tst_render_data();
     void tst_render();
+    void tst_differentScriptsBackgrounds();
 
 private:
     QDir htmlDir;
@@ -48,7 +49,7 @@ void tst_Text::loadTestFiles()
     for (const auto &htmlFile : htmlFiles) {
         QFileInfo fileInfo(htmlFile);
         QFile file(htmlFile);
-        file.open(QFile::ReadOnly);
+        QVERIFY(file.open(QFile::ReadOnly));
         QString html = QString::fromUtf8(file.readAll());
         QBaselineTest::newRow(fileInfo.baseName().toUtf8()) << html;
     }
@@ -81,18 +82,27 @@ void tst_Text::tst_render()
     QBASELINE_TEST(image);
 }
 
-
-#define main _realmain
-QTEST_MAIN(tst_Text)
-#undef main
-
-int main(int argc, char *argv[])
+void tst_Text::tst_differentScriptsBackgrounds()
 {
-    // Avoid rendering variations caused by QHash randomization
-    QHashSeed::setDeterministicGlobalSeed();
+    QTextDocument textDocument;
+    textDocument.setPageSize(QSizeF(800, 600));
+    textDocument.setHtml(QString::fromUtf8("<i><font style=\"font-size:72px\"><font style=\"background:#FFFF00\">イ雨ｴ</font></font></i>"));
 
-    QBaselineTest::handleCmdLineArgs(&argc, &argv);
-    return _realmain(argc, argv);
+    QImage image(800, 600, QImage::Format_ARGB32);
+    image.fill(Qt::white);
+
+    {
+        QPainter painter(&image);
+
+        QAbstractTextDocumentLayout::PaintContext context;
+        context.palette.setColor(QPalette::Text, Qt::black);
+        textDocument.documentLayout()->draw(&painter, context);
+    }
+
+    QBASELINE_CHECK(image, "tst_differentScriptsBackgrounds");
 }
+
+
+QBASELINETEST_MAIN(tst_Text)
 
 #include "tst_baseline_text.moc"

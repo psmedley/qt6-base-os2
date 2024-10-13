@@ -159,8 +159,6 @@ static void qt_debug_path(const QPainterPath &path)
     toReversed() function. There are also several functions to convert
     this painter path object into a polygon representation.
 
-    \tableofcontents
-
     \section1 Composing a QPainterPath
 
     A QPainterPath object can be constructed as an empty path, with a
@@ -517,10 +515,8 @@ QPainterPath::QPainterPath(const QPainterPath &other) = default;
 */
 
 QPainterPath::QPainterPath(const QPointF &startPoint)
-    : d_ptr(new QPainterPathPrivate)
+    : d_ptr(new QPainterPathPrivate(startPoint))
 {
-    Element e = { startPoint.x(), startPoint.y(), MoveToElement };
-    d_func()->elements << e;
 }
 
 void QPainterPath::detach()
@@ -1491,7 +1487,7 @@ QRectF QPainterPath::controlPointRect() const
 
 bool QPainterPath::isEmpty() const
 {
-    return !d_ptr || (d_ptr->elements.size() == 1 && d_ptr->elements.first().type == MoveToElement);
+    return !d_ptr || (d_ptr->elements.size() == 1 && d_ptr->elements.constFirst().type == MoveToElement);
 }
 
 /*!
@@ -2444,14 +2440,14 @@ QDataStream &operator>>(QDataStream &s, QPainterPath &p)
     int size;
     s >> size;
 
-    if (size == 0)
+    if (size == 0) {
+        p = {};
         return s;
+    }
 
     p.ensureData(); // in case if p.d_func() == 0
-    if (p.d_func()->elements.size() == 1) {
-        Q_ASSERT(p.d_func()->elements.at(0).type == QPainterPath::MoveToElement);
-        p.d_func()->elements.clear();
-    }
+    p.detach();
+    p.d_func()->elements.clear();
     for (int i=0; i<size; ++i) {
         int type;
         double x, y;
@@ -2474,9 +2470,7 @@ QDataStream &operator>>(QDataStream &s, QPainterPath &p)
     s >> fillRule;
     Q_ASSERT(fillRule == Qt::OddEvenFill || fillRule == Qt::WindingFill);
     p.d_func()->fillRule = Qt::FillRule(fillRule);
-    p.d_func()->dirtyBounds = true;
-    p.d_func()->dirtyControlBounds = true;
-    if (errorDetected)
+    if (errorDetected || p.d_func()->elements.isEmpty())
         p = QPainterPath();  // Better than to return path with possibly corrupt datastructure, which would likely cause crash
     return s;
 }

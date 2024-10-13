@@ -47,6 +47,11 @@ QT_BEGIN_NAMESPACE
 QPlatformInputContext::QPlatformInputContext()
     : QObject(*(new QPlatformInputContextPrivate))
 {
+    // Delay initialization of cached input direction
+    // until super class has finished constructing.
+    QMetaObject::invokeMethod(this, [this]{
+        m_inputDirection = inputDirection();
+    }, Qt::QueuedConnection);
 }
 
 /*!
@@ -95,7 +100,7 @@ void QPlatformInputContext::update(Qt::InputMethodQueries)
 }
 
 /*!
-    Called when when the word currently being composed in input item is tapped by
+    Called when the word currently being composed in the input item is tapped by
     the user. Input methods often use this information to offer more word
     suggestions to the user.
  */
@@ -192,22 +197,29 @@ void QPlatformInputContext::emitInputPanelVisibleChanged()
 
 QLocale QPlatformInputContext::locale() const
 {
-    return qt_keymapper_private()->keyboardInputLocale;
+    return QLocale::system();
 }
 
 void QPlatformInputContext::emitLocaleChanged()
 {
     emit QGuiApplication::inputMethod()->localeChanged();
+
+    // Changing the locale might have updated the input direction
+    emitInputDirectionChanged(inputDirection());
 }
 
 Qt::LayoutDirection QPlatformInputContext::inputDirection() const
 {
-    return qt_keymapper_private()->keyboardInputDirection;
+    return locale().textDirection();
 }
 
 void QPlatformInputContext::emitInputDirectionChanged(Qt::LayoutDirection newDirection)
 {
+    if (newDirection == m_inputDirection)
+        return;
+
     emit QGuiApplication::inputMethod()->inputDirectionChanged(newDirection);
+    m_inputDirection = newDirection;
 }
 
 /*!

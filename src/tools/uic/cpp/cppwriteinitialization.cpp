@@ -17,13 +17,39 @@
 
 #include <algorithm>
 
-#include <ctype.h>
-
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
 namespace {
+
+    // Expand "Horizontal", "Qt::Horizontal" to "Qt::Orientation::Horizontal"
+    QString expandEnum(QString value, const QString &prefix)
+    {
+        if (value.startsWith(prefix))
+            return value;
+        const auto pos = value.lastIndexOf("::"_L1);
+        if (pos == -1)
+            return prefix + "::"_L1 + value;
+        value.replace(0, pos, prefix);
+        return value;
+    }
+
+    inline QString expandSizePolicyEnum(const QString &value)
+    {
+        return expandEnum(value, "QSizePolicy::Policy"_L1);
+    }
+
+    inline QString expandToolBarArea(const QString &value)
+    {
+        return expandEnum(value, "Qt::ToolBarArea"_L1);
+    }
+
+    inline QString expandDockWidgetArea(const QString &value)
+    {
+        return expandEnum(value, "Qt::DockWidgetArea"_L1);
+    }
+
     // figure out the toolbar area of a DOM attrib list.
     // By legacy, it is stored as an integer. As of 4.3.0, it is the enumeration value.
     QString toolBarAreaStringFromDOMAttributes(const CPP::WriteInitialization::DomPropertyMap &attributes) {
@@ -33,7 +59,7 @@ namespace {
             return result;
         switch (pstyle->kind()) {
         case DomProperty::Number:
-            result = QLatin1StringView(language::toolbarArea(pstyle->elementNumber()));
+            result = language::toolbarArea(pstyle->elementNumber());
             break;
         case DomProperty::Enum:
             result = pstyle->elementEnum();
@@ -41,9 +67,7 @@ namespace {
         default:
             break;
         }
-        if (!result.startsWith("Qt::"_L1))
-            result.prepend("Qt::"_L1);
-        return result + ", "_L1;
+        return expandToolBarArea(result) + ", "_L1;
     }
 
     // Write a statement to create a spacer item.
@@ -62,27 +86,17 @@ namespace {
         output << w << ", " << h << ", ";
 
         // size type
-        QString sizeType;
-        if (const DomProperty *st = properties.value("sizeType"_L1)) {
-            const QString value = st->elementEnum();
-            if (value.startsWith("QSizePolicy::"_L1))
-                sizeType = value;
-            else
-                sizeType = "QSizePolicy::"_L1 + value;
-        } else {
-            sizeType = QStringLiteral("QSizePolicy::Expanding");
-        }
+        const DomProperty *st = properties.value("sizeType"_L1);
+        QString horizType = st != nullptr ? st->elementEnum() : "Expanding"_L1;
+        QString vertType = "Minimum"_L1;
 
         // orientation
-        bool isVspacer = false;
-        if (const DomProperty *o = properties.value("orientation"_L1)) {
-            const QString orientation = o->elementEnum();
-            if (orientation == "Qt::Vertical"_L1 || orientation == "Vertical"_L1)
-                isVspacer = true;
-        }
-        const QString horizType = isVspacer ? "QSizePolicy::Minimum"_L1 : sizeType;
-        const QString vertType = isVspacer ? sizeType : "QSizePolicy::Minimum"_L1;
-        output << language::enumValue(horizType) << ", " << language::enumValue(vertType) << ')';
+        const DomProperty *o = properties.value("orientation"_L1);
+        if (o != nullptr && o->elementEnum().endsWith("Vertical"_L1))
+            std::swap(horizType, vertType);
+
+        output << language::enumValue(expandSizePolicyEnum(horizType)) << ", "
+               << language::enumValue(expandSizePolicyEnum(vertType)) << ')';
     }
 
 
@@ -111,16 +125,94 @@ namespace {
         return iconHasStatePixmaps(i) || !i->attributeTheme().isEmpty();
     }
 
+    // An approximation of "Unicode Standard Annex #31" for checking property
+    // and enumeration identifiers to prevent code injection attacks.
+    // FIXME 6.9: Simplify according to QTBUG-126860
+    static bool isIdStart(QChar c)
+    {
+        bool result = false;
+        switch (c.category()) {
+        case QChar::Letter_Uppercase:
+        case QChar::Letter_Lowercase:
+        case QChar::Letter_Titlecase:
+        case QChar::Letter_Modifier:
+        case QChar::Letter_Other:
+        case QChar::Number_Letter:
+            result = true;
+            break;
+        default:
+            result = c == u'_';
+            break;
+        }
+        return result;
+    }
+
+    static bool isIdContinuation(QChar c)
+    {
+        bool result = false;
+        switch (c.category()) {
+        case QChar::Letter_Uppercase:
+        case QChar::Letter_Lowercase:
+        case QChar::Letter_Titlecase:
+        case QChar::Letter_Modifier:
+        case QChar::Letter_Other:
+        case QChar::Number_Letter:
+        case QChar::Mark_NonSpacing:
+        case QChar::Mark_SpacingCombining:
+        case QChar::Number_DecimalDigit:
+        case QChar::Punctuation_Connector: // '_'
+            result = true;
+            break;
+        default:
+            break;
+        }
+        return result;
+    }
+
+    static bool isEnumIdContinuation(QChar c)
+    {
+        return c == u':' || c == u'|' || c == u' ' || isIdContinuation(c);
+    }
+
+    bool checkPropertyName(QStringView name)
+    {
+        return !name.isEmpty() && isIdStart(name.at(0))
+               && std::all_of(name.cbegin() + 1, name.cend(), isIdContinuation);
+    }
+
+    bool checkEnumValue(QStringView name)
+    {
+        return !name.isEmpty() && isIdStart(name.at(0))
+               && std::all_of(name.cbegin() + 1, name.cend(), isEnumIdContinuation);
+    }
+
+    QString msgInvalidValue(const QString &name, const QString &value)
+    {
+        return "uic: Invalid property value: \""_L1 + name + "\": \""_L1 + value + u'"';
+    }
+
     // Check on properties. Filter out empty legacy pixmap/icon properties
     // as Designer pre 4.4 used to remove missing resource references.
     // This can no longer be handled by the code as we have 'setIcon(QIcon())' as well as 'QIcon icon'
     static bool checkProperty(const CustomWidgetsInfo *customWidgetsInfo,
                               const QString &fileName, const QString &className,
                               const DomProperty *p) {
+
+        const QString &name = p->attributeName();
+        const bool isDynamicProperty = p->hasAttributeStdset() && p->attributeStdset() == 0;
+        if (!isDynamicProperty && !checkPropertyName(name)) {
+            qWarning("uic: Invalid property name: \"%s\".", qPrintable(name));
+            return false;
+        }
+
         switch (p->kind()) {
         // ### fixme Qt 7 remove this: Exclude deprecated properties of Qt 5.
         case DomProperty::Set:
-            if (p->attributeName() == u"features"
+            if (!checkEnumValue(p->elementSet())) {
+                qWarning("%s", qPrintable(msgInvalidValue(name, p->elementSet())));
+                return false;
+            }
+            if (name == u"features"
                 && customWidgetsInfo->extends(className, "QDockWidget")
                 && p->elementSet() == u"QDockWidget::AllDockWidgetFeatures") {
                 const QString msg = fileName + ": Warning: Deprecated enum value QDockWidget::AllDockWidgetFeatures was encountered."_L1;
@@ -129,7 +221,11 @@ namespace {
             }
             break;
         case DomProperty::Enum:
-            if (p->attributeName() == u"sizeAdjustPolicy"
+            if (!checkEnumValue(p->elementEnum())) {
+                qWarning("%s", qPrintable(msgInvalidValue(name, p->elementEnum())));
+                return false;
+            }
+            if (name == u"sizeAdjustPolicy"
                 && customWidgetsInfo->extends(className, "QComboBox")
                 && p->elementEnum() == u"QComboBox::AdjustToMinimumContentsLength") {
                 const QString msg = fileName + ": Warning: Deprecated enum value QComboBox::AdjustToMinimumContentsLength was encountered."_L1;
@@ -142,7 +238,7 @@ namespace {
                 if (!isIconFormat44(dri)) {
                     if (dri->text().isEmpty())  {
                         const QString msg = QString::fromLatin1("%1: Warning: An invalid icon property '%2' was encountered.")
-                                            .arg(fileName, p->attributeName());
+                                            .arg(fileName, name);
                         qWarning("%s", qPrintable(msg));
                         return false;
                     }
@@ -153,7 +249,7 @@ namespace {
             if (const DomResourcePixmap *drp = p->elementPixmap())
                 if (drp->text().isEmpty()) {
                     const QString msg = QString::fromUtf8("%1: Warning: An invalid pixmap property '%2' was encountered.")
-                                        .arg(fileName, p->attributeName());
+                                        .arg(fileName, name);
                     qWarning("%s", qPrintable(msg));
                     return false;
                 }
@@ -180,6 +276,15 @@ FontHandle::FontHandle(const DomFont *domFont) :
 {
 }
 
+static QString fontWeight(const DomFont *domFont)
+{
+   if (domFont->hasElementFontWeight())
+       return domFont->elementFontWeight();
+   if (domFont->hasElementBold())
+      return domFont->elementBold() ? u"Bold"_s : u"Normal"_s;
+   return {};
+}
+
 int FontHandle::compare(const FontHandle &rhs) const
 {
     const QString family    = m_domFont->hasElementFamily()     ?     m_domFont->elementFamily() : QString();
@@ -194,10 +299,10 @@ int FontHandle::compare(const FontHandle &rhs) const
     if (const int crc = compareInt(pointSize, rhsPointSize))
         return crc;
 
-    const int bold    = m_domFont->hasElementBold()     ? (m_domFont->elementBold()     ? 1 : 0) : -1;
-    const int rhsBold = rhs.m_domFont->hasElementBold() ? (rhs.m_domFont->elementBold() ? 1 : 0) : -1;
-    if (const int crc = compareInt(bold, rhsBold))
-        return crc;
+    const QString fontWeight  = CPP::fontWeight(m_domFont);
+    const QString rhsFontWeight = CPP::fontWeight(rhs.m_domFont);
+    if (const int wrc = fontWeight.compare(rhsFontWeight))
+        return wrc;
 
     const int italic    = m_domFont->hasElementItalic()     ? (m_domFont->elementItalic()     ? 1 : 0) : -1;
     const int rhsItalic = rhs.m_domFont->hasElementItalic() ? (rhs.m_domFont->elementItalic() ? 1 : 0) : -1;
@@ -207,11 +312,6 @@ int FontHandle::compare(const FontHandle &rhs) const
     const int underline    = m_domFont->hasElementUnderline()     ? (m_domFont->elementUnderline()     ? 1 : 0) : -1;
     const int rhsUnderline = rhs.m_domFont->hasElementUnderline() ? (rhs.m_domFont->elementUnderline() ? 1 : 0) : -1;
     if (const int crc = compareInt(underline, rhsUnderline))
-        return crc;
-
-    const int weight    = m_domFont->hasElementWeight()     ?     m_domFont->elementWeight() : -1;
-    const int rhsWeight = rhs.m_domFont->hasElementWeight() ? rhs.m_domFont->elementWeight() : -1;
-    if (const int crc = compareInt(weight, rhsWeight))
         return crc;
 
     const int strikeOut    = m_domFont->hasElementStrikeOut()     ? (m_domFont->elementStrikeOut()     ? 1 : 0) : -1;
@@ -345,7 +445,7 @@ int SizePolicyHandle::compare(const SizePolicyHandle &rhs) const
 
 WriteInitialization::LayoutDefaultHandler::LayoutDefaultHandler()
 {
-    std::fill_n(m_state, int(NumProperties), 0u);
+    std::fill_n(m_state, int(NumProperties), 0U);
     std::fill_n(m_defaultValues, int(NumProperties), 0);
 }
 
@@ -428,7 +528,6 @@ void WriteInitialization::LayoutDefaultHandler::writeProperty(int p, const QStri
             writeSetter(indent, objectName, setter, m_defaultValues[p], str);
         }
     }
-    return;
 }
 
 
@@ -476,7 +575,7 @@ void WriteInitialization::acceptUI(DomUI *node)
     if (node->hasAttributeConnectslotsbyname())
         m_connectSlotsByName = node->attributeConnectslotsbyname();
 
-    if (auto customSlots = node->elementSlots()) {
+    if (auto *customSlots = node->elementSlots()) {
         m_customSlots = customSlots->elementSlot();
         m_customSignals = customSlots->elementSignal();
     }
@@ -612,7 +711,8 @@ void WriteInitialization::acceptWidget(DomWidget *node)
     const QString className = node->attributeClass();
     const QString varName = m_driver->findOrInsertWidget(node);
 
-    QString parentWidget, parentClass;
+    QString parentWidget;
+    QString parentClass;
     if (m_widgetChain.top()) {
         parentWidget = m_driver->findOrInsertWidget(m_widgetChain.top());
         parentClass = m_widgetChain.top()->attributeClass();
@@ -627,7 +727,7 @@ void WriteInitialization::acceptWidget(DomWidget *node)
 
     if (m_widgetChain.size() != 1) {
         m_output << m_indent << varName << " = " << language::operatorNew
-            << language::fixClassName(cwi->realClassName(className))
+            << language::fixClassName(CustomWidgetsInfo::realClassName(className))
             << '(' << parentWidget << ')' << language::eol;
     }
 
@@ -697,8 +797,8 @@ void WriteInitialization::acceptWidget(DomWidget *node)
         } else if (cwi->extends(className, "QDockWidget")) {
             m_output << m_indent << parentWidget << language::derefPointer << "addDockWidget(";
             if (DomProperty *pstyle = attributes.value("dockWidgetArea"_L1)) {
-                m_output << "Qt" << language::qualifier
-                    << language::dockWidgetArea(pstyle->elementNumber()) << ", ";
+                QString a = expandDockWidgetArea(language::dockWidgetArea(pstyle->elementNumber()));
+                m_output << language::enumValue(a) << ", ";
             }
             m_output << varName << ")" << language::eol;
         } else if (m_uic->customWidgetsInfo()->extends(className, "QStatusBar")) {
@@ -861,7 +961,7 @@ void WriteInitialization::addButtonGroup(const DomWidget *buttonNode, const QStr
     // was present before the actual Designer support (4.5)
     const bool createGroupOnTheFly = group == nullptr;
     if (createGroupOnTheFly) {
-        DomButtonGroup *newGroup = new DomButtonGroup;
+        auto *newGroup = new DomButtonGroup;
         newGroup->setAttributeName(attributeName);
         group = newGroup;
         fprintf(stderr, "%s: Warning: Creating button group `%s'\n",
@@ -913,8 +1013,10 @@ void WriteInitialization::acceptLayout(DomLayout *node)
     DomPropertyList propList = node->elementProperty();
     DomPropertyList newPropList;
     if (m_layoutWidget) {
-        bool left, top, right, bottom;
-        left = top = right = bottom = false;
+        bool left = false;
+        bool top = false;
+        bool right = false;
+        bool bottom = false;
         for (const DomProperty *p : propList) {
             const QString propertyName = p->attributeName();
             if (propertyName == "leftMargin"_L1 && p->kind() == DomProperty::Number)
@@ -927,25 +1029,25 @@ void WriteInitialization::acceptLayout(DomLayout *node)
                 bottom = true;
         }
         if (!left) {
-            DomProperty *p = new DomProperty();
+            auto *p = new DomProperty();
             p->setAttributeName("leftMargin"_L1);
             p->setElementNumber(0);
             newPropList.append(p);
         }
         if (!top) {
-            DomProperty *p = new DomProperty();
+            auto *p = new DomProperty();
             p->setAttributeName("topMargin"_L1);
             p->setElementNumber(0);
             newPropList.append(p);
         }
         if (!right) {
-            DomProperty *p = new DomProperty();
+            auto *p = new DomProperty();
             p->setAttributeName("rightMargin"_L1);
             p->setElementNumber(0);
             newPropList.append(p);
         }
         if (!bottom) {
-            DomProperty *p = new DomProperty();
+            auto *p = new DomProperty();
             p->setAttributeName("bottomMargin"_L1);
             p->setElementNumber(0);
             newPropList.append(p);
@@ -983,9 +1085,8 @@ void WriteInitialization::writePropertyList(const QString &varName,
 {
     if (value.isEmpty())
         return;
-    const QStringList list = value.split(u',');
-    const int count =  list.size();
-    for (int i = 0; i < count; i++) {
+    const auto list = QStringView{value}.split(u',');
+    for (qsizetype i = 0, count = list.size(); i < count; i++) {
         if (list.at(i) != defaultValue) {
             m_output << m_indent << varName << language::derefPointer << setFunction
                 << '(' << i << ", " << list.at(i) << ')' << language::eol;
@@ -1179,7 +1280,7 @@ static QString configKeyForProperty(const QString &propertyName)
         return shortcutConfigKey();
     if (propertyName == "accessibleName"_L1 || propertyName == "accessibleDescription"_L1)
         return accessibilityConfigKey();
-    return QString();
+    return {};
 }
 
 void WriteInitialization::writeProperties(const QString &varName,
@@ -1219,8 +1320,10 @@ void WriteInitialization::writeProperties(const QString &varName,
             << language::charliteral(objectName, m_dindent) << ')' << language::eol;
     }
 
-    int leftMargin, topMargin, rightMargin, bottomMargin;
-    leftMargin = topMargin = rightMargin = bottomMargin = -1;
+    int leftMargin = -1;
+    int topMargin = -1;
+    int rightMargin = -1;
+    int bottomMargin = -1;
     bool frameShadowEncountered = false;
 
     for (const DomProperty *p : lst) {
@@ -1280,9 +1383,9 @@ void WriteInitialization::writeProperties(const QString &varName,
         } else if (propertyName == "orientation"_L1
                     && m_uic->customWidgetsInfo()->extends(className, "Line")) {
             // Line support
-            QString shape = u"QFrame::HLine"_s;
-            if (p->elementEnum() == "Qt::Vertical"_L1)
-                shape = u"QFrame::VLine"_s;
+            QString shape = u"QFrame::Shape::HLine"_s;
+            if (p->elementEnum().endsWith("::Vertical"_L1))
+                shape = u"QFrame::Shape::VLine"_s;
 
             m_output << m_indent << varName << language::derefPointer << "setFrameShape("
                 << language::enumValue(shape) << ')' << language::eol;
@@ -1290,7 +1393,7 @@ void WriteInitialization::writeProperties(const QString &varName,
             if (!frameShadowEncountered) {
                 m_output << m_indent << varName << language::derefPointer
                     << "setFrameShadow("
-                    << language::enumValue("QFrame::Sunken"_L1)
+                    << language::enumValue("QFrame::Shadow::Sunken"_L1)
                     << ')' << language::eol;
             }
             continue;
@@ -1331,8 +1434,8 @@ void WriteInitialization::writeProperties(const QString &varName,
                 str << language::derefPointer <<"set" << propertyName.at(0).toUpper()
                     << QStringView{propertyName}.mid(1) << '(';
             } else {
-                str << language::derefPointer << "setProperty(\""_L1
-                    << propertyName << "\", ";
+                str << language::derefPointer << "setProperty("_L1
+                    << language::charliteral(propertyName) << ", ";
                 if (language::language() == Language::Cpp) {
                     str << "QVariant";
                     if (p->kind() == DomProperty::Enum)
@@ -1373,8 +1476,8 @@ void WriteInitialization::writeProperties(const QString &varName,
         case DomProperty::CursorShape:
             if (p->hasAttributeStdset() && !p->attributeStdset())
                 varNewName += language::derefPointer + "viewport()"_L1;
-            propertyValue = "QCursor(Qt"_L1 + language::qualifier
-                + p->elementCursorShape() + u')';
+            propertyValue = "QCursor(Qt"_L1 + language::qualifier + "CursorShape"_L1
+                            + language::qualifier + p->elementCursorShape() + u')';
             break;
         case DomProperty::Enum:
             propertyValue = p->elementEnum();
@@ -1590,12 +1693,18 @@ QString  WriteInitialization::writeSizePolicy(const DomSizePolicy *sp)
     m_sizePolicyNameMap.insert(sizePolicyHandle, spName);
 
     m_output << m_indent << language::stackVariableWithInitParameters("QSizePolicy", spName);
+    QString horizPolicy;
+    QString vertPolicy;
     if (sp->hasElementHSizeType() && sp->hasElementVSizeType()) {
-        m_output << "QSizePolicy" << language::qualifier << language::sizePolicy(sp->elementHSizeType())
-            << ", QSizePolicy" << language::qualifier << language::sizePolicy(sp->elementVSizeType());
+        horizPolicy = language::sizePolicy(sp->elementHSizeType());
+        vertPolicy = language::sizePolicy(sp->elementVSizeType());
     } else if (sp->hasAttributeHSizeType() && sp->hasAttributeVSizeType()) {
-        m_output << "QSizePolicy" << language::qualifier << sp->attributeHSizeType()
-            << ", QSizePolicy" << language::qualifier << sp->attributeVSizeType();
+        horizPolicy = sp->attributeHSizeType();
+        vertPolicy = sp->attributeVSizeType();
+    }
+    if (!horizPolicy.isEmpty() && !vertPolicy.isEmpty()) {
+        m_output << language::enumValue(expandSizePolicyEnum(horizPolicy))
+            << ", " << language::enumValue(expandSizePolicyEnum(vertPolicy));
     }
     m_output << ')' << language::eol;
 
@@ -1634,10 +1743,14 @@ QString WriteInitialization::writeFontProperties(const DomFont *f)
              << ")" << language::eol;
     }
 
-    if (f->hasElementBold()) {
+    if (f->hasElementFontWeight()) {
+         m_output << m_indent << fontName << ".setWeight(QFont"
+             << language::qualifier << f->elementFontWeight() << ')' << language::eol;
+    } else if (f->hasElementBold()) {
         m_output << m_indent << fontName << ".setBold("
             << language::boolValue(f->elementBold()) << ')' << language::eol;
     }
+
     if (f->hasElementItalic()) {
         m_output << m_indent << fontName << ".setItalic("
             << language::boolValue(f->elementItalic()) << ')' << language::eol;
@@ -1678,8 +1791,9 @@ static void writeIconAddFile(QTextStream &output, const QString &indent,
 {
     output << indent << iconName << ".addFile("
         << language::qstring(fileName, indent) << ", QSize(), QIcon"
-        << language::qualifier << mode << ", QIcon" << language::qualifier
-        << state << ')' << language::eol;
+        << language::qualifier << "Mode" << language::qualifier << mode
+        << ", QIcon" << language::qualifier << "State" << language::qualifier << state
+        << ')' << language::eol;
 }
 
 // Post 4.4 write resource icon
@@ -1727,7 +1841,8 @@ static void writeIconAddPixmap(QTextStream &output, const QString &indent,
                                const char *mode, const char *state)
 {
     output << indent << iconName << ".addPixmap(" << call << ", QIcon"
-        << language::qualifier << mode << ", QIcon" << language::qualifier
+        << language::qualifier << "Mode" << language::qualifier << mode
+        << ", QIcon" << language::qualifier << "State" << language::qualifier
         << state << ')' << language::eol;
 }
 
@@ -1778,6 +1893,59 @@ void WriteInitialization::writePixmapFunctionIcon(QTextStream &output,
     }
 }
 
+// Write QIcon::fromTheme() (value from enum or variable)
+struct iconFromTheme
+{
+    explicit iconFromTheme(const QString &theme) : m_theme(theme) {}
+
+    QString m_theme;
+};
+
+QTextStream &operator<<(QTextStream &str, const iconFromTheme &i)
+{
+    str << "QIcon" << language::qualifier << "fromTheme(" << i.m_theme << ')';
+    return str;
+}
+
+// Write QIcon::fromTheme() for an XDG icon from string literal
+struct iconFromThemeStringLiteral
+{
+    explicit iconFromThemeStringLiteral(const QString &theme) : m_theme(theme) {}
+
+    QString m_theme;
+};
+
+QTextStream &operator<<(QTextStream &str, const iconFromThemeStringLiteral &i)
+{
+    str << "QIcon" << language::qualifier << "fromTheme(" << language::qstring(i.m_theme) << ')';
+    return str;
+}
+
+// Write QIcon::fromTheme() with a path as fallback, add a check using
+// QIcon::hasThemeIcon().
+void WriteInitialization::writeThemeIconCheckAssignment(const QString &themeValue,
+                                                        const QString &iconName,
+                                                        const DomResourceIcon *i)
+
+{
+    const bool isCpp = language::language() == Language::Cpp;
+    m_output << m_indent << "if ";
+    if (isCpp)
+        m_output << '(';
+    m_output << "QIcon" << language::qualifier << "hasThemeIcon("
+             << themeValue << ')' << (isCpp ? ") {" : ":") << '\n'
+             << m_dindent << iconName << " = " << iconFromTheme(themeValue)
+             << language::eol;
+    m_output << m_indent << (isCpp ? "} else {" : "else:") << '\n';
+    if (m_uic->pixmapFunction().isEmpty())
+        writeResourceIcon(m_output, iconName, m_dindent, i);
+    else
+        writePixmapFunctionIcon(m_output, iconName, m_dindent, i);
+    if (isCpp)
+        m_output << m_indent << '}';
+    m_output  << '\n';
+}
+
 QString WriteInitialization::writeIconProperties(const DomResourceIcon *i)
 {
     // check cache
@@ -1802,7 +1970,8 @@ QString WriteInitialization::writeIconProperties(const DomResourceIcon *i)
     }
 
     // 4.4 onwards
-    if (i->attributeTheme().isEmpty()) {
+    QString theme = i->attributeTheme();
+    if (theme.isEmpty()) {
         // No theme: Write resource icon as is
         m_output << m_indent << language::stackVariable("QIcon", iconName)
             << language::eol;
@@ -1813,12 +1982,21 @@ QString WriteInitialization::writeIconProperties(const DomResourceIcon *i)
         return iconName;
     }
 
+    const bool isThemeEnum = theme.startsWith("QIcon::"_L1);
+    if (isThemeEnum)
+        theme = language::enumValue(theme);
+
     // Theme: Generate code to check the theme and default to resource
     if (iconHasStatePixmaps(i)) {
         // Theme + default state pixmaps:
         // Generate code to check the theme and default to state pixmaps
         m_output << m_indent << language::stackVariable("QIcon", iconName) << language::eol;
-        const char themeNameStringVariableC[] = "iconThemeName";
+        if (isThemeEnum) {
+            writeThemeIconCheckAssignment(theme, iconName, i);
+            return iconName;
+        }
+
+        static constexpr auto themeNameStringVariableC = "iconThemeName"_L1;
         // Store theme name in a variable
         m_output << m_indent;
         if (m_firstThemeIcon) { // Declare variable string
@@ -1827,31 +2005,19 @@ QString WriteInitialization::writeIconProperties(const DomResourceIcon *i)
             m_firstThemeIcon = false;
         }
         m_output << themeNameStringVariableC << " = "
-            << language::qstring(i->attributeTheme()) << language::eol;
-        m_output << m_indent << "if ";
-        if (isCpp)
-            m_output << '(';
-        m_output << "QIcon" << language::qualifier << "hasThemeIcon("
-            << themeNameStringVariableC << ')' << (isCpp ? ") {" : ":") << '\n'
-            << m_dindent << iconName << " = QIcon" << language::qualifier << "fromTheme("
-            << themeNameStringVariableC << ')' << language::eol
-            << m_indent << (isCpp ? "} else {" : "else:") << '\n';
-        if (m_uic->pixmapFunction().isEmpty())
-            writeResourceIcon(m_output, iconName, m_dindent, i);
-        else
-            writePixmapFunctionIcon(m_output, iconName, m_dindent, i);
-        if (isCpp)
-            m_output << m_indent << '}';
-        m_output  << '\n';
+            << language::qstring(theme) << language::eol;
+        writeThemeIconCheckAssignment(themeNameStringVariableC, iconName, i);
         return iconName;
     }
 
     // Theme, but no state pixmaps: Construct from theme directly.
     m_output << m_indent
-        << language::stackVariableWithInitParameters("QIcon", iconName)
-        << "QIcon" << language::qualifier << "fromTheme("
-        << language::qstring(i->attributeTheme()) << "))"
-        << language::eol;
+             << language::stackVariableWithInitParameters("QIcon", iconName);
+    if (isThemeEnum)
+        m_output << iconFromTheme(theme);
+    else
+        m_output << iconFromThemeStringLiteral(theme);
+    m_output << ')' << language::eol;
     return iconName;
 }
 
@@ -1872,8 +2038,8 @@ QString WriteInitialization::domColor2QString(const DomColor *c)
 static inline QVersionNumber colorRoleVersionAdded(const QString &roleName)
 {
     if (roleName == "PlaceholderText"_L1)
-        return QVersionNumber(5, 12, 0);
-    return QVersionNumber();
+        return {5, 12, 0};
+    return {};
 }
 
 void WriteInitialization::writeColorGroup(DomColorGroup *colorGroup, const QString &group, const QString &paletteName)
@@ -2072,7 +2238,7 @@ QString WriteInitialization::pixCall(const DomProperty *p) const
         s = p->elementPixmap()->text();
         break;
     default:
-        qWarning("%s: Warning: Unknown icon format encountered. The ui-file was generated with a too-recent version of Designer.",
+        qWarning("%s: Warning: Unknown icon format encountered. The ui-file was generated with a too-recent version of Qt Widgets Designer.",
                  qPrintable(m_option.messagePrefix()));
         return "QIcon()"_L1;
         break;
@@ -2174,8 +2340,9 @@ void WriteInitialization::enableSorting(DomWidget *w, const QString &varName, co
         the initializer is omitted.
     See above for other parameters.
 */
-void WriteInitialization::addInitializer(Item *item,
-        const QString &name, int column, const QString &value, const QString &directive, bool translatable) const
+void WriteInitialization::addInitializer(Item *item, const QString &name,
+                                         int column, const QString &value,
+                                         const QString &directive, bool translatable)
 {
     if (!value.isEmpty()) {
         QString setter;
@@ -2226,8 +2393,8 @@ void WriteInitialization::addBrushInitializer(Item *item,
     Create inititializer for a flag value in the Qt namespace.
     If the named property is not in the map, the initializer is omitted.
 */
-void WriteInitialization::addQtFlagsInitializer(Item *item,
-        const DomPropertyMap &properties, const QString &name, int column) const
+void WriteInitialization::addQtFlagsInitializer(Item *item, const DomPropertyMap &properties,
+                                                const QString &name, int column)
 {
     if (const DomProperty *p = properties.value(name)) {
         const QString orOperator = u'|' + language::qtQualifier;
@@ -2366,10 +2533,10 @@ WriteInitialization::Items WriteInitialization::initializeTreeWidgetItems(const 
 {
     // items
     Items items;
-    const int numDomItems = domItems.size();
+    const qsizetype numDomItems = domItems.size();
     items.reserve(numDomItems);
 
-    for (int i = 0; i < numDomItems; ++i) {
+    for (qsizetype i = 0; i < numDomItems; ++i) {
         const DomItem *domItem = domItems.at(i);
 
         Item *item = new Item("QTreeWidgetItem"_L1, m_indent, m_output, m_refreshOut, m_driver);
@@ -2553,7 +2720,7 @@ QString WriteInitialization::noTrCall(DomString *str, const QString &defaultStri
 {
     QString value = defaultString;
     if (!str && defaultString.isEmpty())
-        return QString();
+        return {};
     if (str)
         value = str->text();
     QString ret;
@@ -2617,10 +2784,6 @@ ConnectionSyntax WriteInitialization::connectionSyntax(const language::SignalSlo
         return ConnectionSyntax::StringBased;
     }
 
-    // QTBUG-110952, ambiguous overloads of display()
-    if (receiver.className == u"QLCDNumber" && receiver.signature.startsWith(u"display("))
-        return ConnectionSyntax::StringBased;
-
     if ((sender.name == m_mainFormVarName && m_customSignals.contains(sender.signature))
          || (receiver.name == m_mainFormVarName && m_customSlots.contains(receiver.signature))) {
         return ConnectionSyntax::StringBased;
@@ -2648,14 +2811,21 @@ void WriteInitialization::acceptConnection(DomConnection *connection)
         return;
     }
     const QString senderSignature = connection->elementSignal();
+    const QString slotSignature = connection->elementSlot();
+    const bool senderAmbiguous = m_uic->customWidgetsInfo()->isAmbiguousSignal(senderDecl.className,
+                                                                               senderSignature);
+    const bool slotAmbiguous = m_uic->customWidgetsInfo()->isAmbiguousSlot(receiverDecl.className,
+                                                                           slotSignature);
+
     language::SignalSlotOptions signalOptions;
-    if (m_uic->customWidgetsInfo()->isAmbiguousSignal(senderDecl.className, senderSignature))
-        signalOptions.setFlag(language::SignalSlotOption::Ambiguous);
+    signalOptions.setFlag(language::SignalSlotOption::Ambiguous, senderAmbiguous);
+    language::SignalSlotOptions slotOptions;
+    slotOptions.setFlag(language::SignalSlotOption::Ambiguous, slotAmbiguous);
 
     language::SignalSlot theSignal{senderDecl.name, senderSignature,
                                    senderDecl.className, signalOptions};
-    language::SignalSlot theSlot{receiverDecl.name, connection->elementSlot(),
-                                 receiverDecl.className, {}};
+    language::SignalSlot theSlot{receiverDecl.name, slotSignature,
+                                 receiverDecl.className, slotOptions};
 
     m_output << m_indent;
     language::formatConnection(m_output, theSignal, theSlot,
@@ -2678,7 +2848,7 @@ static void generateMultiDirectiveBegin(QTextStream &outputStream, const QSet<QS
     std::sort(list.begin(), list.end());
 
     outputStream << "#if " << language::qtConfig(list.constFirst());
-    for (int i = 1, size = list.size(); i < size; ++i)
+    for (qsizetype i = 1, size = list.size(); i < size; ++i)
         outputStream << " || " << language::qtConfig(list.at(i));
     outputStream << Qt::endl;
 }
@@ -2710,14 +2880,14 @@ WriteInitialization::Item::~Item()
 QString WriteInitialization::Item::writeSetupUi(const QString &parent, Item::EmptyItemPolicy emptyItemPolicy)
 {
     if (emptyItemPolicy == Item::DontConstruct && m_setupUiData.policy == ItemData::DontGenerate)
-        return QString();
+        return {};
 
     bool generateMultiDirective = false;
     if (emptyItemPolicy == Item::ConstructItemOnly && m_children.isEmpty()) {
         if (m_setupUiData.policy == ItemData::DontGenerate) {
             m_setupUiStream << m_indent << language::operatorNew << m_itemClassName
                 << '(' << parent << ')' << language::eol;
-            return QString();
+            return {};
         }
         if (m_setupUiData.policy == ItemData::GenerateWithMultiDirective)
             generateMultiDirective = true;

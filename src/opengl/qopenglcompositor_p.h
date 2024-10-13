@@ -29,6 +29,7 @@ class QOpenGLFramebufferObject;
 class QWindow;
 class QPlatformTextureList;
 
+class QOpenGLCompositorBackingStore;
 class QOpenGLCompositorWindow
 {
 public:
@@ -37,6 +38,8 @@ public:
     virtual const QPlatformTextureList *textures() const = 0;
     virtual void beginCompositing() { }
     virtual void endCompositing() { }
+    virtual void setBackingStore(QOpenGLCompositorBackingStore *backingStore) = 0;
+    virtual QOpenGLCompositorBackingStore *backingStore() const = 0;
 };
 
 class Q_OPENGL_EXPORT QOpenGLCompositor : public QObject
@@ -44,6 +47,11 @@ class Q_OPENGL_EXPORT QOpenGLCompositor : public QObject
     Q_OBJECT
 
 public:
+    enum GrabOrientation {
+        Flipped,
+        NotFlipped,
+    };
+
     static QOpenGLCompositor *instance();
     static void destroy();
 
@@ -52,9 +60,12 @@ public:
     void setRotation(int degrees);
     QOpenGLContext *context() const { return m_context; }
     QWindow *targetWindow() const { return m_targetWindow; }
+    QRect nativeTargetGeometry() const { return m_nativeTargetGeometry; }
 
     void update();
     QImage grab();
+
+    bool grabToFrameBufferObject(QOpenGLFramebufferObject *fbo, GrabOrientation orientation = Flipped);
 
     QList<QOpenGLCompositorWindow *> windows() const { return m_windows; }
     void addWindow(QOpenGLCompositorWindow *window);
@@ -72,8 +83,10 @@ private:
     QOpenGLCompositor();
     ~QOpenGLCompositor();
 
-    void renderAll(QOpenGLFramebufferObject *fbo);
-    void render(QOpenGLCompositorWindow *window);
+    void renderAll(QOpenGLFramebufferObject *fbo,
+                   QOpenGLTextureBlitter::Origin origin = QOpenGLTextureBlitter::OriginTopLeft);
+    void render(QOpenGLCompositorWindow *window,
+                QOpenGLTextureBlitter::Origin origin = QOpenGLTextureBlitter::OriginTopLeft);
     void ensureCorrectZOrder();
 
     QOpenGLContext *m_context;

@@ -1,5 +1,5 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QSignalSpy>
@@ -48,6 +48,7 @@
 #include <private/qinputmethod_p.h>
 
 #include <QtTest/private/qtesthelpers_p.h>
+#include <QtTest/private/qemulationdetector_p.h>
 
 #include <QtWidgets/private/qapplication_p.h>
 
@@ -103,6 +104,7 @@ private slots:
     void mouseWheel();
     void popupWheelHandling();
 #endif // QT_CONFIG(wheelevent)
+    void sendKeyEventToPopup();
     void layoutDirection();
     void itemListPosition();
     void separatorItem_data();
@@ -817,7 +819,6 @@ void tst_QComboBox::virtualAutocompletion()
     QApplication::sendEvent(testWidget, &kp1);
     QApplication::sendEvent(testWidget, &kr1);
 
-    qApp->processEvents(); // Process events to trigger autocompletion
     QTRY_COMPARE(testWidget->currentIndex(), 1);
 
     QKeyEvent kp2(QEvent::KeyPress, Qt::Key_O, {}, "o");
@@ -826,12 +827,10 @@ void tst_QComboBox::virtualAutocompletion()
     QApplication::sendEvent(testWidget, &kp2);
     QApplication::sendEvent(testWidget, &kr2);
 
-    qApp->processEvents(); // Process events to trigger autocompletion
     QTRY_COMPARE(testWidget->currentIndex(), 2);
 
     QApplication::sendEvent(testWidget, &kp2);
     QApplication::sendEvent(testWidget, &kr2);
-    qApp->processEvents(); // Process events to trigger autocompletion
     QTRY_COMPARE(testWidget->currentIndex(), 3);
 #if defined(Q_PROCESSOR_ARM) || defined(Q_PROCESSOR_MIPS)
     QApplication::setKeyboardInputInterval(oldInterval);
@@ -848,7 +847,6 @@ void tst_QComboBox::autoCompletionCaseSensitivity()
     TestWidget topLevel;
     topLevel.show();
     QComboBox *testWidget = topLevel.comboBox();
-    QApplicationPrivate::setActiveWindow(&topLevel);
     testWidget->setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&topLevel));
     QCOMPARE(qApp->focusWidget(), (QWidget *)testWidget);
@@ -869,75 +867,68 @@ void tst_QComboBox::autoCompletionCaseSensitivity()
     testWidget->clearEditText();
     QSignalSpy spyReturn(testWidget, SIGNAL(activated(int)));
     testWidget->completer()->setCaseSensitivity(Qt::CaseInsensitive);
-    QCOMPARE(testWidget->completer()->caseSensitivity(), Qt::CaseInsensitive);
+    QTRY_COMPARE(testWidget->completer()->caseSensitivity(), Qt::CaseInsensitive);
 
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_A);
-    qApp->processEvents();
-    QCOMPARE(testWidget->currentText(), QString("aww"));
+    QTRY_COMPARE(testWidget->currentText(), QString("aww"));
     QCOMPARE(spyReturn.size(), 0);
 
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_B);
-    qApp->processEvents();
     // autocompletions preserve userkey-case from 4.2
-    QCOMPARE(testWidget->currentText(), QString("abCDEF"));
+    QTRY_COMPARE(testWidget->currentText(), QString("abCDEF"));
     QCOMPARE(spyReturn.size(), 0);
 
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_Enter);
-    qApp->processEvents();
-    QCOMPARE(testWidget->currentText(), QString("aBCDEF")); // case restored to item's case
+    QTRY_COMPARE(testWidget->currentText(), QString("aBCDEF")); // case restored to item's case
     QCOMPARE(spyReturn.size(), 1);
 
     testWidget->clearEditText();
     QTest::keyClick(testWidget->lineEdit(), 'c');
-    QCOMPARE(testWidget->currentText(), QString("cow"));
+    QTRY_COMPARE(testWidget->currentText(), QString("cow"));
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_Enter);
-    QCOMPARE(testWidget->currentText(), QString("Cow")); // case restored to item's case
+    QTRY_COMPARE(testWidget->currentText(), QString("Cow")); // case restored to item's case
 
     testWidget->clearEditText();
     QTest::keyClick(testWidget->lineEdit(), 'a');
     QTest::keyClick(testWidget->lineEdit(), '*');
-    QCOMPARE(testWidget->currentText(), QString("a*"));
+    QTRY_COMPARE(testWidget->currentText(), QString("a*"));
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_Enter);
-    QCOMPARE(testWidget->currentText(), QString("A*"));
+    QTRY_COMPARE(testWidget->currentText(), QString("A*"));
 
     // case sensitive
     testWidget->clearEditText();
     testWidget->completer()->setCaseSensitivity(Qt::CaseSensitive);
-    QCOMPARE(testWidget->completer()->caseSensitivity(), Qt::CaseSensitive);
+    QTRY_COMPARE(testWidget->completer()->caseSensitivity(), Qt::CaseSensitive);
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_A);
-    qApp->processEvents();
-    QCOMPARE(testWidget->currentText(), QString("aww"));
+    QTRY_COMPARE(testWidget->currentText(), QString("aww"));
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_B);
-    qApp->processEvents();
-    QCOMPARE(testWidget->currentText(), QString("abcdef"));
+    QTRY_COMPARE(testWidget->currentText(), QString("abcdef"));
 
     testWidget->setCurrentIndex(0); // to reset the completion's "start"
     testWidget->clearEditText();
     QTest::keyClick(testWidget->lineEdit(), 'a');
     QTest::keyClick(testWidget->lineEdit(), 'b');
-    QCOMPARE(testWidget->currentText(), QString("abcdef"));
+    QTRY_COMPARE(testWidget->currentText(), QString("abcdef"));
     QTest::keyClick(testWidget->lineEdit(), 'C');
-    qApp->processEvents();
-    QCOMPARE(testWidget->currentText(), QString("abCdef"));
+    QTRY_COMPARE(testWidget->currentText(), QString("abCdef"));
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_Enter);
-    qApp->processEvents();
-    QCOMPARE(testWidget->currentText(), QString("abCdef")); // case restored to item's case
+    QTRY_COMPARE(testWidget->currentText(), QString("abCdef")); // case restored to item's case
 
     testWidget->clearEditText();
     QTest::keyClick(testWidget->lineEdit(), 'c');
-    QCOMPARE(testWidget->currentText(), QString("c"));
+    QTRY_COMPARE(testWidget->currentText(), QString("c"));
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_Backspace);
     QTest::keyClick(testWidget->lineEdit(), 'C');
-    QCOMPARE(testWidget->currentText(), QString("Cow"));
+    QTRY_COMPARE(testWidget->currentText(), QString("Cow"));
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_Enter);
-    QCOMPARE(testWidget->currentText(), QString("Cow"));
+    QTRY_COMPARE(testWidget->currentText(), QString("Cow"));
 
     testWidget->clearEditText();
     QTest::keyClick(testWidget->lineEdit(), 'a');
     QTest::keyClick(testWidget->lineEdit(), '*');
-    QCOMPARE(testWidget->currentText(), QString("a*"));
+    QTRY_COMPARE(testWidget->currentText(), QString("a*"));
     QTest::keyClick(testWidget->lineEdit(), Qt::Key_Enter);
-    QCOMPARE(testWidget->currentText(), QString("a*")); // A* not matched
+    QTRY_COMPARE(testWidget->currentText(), QString("a*")); // A* not matched
 }
 
 void tst_QComboBox::hide()
@@ -1286,11 +1277,12 @@ void tst_QComboBox::insertItem_data()
     initialItems << "foo" << "bar";
     for(int e = 0 ; e<2 ; e++) {
         bool editable = (e==0);
-        QTest::newRow("Insert less then 0") << initialItems << -1 << "inserted" << 0 << editable;
-        QTest::newRow("Insert at 0") << initialItems << 0 << "inserted" << 0 << editable;
-        QTest::newRow("Insert beyond count") << initialItems << 3 << "inserted" << 2 << editable;
-        QTest::newRow("Insert at count") << initialItems << 2 << "inserted" << 2 << editable;
-        QTest::newRow("Insert in the middle") << initialItems << 1 << "inserted" << 1 << editable;
+        const auto txt = editable ? QByteArray("editable: ") : QByteArray("non-editable: ");
+        QTest::newRow(txt + "Insert less then 0") << initialItems << -1 << "inserted" << 0 << editable;
+        QTest::newRow(txt + "Insert at 0") << initialItems << 0 << "inserted" << 0 << editable;
+        QTest::newRow(txt + "Insert beyond count") << initialItems << 3 << "inserted" << 2 << editable;
+        QTest::newRow(txt + "Insert at count") << initialItems << 2 << "inserted" << 2 << editable;
+        QTest::newRow(txt + "Insert in the middle") << initialItems << 1 << "inserted" << 1 << editable;
     }
 }
 
@@ -1505,42 +1497,70 @@ void tst_QComboBox::currentTextChanged()
     testWidget->addItems(QStringList() << "foo" << "bar");
     QCOMPARE(testWidget->count(), 2);
 
-    QSignalSpy spy(testWidget, SIGNAL(currentTextChanged(QString)));
+    QSignalSpy textChangedSpy(testWidget, &QComboBox::currentTextChanged);
 
     testWidget->setEditable(editable);
 
     // set text in list
     testWidget->setCurrentIndex(0);
     QCOMPARE(testWidget->currentIndex(), 0);
-    spy.clear();
+    textChangedSpy.clear();
     testWidget->setCurrentText(QString("bar"));
-    QCOMPARE(spy.size(), 1);
-    QCOMPARE(qvariant_cast<QString>(spy.at(0).at(0)), QString("bar"));
+    QCOMPARE(textChangedSpy.size(), 1);
+    QCOMPARE(qvariant_cast<QString>(textChangedSpy.at(0).at(0)), QString("bar"));
 
     // set text not in list
     testWidget->setCurrentIndex(0);
     QCOMPARE(testWidget->currentIndex(), 0);
-    spy.clear();
+    textChangedSpy.clear();
     testWidget->setCurrentText(QString("qt"));
     if (editable) {
-        QCOMPARE(spy.size(), 1);
-        QCOMPARE(qvariant_cast<QString>(spy.at(0).at(0)), QString("qt"));
+        QCOMPARE(textChangedSpy.size(), 1);
+        QCOMPARE(qvariant_cast<QString>(textChangedSpy.at(0).at(0)), QString("qt"));
     } else {
-        QCOMPARE(spy.size(), 0);
+        QCOMPARE(textChangedSpy.size(), 0);
     }
 
     // item changed
     testWidget->setCurrentIndex(0);
     QCOMPARE(testWidget->currentIndex(), 0);
-    spy.clear();
+    textChangedSpy.clear();
     testWidget->setItemText(0, QString("ape"));
-    QCOMPARE(spy.size(), 1);
-    QCOMPARE(qvariant_cast<QString>(spy.at(0).at(0)), QString("ape"));
+    QCOMPARE(textChangedSpy.size(), 1);
+    QCOMPARE(qvariant_cast<QString>(textChangedSpy.at(0).at(0)), QString("ape"));
+
     // change it back
-    spy.clear();
+    textChangedSpy.clear();
     testWidget->setItemText(0, QString("foo"));
-    QCOMPARE(spy.size(), 1);
-    QCOMPARE(qvariant_cast<QString>(spy.at(0).at(0)), QString("foo"));
+    QCOMPARE(textChangedSpy.size(), 1);
+    QCOMPARE(qvariant_cast<QString>(textChangedSpy.at(0).at(0)), QString("foo"));
+
+    // currentIndexChanged vs. currentTextChanged
+    testWidget->clear();
+    testWidget->addItems(QStringList() << "first" << "second" << "third" << "fourth" << "fourth");
+    testWidget->setCurrentIndex(4);
+    textChangedSpy.clear();
+    QSignalSpy indexChangedSpy(testWidget, &QComboBox::currentIndexChanged);
+
+    // Index change w/o text change
+    testWidget->removeItem(3);
+    QCOMPARE(textChangedSpy.count(), 0);
+    QCOMPARE(indexChangedSpy.count(), 1);
+
+    // Index and text change
+    testWidget->setCurrentIndex(0);
+    QCOMPARE(textChangedSpy.count(), 1);
+    QCOMPARE(indexChangedSpy.count(), 2);
+
+    // remove item above current index
+    testWidget->removeItem(2);
+    QCOMPARE(textChangedSpy.count(), 1);
+    QCOMPARE(indexChangedSpy.count(), 2);
+
+    // Text change w/o index change
+    testWidget->setItemText(0, "first class");
+    QCOMPARE(textChangedSpy.count(), 2);
+    QCOMPARE(indexChangedSpy.count(), 2);
 }
 
 void tst_QComboBox::editTextChanged()
@@ -1992,7 +2012,7 @@ void tst_QComboBox::flaggedItems_data()
             disableFlagList << 1;
             keyMovementList.clear();
             keyMovementList << Qt::Key_T << Qt::Key_Enter;
-            QTest::newRow(testCase.toLatin1() + "disabled") << itemList << deselectFlagList << disableFlagList << keyMovementList << bool(editable) << 2;
+            QTest::newRow(testCase.toLatin1() + "disabled with key") << itemList << deselectFlagList << disableFlagList << keyMovementList << bool(editable) << 2;
             QTest::newRow(testCase.toLatin1() + "broken autocompletion") << itemList << deselectFlagList << disableFlagList << keyMovementList << bool(editable) << 2;
         }
     }
@@ -2026,7 +2046,6 @@ void tst_QComboBox::flaggedItems()
     comboBox.setView(&listWidget);
     comboBox.move(200, 200);
     comboBox.show();
-    QApplicationPrivate::setActiveWindow(&comboBox);
     comboBox.activateWindow();
     comboBox.setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&comboBox));
@@ -2166,6 +2185,54 @@ void tst_QComboBox::popupWheelHandling()
     QCOMPARE(comboBox->view()->pos(), popupPos);
 }
 #endif // QT_CONFIG(wheelevent)
+
+void tst_QComboBox::sendKeyEventToPopup()
+{
+    struct KeyEventFilter : public QObject {
+        uint countWindow = 0;
+        uint countView = 0;
+        bool eventFilter(QObject *obj, QEvent *event) override
+        {
+            if (event->type() != QEvent::KeyPress)
+                return false;
+
+            if (qobject_cast<QWindow *>(obj))
+                ++countWindow;
+
+            if (qobject_cast<QAbstractItemView *>(obj) && event->spontaneous())
+                ++countView;
+
+            return false;
+        }
+    };
+
+    QScrollArea scrollArea;
+    scrollArea.move(300, 300);
+    QWidget *widget = new QWidget;
+    scrollArea.setWidget(widget);
+    QVBoxLayout *layout = new QVBoxLayout(widget);
+    layout->setSizeConstraint(QLayout::SetMinAndMaxSize);
+    QComboBox *comboBox = new QComboBox;
+    comboBox->addItems(QStringList() << QStringLiteral("Won") << QStringLiteral("Too")
+                       << QStringLiteral("3") << QStringLiteral("fore"));
+    layout->addWidget(comboBox);
+    layout->addSpacing(100);
+    const QPoint sizeP(scrollArea.width(), scrollArea.height());
+    scrollArea.move(QGuiApplication::primaryScreen()->availableGeometry().center() - sizeP / 2);
+    scrollArea.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&scrollArea));
+    comboBox->showPopup();
+    auto *itemView = comboBox->findChild<QAbstractItemView *>();
+    QVERIFY(QTest::qWaitForWindowExposed(itemView));
+    KeyEventFilter filter;
+    itemView->installEventFilter(&filter);
+    comboBox->window()->windowHandle()->installEventFilter(&filter);
+    QWindowSystemInterfacePrivate::KeyEvent ke(comboBox->window()->windowHandle(), 0, QEvent::KeyPress, Qt::Key_End, Qt::KeyboardModifiers());
+    QGuiApplicationPrivate::processKeyEvent(&ke);
+    // Make sure that the key event is directly delivered to the popup
+    QCOMPARE(filter.countWindow, 0);
+    QCOMPARE(filter.countView, 1);
+}
 
 void tst_QComboBox::layoutDirection()
 {
@@ -2456,7 +2523,6 @@ void tst_QComboBox::task247863_keyBoardSelection()
   combo.addItem( QLatin1String("111"));
   combo.addItem( QLatin1String("222"));
   combo.show();
-  QApplicationPrivate::setActiveWindow(&combo);
   QTRY_COMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&combo));
 
   QSignalSpy spy(&combo, &QComboBox::activated);
@@ -2482,7 +2548,6 @@ void tst_QComboBox::task220195_keyBoardSelection2()
     combo.addItem( QLatin1String("foo2"));
     combo.addItem( QLatin1String("foo3"));
     combo.show();
-    QApplicationPrivate::setActiveWindow(&combo);
     QVERIFY(QTest::qWaitForWindowActive(&combo));
 
     combo.setCurrentIndex(-1);
@@ -2768,7 +2833,6 @@ void tst_QComboBox::keyBoardNavigationWithMouse()
 
     combo.move(200, 200);
     combo.showNormal();
-    QApplicationPrivate::setActiveWindow(&combo);
     QVERIFY(QTest::qWaitForWindowActive(&combo));
 
     QCOMPARE(combo.currentText(), QLatin1String("0"));
@@ -2824,7 +2888,6 @@ void tst_QComboBox::task_QTBUG_1071_changingFocusEmitsActivated()
     layout.addWidget(&edit);
 
     w.show();
-    QApplicationPrivate::setActiveWindow(&w);
     QVERIFY(QTest::qWaitForWindowActive(&w));
     cb.clearEditText();
     cb.setFocus();
@@ -3176,31 +3239,55 @@ void tst_QComboBox::task_QTBUG_54191_slotOnEditTextChangedSetsComboBoxToReadOnly
     QCOMPARE(cb.currentIndex(), 1);
 }
 
+class ComboBox : public QComboBox {
+public:
+    using QComboBox::QComboBox;
+
+    void keyPressEvent(QKeyEvent *e) override
+    {
+        QComboBox::keyPressEvent(e);
+        accepted = e->isAccepted();
+    }
+    bool accepted = false;
+};
+
 void tst_QComboBox::keyboardSelection()
 {
-    QComboBox comboBox;
+    ComboBox comboBox;
     const int keyboardInterval = QApplication::keyboardInputInterval();
-    QStringList list;
-    list << "OA" << "OB" << "OC" << "OO" << "OP" << "PP";
+    const QStringList list = {"OA", "OB", "OC", "OO", "OP", "PP"};
     comboBox.addItems(list);
 
     // Clear any remaining keyboard input from previous tests.
     QTest::qWait(keyboardInterval);
     QTest::keyClicks(&comboBox, "oo", Qt::NoModifier, 50);
     QCOMPARE(comboBox.currentText(), list.at(3));
+    QCOMPARE(comboBox.accepted, true);
 
     QTest::qWait(keyboardInterval);
     QTest::keyClicks(&comboBox, "op", Qt::NoModifier, 50);
     QCOMPARE(comboBox.currentText(), list.at(4));
+    QCOMPARE(comboBox.accepted, true);
 
     QTest::keyClick(&comboBox, Qt::Key_P, Qt::NoModifier, keyboardInterval);
     QCOMPARE(comboBox.currentText(), list.at(5));
+    QCOMPARE(comboBox.accepted, true);
 
     QTest::keyClick(&comboBox, Qt::Key_O, Qt::NoModifier, keyboardInterval);
     QCOMPARE(comboBox.currentText(), list.at(0));
+    QCOMPARE(comboBox.accepted, true);
 
     QTest::keyClick(&comboBox, Qt::Key_O, Qt::NoModifier, keyboardInterval);
     QCOMPARE(comboBox.currentText(), list.at(1));
+    QCOMPARE(comboBox.accepted, true);
+
+    QTest::keyClick(&comboBox, Qt::Key_Tab, Qt::NoModifier, keyboardInterval);
+    QCOMPARE(comboBox.currentText(), list.at(1));
+    QCOMPARE(comboBox.accepted, false);
+
+    QTest::keyClick(&comboBox, Qt::Key_Tab, Qt::ControlModifier, keyboardInterval);
+    QCOMPARE(comboBox.currentText(), list.at(1));
+    QCOMPARE(comboBox.accepted, false);
 }
 
 void tst_QComboBox::updateDelegateOnEditableChange()
@@ -3362,8 +3449,12 @@ void tst_QComboBox::task_QTBUG_56693_itemFontFromModel()
     box.hidePopup();
 }
 
+#ifndef QT_NO_STYLE_FUSION
 void tst_QComboBox::popupPositionAfterStyleChange()
 {
+#ifdef Q_OS_QNX
+    QSKIP("Fails on QNX, QTBUG-123798");
+#endif
     // Check that the popup opens up centered on top of the current
     // index if the style has changed since the last time it was
     // opened (QTBUG-113765).
@@ -3372,6 +3463,8 @@ void tst_QComboBox::popupPositionAfterStyleChange()
     const bool usePopup = qApp->style()->styleHint(QStyle::SH_ComboBox_Popup, &opt, &box);
     if (!usePopup)
         QSKIP("This test is only relevant for styles that centers the popup on top of the combo!");
+    if (QTestPrivate::isRunningArmOnX86())
+        QSKIP("Flaky on QEMU, QTBUG-114760");
 
     box.addItems({"first", "middle", "last"});
     box.show();
@@ -3406,13 +3499,14 @@ void tst_QComboBox::popupPositionAfterStyleChange()
     QTest::mouseClick(&box, Qt::LeftButton);
 
     // Click on item under mouse. But wait a bit, to avoid a double click
-    QTest::qWait(qApp->styleHints()->mouseDoubleClickInterval());
+    QTest::qWait(2 * QGuiApplication::styleHints()->mouseDoubleClickInterval());
     QTest::mouseClick(&box, Qt::LeftButton);
 
     // Ensure that the item that was centered on top of the combobox, and which
     // we therefore clicked, was the same item we clicked on the first time.
-    QCOMPARE(box.currentText(), QStringLiteral("last"));
+    QTRY_COMPARE(box.currentText(), QStringLiteral("last"));
 }
+#endif // QT_NO_STYLE_FUSION
 
 void tst_QComboBox::inputMethodUpdate()
 {
@@ -3496,7 +3590,6 @@ void tst_QComboBox::task_QTBUG_52027_mapCompleterIndex()
     QCOMPARE(spy.size(), 0);
     cbox.move(200, 200);
     cbox.show();
-    QApplicationPrivate::setActiveWindow(&cbox);
     QVERIFY(QTest::qWaitForWindowActive(&cbox));
 
     QTest::keyClicks(&cbox, "foobar2");
@@ -3522,7 +3615,6 @@ void tst_QComboBox::task_QTBUG_52027_mapCompleterIndex()
         cbox.activateWindow();
     }
 
-    QApplicationPrivate::setActiveWindow(&cbox);
     QVERIFY(QTest::qWaitForWindowActive(&cbox));
 
     QTest::keyClicks(&cbox, "foobar1");
@@ -3590,7 +3682,6 @@ void tst_QComboBox::checkEmbeddedLineEditWhenStyleSheetIsSet()
     layout->addWidget(comboBox);
     topLevel.show();
     comboBox->setEditable(true);
-    QApplicationPrivate::setActiveWindow(&topLevel);
     QVERIFY(QTest::qWaitForWindowActive(&topLevel));
 
     QImage grab = comboBox->grab().toImage();

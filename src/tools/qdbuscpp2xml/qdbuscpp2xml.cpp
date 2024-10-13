@@ -15,6 +15,7 @@
 
 #include <qdbusconnection.h>    // for the Export* flags
 #include <private/qdbusconnection_p.h>    // for the qDBusCheckAsyncTag
+#include <private/qdbusmetatype_p.h> // for QDBusMetaTypeId::init()
 
 using namespace Qt::StringLiterals;
 
@@ -184,6 +185,8 @@ static QString generateInterfaceXml(const ClassDef *mo)
                 access |= 1;
             if (!mp.write.isEmpty())
                 access |= 2;
+            if (!mp.member.isEmpty())
+                access |= 3;
 
             int typeId = QMetaType::fromName(mp.type).id();
             if (!typeId) {
@@ -429,6 +432,8 @@ int main(int argc, char **argv)
         args.append(QString::fromLocal8Bit(argv[n]));
     parseCmdLine(args);
 
+    QDBusMetaTypeId::init();
+
     QList<ClassDef> classes;
 
     if (args.isEmpty())
@@ -438,15 +443,19 @@ int main(int argc, char **argv)
             continue;
 
         QFile f;
+        bool fileIsOpen;
+        QString fileName;
         if (arg == u'-') {
-            f.open(stdin, QIODevice::ReadOnly | QIODevice::Text);
+            fileName = "stdin"_L1;
+            fileIsOpen = f.open(stdin, QIODevice::ReadOnly | QIODevice::Text);
         } else {
+            fileName = arg;
             f.setFileName(arg);
-            f.open(QIODevice::ReadOnly | QIODevice::Text);
+            fileIsOpen = f.open(QIODevice::ReadOnly | QIODevice::Text);
         }
-        if (!f.isOpen()) {
+        if (!fileIsOpen) {
             fprintf(stderr, PROGRAMNAME ": could not open '%s': %s\n",
-                    qPrintable(arg), qPrintable(f.errorString()));
+                    qPrintable(fileName), qPrintable(f.errorString()));
             return 1;
         }
 
@@ -472,11 +481,15 @@ int main(int argc, char **argv)
 
     QFile output;
     if (outputFile.isEmpty()) {
-        output.open(stdout, QIODevice::WriteOnly);
+        if (!output.open(stdout, QIODevice::WriteOnly)) {
+            fprintf(stderr, PROGRAMNAME ": could not open standard output: %s\n",
+                    qPrintable(output.errorString()));
+            return 1;
+        }
     } else {
         output.setFileName(outputFile);
         if (!output.open(QIODevice::WriteOnly)) {
-            fprintf(stderr, PROGRAMNAME ": could not open output file '%s': %s",
+            fprintf(stderr, PROGRAMNAME ": could not open output file '%s': %s\n",
                     qPrintable(outputFile), qPrintable(output.errorString()));
             return 1;
         }

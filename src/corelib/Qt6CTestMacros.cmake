@@ -116,6 +116,9 @@ function(_qt_internal_get_cmake_test_configure_options out_var)
     if (NO_WIDGETS)
         list(APPEND option_list "-DNO_WIDGETS=True")
     endif()
+    if (NO_OPENGL)
+        list(APPEND option_list "-DNO_OPENGL=True")
+    endif()
     if (NO_DBUS)
         list(APPEND option_list "-DNO_DBUS=True")
     endif()
@@ -142,17 +145,18 @@ function(_qt_internal_get_cmake_test_configure_options out_var)
         )
     endforeach()
 
-    set(prefixes "")
-    foreach(prefix_path IN LISTS CMAKE_PREFIX_PATH)
-      file(TO_CMAKE_PATH "${prefix_path}" prefix_path)
-      list(APPEND prefixes "${prefix_path}")
-    endforeach()
+    _qt_internal_get_build_vars_for_external_projects(
+        PREFIXES_VAR prefixes
+        ADDITIONAL_PACKAGES_PREFIXES_VAR additional_prefixes
+    )
+
     if(arg_OUT_PREFIX_PATH)
       set(${arg_OUT_PREFIX_PATH} "${prefixes}" PARENT_SCOPE)
     endif()
 
     string(REPLACE ";" "\;" prefixes "${prefixes}")
     list(APPEND option_list "-DCMAKE_PREFIX_PATH=${prefixes}")
+    list(APPEND option_list "-DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=${additional_prefixes}")
 
     set(${out_var} "${option_list}" PARENT_SCOPE)
 endfunction()
@@ -260,6 +264,9 @@ endfunction()
 #                so the argument containing list will look as following:
 #                    -DLIST_ARGUMENT=item1[[;]]item2[[;]]...itemN.
 macro(_qt_internal_test_expect_pass _dir)
+    if(WASM)
+        return()
+    endif()
     set(_test_option_args
       SIMULATE_IN_SOURCE
       NO_CLEAN_STEP
@@ -380,7 +387,7 @@ macro(_qt_internal_test_expect_pass _dir)
         endif()
         if(build_environment STREQUAL "ci"
             AND osx_arch_count GREATER_EQUAL 2
-            AND NOT QT_UIKIT_SDK
+            AND NOT QT_APPLE_SDK
             AND NOT QT_NO_IOS_BUILD_ADJUSTMENT_IN_CI)
             list(APPEND additional_configure_args
                 -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_SYSROOT=iphonesimulator)

@@ -7,18 +7,34 @@
 #include <QtSql/qtsqlglobal.h>
 #include <QtSql/qsqlrecord.h>
 #include <QtCore/qlist.h>
+#include <QtCore/qmetaobject.h>
 #include <QtCore/qstring.h>
 
+// clazy:excludeall=qproperty-without-notify
 QT_BEGIN_NAMESPACE
 
 
 class Q_SQL_EXPORT QSqlIndex : public QSqlRecord
 {
+    Q_GADGET
+    Q_PROPERTY(QString name READ name WRITE setName)
+    Q_PROPERTY(QString cursorName READ cursorName WRITE setCursorName)
+
 public:
     explicit QSqlIndex(const QString &cursorName = QString(), const QString &name = QString());
     QSqlIndex(const QSqlIndex &other);
+    QSqlIndex(QSqlIndex &&other) noexcept = default;
     ~QSqlIndex();
     QSqlIndex &operator=(const QSqlIndex &other);
+    QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QSqlIndex)
+
+    void swap(QSqlIndex &other) noexcept {
+        QSqlRecord::swap(other);
+        cursor.swap(other.cursor);
+        nm.swap(other.nm);
+        sorts.swap(other.sorts);
+    };
+
     void setCursorName(const QString &cursorName);
     inline QString cursorName() const { return cursor; }
     void setName(const QString& name);
@@ -31,11 +47,13 @@ public:
     void setDescending(int i, bool desc);
 
 private:
-    QString createField(int i, const QString& prefix, bool verbose) const;
+    // ### Qt7: move to d-ptr
     QString cursor;
     QString nm;
     QList<bool> sorts;
 };
+
+Q_DECLARE_SHARED(QSqlIndex)
 
 QT_END_NAMESPACE
 

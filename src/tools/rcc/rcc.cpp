@@ -8,7 +8,7 @@
 #include <qdatetime.h>
 #include <qdebug.h>
 #include <qdir.h>
-#include <qdiriterator.h>
+#include <qdirlisting.h>
 #include <qfile.h>
 #include <qiodevice.h>
 #include <qlocale.h>
@@ -21,7 +21,7 @@
 #  include <zstd.h>
 #endif
 
-// Note: A copy of this file is used in Qt Designer (qttools/src/designer/src/lib/shared/rcc.cpp)
+// Note: A copy of this file is used in Qt Widgets Designer (qttools/src/designer/src/lib/shared/rcc.cpp)
 
 QT_BEGIN_NAMESPACE
 
@@ -75,15 +75,18 @@ public:
         CompressedZstd = 0x04
     };
 
-    RCCFileInfo(const QString &name = QString(), const QFileInfo &fileInfo = QFileInfo(),
-                QLocale::Language language = QLocale::C,
-                QLocale::Territory territory = QLocale::AnyTerritory,
-                uint flags = NoFlags,
-                RCCResourceLibrary::CompressionAlgorithm compressAlgo = RCCResourceLibrary::CompressionAlgorithm::Best,
-                int compressLevel = CONSTANT_COMPRESSLEVEL_DEFAULT,
-                int compressThreshold = CONSTANT_COMPRESSTHRESHOLD_DEFAULT,
-                bool noZstd = false);
+
+    RCCFileInfo() = default;
+    RCCFileInfo(const QString &name, const QFileInfo &fileInfo, QLocale::Language language,
+                QLocale::Territory territory, uint flags,
+                RCCResourceLibrary::CompressionAlgorithm compressAlgo, int compressLevel,
+                int compressThreshold, bool noZstd, bool isEmpty);
+
     ~RCCFileInfo();
+    RCCFileInfo(const RCCFileInfo &) = delete;
+    RCCFileInfo &operator=(const RCCFileInfo &) = delete;
+    RCCFileInfo(RCCFileInfo &&) = default;
+    RCCFileInfo &operator=(RCCFileInfo &&other) = delete;
 
     QString resourceName() const;
 
@@ -92,41 +95,40 @@ public:
     qint64 writeDataName(RCCResourceLibrary &, qint64 offset);
     void writeDataInfo(RCCResourceLibrary &lib);
 
-    int m_flags;
+    int m_flags = NoFlags;
+    QLocale::Language m_language = QLocale::C;
+    QLocale::Territory m_territory = QLocale::AnyTerritory;
     QString m_name;
-    QLocale::Language m_language;
-    QLocale::Territory m_territory;
     QFileInfo m_fileInfo;
-    RCCFileInfo *m_parent;
+    RCCFileInfo *m_parent = nullptr;
     QMultiHash<QString, RCCFileInfo *> m_children;
-    RCCResourceLibrary::CompressionAlgorithm m_compressAlgo;
-    int m_compressLevel;
-    int m_compressThreshold;
 
-    qint64 m_nameOffset;
-    qint64 m_dataOffset;
-    qint64 m_childOffset;
-    bool m_noZstd;
+    RCCResourceLibrary::CompressionAlgorithm m_compressAlgo = RCCResourceLibrary::CompressionAlgorithm::Best;
+    int m_compressLevel = CONSTANT_COMPRESSLEVEL_DEFAULT;
+    int m_compressThreshold = CONSTANT_COMPRESSTHRESHOLD_DEFAULT;
+    bool m_noZstd = false;
+    bool m_isEmpty = false;
+
+    qint64 m_nameOffset = 0;
+    qint64 m_dataOffset = 0;
+    qint64 m_childOffset = 0;
 };
 
-RCCFileInfo::RCCFileInfo(const QString &name, const QFileInfo &fileInfo,
-    QLocale::Language language, QLocale::Territory territory, uint flags,
-    RCCResourceLibrary::CompressionAlgorithm compressAlgo, int compressLevel, int compressThreshold,
-    bool noZstd)
+RCCFileInfo::RCCFileInfo(const QString &name, const QFileInfo &fileInfo, QLocale::Language language,
+                         QLocale::Territory territory, uint flags,
+                         RCCResourceLibrary::CompressionAlgorithm compressAlgo, int compressLevel,
+                         int compressThreshold, bool noZstd, bool isEmpty)
+    : m_flags(flags),
+      m_language(language),
+      m_territory(territory),
+      m_name(name),
+      m_fileInfo(fileInfo),
+      m_compressAlgo(compressAlgo),
+      m_compressLevel(compressLevel),
+      m_compressThreshold(compressThreshold),
+      m_noZstd(noZstd),
+      m_isEmpty(isEmpty)
 {
-    m_name = name;
-    m_fileInfo = fileInfo;
-    m_language = language;
-    m_territory = territory;
-    m_flags = flags;
-    m_parent = nullptr;
-    m_nameOffset = 0;
-    m_dataOffset = 0;
-    m_childOffset = 0;
-    m_compressAlgo = compressAlgo;
-    m_compressLevel = compressLevel;
-    m_compressThreshold = compressThreshold;
-    m_noZstd = noZstd;
 }
 
 RCCFileInfo::~RCCFileInfo()
@@ -139,7 +141,8 @@ QString RCCFileInfo::resourceName() const
     QString resource = m_name;
     for (RCCFileInfo *p = m_parent; p; p = p->m_parent)
         resource = resource.prepend(p->m_name + u'/');
-    return u':' + resource;
+    resource.prepend(u':');
+    return resource;
 }
 
 void RCCFileInfo::writeDataInfo(RCCResourceLibrary &lib)
@@ -198,7 +201,7 @@ void RCCFileInfo::writeDataInfo(RCCResourceLibrary &lib)
 
     if (lib.formatVersion() >= 2) {
         // last modified time stamp
-        const QDateTime lastModified = m_fileInfo.lastModified();
+        const QDateTime lastModified = m_fileInfo.lastModified(QTimeZone::UTC);
         quint64 lastmod = quint64(lastModified.isValid() ? lastModified.toMSecsSinceEpoch() : 0);
         static const quint64 sourceDate = 1000 * qgetenv("QT_RCC_SOURCE_DATE_OVERRIDE").toULongLong();
         if (sourceDate != 0)
@@ -225,14 +228,18 @@ qint64 RCCFileInfo::writeDataBlob(RCCResourceLibrary &lib, qint64 offset,
 
     //capture the offset
     m_dataOffset = offset;
+    QByteArray data;
 
-    //find the data to be written
-    QFile file(m_fileInfo.absoluteFilePath());
-    if (!file.open(QFile::ReadOnly)) {
-        *errorMessage = msgOpenReadFailed(m_fileInfo.absoluteFilePath(), file.errorString());
-        return 0;
+    if (!m_isEmpty) {
+        //find the data to be written
+        QFile file(m_fileInfo.absoluteFilePath());
+        if (!file.open(QFile::ReadOnly)) {
+            *errorMessage = msgOpenReadFailed(m_fileInfo.absoluteFilePath(), file.errorString());
+            return 0;
+        }
+
+        data = file.readAll();
     }
-    QByteArray data = file.readAll();
 
     // Check if compression is useful for this file
     if (data.size() != 0) {
@@ -314,7 +321,7 @@ qint64 RCCFileInfo::writeDataBlob(RCCResourceLibrary &lib, qint64 offset,
     // some info
     if (text || pass1) {
         lib.writeString("  // ");
-        lib.writeByteArray(m_fileInfo.absoluteFilePath().toLocal8Bit());
+        lib.writeByteArray(m_fileInfo.fileName().toLocal8Bit());
         lib.writeString("\n  ");
     }
 
@@ -420,6 +427,7 @@ RCCResourceLibrary::Strings::Strings() :
    ATTRIBUTE_LANG("lang"_L1),
    ATTRIBUTE_PREFIX("prefix"_L1),
    ATTRIBUTE_ALIAS("alias"_L1),
+   ATTRIBUTE_EMPTY("empty"_L1),
    ATTRIBUTE_THRESHOLD("threshold"_L1),
    ATTRIBUTE_COMPRESS("compress"_L1),
    ATTRIBUTE_COMPRESSALGO(QStringLiteral("compression-algorithm"))
@@ -464,6 +472,17 @@ enum RCCXmlTag {
 };
 Q_DECLARE_TYPEINFO(RCCXmlTag, Q_PRIMITIVE_TYPE);
 
+static bool parseBoolean(QStringView value, QString *errorMsg)
+{
+    if (value.compare("true"_L1, Qt::CaseInsensitive) == 0)
+        return true;
+    if (value.compare("false"_L1, Qt::CaseInsensitive) == 0)
+        return false;
+
+    *errorMsg = QString::fromLatin1("Invalid value for boolean attribute: '%1'").arg(value);
+    return false;
+}
+
 bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
     const QString &fname, QString currentPath, bool listMode)
 {
@@ -479,6 +498,7 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
     QLocale::Language language = QLocale::c().language();
     QLocale::Territory territory = QLocale::c().territory();
     QString alias;
+    bool empty = false;
     auto compressAlgo = m_compressionAlgo;
     int compressLevel = m_compressLevel;
     int compressThreshold = m_compressThreshold;
@@ -492,6 +512,12 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
                     reader.raiseError("expected <RCC> tag"_L1);
                 else
                     tokens.push(RccTag);
+            } else if (reader.name() == m_strings.TAG_LEGAL) {
+                if (tokens.isEmpty() || tokens.top() != RccTag) {
+                    reader.raiseError("unexpected <legal> tag"_L1);
+                } else {
+                    m_legal = reader.readElementText().trimmed();
+                }
             } else if (reader.name() == m_strings.TAG_RESOURCE) {
                 if (tokens.isEmpty() || tokens.top() != RccTag) {
                     reader.raiseError("unexpected <RESOURCE> tag"_L1);
@@ -538,6 +564,11 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
                     compressThreshold = m_compressThreshold;
 
                     QString errorString;
+                    if (attributes.hasAttribute(m_strings.ATTRIBUTE_EMPTY))
+                        empty = parseBoolean(attributes.value(m_strings.ATTRIBUTE_EMPTY), &errorString);
+                    else
+                        empty = false;
+
                     if (attributes.hasAttribute(m_strings.ATTRIBUTE_COMPRESSALGO))
                         compressAlgo = parseCompressionAlgorithm(attributes.value(m_strings.ATTRIBUTE_COMPRESSALGO), &errorString);
                     if (errorString.isEmpty() && attributes.hasAttribute(m_strings.ATTRIBUTE_COMPRESS)) {
@@ -604,17 +635,17 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
                     absFileName.prepend(currentPath);
                 QFileInfo file(absFileName);
                 if (file.isDir()) {
-                    QDir dir(file.filePath());
                     if (!alias.endsWith(slash))
                         alias += slash;
 
                     QStringList filePaths;
-                    QDirIterator it(dir, QDirIterator::FollowSymlinks|QDirIterator::Subdirectories);
-                    while (it.hasNext()) {
-                        it.next();
-                        if (it.fileName() == "."_L1 || it.fileName() == ".."_L1)
+                    using F = QDirListing::IteratorFlag;
+                    constexpr auto flags = F::FollowDirSymlinks | F::Recursive;
+                    for (const auto &entry : QDirListing(file.filePath(), flags)) {
+                        const QString &fileName = entry.fileName();
+                        if (fileName == "."_L1 || fileName == ".."_L1)
                             continue;
-                        filePaths.append(it.filePath());
+                        filePaths.emplace_back(entry.filePath());
                     }
 
                     // make rcc output deterministic
@@ -628,7 +659,7 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
                                                     child.isDir() ? RCCFileInfo::Directory
                                                                   : RCCFileInfo::NoFlags,
                                                     compressAlgo, compressLevel, compressThreshold,
-                                                    m_noZstd));
+                                                    m_noZstd, empty));
                         if (!arc)
                             m_failedResources.push_back(child.fileName());
                     }
@@ -643,7 +674,7 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
                                             compressAlgo,
                                             compressLevel,
                                             compressThreshold,
-                                            m_noZstd)
+                                            m_noZstd, empty)
                                 );
                     if (!arc)
                         m_failedResources.push_back(absFileName);
@@ -682,15 +713,15 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
         m_errorDevice->write(msg.toUtf8());
         if (!listMode && m_format == Binary) {
             // create dummy entry, otherwise loading with QResource will crash
-            m_root = new RCCFileInfo(QString(), QFileInfo(),
-                    QLocale::C, QLocale::AnyTerritory, RCCFileInfo::Directory);
+            m_root = new RCCFileInfo{};
+            m_root->m_flags = RCCFileInfo::Directory;
         }
     }
 
     return true;
 }
 
-bool RCCResourceLibrary::addFile(const QString &alias, const RCCFileInfo &file)
+bool RCCResourceLibrary::addFile(const QString &alias, RCCFileInfo file)
 {
     Q_ASSERT(m_errorDevice);
     if (file.m_fileInfo.size() > 0xffffffff) {
@@ -698,8 +729,10 @@ bool RCCResourceLibrary::addFile(const QString &alias, const RCCFileInfo &file)
         m_errorDevice->write(msg.toUtf8());
         return false;
     }
-    if (!m_root)
-        m_root = new RCCFileInfo(QString(), QFileInfo(), QLocale::C, QLocale::AnyTerritory, RCCFileInfo::Directory);
+    if (!m_root) {
+        m_root = new RCCFileInfo{};
+        m_root->m_flags = RCCFileInfo::Directory;
+    }
 
     RCCFileInfo *parent = m_root;
     const QStringList nodes = alias.split(u'/');
@@ -708,7 +741,9 @@ bool RCCResourceLibrary::addFile(const QString &alias, const RCCFileInfo &file)
         if (node.isEmpty())
             continue;
         if (!parent->m_children.contains(node)) {
-            RCCFileInfo *s = new RCCFileInfo(node, QFileInfo(), QLocale::C, QLocale::AnyTerritory, RCCFileInfo::Directory);
+            RCCFileInfo *s = new RCCFileInfo{};
+            s->m_name = node;
+            s->m_flags = RCCFileInfo::Directory;
             s->m_parent = parent;
             parent->m_children.insert(node, s);
             parent = s;
@@ -718,7 +753,7 @@ bool RCCResourceLibrary::addFile(const QString &alias, const RCCFileInfo &file)
     }
 
     const QString filename = nodes.at(nodes.size()-1);
-    RCCFileInfo *s = new RCCFileInfo(file);
+    RCCFileInfo *s = new RCCFileInfo(std::move(file));
     s->m_parent = parent;
     auto cbegin = parent->m_children.constFind(filename);
     auto cend = parent->m_children.constEnd();
@@ -900,13 +935,17 @@ bool RCCResourceLibrary::output(QIODevice &outDevice, QIODevice &tempDevice, QIO
                     m_errorDevice->write("No data signature found\n");
                     return false;
                 }
+
+                if (c != pattern[i]) {
+                    for (int k = 0; k < i; ++k)
+                        outDevice.putChar(pattern[k]);
+                    i = 0;
+                }
+
                 if (c == pattern[i]) {
                     ++i;
                 } else {
-                    for (int k = 0; k < i; ++k)
-                        outDevice.putChar(pattern[k]);
                     outDevice.putChar(c);
-                    i = 0;
                 }
             }
 
@@ -1054,20 +1093,34 @@ void RCCResourceLibrary::writeNumber8(quint64 number)
 
 bool RCCResourceLibrary::writeHeader()
 {
+    auto writeCopyright = [this](QByteArrayView prefix) {
+        const QStringList lines = m_legal.split(u'\n', Qt::SkipEmptyParts);
+        for (const QString &line : lines) {
+            write(prefix.data(), prefix.size());
+            writeString(line.toUtf8().trimmed());
+            writeChar('\n');
+        }
+    };
     switch (m_format) {
     case C_Code:
     case Pass1:
         writeString("/****************************************************************************\n");
         writeString("** Resource object code\n");
+        writeCopyright("** ");
         writeString("**\n");
         writeString("** Created by: The Resource Compiler for Qt version ");
         writeByteArray(QT_VERSION_STR);
         writeString("\n**\n");
         writeString("** WARNING! All changes made in this file will be lost!\n");
         writeString( "*****************************************************************************/\n\n");
+        writeString("#ifdef _MSC_VER\n"
+                    "// disable informational message \"function ... selected for automatic inline expansion\"\n"
+                    "#pragma warning (disable: 4711)\n"
+                    "#endif\n\n");
         break;
     case Python_Code:
         writeString("# Resource object code (Python 3)\n");
+        writeCopyright("# ");
         writeString("# Created by: object code\n");
         writeString("# Created by: The Resource Compiler for Qt version ");
         writeByteArray(QT_VERSION_STR);
@@ -1345,7 +1398,9 @@ bool RCCResourceLibrary::writeInitializer()
                         "#   define QT_RCC_MANGLE_NAMESPACE(name) name\n"
                         "#endif\n\n");
 
-            writeString("#ifdef QT_NAMESPACE\n"
+            writeString("#if defined(QT_INLINE_NAMESPACE)\n"
+                        "inline namespace QT_NAMESPACE {\n"
+                        "#elif defined(QT_NAMESPACE)\n"
                         "namespace QT_NAMESPACE {\n"
                         "#endif\n\n");
         }

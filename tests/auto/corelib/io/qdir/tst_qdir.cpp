@@ -1,8 +1,9 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // Copyright (C) 2017 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
+#include <QtTest/private/qcomparisontesthelper_p.h>
 #include <QTemporaryFile>
 #if QT_CONFIG(process)
 #include <QProcess>
@@ -12,7 +13,6 @@
 #include <qdebug.h>
 #include <qdir.h>
 #include <qfileinfo.h>
-#include <qscopedvaluerollback.h>
 #include <qstringlist.h>
 
 #if defined(Q_OS_DOSLIKE)
@@ -40,7 +40,6 @@
 
 #ifdef Q_OS_DOSLIKE
 #define DRIVE "Q:"
-extern Q_CORE_EXPORT int qt_ntfs_permission_lookup;
 #else
 #define DRIVE
 #endif
@@ -128,6 +127,7 @@ private slots:
     void normalizePathSegments();
 #endif
 
+    void compareCompiles();
     void compare();
     void QDir_default();
 
@@ -207,12 +207,18 @@ private slots:
     void stdfilesystem();
 
 private:
-#ifdef BUILTIN_TESTDATA
-    QString m_dataPath;
     QSharedPointer<QTemporaryDir> m_dataDir;
-#else
-    const QString m_dataPath;
-#endif
+    QString m_dataPath;
+
+    constexpr static const std::array m_testDirs = {
+        "entrylist"_L1,
+        "resources"_L1,
+        "searchdir"_L1,
+        "testData"_L1,
+        "testdir"_L1,
+        "types"_L1,
+        "tst_qdir.cpp"_L1,
+    };
 };
 
 Q_DECLARE_METATYPE(tst_QDir::UncHandling)
@@ -260,6 +266,20 @@ void tst_QDir::initTestCase()
     m_dataDir = QEXTRACTTESTDATA("/");
     QVERIFY2(!m_dataDir.isNull(), qPrintable("Did not find testdata. Is this builtin?"));
     m_dataPath = m_dataDir->path();
+#elif QT_CONFIG(cxx17_filesystem) // This code doesn't work in QNX on the CI
+    m_dataDir.reset(new QTemporaryDir);
+    m_dataPath = m_dataDir->path();
+
+    QString sourceDir = QFileInfo(QFINDTESTDATA(m_testDirs[0])).absolutePath();
+    namespace fs = std::filesystem;
+    for (const auto &entry : m_testDirs) {
+        auto l1 = QLatin1StringView(entry);
+        const auto src = fs::path(QString(sourceDir + u'/' + l1).toStdString());
+        const auto dest = fs::path(QString(m_dataPath + u'/' + l1).toStdString());
+        std::error_code ec;
+        fs::copy(src, dest, fs::copy_options::recursive, ec);
+        QCOMPARE(ec.value(), 0);
+    }
 #endif
 
     QVERIFY2(!m_dataPath.isEmpty(), "test data not found");
@@ -321,6 +341,7 @@ void tst_QDir::setPath()
     QFETCH(QString, dir1);
     QFETCH(QString, dir2);
 
+    QDir::setCurrent(m_dataPath + "/entrylist"_L1);
     QDir shared;
     QDir qDir1(dir1);
     QStringList entries1 = qDir1.entryList();
@@ -417,7 +438,7 @@ void tst_QDir::mkdirOnSymlink()
 
     // create our structure:
     dir.mkpath("two/three");
-    ::symlink("two/three", "symlink");
+    QCOMPARE(::symlink("two/three", "symlink"), 0);
 
     // try it:
     QString path = "symlink/../four/five";
@@ -453,8 +474,7 @@ void tst_QDir::mkdirWithPermissions()
     QFETCH(QFile::Permissions, permissions);
 
 #ifdef Q_OS_WIN
-    QScopedValueRollback<int> ntfsMode(qt_ntfs_permission_lookup);
-    ++qt_ntfs_permission_lookup;
+    QNtfsPermissionCheckGuard permissionGuard;
 #endif
 #ifdef Q_OS_UNIX
     auto restoreMask = qScopeGuard([oldMask = umask(0)] { umask(oldMask); });
@@ -500,7 +520,7 @@ void tst_QDir::makedirReturnCode()
     // Remove the directory and create a file with the same path
     QDir::current().rmdir(dirName);
     QVERIFY(!f.exists());
-    f.open(QIODevice::WriteOnly);
+    QVERIFY(f.open(QIODevice::WriteOnly));
     f.write("test");
     f.close();
     QVERIFY2(f.exists(), msgDoesNotExist(f.fileName()).constData());
@@ -594,7 +614,7 @@ void tst_QDir::removeRecursivelySymlink()
     QDir().mkpath(tmpdir);
     QDir currentDir;
     currentDir.mkdir("myDir");
-    QFile("testfile").open(QIODevice::WriteOnly);
+    QVERIFY(QFile("testfile").open(QIODevice::WriteOnly));
     const QString link = tmpdir + "linkToDir.lnk";
     const QString linkToFile = tmpdir + "linkToFile.lnk";
 #ifndef Q_NO_SYMLINKS_TO_DIRS
@@ -704,32 +724,29 @@ void tst_QDir::QDir_default()
     QCOMPARE(dir.absolutePath(), QDir::currentPath());
 }
 
-void tst_QDir::compare()
+void tst_QDir::compareCompiles()
 {
-    // operator==
-
-    // Not using QCOMPARE to test result of QDir::operator==
-
-    QDir dir;
-    dir.makeAbsolute();
-    QVERIFY(dir == QDir::currentPath());
-
-    QCOMPARE(QDir(), QDir(QDir::currentPath()));
-    QVERIFY(QDir("../") == QDir(QDir::currentPath() + "/.."));
+    QTestPrivate::testEqualityOperatorsCompile<QDir>();
 }
 
-static QStringList filterLinks(const QStringList &list)
+void tst_QDir::compare()
 {
-#ifndef Q_NO_SYMLINKS
-    return list;
-#else
-    QStringList result;
-    foreach (QString str, list) {
-        if (!str.endsWith(QLatin1String(".lnk")))
-            result.append(str);
-    }
-    return result;
+    QDir dir;
+    dir.makeAbsolute();
+    QT_TEST_EQUALITY_OPS(dir, QDir::currentPath(), true);
+
+    QCOMPARE(QDir(), QDir(QDir::currentPath()));
+
+    QT_TEST_EQUALITY_OPS(QDir("../"), QDir(QDir::currentPath() + "/.."), true);
+}
+
+static QStringList filterLinks(QStringList &&list)
+{
+#ifdef Q_NO_SYMLINKS
+    auto isDotLnk = [](const auto &s) { return s.endsWith(".lnk"_L1); };
+    list.removeIf(isDotLnk);
 #endif
+    return std::move(list);
 }
 
 void tst_QDir::entryList_data()
@@ -796,6 +813,12 @@ void tst_QDir::entryListWithTestFiles_data()
     QTest::newRow("QDir::AllEntries") << (m_dataPath + "/entrylist/") << QStringList("*")
                               << int(QDir::AllEntries) << int(QDir::Name)
                               << filterLinks(QString(".,..,directory,file,linktodirectory.lnk,linktofile.lnk,writable").split(','));
+    // Tests an assert in QDirSortItemComparator, when QDir::LocaleAware is set
+    // a QCollator is used
+    QTest::newRow("QDir::AllEntries")
+        << (m_dataPath + "/entrylist/") << QStringList("*")
+        << int(QDir::AllEntries) << int(QDir::Name | QDir::LocaleAware)
+        << filterLinks(QString(".,..,directory,file,linktodirectory.lnk,linktofile.lnk,writable").split(','));
     QTest::newRow("QDir::Files") << (m_dataPath + "/entrylist/") << QStringList("*")
                                  << int(QDir::Files) << int(QDir::Name)
                                  << filterLinks(QString("file,linktofile.lnk,writable").split(','));
@@ -1003,7 +1026,7 @@ void tst_QDir::entryListTimedSort()
 
     QFileInfo aFileInfo(aFile);
     QFileInfo bFileInfo(bFile);
-    QVERIFY(bFileInfo.lastModified().msecsTo(aFileInfo.lastModified()) < 0);
+    QVERIFY(bFileInfo.lastModified(QTimeZone::UTC).msecsTo(aFileInfo.lastModified(QTimeZone::UTC)) < 0);
 
     QCOMPARE(actual.size(), 2);
     QCOMPARE(actual.first(), bFileInfo.fileName());
@@ -1062,7 +1085,7 @@ void tst_QDir::entryListWithSymLinks()
     QFile::remove("testfile.cpp");
     QDir dir;
     dir.mkdir("myDir");
-    QFile("testfile.cpp").open(QIODevice::WriteOnly);
+    QVERIFY(QFile("testfile.cpp").open(QIODevice::WriteOnly));
 #  ifndef Q_NO_SYMLINKS_TO_DIRS
     QVERIFY(QFile::link("myDir", "myLinkToDir.lnk"));
 #  endif
@@ -1604,7 +1627,7 @@ void tst_QDir::filePath()
 void tst_QDir::remove()
 {
     QFile f("remove-test");
-    f.open(QIODevice::WriteOnly);
+    QVERIFY(f.open(QIODevice::WriteOnly));
     f.close();
     QDir dir;
     QVERIFY(dir.remove("remove-test"));
@@ -1617,12 +1640,12 @@ void tst_QDir::remove()
 void tst_QDir::rename()
 {
     QFile f("rename-test");
-    f.open(QIODevice::WriteOnly);
+    QVERIFY(f.open(QIODevice::WriteOnly));
     f.close();
     QDir dir;
     QVERIFY(dir.rename("rename-test", "rename-test-renamed"));
     QVERIFY(dir.rename("rename-test-renamed", "rename-test"));
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_DARWIN)
     QVERIFY(!dir.rename("rename-test", "/etc/rename-test-renamed"));
 #elif !defined(Q_OS_DOSLIKE)
     // on windows this is possible - maybe make the test a bit better
@@ -1871,9 +1894,9 @@ void tst_QDir::searchPaths()
     }
 
     for (int i = 0; i < searchPathPrefixList.size(); ++i) {
-        foreach (QString path, searchPathsList.at(i).split(",")) {
+        const auto parts = searchPathsList.at(i).split(",");
+        for (const QString &path : parts)
             QDir::addSearchPath(searchPathPrefixList.at(i), path);
-        }
     }
     for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         QCOMPARE(QDir::searchPaths(searchPathPrefixList.at(i)), searchPathsList.at(i).split(","));
@@ -2199,7 +2222,7 @@ void tst_QDir::match()
 
 void tst_QDir::drives()
 {
-    QFileInfoList list(QDir::drives());
+    const QFileInfoList list(QDir::drives());
 #if defined(Q_OS_WIN)
     QVERIFY(list.count() >= 1); //system
     QLatin1Char systemdrive('c');
@@ -2207,7 +2230,7 @@ void tst_QDir::drives()
 #if defined(Q_OS_WIN)
     QVERIFY(list.count() <= 26);
     bool foundsystem = false;
-    foreach (QFileInfo fi, list) {
+    for (const QFileInfo &fi : list) {
         QCOMPARE(fi.absolutePath().size(), 3); //"x:/"
         QCOMPARE(fi.absolutePath().at(1), QChar(QLatin1Char(':')));
         QCOMPARE(fi.absolutePath().at(2), QChar(QLatin1Char('/')));
@@ -2268,6 +2291,8 @@ void tst_QDir::equalityOperator_data()
     QString pathinroot("/system/..");
 #elif defined(Q_OS_HAIKU)
     QString pathinroot("/boot/..");
+#elif defined(Q_OS_VXWORKS)
+    QString pathinroot("/tmp/..");
 #else
     QString pathinroot("/usr/..");
 #endif
@@ -2333,9 +2358,9 @@ void tst_QDir::isRelative_data()
     QTest::newRow("homepath") << QDir::homePath() << false;
     QTest::newRow("temppath") << QDir::tempPath() << false;
     QTest::newRow("rootpath") << QDir::rootPath() << false;
-    foreach (QFileInfo root, QDir::drives()) {
+    const auto drives = QDir::drives();
+    for (const QFileInfo &root : drives)
         QTest::newRow(root.absolutePath().toLocal8Bit()) << root.absolutePath() << false;
-    }
 
     QTest::newRow("resource") << ":/prefix" << false;
 }

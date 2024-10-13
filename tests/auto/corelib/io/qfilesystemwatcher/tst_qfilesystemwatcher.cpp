@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
+
 #include <QTest>
 
 #include <QCoreApplication>
@@ -20,6 +21,23 @@
 
 #ifdef Q_OS_ANDROID
 #include <QStandardPaths>
+#endif
+
+using namespace std::chrono_literals;
+
+#if defined(Q_OS_QNX)
+constexpr bool isQNX = true;
+#else
+constexpr bool isQNX = false;
+#endif
+
+#if defined(Q_OS_QNX) || defined(Q_OS_VXWORKS)
+// Longer polling times on QNX and VxWorks, otherwise the tests fail on the CI
+constexpr auto nativeEngineTimeout = 1s;
+constexpr auto pollingEngineTimeout = 1s;
+#else
+constexpr auto nativeEngineTimeout = 0ms;
+constexpr auto pollingEngineTimeout = 20ms;
 #endif
 
 /* All tests need to run in temporary directories not used
@@ -129,20 +147,21 @@ void tst_QFileSystemWatcher::basicTest()
     watcher.setObjectName(QLatin1String("_qt_autotest_force_engine_") + backend);
     QVERIFY(watcher.addPath(testFile.fileName()));
 
+    const bool isPollerBackend = backend == u"poller";
+
     QSignalSpy changedSpy(&watcher, &QFileSystemWatcher::fileChanged);
     QVERIFY(changedSpy.isValid());
     QEventLoop eventLoop;
     QTimer timer;
+    timer.setInterval(isPollerBackend ? pollingEngineTimeout : nativeEngineTimeout);
     connect(&timer, SIGNAL(timeout()), &eventLoop, SLOT(quit()));
 
     // modify the file, should get a signal from the watcher
 
-    // resolution of the modification time is system dependent, but it's at most 1 second when using
-    // the polling engine. I've heard rumors that FAT32 has a 2 second resolution. So, we have to
-    // wait a bit before we can modify the file (hrmph)...
-    QTest::qWait(2000);
+    if (isPollerBackend || isQNX)
+        QTest::qWait(pollingEngineTimeout);
 
-    testFile.open(QIODevice::WriteOnly | QIODevice::Append);
+    QVERIFY(testFile.open(QIODevice::WriteOnly | QIODevice::Append));
     testFile.write(QByteArray("world"));
     testFile.close();
 
@@ -157,12 +176,12 @@ void tst_QFileSystemWatcher::basicTest()
 
     // remove the watch and modify the file, should not get a signal from the watcher
     QVERIFY(watcher.removePath(testFile.fileName()));
-    testFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    QVERIFY(testFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
     testFile.write(QByteArray("hello universe!"));
     testFile.close();
 
-    // waiting max 5 seconds for notification for file modification to trigger
-    timer.start(5000);
+    // waiting for notification for file modification to trigger
+    timer.start();
     eventLoop.exec();
 
     QCOMPARE(changedSpy.size(), 0);
@@ -171,7 +190,7 @@ void tst_QFileSystemWatcher::basicTest()
     const QString relativeTestFileName = QDir::current().relativeFilePath(testFile.fileName());
     QVERIFY(!relativeTestFileName.isEmpty());
     QVERIFY(watcher.addPath(relativeTestFileName));
-    testFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    QVERIFY(testFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
     testFile.write(QByteArray("hello multiverse!"));
     testFile.close();
 
@@ -205,8 +224,8 @@ void tst_QFileSystemWatcher::basicTest()
     QVERIFY(watcher.removePath(testFile.fileName()));
     testFile.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOther);
 
-    // waiting max 5 seconds for notification for file modification to trigger
-    timer.start(5000);
+    // waiting for notification for file modification to trigger
+    timer.start();
     eventLoop.exec();
 
     QCOMPARE(changedSpy.size(), 0);
@@ -233,8 +252,8 @@ void tst_QFileSystemWatcher::basicTest()
     testFile.write(QByteArray("hello"));
     testFile.close();
 
-    // waiting max 5 seconds for notification for file recreation to trigger
-    timer.start(5000);
+    // waiting for notification for file recreation to trigger
+    timer.start();
     eventLoop.exec();
 
     QCOMPARE(changedSpy.size(), 0);
@@ -248,7 +267,9 @@ void tst_QFileSystemWatcher::watchDirectory_data()
     QTest::addColumn<QStringList>("testDirNames");
     const QStringList testDirNames = {QStringLiteral("testdir"), QStringLiteral("testdir2")};
 
+#if !defined(QT_NO_INOTIFY)
     QTest::newRow("native backend") << "native" << testDirNames;
+#endif
     QTest::newRow("poller backend") << "poller" << testDirNames;
 }
 
@@ -279,16 +300,18 @@ void tst_QFileSystemWatcher::watchDirectory()
     watcher.setObjectName(QLatin1String("_qt_autotest_force_engine_") + backend);
     QVERIFY(watcher.addPaths(testDirs).isEmpty());
 
+    const bool isPollerBackend = backend == u"poller";
+
     QSignalSpy changedSpy(&watcher, &QFileSystemWatcher::directoryChanged);
     QVERIFY(changedSpy.isValid());
     QEventLoop eventLoop;
     QTimer timer;
+    timer.setInterval(isPollerBackend ? pollingEngineTimeout : nativeEngineTimeout);
     connect(&timer, SIGNAL(timeout()), &eventLoop, SLOT(quit()));
 
-    // resolution of the modification time is system dependent, but it's at most 1 second when using
-    // the polling engine. From what I know, FAT32 has a 2 second resolution. So we have to
-    // wait before modifying the directory...
-    QTest::qWait(2000);
+    if (isPollerBackend || isQNX)
+        QTest::qWait(pollingEngineTimeout);
+
     // remove the watch, should not get notification of a new file
     QVERIFY(watcher.removePaths(testDirs).isEmpty());
     for (const auto &testFileName : testFiles) {
@@ -297,8 +320,8 @@ void tst_QFileSystemWatcher::watchDirectory()
         testFile.close();
     }
 
-    // waiting max 5 seconds for notification for file recreationg to trigger
-    timer.start(5000);
+    // waiting for notification for file recreation to trigger
+    timer.start();
     eventLoop.exec();
 
     QCOMPARE(changedSpy.size(), 0);
@@ -309,7 +332,7 @@ void tst_QFileSystemWatcher::watchDirectory()
     for (const auto &testFileName : testFiles)
         QVERIFY(QFile::remove(testFileName));
 
-    timer.start(5000);
+    timer.start();
     eventLoop.exec();
 
     // remove the directory, should get a signal from the watcher
@@ -336,7 +359,7 @@ void tst_QFileSystemWatcher::watchDirectory()
         QCOMPARE(count, 2);
 
     // flush pending signals (like the one from the rmdir above)
-    timer.start(5000);
+    timer.start();
     eventLoop.exec();
     changedSpy.clear();
 
@@ -348,8 +371,8 @@ void tst_QFileSystemWatcher::watchDirectory()
         }
     }
 
-    // waiting max 5 seconds for notification for dir recreation to trigger
-    timer.start(5000);
+    // waiting for notification for dir recreation to trigger
+    timer.start();
     eventLoop.exec();
 
     QCOMPARE(changedSpy.size(), 0);
@@ -547,23 +570,24 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
     QVERIFY(watcher.addPath(testDir.absolutePath()));
     QVERIFY(watcher.addPath(testFileName));
 
+    const bool isPollerBackend = backend == u"poller";
+
     QSignalSpy fileChangedSpy(&watcher, &QFileSystemWatcher::fileChanged);
     FileSystemWatcherSpy dirChangedSpy(&watcher, FileSystemWatcherSpy::SpyOnDirectoryChanged);
     QVERIFY(fileChangedSpy.isValid());
     QEventLoop eventLoop;
     QTimer timer;
+    timer.setInterval(isPollerBackend ? pollingEngineTimeout : nativeEngineTimeout);
     connect(&timer, SIGNAL(timeout()), &eventLoop, SLOT(quit()));
 
-    // resolution of the modification time is system dependent, but it's at most 1 second when using
-    // the polling engine. From what I know, FAT32 has a 2 second resolution. So we have to
-    // wait before modifying the directory...
-    QTest::qWait(2000);
+    if (isPollerBackend || isQNX)
+        QTest::qWait(pollingEngineTimeout);
 
     QVERIFY2(testFile.open(QIODevice::WriteOnly | QIODevice::Truncate), msgFileOperationFailed("open", testFile));
     QVERIFY2(testFile.write(QByteArrayLiteral("hello again")), msgFileOperationFailed("write", testFile));
     testFile.close();
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
     // wait again for the file's atime to be updated
     QTest::qWait(2000);
 #endif
@@ -577,7 +601,7 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
     QVERIFY2(secondFile.write(QByteArrayLiteral("Foo")) > 0, msgFileOperationFailed("write", secondFile));
     secondFile.close();
 
-    timer.start(3000);
+    timer.start();
     eventLoop.exec();
     int fileChangedSpyCount = fileChangedSpy.size();
 #ifdef Q_OS_WIN
@@ -601,7 +625,7 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
     QVERIFY(!watcher.removePath(testFileName));
     QVERIFY(QFile::remove(secondFileName));
 
-    timer.start(3000);
+    timer.start();
     eventLoop.exec();
     QCOMPARE(fileChangedSpy.size(), 0);
     QCOMPARE(dirChangedSpy.count(), 1);
@@ -736,7 +760,8 @@ public slots:
         QCOMPARE(finfo.absolutePath(), moveSrcDir.absolutePath());
 
         if (!added) {
-            foreach (const QFileInfo &fi, moveDestination.entryInfoList(QDir::Files | QDir::NoSymLinks))
+            const auto entries = moveDestination.entryInfoList(QDir::Files | QDir::NoSymLinks);
+            for (const QFileInfo &fi : entries)
                 watcher->addPath(fi.absoluteFilePath());
             added = true;
         }
@@ -776,9 +801,9 @@ void tst_QFileSystemWatcher::signalsEmittedAfterFileMoved()
     QVERIFY(watcher.addPath(movePath));
 
     // add files to watcher
-    QFileInfoList files = testDir.entryInfoList(QDir::Files | QDir::NoSymLinks);
+    const QFileInfoList files = testDir.entryInfoList(QDir::Files | QDir::NoSymLinks);
     QCOMPARE(files.size(), fileCount);
-    foreach (const QFileInfo &finfo, files)
+    for (const QFileInfo &finfo : files)
         QVERIFY(watcher.addPath(finfo.absoluteFilePath()));
 
     // create the signal receiver
@@ -790,7 +815,7 @@ void tst_QFileSystemWatcher::signalsEmittedAfterFileMoved()
     QCOMPARE(changedSpy.count(), 0);
 
     // move files to second directory
-    foreach (const QFileInfo &finfo, files)
+    for (const QFileInfo &finfo : files)
         QVERIFY(testDir.rename(finfo.fileName(), QString("movehere/%2").arg(finfo.fileName())));
 
     QCoreApplication::processEvents();

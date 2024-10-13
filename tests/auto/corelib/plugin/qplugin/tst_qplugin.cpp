@@ -1,6 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // Copyright (C) 2021 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #include <QTest>
 
 #include <QCoreApplication>
@@ -49,7 +49,7 @@ void tst_QPlugin::initTestCase()
 
 void tst_QPlugin::loadDebugPlugin()
 {
-    const auto fileNames = dir.entryList(QStringList() << "*debug*", QDir::Files);
+    const auto fileNames = dir.entryList(QStringList() << "*debugplugin*", QDir::Files);
     if (fileNames.isEmpty())
         QSKIP("No debug plugins found - skipping test");
 
@@ -57,7 +57,7 @@ void tst_QPlugin::loadDebugPlugin()
         if (!QLibrary::isLibrary(fileName))
             continue;
         QPluginLoader loader(dir.filePath(fileName));
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN)
         // we can always load a plugin on unix
         QVERIFY(loader.load());
         QObject *object = loader.instance();
@@ -82,7 +82,7 @@ void tst_QPlugin::loadDebugPlugin()
 
 void tst_QPlugin::loadReleasePlugin()
 {
-    const auto fileNames = dir.entryList(QStringList() << "*release*", QDir::Files);
+    const auto fileNames = dir.entryList(QStringList() << "*releaseplugin*", QDir::Files);
     if (fileNames.isEmpty())
         QSKIP("No release plugins found - skipping test");
 
@@ -90,7 +90,7 @@ void tst_QPlugin::loadReleasePlugin()
         if (!QLibrary::isLibrary(fileName))
             continue;
         QPluginLoader loader(dir.filePath(fileName));
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN)
         // we can always load a plugin on unix
         QVERIFY(loader.load());
         QObject *object = loader.instance();
@@ -180,7 +180,7 @@ void tst_QPlugin::scanInvalidPlugin()
 #if defined(Q_OS_MACOS) && defined(Q_PROCESSOR_ARM)
     QSKIP("This test crashes on ARM macOS");
 #endif
-    const auto fileNames = dir.entryList({"*invalid*"}, QDir::Files);
+    const auto fileNames = dir.entryList({"*invalidplugin*"}, QDir::Files);
     QString invalidPluginName;
     if (fileNames.isEmpty())
         QSKIP("No invalid plugin found - skipping test");

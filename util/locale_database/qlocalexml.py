@@ -44,77 +44,28 @@ def startCount(c, text): # strspn
     except StopIteration:
         return len(text)
 
-def convertFormat(format):
-    """Convert date/time format-specier from CLDR to Qt
-
-    Match up (as best we can) the differences between:
-    * https://www.unicode.org/reports/tr35/tr35-dates.html#Date_Field_Symbol_Table
-    * QDateTimeParser::parseFormat() and QLocalePrivate::dateTimeToString()
-    """
-    # Compare and contrast dateconverter.py's convert_date().
-    # Need to (check consistency and) reduce redundancy !
-    result = ""
-    i = 0
-    while i < len(format):
-        if format[i] == "'":
-            result += "'"
-            i += 1
-            while i < len(format) and format[i] != "'":
-                result += format[i]
-                i += 1
-            if i < len(format):
-                result += "'"
-                i += 1
-        else:
-            s = format[i:]
-            if s.startswith('E'): # week-day
-                n = startCount('E', s)
-                if n < 3:
-                    result += 'ddd'
-                elif n == 4:
-                    result += 'dddd'
-                else: # 5: narrow, 6 short; but should be name, not number :-(
-                    result += 'd' if n < 6 else 'dd'
-                i += n
-            elif s[0] in 'ab': # am/pm
-                # 'b' should distinguish noon/midnight, too :-(
-                result += "AP"
-                i += startCount('ab', s)
-            elif s.startswith('S'): # fractions of seconds: count('S') == number of decimals to show
-                result += 'z'
-                i += startCount('S', s)
-            elif s.startswith('V'): # long time zone specifiers (and a deprecated short ID)
-                result += 't'
-                i += startCount('V', s)
-            elif s[0] in 'zv': # zone
-                # Should use full name, e.g. "Central European Time", if 'zzzz' :-(
-                # 'v' should get generic non-location format, e.g. PT for "Pacific Time", no DST indicator
-                result += "t"
-                i += startCount('zv', s)
-            else:
-                result += format[i]
-                i += 1
-
-    return result
-
 class QLocaleXmlReader (object):
     def __init__(self, filename):
         self.root = self.__parse(filename)
-        # Lists of (id, name, code) triples:
-        languages = tuple(self.__loadMap('language'))
-        scripts = tuple(self.__loadMap('script'))
-        territories = tuple(self.__loadMap('territory'))
+
+        from enumdata import language_map, script_map, territory_map
+        # Lists of (id, enum name, code, en.xml name) tuples:
+        languages = tuple(self.__loadMap('language', language_map))
+        scripts = tuple(self.__loadMap('script', script_map))
+        territories = tuple(self.__loadMap('territory', territory_map))
         self.__likely = tuple(self.__likelySubtagsMap())
-        # Mappings {ID: (name, code)}
-        self.languages = dict((v[0], v[1:]) for v in languages)
-        self.scripts = dict((v[0], v[1:]) for v in scripts)
-        self.territories = dict((v[0], v[1:]) for v in territories)
-        # Private mappings {name: (ID, code)}
-        self.__langByName = dict((v[1], (v[0], v[2])) for v in languages)
-        self.__textByName = dict((v[1], (v[0], v[2])) for v in scripts)
-        self.__landByName = dict((v[1], (v[0], v[2])) for v in territories)
+
+        # Mappings {ID: (enum name, code, en.xml name)}
+        self.languages = {v[0]: v[1:] for v in languages}
+        self.scripts = {v[0]: v[1:] for v in scripts}
+        self.territories = {v[0]: v[1:] for v in territories}
+
+        # Private mappings {enum name: (ID, code)}
+        self.__langByName = {v[1]: (v[0], v[2]) for v in languages}
+        self.__textByName = {v[1]: (v[0], v[2]) for v in scripts}
+        self.__landByName = {v[1]: (v[0], v[2]) for v in territories}
         # Other properties:
-        self.dupes = set(v[1] for v in languages) & set(v[1] for v in territories)
+        self.__dupes = set(v[1] for v in languages) & set(v[1] for v in territories)
         self.cldrVersion = self.__firstChildText(self.root, "version")
 
     def loadLocaleMap(self, calendars, grumble = lambda text: None):
@@ -145,6 +96,21 @@ class QLocaleXmlReader (object):
                         script = self.__textByName[locale.script][0]
 
             yield (language, script, territory), locale
+
+    def aliasToIana(self):
+        kid = self.__firstChildText
+        for elt in self.__eachEltInGroup(self.root, 'zoneAliases', 'zoneAlias'):
+            yield kid(elt, 'alias'), kid(elt, 'iana')
+
+    def msToIana(self):
+        kid = self.__firstChildText
+        for elt in self.__eachEltInGroup(self.root, 'windowsZone', 'msZoneIana'):
+            yield kid(elt, 'msid'), kid(elt, 'iana')
+
+    def msLandIanas(self):
+        kid = self.__firstChildText
+        for elt in self.__eachEltInGroup(self.root, 'windowsZone', 'msLandZones'):
+            yield kid(elt, 'msid'), kid(elt, 'territorycode'), kid(elt, 'ianaids')
 
     def languageIndices(self, locales):
         index = 0
@@ -184,11 +150,38 @@ class QLocaleXmlReader (object):
                         self.__textByName[give[1]][0]),
                        self.__landByName[give[2]][0])
 
+    def enumify(self, name, suffix):
+        """Stick together the parts of an enumdata.py name.
+
+        Names given in enumdata.py include spaces and hyphens that we
+        can't include in an identifier, such as the name of a member
+        of an enum type. Removing those would lose the word
+        boundaries, so make sure each word starts with a capital (but
+        don't simply capitalize() as some names contain words,
+        e.g. McDonald, that have later capitals in them).
+
+        We also need to resolve duplication between languages and
+        territories (by adding a suffix to each) and add Script to the
+        ends of script-names that don't already end in it."""
+        name = name.replace('-', ' ')
+        # Don't .capitalize() as McDonald is already camel-case (see enumdata.py):
+        name = ''.join(word[0].upper() + word[1:] for word in name.split())
+        if suffix != 'Script':
+            assert not(name in self.__dupes and name.endswith(suffix))
+            return name + suffix if name in self.__dupes else name
+
+        if not name.endswith(suffix):
+            name += suffix
+        if name in self.__dupes:
+            raise Error(f'The script name "{name}" is messy')
+        return name
+
     # Implementation details:
-    def __loadMap(self, category):
+    def __loadMap(self, category, enum):
         kid = self.__firstChildText
         for element in self.__eachEltInGroup(self.root, f'{category}List', category):
-            yield int(kid(element, 'id')), kid(element, 'name'), kid(element, 'code')
+            key = int(kid(element, 'id'))
+            yield key, enum[key][0], kid(element, 'code'), kid(element, 'name')
 
     def __likelySubtagsMap(self):
         def triplet(element, keys=('language', 'script', 'territory'), kid = self.__firstChildText):
@@ -217,6 +210,8 @@ class QLocaleXmlReader (object):
         child = elt.firstChild
         while child:
             if child.nodeType == elt.TEXT_NODE:
+                # Note: do not strip(), as some group separators are
+                # non-breaking spaces, that strip() will discard.
                 yield child.nodeValue
             child = child.nextSibling
 
@@ -256,17 +251,16 @@ class Spacer (object):
         First argument, indent, is either None (its default, for
         'minifying'), an ingeter (number of spaces) or the unit of
         text that is to be used for each indentation level (e.g. '\t'
-        to use tabs).  If indent is None, no indentation is added, nor
+        to use tabs). If indent is None, no indentation is added, nor
         are line-breaks; otherwise, self(text), for non-empty text,
         shall end with a newline and begin with indentation.
 
         Second argument, initial, is the initial indentation; it is
-        ignored if indent is None.  Indentation increases after each
+        ignored if indent is None. Indentation increases after each
         call to self(text) in which text starts with a tag and doesn't
         include its end-tag; indentation decreases if text starts with
-        an end-tag.  The text is not parsed any more carefully than
-        just described.
-        """
+        an end-tag. The text is not parsed any more carefully than
+        just described."""
         if indent is None:
             self.__call = lambda x: x
         else:
@@ -292,6 +286,10 @@ class Spacer (object):
         return self.__call(line)
 
 class QLocaleXmlWriter (object):
+    """Save the full set of locale data to a QLocaleXML file.
+
+    The output saved by this should conform to qlocalexml.rnc's
+    schema."""
     def __init__(self, save = None, space = Spacer(4)):
         """Set up to write digested CLDR data as QLocale XML.
 
@@ -315,11 +313,21 @@ class QLocaleXmlWriter (object):
         self.__write('<localeDatabase>')
 
     # Output of various sections, in their usual order:
-    def enumData(self):
+    def enumData(self, code2name):
+        """Output name/id/code tables for language, script and territory.
+
+        Parameter, code2name, is a function taking 'language',
+        'script' or 'territory' and returning a lookup function that
+        maps codes, of the relevant type, to their English names. This
+        lookup function is passed a code and the name, both taken from
+        enumdata.py, that QLocale uses, so the .get() of a dict will
+        work. The English name from this lookup will be used by
+        QLocale::*ToString() for the enum member whose name is based
+        on the enumdata.py name passed as fallback to the lookup."""
         from enumdata import language_map, script_map, territory_map
-        self.__enumTable('language', language_map)
-        self.__enumTable('script', script_map)
-        self.__enumTable('territory', territory_map)
+        self.__enumTable('language', language_map, code2name)
+        self.__enumTable('script', script_map, code2name)
+        self.__enumTable('territory', territory_map, code2name)
         # Prepare to detect any unused codes (see __writeLocale(), close()):
         self.__languages = set(p[1] for p in language_map.values()
                                if not p[1].isspace())
@@ -337,10 +345,46 @@ class QLocaleXmlWriter (object):
             self.__closeTag('likelySubtag')
         self.__closeTag('likelySubtags')
 
-    def locales(self, locales, calendars):
+    def zoneData(self, alias, defaults, windowsIds):
+        self.__openTag('zoneAliases')
+        # iana is a single IANA ID
+        # name has the same form, but has been made redundant
+        for name, iana in sorted(alias.items()):
+            self.__openTag('zoneAlias')
+            self.inTag('alias', name)
+            self.inTag('iana', iana)
+            self.__closeTag('zoneAlias')
+        self.__closeTag('zoneAliases')
+
+        self.__openTag('windowsZone')
+        for (msid, code), ids in windowsIds.items():
+            # ianaids is a space-joined sequence of IANA IDs
+            self.__openTag('msLandZones')
+            self.inTag('msid', msid)
+            self.inTag('territorycode', code)
+            self.inTag('ianaids', ids)
+            self.__closeTag('msLandZones')
+
+        for winid, iana in defaults.items():
+            self.__openTag('msZoneIana')
+            self.inTag('msid', winid)
+            self.inTag('iana', iana)
+            self.__closeTag('msZoneIana')
+        self.__closeTag('windowsZone')
+
+    def locales(self, locales, calendars, en_US):
+        """Write the data for each locale.
+
+        First argument, locales, is the mapping whose values are the
+        Locale objects, with each key being the matching tuple of
+        numeric IDs for language, script, territory and variant.
+        Second argument is a tuple of calendar names. Third is the
+        tuple of numeric IDs that corresponds to en_US (needed to
+        provide fallbacks for the C locale)."""
+
         self.__openTag('localeList')
         self.__openTag('locale')
-        self.__writeLocale(Locale.C(calendars), calendars)
+        self.__writeLocale(Locale.C(locales[en_US]), calendars)
         self.__closeTag('locale')
         for key in sorted(locales.keys()):
             self.__openTag('locale')
@@ -355,7 +399,7 @@ class QLocaleXmlWriter (object):
         self.__write(f'<{tag}>{text}</{tag}>')
 
     def close(self, grumble):
-        """Finish writing and grumble any issues discovered."""
+        """Finish writing and grumble about any issues discovered."""
         if self.__rawOutput != self.__complain:
             self.__write('</localeDatabase>')
         self.__rawOutput = self.__complain
@@ -381,13 +425,18 @@ class QLocaleXmlWriter (object):
     def __complain(text):
         raise Error('Attempted to write data after closing :-(')
 
-    def __enumTable(self, tag, table):
+    @staticmethod
+    def __xmlSafe(text):
+        return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    def __enumTable(self, tag, table, code2name):
         self.__openTag(f'{tag}List')
-        for key, value in table.items():
+        enname, safe = code2name(tag), self.__xmlSafe
+        for key, (name, code) in table.items():
             self.__openTag(tag)
-            self.inTag('name', value[0])
+            self.inTag('name', safe(enname(code, name)))
             self.inTag('id', key)
-            self.inTag('code', value[1])
+            self.inTag('code', code)
             self.__closeTag(tag)
         self.__closeTag(f'{tag}List')
 
@@ -405,7 +454,10 @@ class QLocaleXmlWriter (object):
         self.__scripts.discard(locale.script_code)
         self.__territories.discard(locale.territory_code)
 
-    def __openTag(self, tag):
+    def __openTag(self, tag, **attrs):
+        if attrs:
+            text = ', '.join(f'{k}="{v}"' for k, v in attrs.items())
+            tag = f'{tag} {text}'
         self.__write(f'<{tag}>')
     def __closeTag(self, tag):
         self.__write(f'</{tag}>')
@@ -440,8 +492,6 @@ class Locale (object):
     __asint = ("currencyDigits", "currencyRounding")
     # Convert day-name to Qt day-of-week number:
     __asdow = ("firstDayOfWeek", "weekendStart", "weekendEnd")
-    # Convert from CLDR format-strings to QDateTimeParser ones:
-    __asfmt = ("longDateFormat", "shortDateFormat", "longTimeFormat", "shortTimeFormat")
     # Just use the raw text:
     __astxt = ("language", "languageEndonym", "script", "territory", "territoryEndonym",
                "decimal", "group", "zero",
@@ -450,9 +500,12 @@ class Locale (object):
                "alternateQuotationStart", "alternateQuotationEnd",
                "listPatternPartStart", "listPatternPartMiddle",
                "listPatternPartEnd", "listPatternPartTwo", "am", "pm",
+               "longDateFormat", "shortDateFormat",
+               "longTimeFormat", "shortTimeFormat",
                'byte_unit', 'byte_si_quantified', 'byte_iec_quantified',
                "currencyIsoCode", "currencySymbol", "currencyDisplayName",
-               "currencyFormat", "currencyNegativeFormat")
+               "currencyFormat", "currencyNegativeFormat",
+               )
 
     # Day-of-Week numbering used by Qt:
     __qDoW = {"mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6, "sun": 7}
@@ -461,12 +514,15 @@ class Locale (object):
     def fromXmlData(cls, lookup, calendars=('gregorian',)):
         """Constructor from the contents of XML elements.
 
-        Single parameter, lookup, is called with the names of XML
-        elements that should contain the relevant data, within a CLDR
-        locale element (within a localeList element); these names are
-        used for the attributes of the object constructed.  Attribute
-        values are obtained by suitably digesting the returned element
-        texts.\n"""
+        First parameter, lookup, is called with the names of XML elements that
+        should contain the relevant data, within a QLocaleXML locale element
+        (within a localeList element); these names mostly match the attributes
+        of the object constructed. Its return must be the full text of the
+        first child DOM node element with the given name. Attribute values are
+        obtained by suitably digesting the returned element texts.
+
+        Optional second parameter, calendars, is a sequence of calendars for
+        which data is to be retrieved."""
         data = {}
         for k in cls.__asint:
             data[k] = int(lookup(k))
@@ -474,14 +530,11 @@ class Locale (object):
         for k in cls.__asdow:
             data[k] = cls.__qDoW[lookup(k)]
 
-        for k in cls.__asfmt:
-            data[k] = convertFormat(lookup(k))
-
         for k in cls.__astxt + tuple(cls.propsMonthDay('days')):
             data['listDelim' if k == 'list' else k] = lookup(k)
 
         for k in cls.propsMonthDay('months'):
-            data[k] = dict((cal, lookup('_'.join((k, cal)))) for cal in calendars)
+            data[k] = {cal: lookup('_'.join((k, cal))) for cal in calendars}
 
         grouping = lookup('groupSizes').split(';')
         data.update(groupLeast = int(grouping[0]),
@@ -520,7 +573,7 @@ class Locale (object):
                     'longDateFormat', 'shortDateFormat',
                     'longTimeFormat', 'shortTimeFormat',
                     'currencyIsoCode', 'currencySymbol', 'currencyDisplayName',
-                    'currencyFormat', 'currencyNegativeFormat'
+                    'currencyFormat', 'currencyNegativeFormat',
                     ) + tuple(self.propsMonthDay('days')) + tuple(
                 '_'.join((k, cal))
                 for k in self.propsMonthDay('months')
@@ -531,97 +584,49 @@ class Locale (object):
         for key in ('currencyDigits', 'currencyRounding'):
             write(key, get(key))
 
-    # Tools used by __monthNames:
-    def fullName(i, name): return name
-    def firstThree(i, name): return name[:3]
-    def initial(i, name): return name[:1]
-    def number(i, name): return str(i + 1)
-    def islamicShort(i, name):
-        if not name: return name
-        if name == 'Shawwal': return 'Shaw.'
-        words = name.split()
-        if words[0].startswith('Dhu'):
-            words[0] = words[0][:7] + '.'
-        elif len(words[0]) > 3:
-            words[0] = words[0][:3] + '.'
-        return ' '.join(words)
-    @staticmethod
-    def __monthNames(calendars,
-                     known={ # Map calendar to (names, extractors...):
-            # TODO: do we even need these ?  CLDR's root.xml seems to
-            # have them, complete with yeartype="leap" handling for
-            # Hebrew's extra.
-            'gregorian': (('January', 'February', 'March', 'April', 'May', 'June', 'July',
-                           'August', 'September', 'October', 'November', 'December'),
-                          # Extractor pairs, (plain, standalone)
-                          (fullName, fullName), # long
-                          (firstThree, firstThree), # short
-                          (number, initial)), # narrow
-            'persian': (('Farvardin', 'Ordibehesht', 'Khordad', 'Tir', 'Mordad',
-                         'Shahrivar', 'Mehr', 'Aban', 'Azar', 'Dey', 'Bahman', 'Esfand'),
-                        (fullName, fullName),
-                        (firstThree, firstThree),
-                        (number, initial)),
-            'islamic': (('Muharram', 'Safar', 'Rabiʻ I', 'Rabiʻ II', 'Jumada I',
-                         'Jumada II', 'Rajab', 'Shaʻban', 'Ramadan', 'Shawwal',
-                         'Dhuʻl-Qiʻdah', 'Dhuʻl-Hijjah'),
-                        (fullName, fullName),
-                        (islamicShort, islamicShort),
-                        (number, number)),
-            'hebrew': (('Tishri', 'Heshvan', 'Kislev', 'Tevet', 'Shevat', 'Adar I',
-                        'Adar', 'Nisan', 'Iyar', 'Sivan', 'Tamuz', 'Av'),
-                       (fullName, fullName),
-                       (fullName, fullName),
-                       (number, number)),
-            },
-                     sizes=('long', 'short', 'narrow')):
-        for cal in calendars:
-            try:
-                data = known[cal]
-            except KeyError as e: # Need to add an entry to known, above.
-                e.args += ('Unsupported calendar:', cal)
-                raise
-            names, get = data[0], data[1:]
-            for n, size in enumerate(sizes):
-                yield ('_'.join((camelCase((size, 'months')), cal)),
-                       ';'.join(get[n][0](i, x) for i, x in enumerate(names)))
-                yield ('_'.join((camelCase(('standalone', size, 'months')), cal)),
-                       ';'.join(get[n][1](i, x) for i, x in enumerate(names)))
-    del fullName, firstThree, initial, number, islamicShort
-
     @classmethod
-    def C(cls, calendars=('gregorian',),
-          days = ('Sunday', 'Monday', 'Tuesday', 'Wednesday',
-                  'Thursday', 'Friday', 'Saturday'),
-          quantifiers=('k', 'M', 'G', 'T', 'P', 'E')):
-        """Returns an object representing the C locale."""
-        return cls(cls.__monthNames(calendars),
-                   language='C', language_code='0', languageEndonym='',
-                   script='AnyScript', script_code='0',
-                   territory='AnyTerritory', territory_code='0', territoryEndonym='',
-                   groupSizes=(3, 3, 1),
-                   decimal='.', group=',', list=';', percent='%',
-                   zero='0', minus='-', plus='+', exp='e',
+    def C(cls, en_US):
+        """Returns an object representing the C locale.
+
+        Required argument, en_US, is the corresponding object for the
+        en_US locale (or the en_US_POSIX one if we ever support
+        variants). The C locale inherits from this, overriding what it
+        may need to."""
+        base = en_US.__dict__.copy()
+        # Soroush's original contribution shortened Jalali month names
+        # - contrary to CLDR, which doesn't abbreviate these in
+        # root.xml or en.xml, although some locales do, e.g. fr_CA.
+        # For compatibility with that,
+        for k in ('shortMonths_persian', 'standaloneShortMonths_persian'):
+            base[k] = ';'.join(x[:3] for x in base[k].split(';'))
+
+        return cls(base,
+                   language='C', language_code='',
+                   language_id=0, languageEndonym='',
+                   script='AnyScript', script_code='', script_id=0,
+                   territory='AnyTerritory', territory_code='',
+                   territory_id=0, territoryEndonym='',
+                   variant='', variant_code='', variant_id=0,
+                   # CLDR has non-ASCII versions of these:
                    quotationStart='"', quotationEnd='"',
-                   alternateQuotationStart='\'', alternateQuotationEnd='\'',
-                   listPatternPartStart='%1, %2',
-                   listPatternPartMiddle='%1, %2',
-                   listPatternPartEnd='%1, %2',
-                   listPatternPartTwo='%1, %2',
-                   byte_unit='bytes',
-                   byte_si_quantified=';'.join(q + 'B' for q in quantifiers),
-                   byte_iec_quantified=';'.join(q.upper() + 'iB' for q in quantifiers),
-                   am='AM', pm='PM', firstDayOfWeek='mon',
-                   weekendStart='sat', weekendEnd='sun',
-                   longDateFormat='EEEE, d MMMM yyyy', shortDateFormat='d MMM yyyy',
-                   longTimeFormat='HH:mm:ss z', shortTimeFormat='HH:mm:ss',
-                   longDays=';'.join(days),
-                   shortDays=';'.join(d[:3] for d in days),
-                   narrowDays='7;1;2;3;4;5;6',
-                   standaloneLongDays=';'.join(days),
-                   standaloneShortDays=';'.join(d[:3] for d in days),
-                   standaloneNarrowDays=';'.join(d[:1] for d in days),
-                   currencyIsoCode='', currencySymbol='',
-                   currencyDisplayName='',
+                   alternateQuotationStart="'", alternateQuotationEnd="'",
+                   # CLDR gives 'dddd, MMMM d, yyyy', 'M/d/yy', 'h:mm:ss Ap tttt',
+                   # 'h:mm Ap' with non-breaking space before Ap.
+                   longDateFormat='dddd, d MMMM yyyy', shortDateFormat='d MMM yyyy',
+                   longTimeFormat='HH:mm:ss t', shortTimeFormat='HH:mm:ss',
+                   # CLDR has US-$ and US-style formats:
+                   currencyIsoCode='', currencySymbol='', currencyDisplayName='',
                    currencyDigits=2, currencyRounding=1,
-                   currencyFormat='%1%2', currencyNegativeFormat='')
+                   currencyFormat='%1%2', currencyNegativeFormat='',
+                   # We may want to fall back to CLDR for some of these:
+                   firstDayOfWeek='mon', # CLDR has 'sun'
+                   exp='e', # CLDR has 'E'
+                   listPatternPartEnd='%1, %2', # CLDR has '%1, and %2'
+                   listPatternPartTwo='%1, %2', # CLDR has '%1 and %2'
+                   narrowDays='7;1;2;3;4;5;6', # CLDR has letters
+                   narrowMonths_gregorian='1;2;3;4;5;6;7;8;9;10;11;12', # CLDR has letters
+                   standaloneNarrowMonths_persian='F;O;K;T;M;S;M;A;A;D;B;E', # CLDR has digits
+                   # Keep these explicit, despite matching CLDR:
+                   decimal='.', group=',', percent='%',
+                   zero='0', minus='-', plus='+',
+                   am='AM', pm='PM', weekendStart='sat', weekendEnd='sun')

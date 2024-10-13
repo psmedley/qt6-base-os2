@@ -1025,10 +1025,13 @@ static ProString msvcArchitecture(const QString &vcInstallDir, const QString &pa
 void QMakeEvaluator::loadDefaults()
 {
     ProValueMap &vars = m_valuemapStack.top();
+    qlonglong sde = qgetenv("SOURCE_DATE_EPOCH").toLongLong();
+    QDateTime builddate = sde ? QDateTime::fromSecsSinceEpoch(sde)
+                              : QDateTime::currentDateTime();
 
     vars[ProKey("DIR_SEPARATOR")] << ProString(m_option->dir_sep);
     vars[ProKey("DIRLIST_SEPARATOR")] << ProString(m_option->dirlist_sep);
-    vars[ProKey("_DATE_")] << ProString(QDateTime::currentDateTime().toString());
+    vars[ProKey("_DATE_")] << ProString(builddate.toString());
     if (!m_option->qmake_abslocation.isEmpty())
         vars[ProKey("QMAKE_QMAKE")] << ProString(m_option->qmake_abslocation);
     if (!m_option->qmake_args.isEmpty())
@@ -1054,6 +1057,11 @@ void QMakeEvaluator::loadDefaults()
 # ifdef PROCESSOR_ARCHITECTURE_AMD64
     case PROCESSOR_ARCHITECTURE_AMD64:
         archStr = ProString("x86_64");
+        break;
+# endif
+# ifdef PROCESSOR_ARCHITECTURE_ARM64
+    case PROCESSOR_ARCHITECTURE_ARM64:
+        archStr = ProString("arm64");
         break;
 # endif
     case PROCESSOR_ARCHITECTURE_INTEL:

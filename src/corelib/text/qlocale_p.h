@@ -18,24 +18,96 @@
 
 #include "qlocale.h"
 
-#include <QtCore/private/qglobal_p.h>
 #include <QtCore/qcalendar.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qnumeric.h>
+#include <QtCore/private/qnumeric_p.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qvariant.h>
 #include <QtCore/qvarlengtharray.h>
+#ifdef Q_OS_WASM
+#include <private/qstdweb_p.h>
+#endif
 
 #include <limits>
 #include <cmath>
+#include <string_view>
 
 QT_BEGIN_NAMESPACE
+
+template <typename T> struct QSimpleParsedNumber
+{
+    T result;
+    // When used < 0, -used is how much was used, but it was an error.
+    qsizetype used;
+    bool ok() const { return used > 0; }
+};
+
+template <typename MaskType, uchar Lowest> struct QCharacterSetMatch
+{
+    static constexpr int MaxRange = std::numeric_limits<MaskType>::digits;
+    MaskType mask;
+
+    constexpr QCharacterSetMatch(std::string_view set)
+        : mask(0)
+    {
+        for (char c : set) {
+            int idx = uchar(c) - Lowest;
+            mask |= MaskType(1) << idx;
+        }
+    }
+
+    constexpr bool matches(uchar c) const
+    {
+        unsigned idx = c - Lowest;
+        if (idx >= MaxRange)
+            return false;
+        return (mask >> idx) & 1;
+    }
+};
+
+namespace QtPrivate {
+inline constexpr char ascii_space_chars[] =
+        "\t"    // 9: HT - horizontal tab
+        "\n"    // 10: LF - line feed
+        "\v"    // 11: VT - vertical tab
+        "\f"    // 12: FF - form feed
+        "\r"    // 13: CR - carriage return
+        " ";    // 32: space
+
+template <const char *Set, int ForcedLowest = -1>
+inline constexpr auto makeCharacterSetMatch()
+{
+    constexpr auto view = std::string_view(Set);
+    constexpr uchar MinElement = *std::min_element(view.begin(), view.end());
+    constexpr uchar MaxElement = *std::max_element(view.begin(), view.end());
+    constexpr int Range = MaxElement - MinElement;
+    static_assert(Range < 64, "Characters in the set are 64 or more values apart");
+
+    if constexpr (ForcedLowest >= 0) {
+        // use the force
+        static_assert(ForcedLowest <= int(MinElement), "The force is not with you");
+        using MaskType = std::conditional_t<MaxElement - ForcedLowest < 32, quint32, quint64>;
+        return QCharacterSetMatch<MaskType, ForcedLowest>(view);
+    } else if constexpr (MaxElement < std::numeric_limits<qregisteruint>::digits) {
+        // if we can use a Lowest of zero, we can remove a subtraction
+        // from the matches() code at runtime
+        using MaskType = std::conditional_t<(MaxElement < 32), quint32, qregisteruint>;
+        return QCharacterSetMatch<MaskType, 0>(view);
+    } else {
+        using MaskType = std::conditional_t<(Range < 32), quint32, quint64>;
+        return QCharacterSetMatch<MaskType, MinElement>(view);
+    }
+}
+} // QtPrivate
 
 struct QLocaleData;
 // Subclassed by Android platform plugin:
 class Q_CORE_EXPORT QSystemLocale
 {
+    Q_DISABLE_COPY_MOVE(QSystemLocale)
     QSystemLocale *next = nullptr; // Maintains a stack.
+
 public:
     QSystemLocale();
     virtual ~QSystemLocale();
@@ -98,7 +170,7 @@ public:
         StandaloneDayNameShort, // QString, in: int
         StandaloneDayNameNarrow // QString, in: int
     };
-    virtual QVariant query(QueryType type, QVariant in = QVariant()) const;
+    virtual QVariant query(QueryType type, QVariant &&in = QVariant()) const;
 
     virtual QLocale fallbackLocale() const;
     inline qsizetype fallbackLocaleIndex() const;
@@ -117,34 +189,34 @@ namespace QIcu {
 struct QLocaleId
 {
     [[nodiscard]] Q_AUTOTEST_EXPORT static QLocaleId fromName(QStringView name);
-    [[nodiscard]] inline bool operator==(QLocaleId other) const
+    [[nodiscard]] inline bool operator==(QLocaleId other) const noexcept
     { return language_id == other.language_id && script_id == other.script_id && territory_id == other.territory_id; }
-    [[nodiscard]] inline bool operator!=(QLocaleId other) const
+    [[nodiscard]] inline bool operator!=(QLocaleId other) const noexcept
     { return !operator==(other); }
-    [[nodiscard]] inline bool isValid() const
+    [[nodiscard]] inline bool isValid() const noexcept
     {
         return language_id <= QLocale::LastLanguage && script_id <= QLocale::LastScript
                 && territory_id <= QLocale::LastTerritory;
     }
-    [[nodiscard]] inline bool matchesAll() const
+    [[nodiscard]] inline bool matchesAll() const noexcept
     {
         return !language_id && !script_id && !territory_id;
     }
     // Use as: filter.accept...(candidate)
-    [[nodiscard]] inline bool acceptLanguage(quint16 lang) const
+    [[nodiscard]] inline bool acceptLanguage(quint16 lang) const noexcept
     {
         // Always reject AnyLanguage (only used for last entry in locale_data array).
         // So, when searching for AnyLanguage, accept everything *but* AnyLanguage.
         return language_id ? lang == language_id : lang;
     }
-    [[nodiscard]] inline bool acceptScriptTerritory(QLocaleId other) const
+    [[nodiscard]] inline bool acceptScriptTerritory(QLocaleId other) const noexcept
     {
         return (!territory_id || other.territory_id == territory_id)
                 && (!script_id || other.script_id == script_id);
     }
 
-    [[nodiscard]] QLocaleId withLikelySubtagsAdded() const;
-    [[nodiscard]] QLocaleId withLikelySubtagsRemoved() const;
+    [[nodiscard]] QLocaleId withLikelySubtagsAdded() const noexcept;
+    [[nodiscard]] QLocaleId withLikelySubtagsRemoved() const noexcept;
 
     [[nodiscard]] QByteArray name(char separator = '-') const;
 
@@ -152,13 +224,28 @@ struct QLocaleId
 };
 Q_DECLARE_TYPEINFO(QLocaleId, Q_PRIMITIVE_TYPE);
 
+
+using CharBuff = QVarLengthArray<char, 256>;
+
+struct ParsingResult
+{
+    enum State { // A duplicate of QValidator::State
+        Invalid,
+        Intermediate,
+        Acceptable
+    };
+
+    State state = Invalid;
+    CharBuff buff;
+};
+
 struct QLocaleData
 {
 public:
     // Having an index for each locale enables us to have diverse sources of
     // data, e.g. calendar locales, as well as the main CLDR-derived data.
-    [[nodiscard]] static qsizetype findLocaleIndex(QLocaleId localeId);
-    [[nodiscard]] static const QLocaleData *c();
+    [[nodiscard]] static qsizetype findLocaleIndex(QLocaleId localeId) noexcept;
+    [[nodiscard]] static const QLocaleData *c() noexcept;
 
     enum DoubleForm {
         DFExponent = 0,
@@ -184,8 +271,6 @@ public:
     };
 
     enum NumberMode { IntegerMode, DoubleStandardMode, DoubleScientificMode };
-
-    typedef QVarLengthArray<char, 256> CharBuff;
 
 private:
     enum PrecisionMode {
@@ -220,45 +305,82 @@ public:
                                               unsigned flags = NoFlags) const;
 
     // this function is meant to be called with the result of stringToDouble or bytearrayToDouble
+    // so *ok must have been properly set (if not null)
     [[nodiscard]] static float convertDoubleToFloat(double d, bool *ok)
     {
-        if (qIsInf(d))
-            return float(d);
-        if (std::fabs(d) > (std::numeric_limits<float>::max)()) {
-            if (ok)
-                *ok = false;
-            const float huge = std::numeric_limits<float>::infinity();
-            return d < 0 ? -huge : huge;
-        }
-        if (d != 0 && float(d) == 0) {
-            // Values that underflow double already failed. Match them:
-            if (ok)
-                *ok = false;
-            return 0;
-        }
-        return float(d);
+        float result;
+        bool b = convertDoubleTo<float>(d, &result);
+        if (ok && *ok)
+            *ok = b;
+        return result;
     }
 
     [[nodiscard]] double stringToDouble(QStringView str, bool *ok,
                                         QLocale::NumberOptions options) const;
-    [[nodiscard]] qint64 stringToLongLong(QStringView str, int base, bool *ok,
-                                          QLocale::NumberOptions options) const;
-    [[nodiscard]] quint64 stringToUnsLongLong(QStringView str, int base, bool *ok,
-                                              QLocale::NumberOptions options) const;
+    [[nodiscard]] QSimpleParsedNumber<qint64>
+    stringToLongLong(QStringView str, int base, QLocale::NumberOptions options) const;
+    [[nodiscard]] QSimpleParsedNumber<quint64>
+    stringToUnsLongLong(QStringView str, int base, QLocale::NumberOptions options) const;
 
     // this function is used in QIntValidator (QtGui)
-    [[nodiscard]] Q_CORE_EXPORT static qint64 bytearrayToLongLong(QByteArrayView num, int base,
-                                                                  bool *ok);
-    [[nodiscard]] static quint64 bytearrayToUnsLongLong(QByteArrayView num, int base, bool *ok);
+    [[nodiscard]] Q_CORE_EXPORT
+    static QSimpleParsedNumber<qint64> bytearrayToLongLong(QByteArrayView num, int base);
+    [[nodiscard]] static QSimpleParsedNumber<quint64>
+    bytearrayToUnsLongLong(QByteArrayView num, int base);
 
     [[nodiscard]] bool numberToCLocale(QStringView s, QLocale::NumberOptions number_options,
-                                       CharBuff *result) const;
-    [[nodiscard]] inline char numericToCLocale(QStringView in) const;
+                                       NumberMode mode, CharBuff *result) const;
+
+    struct NumericData
+    {
+#ifndef QT_NO_SYSTEMLOCALE
+        // Only used for the system locale, to store data for the view to look at:
+        QString sysDecimal, sysGroup, sysMinus, sysPlus;
+#endif
+        QStringView decimal, group, minus, plus, exponent;
+        char32_t zeroUcs = 0;
+        qint8 zeroLen = 0;
+        bool isC = false; // C locale sets this and nothing else.
+        bool exponentCyrillic = false; // True only for floating-point parsing of Cyrillic.
+        void setZero(QStringView zero)
+        {
+            // No known locale has digits that are more than one Unicode
+            // code-point, so we can safely deal with digits as plain char32_t.
+            switch (zero.size()) {
+            case 1:
+                Q_ASSERT(!zero.at(0).isSurrogate());
+                zeroUcs = zero.at(0).unicode();
+                zeroLen = 1;
+                break;
+            case 2:
+                Q_ASSERT(zero.at(0).isHighSurrogate());
+                zeroUcs = QChar::surrogateToUcs4(zero.at(0), zero.at(1));
+                zeroLen = 2;
+                break;
+            default:
+                Q_ASSERT(zero.size() == 0); // i.e. we got no value to use
+                break;
+            }
+        }
+        [[nodiscard]] bool isValid(NumberMode mode) const // Asserted as a sanity check.
+        {
+            if (isC)
+                return true;
+            if (exponentCyrillic && exponent != u"E" && exponent != u"\u0415")
+                return false;
+            return (zeroLen == 1 || zeroLen == 2) && zeroUcs > 0
+                && (mode == IntegerMode || !decimal.isEmpty())
+                // group may be empty (user config in system locale)
+                && !minus.isEmpty() && !plus.isEmpty()
+                && (mode != DoubleScientificMode || !exponent.isEmpty());
+        }
+    };
+    [[nodiscard]] inline NumericData numericData(NumberMode mode) const;
 
     // this function is used in QIntValidator (QtGui)
-    [[nodiscard]] Q_CORE_EXPORT bool validateChars(
-            QStringView str, NumberMode numMode, QByteArray *buff, int decDigits = -1,
-            QLocale::NumberOptions number_options = QLocale::DefaultNumberOptions) const;
+    [[nodiscard]] Q_CORE_EXPORT ParsingResult
+    validateChars(QStringView str, NumberMode numMode, int decDigits = -1,
+                  QLocale::NumberOptions number_options = QLocale::DefaultNumberOptions) const;
 
     // Access to assorted data members:
     [[nodiscard]] QLocaleId id() const
@@ -379,7 +501,7 @@ public:
 
     [[nodiscard]] QByteArray bcp47Name(char separator = '-') const;
 
-    [[nodiscard]] inline QLatin1StringView
+    [[nodiscard]] inline std::array<char, 4>
     languageCode(QLocale::LanguageCodeTypes codeTypes = QLocale::AnyLanguageCode) const
     {
         return languageToCode(QLocale::Language(m_data->m_language_id), codeTypes);
@@ -390,7 +512,7 @@ public:
     { return territoryToCode(QLocale::Territory(m_data->m_territory_id)); }
 
     [[nodiscard]] static const QLocalePrivate *get(const QLocale &l) { return l.d; }
-    [[nodiscard]] static QLatin1StringView
+    [[nodiscard]] static std::array<char, 4>
     languageToCode(QLocale::Language language,
                    QLocale::LanguageCodeTypes codeTypes = QLocale::AnyLanguageCode);
     [[nodiscard]] static QLatin1StringView scriptToCode(QLocale::Script script);
@@ -406,7 +528,7 @@ public:
     // System locale has an m_data all its own; all others have m_data = locale_data + m_index
     const QLocaleData *const m_data;
     QBasicAtomicInt ref;
-    const qsizetype m_index;
+    qsizetype m_index; // System locale needs this updated when m_data->id() changes.
     QLocale::NumberOptions m_numberOptions;
 
     static QBasicAtomicInt s_generation;
@@ -424,58 +546,6 @@ inline QLocalePrivate *QSharedDataPointer<QLocalePrivate>::clone()
     return new QLocalePrivate(d->m_data, d->m_index, d->m_numberOptions);
 }
 
-inline char QLocaleData::numericToCLocale(QStringView in) const
-{
-    Q_ASSERT(in.size() == 1 || (in.size() == 2 && in.at(0).isHighSurrogate()));
-
-    if (in == positiveSign() || in == u"+")
-        return '+';
-
-    if (in == negativeSign() || in == u"-" || in == u"\x2212")
-        return '-';
-
-    if (in == decimalPoint())
-        return '.';
-
-    if (const QString exp = exponentSeparator();
-        in.compare(exp, Qt::CaseInsensitive) == 0
-        || (m_script_id == QLocale::CyrillicScript
-            // Ukrainian officially uses the Cyrillic E, other Cyrillic-script
-            // languages use Latin E, but these are indistinguishable.
-            && in.compare(exp == u'\u0415' ? u'E' : u'\u0415', Qt::CaseInsensitive) == 0)) {
-        return 'e';
-    }
-
-    const QString group = groupSeparator();
-    if (in == group)
-        return ',';
-
-    // In several languages group() is a non-breaking space (U+00A0) or its thin
-    // version (U+202f), which look like spaces.  People (and thus some of our
-    // tests) use a regular space instead and complain if it doesn't work.
-    // Should this be extended generally to any case where group is a space ?
-    if ((group == u"\xa0" || group == u"\x202f") && in == u" ")
-        return ',';
-
-    const char32_t inUcs4 = in.size() == 2
-        ? QChar::surrogateToUcs4(in.at(0), in.at(1)) : in.at(0).unicode();
-    const char32_t zeroUcs4 = zeroUcs();
-    // Must match qlocale_tools.h's unicodeForDigit()
-    if (zeroUcs4 == u'\u3007') {
-        // QTBUG-85409: Suzhou's digits aren't contiguous !
-        if (inUcs4 == zeroUcs4)
-            return '0';
-        if (inUcs4 > u'\u3020' && inUcs4 <= u'\u3029')
-            return inUcs4 - u'\u3020';
-    } else if (zeroUcs4 <= inUcs4 && inUcs4 < zeroUcs4 + 10) {
-        return '0' + inUcs4 - zeroUcs4;
-    }
-    if ('0' <= inUcs4 && inUcs4 <= '9')
-        return inUcs4;
-
-    return 0;
-}
-
 // Also used to merely skip over an escape in a format string, advancint idx to
 // point after it (so not [[nodiscard]]):
 QString qt_readEscapedFormatString(QStringView format, qsizetype *idx);
@@ -483,15 +553,10 @@ QString qt_readEscapedFormatString(QStringView format, qsizetype *idx);
                                       QStringView *script = nullptr, QStringView *cntry = nullptr);
 [[nodiscard]] qsizetype qt_repeatCount(QStringView s);
 
-enum { AsciiSpaceMask = (1u << (' ' - 1)) |
-                        (1u << ('\t' - 1)) |   // 9: HT - horizontal tab
-                        (1u << ('\n' - 1)) |   // 10: LF - line feed
-                        (1u << ('\v' - 1)) |   // 11: VT - vertical tab
-                        (1u << ('\f' - 1)) |   // 12: FF - form feed
-                        (1u << ('\r' - 1)) };  // 13: CR - carriage return
 [[nodiscard]] constexpr inline bool ascii_isspace(uchar c)
 {
-    return c >= 1u && c <= 32u && (AsciiSpaceMask >> uint(c - 1)) & 1u;
+    constexpr auto matcher = QtPrivate::makeCharacterSetMatch<QtPrivate::ascii_space_chars>();
+    return matcher.matches(c);
 }
 
 QT_END_NAMESPACE

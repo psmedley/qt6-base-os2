@@ -1,5 +1,5 @@
 // Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 import {
     AbortedError,
@@ -68,9 +68,9 @@ export class BatchedTestRunner {
 
     get errorDetails() { return this.#errorDetails; }
 
-    async run(targetIsBatch, testName, testOutputFormat) {
+    async run(targetIsBatch, testName, functions, testOutputFormat) {
         try {
-            await this.#doRun(targetIsBatch, testName, testOutputFormat);
+            await this.#doRun(targetIsBatch, testName, functions, testOutputFormat);
         } catch (e) {
             this.#setTestRunnerError(e.message);
             return;
@@ -93,7 +93,7 @@ export class BatchedTestRunner {
         this.#setTestRunnerStatus(status.code, status.numberOfFailed);
     }
 
-    async #doRun(targetIsBatch, testName, testOutputFormat) {
+    async #doRun(targetIsBatch, testName, functions, testOutputFormat) {
         const module = await this.#loader.loadEmscriptenModule(
             targetIsBatch ? BatchedTestRunner.#TestBatchModuleName : testName,
             () => { }
@@ -111,6 +111,7 @@ export class BatchedTestRunner {
                 const LogToStdoutSpecialFilename = '-';
                 result = await module.exec({
                     args: [...(targetIsBatch ? [testClassName] : []),
+                           ...(functions ?? []),
                            '-o', `${LogToStdoutSpecialFilename},${testOutputFormat}`],
                     onStdout: (output) => {
                         this.#addTestOutput(testClassName, output);

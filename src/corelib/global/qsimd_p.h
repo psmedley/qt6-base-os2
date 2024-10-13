@@ -228,8 +228,8 @@ asm(
 // List of features present with -march=x86-64-v3 and not architecturally
 // implied by __AVX2__
 #    define ARCH_HASWELL_MACROS     \
-    (__AVX2__ && __BMI__ && __BMI2__ && __F16C__ && __FMA__ && __LZCNT__ && __POPCNT__)
-#    if ARCH_HASWELL_MACROS == 0
+    (__AVX2__ + __BMI__ + __BMI2__ + __F16C__ + __FMA__ + __LZCNT__ + __POPCNT__)
+#    if ARCH_HASWELL_MACROS != 7
 #      error "Please enable all x86-64-v3 extensions; you probably want to use -march=haswell or -march=x86-64-v3 instead of -mavx2"
 #    endif
 static_assert(ARCH_HASWELL_MACROS, "Undeclared identifiers indicate which features are missing.");
@@ -257,7 +257,7 @@ static_assert(ARCH_SKX_MACROS, "Undeclared identifiers indicate which features a
 
 // NEON intrinsics
 // note: as of GCC 4.9, does not support function targets for ARM
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#if defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(_M_ARM64)
 #if defined(Q_CC_CLANG)
 #define QT_FUNCTION_TARGET_STRING_NEON      "neon"
 #else
@@ -325,12 +325,19 @@ static const uint64_t qCompilerCpuFeatures = 0
 #if defined __ARM_NEON__
         | CpuFeatureNEON
 #endif
+#if !(defined(Q_OS_LINUX) && defined(Q_PROCESSOR_ARM_64))
+        // Yocto Project recipes enable Crypto extension for all ARMv8 configs,
+        // even for targets without the Crypto extension. That's wrong, but as
+        // the compiler never generates the code for them on their own, most
+        // code never notices the problem. But we would. By not setting the
+        // bits here, we force a runtime detection.
 #if defined __ARM_FEATURE_CRC32
         | CpuFeatureCRC32
 #endif
 #if defined __ARM_FEATURE_CRYPTO
         | CpuFeatureAES
 #endif
+#endif // Q_OS_LINUX && Q_PROCESSOR_ARM64
 #if defined __mips_dsp
         | CpuFeatureDSP
 #endif
@@ -379,50 +386,6 @@ static inline uint64_t qCpuFeatures()
 
 #define qCpuHasFeature(feature)     (((qCompilerCpuFeatures & CpuFeature ## feature) == CpuFeature ## feature) \
                                      || ((qCpuFeatures() & CpuFeature ## feature) == CpuFeature ## feature))
-
-/*
-    Small wrapper around x86's PAUSE and ARM's YIELD instructions.
-
-    This is completely different from QThread::yieldCurrentThread(), which is
-    an OS-level operation that takes the whole thread off the CPU.
-
-    This is just preventing one SMT thread from filling a core's pipeline with
-    speculated further loop iterations (which need to be expensively flushed on
-    final success) when it could just give those pipeline slots to a second SMT
-    thread that can do something useful with the core, such as unblocking this
-    SMT thread :)
-
-    So, instead of
-
-        while (!condition)
-            ;
-
-    it's better to use
-
-        while (!condition)
-            qYieldCpu();
-*/
-static inline void qYieldCpu()
-{
-#if defined(Q_PROCESSOR_X86)
-    _mm_pause();
-#elif defined(Q_PROCESSOR_ARM) && Q_PROCESSOR_ARM >= 7 /* yield was added in ARMv7 */
-#  if __has_builtin(__builtin_arm_yield) /* e.g. Clang */
-    __builtin_arm_yield();
-#  elif defined(Q_OS_INTEGRITY) || \
-        (defined(Q_CC_GNU) && !defined(Q_CC_CLANG))
-    /*
-       - Integrity is missing the arm_acle.h header
-       - GCC doesn't have __yield() in arm_acle.h
-         https://stackoverflow.com/a/70076751/134841
-         https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105416
-    */
-    asm volatile("yield"); /* this works everywhere */
-#  else
-    __yield(); /* this is what should work everywhere */
-#  endif
-#endif
-}
 
 #ifdef __cplusplus
 } // extern "C"

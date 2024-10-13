@@ -1,25 +1,12 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef WINDOW_H
 #define WINDOW_H
 
 #include <QWindow>
-
-#include <QtGui/private/qrhinull_p.h>
-#if QT_CONFIG(opengl)
-#include <QtGui/private/qrhigles2_p.h>
 #include <QOffscreenSurface>
-#endif
-#if QT_CONFIG(vulkan)
-#include <QtGui/private/qrhivulkan_p.h>
-#endif
-#ifdef Q_OS_WIN
-#include <QtGui/private/qrhid3d11_p.h>
-#endif
-#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
-#include <QtGui/private/qrhimetal_p.h>
-#endif
+#include <rhi/qrhi.h>
 
 class Window : public QWindow
 {

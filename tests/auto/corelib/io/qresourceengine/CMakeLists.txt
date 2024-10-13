@@ -5,10 +5,10 @@
 ## tst_qresourceengine Test:
 #####################################################################
 
-if (NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
+if(NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
     cmake_minimum_required(VERSION 3.16)
     project(tst_qresourceengine LANGUAGES C CXX ASM)
-    find_package(Qt6BuildInternals COMPONENTS STANDALONE_TEST)
+    find_package(Qt6BuildInternals REQUIRED COMPONENTS STANDALONE_TEST)
 endif()
 
 # Collect test data
@@ -29,6 +29,17 @@ qt_internal_add_test(tst_qresourceengine
         Qt::CorePrivate
         moctestplugin
     TESTDATA ${test_data}
+)
+
+set_source_files_properties("world.txt"
+    PROPERTIES QT_DISCARD_FILE_CONTENTS TRUE
+)
+
+qt_internal_add_resource(tst_qresourceengine "qt_resource_empty"
+    PREFIX
+        "/empty"
+    FILES
+        "world.txt"
 )
 
 qt_add_resources(additional_sources testqrc/test.qrc)

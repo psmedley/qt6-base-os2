@@ -8,7 +8,7 @@
 qt_internal_add_plugin(QQnxIntegrationPlugin
     OUTPUT_NAME qqnx
     PLUGIN_TYPE platforms
-    DEFAULT_IF ${QT_QPA_DEFAULT_PLATFORM} MATCHES qnx
+    DEFAULT_IF "qnx" IN_LIST QT_QPA_PLATFORMS
     SOURCES
         main.cpp main.h
         qqnxabstractcover.h
@@ -31,6 +31,12 @@ qt_internal_add_plugin(QQnxIntegrationPlugin
         qqnxscreeneventthread.cpp qqnxscreeneventthread.h
         qqnxservices.cpp qqnxservices.h
         qqnxwindow.cpp qqnxwindow.h
+    NO_PCH_SOURCES
+        qqnxclipboard.cpp # undef QT_NO_FOREACH
+        qqnxintegration.cpp # undef QT_NO_FOREACH
+        qqnxscreen.cpp # undef QT_NO_FOREACH
+        qqnxscreeneventhandler.cpp # undef QT_NO_FOREACH
+        qqnxwindow.cpp # undef QT_NO_FOREACH
     LIBRARIES
         Qt::Core
         Qt::CorePrivate

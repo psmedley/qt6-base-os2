@@ -7,6 +7,7 @@
 #include <QtCore/qcompilerdetection.h>
 #include <QtCore/qtconfigmacros.h>
 #include <QtCore/qtcoreexports.h>
+#include <QtCore/qtnoop.h>
 
 #if 0
 #pragma qt_class(QtAssert)
@@ -17,7 +18,7 @@ QT_BEGIN_NAMESPACE
 
 #if defined(__cplusplus)
 
-#ifndef Q_CC_MSVC
+#if !defined(Q_CC_MSVC_ONLY)
 Q_NORETURN
 #endif
 Q_DECL_COLD_FUNCTION
@@ -31,7 +32,7 @@ Q_CORE_EXPORT void qt_assert(const char *assertion, const char *file, int line) 
 #  endif
 #endif
 
-#ifndef Q_CC_MSVC
+#if !defined(Q_CC_MSVC_ONLY)
 Q_NORETURN
 #endif
 Q_DECL_COLD_FUNCTION
@@ -78,11 +79,14 @@ inline T *q_check_ptr(T *p) { Q_CHECK_PTR(p); return p; }
 #  endif
 #endif
 
+Q_DECL_DEPRECATED_X("Q_ASSUME() is deprecated because it can produce worse code than when it's absent; "
+                    "use C++23 [[assume]] instead")
+inline bool qt_assume_is_deprecated(bool cond) noexcept { return cond; }
 #define Q_ASSUME(Expr) \
     [] (bool valueOfExpression) {\
         Q_ASSERT_X(valueOfExpression, "Q_ASSUME()", "Assumption in Q_ASSUME(\"" #Expr "\") was not correct");\
         Q_ASSUME_IMPL(valueOfExpression);\
-    }(Expr)
+    }(qt_assume_is_deprecated(Expr))
 
 // Don't use these in C++ mode, use static_assert directly.
 // These are here only to keep old code compiling.

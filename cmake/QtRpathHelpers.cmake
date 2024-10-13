@@ -192,6 +192,51 @@ function(qt_apply_rpaths)
     endif()
 endfunction()
 
+macro(qt_internal_set_default_rpath_settings)
+    # the default RPATH to be used when installing, but only if it's not a system directory
+    list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES
+        "${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}" isSystemDir)
+    if("${isSystemDir}" STREQUAL "-1")
+       set(_default_install_rpath "${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}")
+    endif("${isSystemDir}" STREQUAL "-1")
+
+    # The default rpath settings for installed targets is empty.
+    # The rpaths will instead be computed for each target separately using qt_apply_rpaths().
+    # Additional rpaths can be passed via QT_EXTRA_RPATHS.
+    # By default this will include $ORIGIN / @loader_path, so the installation is relocatable.
+    # Bottom line: No need to pass anything to CMAKE_INSTALL_RPATH.
+    set(CMAKE_INSTALL_RPATH "" CACHE STRING "RPATH for installed binaries")
+
+    # By default, don't embed auto-determined RPATHs pointing to directories
+    # outside of the build tree, into the installed binaries.
+    # This ended up adding rpaths like ${CMAKE_INSTALL_PREFIX}/lib (or /Users/qt/work/install/lib
+    # into the official libraries created by the CI) into the non-qtbase libraries, plugins, etc.
+    #
+    # It should not be necessary, given that qt_apply_rpaths() already adds the necessary rpaths,
+    # either relocatable ones or absolute ones, depending on what the platform supports.
+    if(NOT QT_NO_DISABLE_CMAKE_INSTALL_RPATH_USE_LINK_PATH)
+        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+    endif()
+
+    # If Qt is built without rpath support, we should not add "user-project default rpaths" to
+    # qt qml plugins. Do this by setting QT_NO_QML_PLUGIN_RPATH to TRUE, which is
+    # then read by qt6_add_qml_plugin.
+    # We do this as part of the internal API, because we still want to allow user project qml
+    # plugins to have sensible default rpaths, even if Qt qml plugins were built without support
+    # for rpaths.
+    #
+    # Note that feature evaluation is not done yet in qtbase at this point, so we check both
+    # feature variable variants. In practice it doesn't really matter, because the variable is only
+    # read during qtdeclarative configuration time when the feature is already evaluated.
+    #
+    # We also make sure not to set it as a cache var just in case somebody wants to override it
+    # per directory scope.
+    if(NOT DEFINED QT_NO_QML_PLUGIN_RPATH
+            AND (QT_DISABLE_RPATH OR (NOT FEATURE_rpath) OR (NOT QT_FEATURE_rpath)))
+        set(QT_NO_QML_PLUGIN_RPATH "TRUE")
+    endif()
+endmacro()
+
 # Overrides the CMAKE_STAGING_PREFIX in a subdirectory scope, to stop CMake from rewriting build
 # rpaths to point into the original staging prefix, and thus breaking running executables from
 # the build directory.

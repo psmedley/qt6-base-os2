@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="org.qtproject.example"
+    package="org.qtproject.example.permissions"
     android:installLocation="auto"
     android:versionCode="-- %%INSERT_VERSION_CODE%% --"
     android:versionName="-- %%INSERT_VERSION_NAME%% --">
@@ -9,7 +9,11 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH"
+                     android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
@@ -26,13 +30,11 @@
         android:hardwareAccelerated="true"
         android:label="-- %%INSERT_APP_NAME%% --"
         android:requestLegacyExternalStorage="true"
-        android:allowNativeHeapPointerTagging="false"
         android:allowBackup="true"
         android:fullBackupOnly="false">
         <activity
             android:name="org.qtproject.qt.android.bindings.QtActivity"
             android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
-            android:label="-- %%INSERT_APP_NAME%% --"
             android:launchMode="singleTop"
             android:screenOrientation="unspecified"
             android:exported="true">
@@ -44,10 +46,6 @@
           <meta-data
                 android:name="android.app.lib_name"
                 android:value="-- %%INSERT_APP_LIB_NAME%% --" />
-
-            <meta-data
-                android:name="android.app.extract_android_style"
-                android:value="minimal" />
         </activity>
     </application>
 </manifest>

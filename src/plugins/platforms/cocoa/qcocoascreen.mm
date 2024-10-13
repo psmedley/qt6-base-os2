@@ -197,38 +197,6 @@ QCocoaScreen::~QCocoaScreen()
          dispatch_release(m_displayLinkSource);
 }
 
-static QString displayName(CGDirectDisplayID displayID)
-{
-    QIOType<io_iterator_t> iterator;
-    if (IOServiceGetMatchingServices(kIOMasterPortDefault,
-        IOServiceMatching("IODisplayConnect"), &iterator))
-        return QString();
-
-    QIOType<io_service_t> display;
-    while ((display = IOIteratorNext(iterator)) != 0)
-    {
-        NSDictionary *info = [(__bridge NSDictionary*)IODisplayCreateInfoDictionary(
-            display, kIODisplayOnlyPreferredName) autorelease];
-
-        if ([[info objectForKey:@kDisplayVendorID] unsignedIntValue] != CGDisplayVendorNumber(displayID))
-            continue;
-
-        if ([[info objectForKey:@kDisplayProductID] unsignedIntValue] != CGDisplayModelNumber(displayID))
-            continue;
-
-        if ([[info objectForKey:@kDisplaySerialNumber] unsignedIntValue] != CGDisplaySerialNumber(displayID))
-            continue;
-
-        NSDictionary *localizedNames = [info objectForKey:@kDisplayProductName];
-        if (![localizedNames count])
-            break; // Correct screen, but no name in dictionary
-
-        return QString::fromNSString([localizedNames objectForKey:[[localizedNames allKeys] objectAtIndex:0]]);
-    }
-
-    return QString();
-}
-
 void QCocoaScreen::update(CGDirectDisplayID displayId)
 {
     if (displayId != m_displayId) {
@@ -248,6 +216,7 @@ void QCocoaScreen::update(CGDirectDisplayID displayId)
     const QRect previousGeometry = m_geometry;
     const QRect previousAvailableGeometry = m_availableGeometry;
     const qreal previousRefreshRate = m_refreshRate;
+    const double previousRotation = m_rotation;
 
     // The reference screen for the geometry is always the primary screen
     QRectF primaryScreenGeometry = QRectF::fromCGRect(CGDisplayBounds(CGMainDisplayID()));
@@ -272,13 +241,13 @@ void QCocoaScreen::update(CGDirectDisplayID displayId)
     QCFType<CGDisplayModeRef> displayMode = CGDisplayCopyDisplayMode(m_displayId);
     float refresh = CGDisplayModeGetRefreshRate(displayMode);
     m_refreshRate = refresh > 0 ? refresh : 60.0;
-
-    if (@available(macOS 10.15, *))
-        m_name = QString::fromNSString(nsScreen.localizedName);
-    else
-        m_name = displayName(m_displayId);
+    m_rotation = CGDisplayRotation(displayId);
+    m_name = QString::fromNSString(nsScreen.localizedName);
 
     const bool didChangeGeometry = m_geometry != previousGeometry || m_availableGeometry != previousAvailableGeometry;
+
+    if (m_rotation != previousRotation)
+        QWindowSystemInterface::handleScreenOrientationChange(screen(), orientation());
 
     if (didChangeGeometry)
         QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry(), availableGeometry());
@@ -452,14 +421,14 @@ void QCocoaScreen::deliverUpdateRequests()
         auto windows = QGuiApplication::allWindows();
         for (int i = 0; i < windows.size(); ++i) {
             QWindow *window = windows.at(i);
-            auto *platformWindow = static_cast<QCocoaWindow*>(window->handle());
+            if (window->screen() != screen())
+                continue;
+
+            QPointer<QCocoaWindow> platformWindow = static_cast<QCocoaWindow*>(window->handle());
             if (!platformWindow)
                 continue;
 
             if (!platformWindow->hasPendingUpdateRequest())
-                continue;
-
-            if (window->screen() != screen())
                 continue;
 
             // Skip windows that are not doing update requests via display link
@@ -467,6 +436,10 @@ void QCocoaScreen::deliverUpdateRequests()
                 continue;
 
             platformWindow->deliverUpdateRequest();
+
+            // platform window can be destroyed in deliverUpdateRequest()
+            if (!platformWindow)
+                continue;
 
             // Another update request was triggered, keep the display link running
             if (platformWindow->hasPendingUpdateRequest())
@@ -503,6 +476,19 @@ QPlatformScreen::SubpixelAntialiasingType QCocoaScreen::subpixelAntialiasingType
     return type;
 }
 
+Qt::ScreenOrientation QCocoaScreen::orientation() const
+{
+    if (m_rotation == 0)
+        return Qt::LandscapeOrientation;
+    if (m_rotation == 90)
+        return Qt::PortraitOrientation;
+    if (m_rotation == 180)
+        return Qt::InvertedLandscapeOrientation;
+    if (m_rotation == 270)
+        return Qt::InvertedPortraitOrientation;
+    return QPlatformScreen::orientation();
+}
+
 QWindow *QCocoaScreen::topLevelAt(const QPoint &point) const
 {
     __block QWindow *window = nullptr;
@@ -523,7 +509,12 @@ QWindow *QCocoaScreen::topLevelAt(const QPoint &point) const
             if (!w->isVisible())
                 return;
 
-            if (!QHighDpi::toNativePixels(w->geometry(), w).contains(point))
+            auto nativeGeometry = QHighDpi::toNativePixels(w->geometry(), w);
+            if (!nativeGeometry.contains(point))
+                return;
+
+            QRegion mask = QHighDpi::toNativeLocalPosition(w->mask(), w);
+            if (!mask.isEmpty() && !mask.contains(point - nativeGeometry.topLeft()))
                 return;
 
             window = w;

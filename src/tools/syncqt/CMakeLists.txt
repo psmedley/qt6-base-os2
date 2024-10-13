@@ -1,3 +1,5 @@
+# Copyright (C) 2024 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 if(NOT QT_INTERNAL_AVOID_OVERRIDING_SYNCQT_CONFIG)
     qt_internal_get_configs_for_flag_manipulation(configs)
     qt_internal_remove_known_optimization_flags(LANGUAGES CXX CONFIGS ${configs})
@@ -18,6 +20,7 @@ if(NOT QT_INTERNAL_AVOID_OVERRIDING_SYNCQT_CONFIG)
     foreach(config IN LISTS configs)
         set(CMAKE_EXE_LINKER_FLAGS_${config} "${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO}")
     endforeach()
+    qt_internal_skip_sanitizer()
 endif()
 
 set(compile_definitions
@@ -28,33 +31,52 @@ set(compile_definitions
     QT_NAMESPACE="${QT_NAMESPACE}"
 )
 
-set(config_type "")
-if(NOT QT_INTERNAL_AVOID_OVERRIDING_SYNCQT_CONFIG)
-    set(config_type CONFIG RelWithDebInfo)
-endif()
-
-if(CMAKE_OSX_ARCHITECTURES)
-    set(osx_architectures "-DCMAKE_OSX_ARCHITECTURES:STRING=${CMAKE_OSX_ARCHITECTURES}")
-endif()
-
-if(CMAKE_OSX_SYSROOT)
-    set(osx_sysroot "-DCMAKE_OSX_SYSROOT:STRING=${CMAKE_OSX_SYSROOT}")
-endif()
 qt_get_tool_target_name(target_name syncqt)
-# Note: configure-time tools reserve the original tool name for the imported executable.
-# To re-build syncqt use 'syncqt_build' target.
-qt_internal_add_configure_time_tool(${target_name}
-    DEFINES ${compile_definitions}
-    TOOLS_TARGET Core
-    INSTALL_DIRECTORY "${INSTALL_LIBEXECDIR}"
-    CMAKE_FLAGS
-        -DCMAKE_CXX_STANDARD_REQUIRED:BOOL=TRUE
-        -DCMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD}
-        # std::filesystem API is only available in macOS 10.15+
-        -DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=10.15
-        "${osx_architectures}"
-        "${osx_sysroot}"
-    SOURCES
+if(NOT QT_SYNC_HEADERS_AT_CONFIGURE_TIME)
+    qt_internal_add_tool(${target_name}
+        DEFINES ${compile_definitions}
+        EXCEPTIONS
+        TOOLS_TARGET Core
+        CORE_LIBRARY None
+        INSTALL_DIR "${INSTALL_LIBEXECDIR}"
+        SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
-    ${config_type}
-)
+    )
+else()
+    set(config_type "")
+    if(NOT QT_INTERNAL_AVOID_OVERRIDING_SYNCQT_CONFIG)
+        set(config_type CONFIG RelWithDebInfo)
+    endif()
+
+    if(CMAKE_OSX_ARCHITECTURES)
+        set(osx_architectures "-DCMAKE_OSX_ARCHITECTURES:STRING=${CMAKE_OSX_ARCHITECTURES}")
+    endif()
+
+    if(CMAKE_OSX_SYSROOT)
+        set(osx_sysroot "-DCMAKE_OSX_SYSROOT:STRING=${CMAKE_OSX_SYSROOT}")
+    endif()
+    # Note: configure-time tools reserve the original tool name for the imported executable.
+    # To re-build syncqt use 'syncqt_build' target.
+    qt_internal_add_configure_time_tool(${target_name}
+        DEFINES ${compile_definitions}
+        TOOLS_TARGET Core
+        INSTALL_DIRECTORY "${INSTALL_LIBEXECDIR}"
+        CMAKE_FLAGS
+            -DCMAKE_CXX_STANDARD_REQUIRED:BOOL=TRUE
+            -DCMAKE_CXX_STANDARD:STRING=17
+            # std::filesystem API is only available in macOS 10.15+
+            -DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=10.15
+            "${osx_architectures}"
+            "${osx_sysroot}"
+        SOURCES
+            "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
+        ${config_type}
+    )
+endif()
+
+# Needs to be called at the end after all relevant target have created
+# when using qt_internal_add_tool.
+# Doesn't work if QT_SYNC_HEADERS_AT_CONFIGURE_TIME is TRUE.
+if(NOT QT_INTERNAL_AVOID_OVERRIDING_SYNCQT_CONFIG)
+    qt_internal_skip_linking_sanitizer()
+endif()

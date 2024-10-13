@@ -44,7 +44,7 @@
 #  include <shlobj.h>
 #endif
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC) && !defined(Q_OS_ANDROID)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN) && !defined(Q_OS_ANDROID)
 #define Q_XDG_PLATFORM
 #endif
 
@@ -129,12 +129,12 @@ bool QConfFile::isWritable() const
 {
     QFileInfo fileInfo(name);
 
-#ifndef QT_NO_TEMPORARYFILE
+#if QT_CONFIG(temporaryfile)
     if (fileInfo.exists()) {
 #endif
         QFile file(name);
         return file.open(QFile::ReadWrite);
-#ifndef QT_NO_TEMPORARYFILE
+#if QT_CONFIG(temporaryfile)
     } else {
         // Create the directories to the file.
         QDir dir(fileInfo.absolutePath());
@@ -212,9 +212,7 @@ namespace {
     }
     QChar *write(QChar *out, QLatin1StringView v)
     {
-        for (char ch : v)
-            *out++ = QLatin1Char(ch);
-        return out;
+        return QLatin1::convertToUnicode(out, v);
     }
     QChar *write(QChar *out, QStringView v)
     {
@@ -272,7 +270,7 @@ QString QSettingsPrivate::normalizedKey(QAnyStringView key)
 
 // see also qsettings_win.cpp and qsettings_mac.cpp
 
-#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(Q_OS_WASM)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_DARWIN) && !defined(Q_OS_WASM)
 QSettingsPrivate *QSettingsPrivate::create(QSettings::Format format, QSettings::Scope scope,
                                            const QString &organization, const QString &application)
 {
@@ -560,7 +558,7 @@ bool QSettingsPrivate::iniUnescapedKey(QByteArrayView key, QString &result)
         }
 
         int numDigits = 2;
-        int firstDigitPos = i + 1;
+        qsizetype firstDigitPos = i + 1;
 
         ch = decoded.at(i + 1).unicode();
         if (ch == 'U') {
@@ -753,8 +751,8 @@ StNormal:
                 ch = str.at(i);
                 if (isHexDigit(ch))
                     goto StHexEscape;
-            } else if (isOctalDigit(ch)) {
-                escapeVal = ch - '0';
+            } else if (const int o = fromOct(ch); o != -1) {
+                escapeVal = o;
                 goto StOctEscape;
             } else if (ch == '\n' || ch == '\r') {
                 if (i < str.size()) {
@@ -816,11 +814,9 @@ StHexEscape:
     }
 
     ch = str.at(i);
-    if (ch >= 'a')
-        ch -= 'a' - 'A';
-    if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F')) {
+    if (const int h = fromHex(ch); h != -1) {
         escapeVal <<= 4;
-        escapeVal += QtMiscUtils::fromHex(ch);
+        escapeVal += h;
         ++i;
         goto StHexEscape;
     } else {
@@ -835,9 +831,9 @@ StOctEscape:
     }
 
     ch = str.at(i);
-    if (ch >= '0' && ch <= '7') {
+    if (const int o = fromOct(ch); o != -1) {
         escapeVal <<= 3;
-        escapeVal += ch - '0';
+        escapeVal += o;
         ++i;
         goto StOctEscape;
     } else {
@@ -882,16 +878,26 @@ QStringList QSettingsPrivate::splitArgs(const QString &s, qsizetype idx)
 
 void QConfFileSettingsPrivate::initFormat()
 {
+#if defined(Q_OS_WASM)
+    extension = (format == QSettings::NativeFormat || format == QSettings::WebIndexedDBFormat)
+            ? ".conf"_L1
+            : ".ini"_L1;
+#else
     extension = (format == QSettings::NativeFormat) ? ".conf"_L1 : ".ini"_L1;
+#endif
     readFunc = nullptr;
     writeFunc = nullptr;
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_DARWIN)
     caseSensitivity = (format == QSettings::NativeFormat) ? Qt::CaseSensitive : IniCaseSensitivity;
 #else
     caseSensitivity = IniCaseSensitivity;
 #endif
 
+#if defined Q_OS_WASM
+    if (format > QSettings::IniFormat && format != QSettings::WebIndexedDBFormat) {
+#else
     if (format > QSettings::IniFormat) {
+#endif
         const auto locker = qt_scoped_lock(settingsGlobalMutex);
         const CustomFormatVector *customFormatVector = customFormatVectorFunc();
 
@@ -909,7 +915,11 @@ void QConfFileSettingsPrivate::initFormat()
 void QConfFileSettingsPrivate::initAccess()
 {
     if (!confFiles.isEmpty()) {
+#if defined Q_OS_WASM
+        if (format > QSettings::IniFormat && format != QSettings::WebIndexedDBFormat) {
+#else
         if (format > QSettings::IniFormat) {
+#endif
             if (!readFunc)
                 setStatus(QSettings::AccessError);
         }
@@ -1019,7 +1029,7 @@ static std::unique_lock<QBasicMutex> initDefaultPaths(std::unique_lock<QBasicMut
         const QString userPath = make_user_path();
         pathHash->insert(pathHashKey(QSettings::IniFormat, QSettings::UserScope), Path(userPath, false));
         pathHash->insert(pathHashKey(QSettings::IniFormat, QSettings::SystemScope), Path(systemPath, false));
-#ifndef Q_OS_MAC
+#ifndef Q_OS_DARWIN
         pathHash->insert(pathHashKey(QSettings::NativeFormat, QSettings::UserScope), Path(userPath, false));
         pathHash->insert(pathHashKey(QSettings::NativeFormat, QSettings::SystemScope), Path(systemPath, false));
 #endif
@@ -1114,9 +1124,7 @@ QConfFileSettingsPrivate::QConfFileSettingsPrivate(QSettings::Format format,
         confFiles.append(QConfFile::fromName(systemPath.path + orgFile, false));
     }
 
-#ifndef Q_OS_WASM // wasm needs to delay access until after file sync
     initAccess();
-#endif
 }
 
 QConfFileSettingsPrivate::QConfFileSettingsPrivate(const QString &fileName,
@@ -1248,17 +1256,17 @@ QStringList QConfFileSettingsPrivate::children(const QString &prefix, ChildSpec 
         else
             ensureSectionParsed(confFile, thePrefix);
 
-        auto j = const_cast<const ParsedSettingsMap *>(
-                &confFile->originalKeys)->lowerBound( thePrefix);
-        while (j != confFile->originalKeys.constEnd() && j.key().startsWith(thePrefix)) {
-            if (!confFile->removedKeys.contains(j.key()))
-                processChild(QStringView{j.key().originalCaseKey()}.sliced(startPos), spec, result);
-            ++j;
+        const auto &originalKeys = confFile->originalKeys;
+        auto i = originalKeys.lowerBound(thePrefix);
+        while (i != originalKeys.end() && i.key().startsWith(thePrefix)) {
+            if (!confFile->removedKeys.contains(i.key()))
+                processChild(QStringView{i.key().originalCaseKey()}.sliced(startPos), spec, result);
+            ++i;
         }
 
-        j = const_cast<const ParsedSettingsMap *>(
-                &confFile->addedKeys)->lowerBound(thePrefix);
-        while (j != confFile->addedKeys.constEnd() && j.key().startsWith(thePrefix)) {
+        const auto &addedKeys = confFile->addedKeys;
+        auto j = addedKeys.lowerBound(thePrefix);
+        while (j != addedKeys.end() && j.key().startsWith(thePrefix)) {
             processChild(QStringView{j.key().originalCaseKey()}.sliced(startPos), spec, result);
             ++j;
         }
@@ -1313,7 +1321,11 @@ QString QConfFileSettingsPrivate::fileName() const
 
 bool QConfFileSettingsPrivate::isWritable() const
 {
+#if defined(Q_OS_WASM)
+    if (format > QSettings::IniFormat && format != QSettings::WebIndexedDBFormat && !writeFunc)
+#else
     if (format > QSettings::IniFormat && !writeFunc)
+#endif
         return false;
 
     if (confFiles.isEmpty())
@@ -1326,13 +1338,13 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
 {
     bool readOnly = confFile->addedKeys.isEmpty() && confFile->removedKeys.isEmpty();
 
+    QFileInfo fileInfo(confFile->name);
     /*
         We can often optimize the read-only case, if the file on disk
         hasn't changed.
     */
     if (readOnly && confFile->size > 0) {
-        QFileInfo fileInfo(confFile->name);
-        if (confFile->size == fileInfo.size() && confFile->timeStamp == fileInfo.lastModified())
+        if (confFile->size == fileInfo.size() && confFile->timeStamp == fileInfo.lastModified(QTimeZone::UTC))
             return;
     }
 
@@ -1368,13 +1380,13 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
         We hold the lock. Let's reread the file if it has changed
         since last time we read it.
     */
-    QFileInfo fileInfo(confFile->name);
+    fileInfo.refresh();
     bool mustReadFile = true;
     bool createFile = !fileInfo.exists();
 
     if (!readOnly)
         mustReadFile = (confFile->size != fileInfo.size()
-                        || (confFile->size != 0 && confFile->timeStamp != fileInfo.lastModified()));
+                        || (confFile->size != 0 && confFile->timeStamp != fileInfo.lastModified(QTimeZone::UTC)));
 
     if (mustReadFile) {
         confFile->unparsedIniSections.clear();
@@ -1392,7 +1404,14 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
         */
         if (file.isReadable() && file.size() != 0) {
             bool ok = false;
-#ifdef Q_OS_MAC
+
+#ifdef Q_OS_WASM
+            if (format == QSettings::WebIndexedDBFormat) {
+                QByteArray data = file.readAll();
+                ok = readIniFile(data, &confFile->unparsedIniSections);
+            } else
+#endif
+#ifdef Q_OS_DARWIN
             if (format == QSettings::NativeFormat) {
                 QByteArray data = file.readAll();
                 ok = readPlistFile(data, &confFile->originalKeys);
@@ -1420,7 +1439,7 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
         }
 
         confFile->size = fileInfo.size();
-        confFile->timeStamp = fileInfo.lastModified();
+        confFile->timeStamp = fileInfo.lastModified(QTimeZone::UTC);
     }
 
     /*
@@ -1448,7 +1467,12 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
             return;
         }
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_WASM
+        if (format == QSettings::WebIndexedDBFormat) {
+            ok = writeIniFile(sf, mergedKeys);
+        } else
+#endif
+#ifdef Q_OS_DARWIN
         if (format == QSettings::NativeFormat) {
             ok = writePlistFile(sf, mergedKeys);
         } else
@@ -1477,9 +1501,9 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
             confFile->addedKeys.clear();
             confFile->removedKeys.clear();
 
-            QFileInfo fileInfo(confFile->name);
+            fileInfo.refresh();
             confFile->size = fileInfo.size();
-            confFile->timeStamp = fileInfo.lastModified();
+            confFile->timeStamp = fileInfo.lastModified(QTimeZone::UTC);
 
             // If we have created the file, apply the file perms
             if (createFile) {
@@ -1493,6 +1517,8 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
         }
     }
 }
+
+namespace SettingsImpl {
 
 enum { Space = 0x1, Special = 0x2 };
 
@@ -1520,10 +1546,15 @@ static const char charTraits[256] =
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
+} // namespace SettingsImpl
+
+using SettingsImpl::charTraits;
+
 bool QConfFileSettingsPrivate::readIniLine(QByteArrayView data, qsizetype &dataPos,
                                            qsizetype &lineStart, qsizetype &lineLen,
                                            qsizetype &equalsPos)
 {
+    using namespace SettingsImpl;
     qsizetype dataLen = data.size();
     bool inQuotes = false;
 
@@ -1902,8 +1933,6 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
     If all you need is a non-persistent memory-based structure,
     consider using QMap<QString, QVariant> instead.
 
-    \tableofcontents section1
-
     \section1 Basic Usage
 
     When creating a QSettings object, you must pass the name of your
@@ -2097,10 +2126,6 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
     as QString. The numeric value can be recovered using \l QString::toInt(), \l
     QString::toDouble() and related functions.
 
-    The \l{tools/settingseditor}{Settings Editor} example lets you
-    experiment with different settings location and with fallbacks
-    turned on or off.
-
     \section1 Restoring the State of a GUI Application
 
     QSettings is often used to store the state of a GUI
@@ -2125,9 +2150,6 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
     \snippet settings/settings.cpp 20
     \codeline
     \snippet settings/settings.cpp 21
-
-    See the \l{mainwindows/application}{Application} example for a
-    self-contained example that uses QSettings.
 
     \section1 Accessing Settings from Multiple Threads or Processes Simultaneously
 
@@ -2344,7 +2366,7 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
 
     \endlist
 
-    \sa QVariant, QSessionManager, {Settings Editor Example}, {Qt Widgets - Application Example}
+    \sa QVariant, QSessionManager
 */
 
 /*! \enum QSettings::Status
@@ -2382,6 +2404,16 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
                             lose the distinction between numeric data and the
                             strings used to encode them, so values written as
                             numbers shall be read back as QString.
+    \value WebLocalStorageFormat
+                            WASM only: Store the settings in window.localStorage for the current
+                            origin. If cookies are not allowed, this falls back to the INI format.
+                            This provides up to 5MiB storage per origin, but access to it is
+                            synchronous and JSPI is not required.
+    \value WebIndexedDBFormat
+                            WASM only: Store the settings in an Indexed DB for the current
+                            origin. If cookies are not allowed, this falls back to the INI format.
+                            This requires JSPI, but provides more storage than
+                            WebLocalStorageFormat.
 
     \value InvalidFormat    Special value returned by registerFormat().
     \omitvalue CustomFormat1

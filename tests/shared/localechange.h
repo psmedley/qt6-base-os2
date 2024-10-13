@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef QT_TESTS_SHARED_LOCALE_CHANGE_H
 #define QT_TESTS_SHARED_LOCALE_CHANGE_H
@@ -12,7 +12,7 @@
 
 namespace QTestLocaleChange {
 
-    QLocale resetSystemLocale()
+    inline QLocale resetSystemLocale()
     {
 #ifndef QT_NO_SYSTEMLOCALE
         { // Transient instance marks system locale data as stale:
@@ -27,8 +27,7 @@ namespace QTestLocaleChange {
         const int m_category;
         const QByteArray m_prior;
         const bool m_didSet;
-#if !defined(QT_NO_SYSTEMLOCALE) && defined(Q_OS_UNIX) \
-    && (!defined(Q_OS_DARWIN) || defined(Q_OS_NACL))
+#if !defined(QT_NO_SYSTEMLOCALE) && defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN)
 #define TRANSIENT_ENV
         // Unix system locale consults environment variables, so we need to set
         // the appropriate one, too.

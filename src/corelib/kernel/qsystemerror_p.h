@@ -40,12 +40,19 @@ public:
     constexpr ErrorScope scope() const { return errorScope; }
     constexpr int error() const { return errorCode; }
 
+    constexpr bool ok() const noexcept { return errorScope == NoError; }
+    static constexpr QSystemError stdError(int error)
+    { return QSystemError(error, StandardLibraryError); }
+
     static Q_CORE_EXPORT QString string(ErrorScope errorScope, int errorCode);
     static Q_CORE_EXPORT QString stdString(int errorCode = -1);
 #ifdef Q_OS_WIN
     static Q_CORE_EXPORT QString windowsString(int errorCode = -1);
     using HRESULT = long;
     static Q_CORE_EXPORT QString windowsComString(HRESULT hr);
+
+    static constexpr QSystemError nativeError(int error)
+    { return QSystemError(error, NativeError); }
 #elif defined(Q_OS_OS2)
     static Q_CORE_EXPORT QString os2String(int errorCode = -1);
 #endif

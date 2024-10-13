@@ -1,6 +1,7 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
+#undef QTEST_THROW_ON_FAIL // fails ### investigate
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QRegularExpression>
@@ -27,6 +28,7 @@ private slots:
     void testFailOnWarningsThenSkip();
 #endif
     void testFailOnWarningsAndIgnoreWarnings();
+    void testFailOnTemporaryObjectDestruction();
 };
 
 void tst_Warnings::testWarnings()
@@ -182,6 +184,7 @@ void tst_Warnings::testFailOnWarningsWithData()
 
 void tst_Warnings::testFailOnWarningsFailInHelper()
 {
+    const QTest::ThrowOnFailDisabler nothrow; // tests repeated QFAILs
     [](){ QFAIL("This failure message should be printed but not cause the test to abort"); }();
     // So we've already failed, but we get more messages - that don't increment counters.
     const auto warnRegex = QRegularExpression("Ran out of .*!");
@@ -206,6 +209,27 @@ void tst_Warnings::testFailOnWarningsAndIgnoreWarnings()
     QTest::ignoreMessage(QtWarningMsg, warningStr);
     // Shouldn't fail; we ignored it.
     qWarning(warningStr);
+}
+
+void tst_Warnings::testFailOnTemporaryObjectDestruction()
+{
+    QTest::failOnWarning("Running low on toothpaste!");
+    QTest::ignoreMessage(QtWarningMsg, "Ran out of cabbage!");
+
+    class TestObject : public QObject
+    {
+    public:
+        ~TestObject()
+        {
+            // Shouldn't fail - ignored
+            qWarning("Ran out of cabbage!");
+            // Should fail
+            qWarning("Running low on toothpaste!");
+        }
+    };
+
+    QScopedPointer<TestObject, QScopedPointerDeleteLater> testObject(new TestObject);
+    QVERIFY(testObject);
 }
 
 QTEST_MAIN(tst_Warnings)

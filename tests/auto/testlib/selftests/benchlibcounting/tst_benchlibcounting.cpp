@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtCore/QCoreApplication>
 #include <QTest>
@@ -37,7 +37,7 @@ void tst_BenchlibCounting::failingBenchmark()
 QTEST_MAIN_WRAPPER(tst_BenchlibCounting,
     std::vector<const char*> args(argv, argv + argc);
     args.push_back("-eventcounter");
-    argc = args.size();
+    argc = int(args.size());
     argv = const_cast<char**>(&args[0]);
     QTEST_MAIN_SETUP())
 

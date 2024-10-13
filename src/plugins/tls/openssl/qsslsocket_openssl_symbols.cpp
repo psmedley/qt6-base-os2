@@ -155,6 +155,7 @@ DEFINEFUNC3(int, X509_STORE_set_ex_data, X509_STORE *a, a, int idx, idx, void *d
 DEFINEFUNC2(void *, X509_STORE_get_ex_data, X509_STORE *r, r, int idx, idx, return nullptr, return)
 DEFINEFUNC(STACK_OF(X509) *, X509_STORE_CTX_get0_chain, X509_STORE_CTX *a, a, return nullptr, return)
 DEFINEFUNC3(void, CRYPTO_free, void *str, str, const char *file, file, int line, line, return, DUMMYARG)
+DEFINEFUNC3(int, CRYPTO_memcmp, const void * in_a, in_a, const void * in_b, in_b, size_t len, len, return 1, return);
 DEFINEFUNC(long, OpenSSL_version_num, void, DUMMYARG, return 0, return)
 DEFINEFUNC(const char *, OpenSSL_version, int a, a, return nullptr, return)
 DEFINEFUNC(unsigned long, SSL_SESSION_get_ticket_lifetime_hint, const SSL_SESSION *session, session, return 0, return)
@@ -770,10 +771,22 @@ static LoadedOpenSsl loadOpenSsl()
 #ifdef Q_OS_OPENBSD
     libcrypto->setLoadHints(QLibrary::ExportExternalSymbolsHint);
 #endif
-#if defined(SHLIB_VERSION_NUMBER) && !defined(Q_OS_QNX) // on QNX, the libs are always libssl.so and libcrypto.so
+
+#if !defined(Q_OS_QNX) // on QNX, the libs are always libssl.so and libcrypto.so
+
+#if defined(OPENSSL_SHLIB_VERSION)
+    // OpenSSL v.3 does not have SLIB_VERSION_NUMBER but has OPENSSL_SHLIB_VERSION.
+    // The comment about OPENSSL_SHLIB_VERSION in opensslv.h is a bit troublesome:
+    // "This is defined in free form."
+    auto shlibVersion = QString("%1"_L1).arg(OPENSSL_SHLIB_VERSION);
+    libssl->setFileNameAndVersion("ssl"_L1, shlibVersion);
+    libcrypto->setFileNameAndVersion("crypto"_L1, shlibVersion);
+#elif defined(SHLIB_VERSION_NUMBER)
     // first attempt: the canonical name is libssl.so.<SHLIB_VERSION_NUMBER>
     libssl->setFileNameAndVersion("ssl"_L1, SHLIB_VERSION_NUMBER ""_L1);
     libcrypto->setFileNameAndVersion("crypto"_L1, SHLIB_VERSION_NUMBER ""_L1);
+#endif // OPENSSL_SHLIB_VERSION
+
     if (libcrypto->load() && libssl->load()) {
         // libssl.so.<SHLIB_VERSION_NUMBER> and libcrypto.so.<SHLIB_VERSION_NUMBER> found
         return result;
@@ -781,7 +794,7 @@ static LoadedOpenSsl loadOpenSsl()
         libssl->unload();
         libcrypto->unload();
     }
-#endif
+#endif // !defined(Q_OS_QNX)
 
 #ifndef Q_OS_DARWIN
     // second attempt: find the development files libssl.so and libcrypto.so
@@ -917,6 +930,7 @@ bool q_resolveOpenSslSymbols()
         RESOLVEFUNC(X509_STORE_set_ex_data)
         RESOLVEFUNC(X509_STORE_get_ex_data)
         RESOLVEFUNC(CRYPTO_free)
+        RESOLVEFUNC(CRYPTO_memcmp)
         RESOLVEFUNC(OpenSSL_version_num)
         RESOLVEFUNC(OpenSSL_version)
 

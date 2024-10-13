@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QtTest/private/qpropertytesthelper_p.h>
@@ -12,7 +12,7 @@
 
 #include <private/qabstractanimation_p.h>
 
-#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID) || defined(Q_OS_OS2)
+#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID) || defined(Q_OS_QNX) || defined(Q_OS_OS2)
 #  define BAD_TIMER_RESOLUTION
 #endif
 

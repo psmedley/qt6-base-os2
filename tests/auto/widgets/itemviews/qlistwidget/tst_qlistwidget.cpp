@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QCompleter>
 #include <QHBoxLayout>
@@ -75,6 +75,8 @@ private slots:
     void sortItems();
     void sortHiddenItems();
     void sortHiddenItems_data();
+    void sortCheckStability_data();
+    void sortCheckStability();
     void closeEditor();
     void setData_data();
     void setData();
@@ -1131,6 +1133,64 @@ void tst_QListWidget::sortHiddenItems()
     delete tw;
 }
 
+void tst_QListWidget::sortCheckStability_data() {
+    QTest::addColumn<Qt::SortOrder>("order");
+    QTest::addColumn<QVariantList>("initialList");
+    QTest::addColumn<QVariantList>("expectedList");
+
+    QTest::newRow("ascending strings")
+            << Qt::AscendingOrder
+            << QVariantList{ QString("a"), QString("b"), QString("b"), QString("a")}
+            << QVariantList{ QString("a"), QString("a"), QString("b"), QString("b")};
+
+    QTest::newRow("descending strings")
+            << Qt::DescendingOrder
+            << QVariantList{ QString("a"), QString("b"), QString("b"), QString("a")}
+            << QVariantList{ QString("b"), QString("b"), QString("a"), QString("a")};
+
+    QTest::newRow("ascending numbers")
+            << Qt::AscendingOrder
+            << QVariantList{ 1, 2, 2, 1}
+            << QVariantList{ 1, 1, 2, 2};
+
+    QTest::newRow("descending numbers")
+            << Qt::DescendingOrder
+            << QVariantList{ 1, 2, 2, 1}
+            << QVariantList{ 2, 2, 1, 1};
+}
+
+void tst_QListWidget::sortCheckStability() {
+    QFETCH(Qt::SortOrder, order);
+    QFETCH(const QVariantList, initialList);
+    QFETCH(const QVariantList, expectedList);
+
+    for (const QVariant &data : initialList) {
+        QListWidgetItem *item = new QListWidgetItem(testWidget);
+        item->setData(Qt::DisplayRole, data);
+    }
+
+    QAbstractItemModel *model = testWidget->model();
+    QList<QPersistentModelIndex> persistent;
+    for (int j = 0; j < model->rowCount(QModelIndex()); ++j)
+        persistent << model->index(j, 0, QModelIndex());
+
+    testWidget->sortItems(order);
+
+    QCOMPARE(testWidget->count(), expectedList.size());
+    for (int i = 0; i < testWidget->count(); ++i)
+        QCOMPARE(testWidget->item(i)->text(), expectedList.at(i).toString());
+
+    QVector<QListWidgetItem*> itemOrder(testWidget->count());
+    for (int i = 0; i < testWidget->count(); ++i)
+        itemOrder[i] = testWidget->item(i);
+
+    qobject_cast<QListModel*>(testWidget->model())->ensureSorted(0, order, 1, 1);
+    testWidget->sortItems(order);
+
+    for (int i = 0; i < testWidget->count(); ++i)
+        QCOMPARE(itemOrder[i],testWidget->item(i));
+}
+
 class TestListWidget : public QListWidget
 {
     Q_OBJECT
@@ -1750,7 +1810,6 @@ void tst_QListWidget::QTBUG14363_completerWithAnyKeyPressedEditTriggers()
     new QListWidgetItem(QLatin1String("completer"), &listWidget);
     listWidget.show();
     listWidget.setCurrentItem(item);
-    QApplicationPrivate::setActiveWindow(&listWidget);
     QVERIFY(QTest::qWaitForWindowActive(&listWidget));
     listWidget.setFocus();
     QCOMPARE(QApplication::focusWidget(), &listWidget);

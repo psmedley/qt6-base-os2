@@ -1,7 +1,7 @@
 <ui version="4.0" >
 <comment>
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 </comment>
  <exportmacro></exportmacro>
  <class>HelpDialog</class>
@@ -155,7 +155,7 @@
             <enum>Qt::Horizontal</enum>
            </property>
            <property name="sizeType" >
-            <enum>QSizePolicy::Expanding</enum>
+            <enum>QSizePolicy::Policy::Expanding</enum>
            </property>
            <property name="sizeHint" >
             <size>
@@ -212,7 +212,7 @@
           <enum>Qt::Vertical</enum>
          </property>
          <property name="sizeType" >
-          <enum>QSizePolicy::Fixed</enum>
+          <enum>QSizePolicy::Policy::Fixed</enum>
          </property>
          <property name="sizeHint" >
           <size>
@@ -289,7 +289,7 @@
             <enum>Qt::Horizontal</enum>
            </property>
            <property name="sizeType" >
-            <enum>QSizePolicy::Expanding</enum>
+            <enum>QSizePolicy::Policy::Expanding</enum>
            </property>
            <property name="sizeHint" >
             <size>

@@ -2,18 +2,16 @@
 // Copyright (C) 2016 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
-#ifdef QT_NO_DEBUG
-#undef QT_NO_DEBUG
-#endif
-#ifdef qDebug
-#undef qDebug
-#endif
-
 #include "qdebug.h"
 #include "private/qdebug_p.h"
 #include "qmetaobject.h"
+#include <private/qlogging_p.h>
 #include <private/qtextstream_p.h>
 #include <private/qtools_p.h>
+
+#include <array>
+#include <q20chrono.h>
+#include <cstdio>
 
 QT_BEGIN_NAMESPACE
 
@@ -154,15 +152,15 @@ QByteArray QtDebugUtils::toPrintable(const char *data, qint64 len, qsizetype max
 
     Flushes any pending data to be written and destroys the debug stream.
 */
-// Has been defined in the header / inlined before Qt 5.4
 QDebug::~QDebug()
 {
     if (stream && !--stream->ref) {
         if (stream->space && stream->buffer.endsWith(u' '))
             stream->buffer.chop(1);
         if (stream->message_output) {
+            QInternalMessageLogContext ctxt(stream->context);
             qt_message_output(stream->type,
-                              stream->context,
+                              ctxt,
                               stream->buffer);
         }
         delete stream;
@@ -345,6 +343,176 @@ void QDebug::putByteArray(const char *begin, size_t length, Latin1Content conten
     }
 }
 
+static QByteArray timeUnit(qint64 num, qint64 den)
+{
+    using namespace std::chrono;
+    using namespace q20::chrono;
+
+    if (num == 1 && den > 1) {
+        // sub-multiple of seconds
+        char prefix = '\0';
+        auto tryprefix = [&](auto d, char c) {
+            static_assert(decltype(d)::num == 1, "not an SI prefix");
+            if (den == decltype(d)::den)
+                prefix = c;
+        };
+
+        // "u" should be "µ", but debugging output is not always UTF-8-safe
+        tryprefix(std::milli{}, 'm');
+        tryprefix(std::micro{}, 'u');
+        tryprefix(std::nano{}, 'n');
+        tryprefix(std::pico{}, 'p');
+        tryprefix(std::femto{}, 'f');
+        tryprefix(std::atto{}, 'a');
+        // uncommon ones later
+        tryprefix(std::centi{}, 'c');
+        tryprefix(std::deci{}, 'd');
+        if (prefix) {
+            char unit[3] = { prefix, 's' };
+            return QByteArray(unit, sizeof(unit) - 1);
+        }
+    }
+
+    const char *unit = nullptr;
+    if (num > 1 && den == 1) {
+        // multiple of seconds - but we don't use SI prefixes
+        auto tryunit = [&](auto d, const char *name) {
+            static_assert(decltype(d)::period::den == 1, "not a multiple of a second");
+            if (unit || num % decltype(d)::period::num)
+                return;
+            unit = name;
+            num /= decltype(d)::period::num;
+        };
+        tryunit(years{}, "yr");
+        tryunit(weeks{}, "wk");
+        tryunit(days{}, "d");
+        tryunit(hours{}, "h");
+        tryunit(minutes{}, "min");
+    }
+    if (!unit)
+        unit = "s";
+
+    if (num == 1 && den == 1)
+        return unit;
+    if (Q_UNLIKELY(num < 1 || den < 1))
+        return QString::asprintf("<invalid time unit %lld/%lld>", num, den).toLatin1();
+
+    // uncommon units: will return something like "[2/3]s"
+    //  strlen("[/]min") = 6
+    char buf[2 * (std::numeric_limits<qint64>::digits10 + 2) + 10];
+    size_t len = 0;
+    auto appendChar = [&](char c) {
+        Q_ASSERT(len < sizeof(buf));
+        buf[len++] = c;
+    };
+    auto appendNumber = [&](qint64 value) {
+        if (value >= 10'000 && (value % 1000) == 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, "%.6g", double(value));  // "1e+06"
+        else
+            len += std::snprintf(buf + len, sizeof(buf) - len, "%lld", value);
+    };
+    appendChar('[');
+    appendNumber(num);
+    if (den != 1) {
+        appendChar('/');
+        appendNumber(den);
+    }
+    appendChar(']');
+    memcpy(buf + len, unit, strlen(unit));
+    return QByteArray(buf, len + strlen(unit));
+}
+
+/*!
+    \since 6.6
+    \internal
+    Helper to the std::chrono::duration debug streaming output.
+ */
+void QDebug::putTimeUnit(qint64 num, qint64 den)
+{
+    stream->ts << timeUnit(num, den); // ### optimize
+}
+
+namespace {
+
+#ifdef QT_SUPPORTS_INT128
+
+constexpr char Q_INT128_MIN_STR[] = "-170141183460469231731687303715884105728";
+
+constexpr int Int128BufferSize = sizeof(Q_INT128_MIN_STR);
+using Int128Buffer = std::array<char, Int128BufferSize>;
+                                           // numeric_limits<qint128>::digits10 may not exist
+
+static char *i128ToStringHelper(Int128Buffer &buffer, quint128 n)
+{
+    auto dst = buffer.data() + buffer.size();
+    *--dst = '\0'; // NUL-terminate
+    if (n == 0) {
+        *--dst = '0'; // and done
+    } else {
+        while (n != 0) {
+            *--dst = "0123456789"[n % 10];
+            n /= 10;
+        }
+    }
+    return dst;
+}
+#endif // QT_SUPPORTS_INT128
+
+[[maybe_unused]]
+static const char *int128Warning()
+{
+    const char *msg = "Qt was not compiled with int128 support.";
+    qWarning("%s", msg);
+    return msg;
+}
+
+} // unnamed namespace
+
+/*!
+    \since 6.7
+    \internal
+    Helper to the qint128 debug streaming output.
+ */
+void QDebug::putInt128([[maybe_unused]] const void *p)
+{
+#ifdef QT_SUPPORTS_INT128
+    Q_ASSERT(p);
+    qint128 i;
+    memcpy(&i, p, sizeof(i)); // alignment paranoia
+    if (i == Q_INT128_MIN) {
+        // -i is not representable, hardcode the result:
+        stream->ts << Q_INT128_MIN_STR;
+    } else {
+        Int128Buffer buffer;
+        auto dst = i128ToStringHelper(buffer, i < 0 ? -i : i);
+        if (i < 0)
+            *--dst = '-';
+        stream->ts << dst;
+    }
+    return;
+#endif // QT_SUPPORTS_INT128
+    stream->ts << int128Warning();
+}
+
+/*!
+    \since 6.7
+    \internal
+    Helper to the quint128 debug streaming output.
+ */
+void QDebug::putUInt128([[maybe_unused]] const void *p)
+{
+#ifdef QT_SUPPORTS_INT128
+    Q_ASSERT(p);
+    quint128 i;
+    memcpy(&i, p, sizeof(i)); // alignment paranoia
+    Int128Buffer buffer;
+    stream->ts << i128ToStringHelper(buffer, i);
+    return;
+#endif // QT_SUPPORTS_INT128
+    stream->ts << int128Warning();
+}
+
+
 /*!
     \fn QDebug::swap(QDebug &other)
     \since 5.0
@@ -417,6 +585,29 @@ QDebug &QDebug::resetFormat()
     \since 5.0
 
     \sa QDebugStateSaver
+*/
+
+
+/*!
+    \fn bool QDebug::quoteStrings() const
+    \since 6.7
+
+    Returns \c true if this QDebug instance will quote strings streamed into
+    it (which is the default).
+
+    \sa QDebugStateSaver, quote(), noquote(), setQuoteStrings()
+*/
+
+/*!
+    \fn void QDebug::setQuoteStrings(bool b)
+    \since 6.7
+
+    Enables quoting of strings streamed into this QDebug instance if \a b is
+    \c true; otherwise quoting is disabled.
+
+    The default is to quote strings.
+
+    \sa QDebugStateSaver, quote(), noquote(), quoteStrings()
 */
 
 
@@ -777,11 +968,51 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
-    \fn template <class T> QString QDebug::toString(T &&object)
+    \since 6.6
+    \fn template <typename Rep, typename Period> QDebug &QDebug::operator<<(std::chrono::duration<Rep, Period> duration)
+
+    Prints the time duration \a duration to the stream and returns a reference
+    to the stream. The printed string is the numeric representation of the
+    period followed by the time unit, similar to what the C++ Standard Library
+    would produce with \c{std::ostream}.
+
+    The unit is not localized.
+*/
+
+/*!
+    \fn template <typename T, QDebug::if_qint128<T>> QDebug::operator<<(T i)
+    \fn template <typename T, QDebug::if_quint128<T>> QDebug::operator<<(T i)
+    \since 6.7
+
+    Prints the textual representation of the 128-bit integer \a i.
+
+    \note This operator is only available if Qt supports 128-bit integer types.
+    If 128-bit integer types are available in your build, but the Qt libraries
+    were compiled without, the operator will print a warning instead.
+
+    \note Because the operator is a function template, no implicit conversions
+    are performed on its argument. It must be exactly qint128/quint128.
+
+    \sa QT_SUPPORTS_INT128
+*/
+
+/*!
+    \fn template <class T> QString QDebug::toString(const T &object)
     \since 6.0
 
     \include qdebug-toString.qdocinc
 */
+
+/*! \internal */
+QString QDebug::toStringImpl(StreamTypeErased s, const void *obj)
+{
+    QString result;
+    {
+        QDebug d(&result);
+        s(d.nospace(), obj);
+    }
+    return result;
+}
 
 /*!
     \fn template <class T> QDebug operator<<(QDebug debug, const QList<T> &list)
@@ -877,7 +1108,7 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
-    \fn template <class T1, class T2> QDebug operator<<(QDebug debug, const QPair<T1, T2> &pair)
+    \fn template <class T1, class T2> QDebug operator<<(QDebug debug, const std::pair<T1, T2> &pair)
     \relates QDebug
 
     Writes the contents of \a pair to \a debug. Both \c T1 and
@@ -885,11 +1116,12 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
-    \fn template <class T1, class T2> QDebug operator<<(QDebug debug, const std::pair<T1, T2> &pair)
+    \since 6.7
+    \fn template <class T> QDebug operator<<(QDebug debug, const std::optional<T> &opt)
     \relates QDebug
 
-    Writes the contents of \a pair to \a debug. Both \c T1 and
-    \c T2 need to support streaming into QDebug.
+    Writes the contents of \a opt (or \c nullopt if not set) to \a debug.
+    \c T needs to support streaming into QDebug.
 */
 
 /*!
@@ -925,6 +1157,13 @@ QDebug &QDebug::resetFormat()
  */
 
 /*!
+    \since 6.7
+    \fn QDebug &QDebug::operator<<(std::nullopt_t)
+
+    Writes nullopt to the stream.
+*/
+
+/*!
     \class QDebugStateSaver
     \inmodule QtCore
     \brief Convenience class for custom QDebug operators.
@@ -942,7 +1181,7 @@ QDebug &QDebug::resetFormat()
 
     QDebugStateSaver is typically used in the implementation of an operator<<() for debugging:
 
-    \snippet tools/customtype/message.cpp custom type streaming operator
+    \snippet customtype/customtypeexample.cpp custom type streaming operator
 
     \since 5.1
 */
@@ -1012,18 +1251,17 @@ QDebugStateSaver::~QDebugStateSaver()
     \internal
 
     Specialization of the primary template in qdebug.h to out-of-line
-    the common case of QFlags<T>::Int being int.
+    the common case of QFlags<T>::Int being 32-bit.
 
     Just call the generic version so the two don't get out of sync.
 */
-void qt_QMetaEnum_flagDebugOperator(QDebug &debug, size_t sizeofT, int value)
+void qt_QMetaEnum_flagDebugOperator(QDebug &debug, size_t sizeofT, uint value)
 {
-    qt_QMetaEnum_flagDebugOperator<int>(debug, sizeofT, value);
+    qt_QMetaEnum_flagDebugOperator<uint>(debug, sizeofT, value);
 }
 
 #ifndef QT_NO_QOBJECT
 /*!
-    \fn QDebug qt_QMetaEnum_debugOperator(QDebug &, int value, const QMetaObject *, const char *name)
     \internal
 
     Formats the given enum \a value for debug output.
@@ -1070,7 +1308,7 @@ QDebug qt_QMetaEnum_debugOperator(QDebug &dbg, qint64 value, const QMetaObject *
             dbg << scope << u"::";
     }
 
-    const char *key = me.valueToKey(value);
+    const char *key = me.valueToKey(static_cast<int>(value));
     const bool scoped = me.isScoped() || verbosity & 1;
     if (scoped || !key)
         dbg << me.enumName() << (!key ? u"(" : u"::");
@@ -1139,7 +1377,7 @@ QDebug qt_QMetaEnum_flagDebugOperator(QDebug &debug, quint64 value, const QMetaO
         debug << '(';
     }
 
-    debug << me.valueToKeys(value);
+    debug << me.valueToKeys(static_cast<int>(value));
 
     if (enumScope)
         debug << ')';

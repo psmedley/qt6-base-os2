@@ -4,374 +4,263 @@
 #ifndef QJNITYPES_H
 #define QJNITYPES_H
 
-#include <QtCore/qglobal.h>
-
 #if defined(Q_QDOC) || defined(Q_OS_ANDROID)
-#include <jni.h>
+
+#include <QtCore/qjnitypes_impl.h>
+#include <QtCore/qjniobject.h>
 
 QT_BEGIN_NAMESPACE
 
-namespace QtJniTypes
-{
-
-// a constexpr type for string literals of any character width, aware of the length
-// of the string.
-template<size_t N_WITH_NULL, typename BaseType = char>
-struct String
-{
-    BaseType m_data[N_WITH_NULL] = {};
-
-    constexpr String() noexcept {}
-    // Can be instantiated (only) with a string literal
-    constexpr explicit String(const BaseType (&data)[N_WITH_NULL]) noexcept
-    {
-        for (size_t i = 0; i < N_WITH_NULL - 1; ++i)
-            m_data[i] = data[i];
-    }
-
-    constexpr BaseType at(size_t i) const { return m_data[i]; }
-    constexpr BaseType operator[](size_t i) const { return at(i); }
-    static constexpr size_t size() noexcept { return N_WITH_NULL; }
-    constexpr operator const BaseType *() const noexcept { return m_data; }
-    constexpr const BaseType *data() const noexcept { return m_data; }
-    template<size_t N2_WITH_NULL>
-    constexpr bool startsWith(const BaseType (&lit)[N2_WITH_NULL]) const noexcept
-    {
-        if constexpr (N2_WITH_NULL > N_WITH_NULL) {
-            return false;
-        } else {
-            for (size_t i = 0; i < N2_WITH_NULL - 1; ++i) {
-                if (m_data[i] != lit[i])
-                    return false;
-            }
-        }
-        return true;
-    }
-    constexpr bool startsWith(BaseType c) const noexcept
-    {
-        return N_WITH_NULL > 1 && m_data[0] == c;
-    }
-    template<size_t N2_WITH_NULL>
-    constexpr bool endsWith(const BaseType (&lit)[N2_WITH_NULL]) const noexcept
-    {
-        if constexpr (N2_WITH_NULL > N_WITH_NULL) {
-            return false;
-        } else {
-            for (size_t i = 0; i < N2_WITH_NULL; ++i) {
-                if (m_data[N_WITH_NULL - i - 1] != lit[N2_WITH_NULL - i - 1])
-                    return false;
-            }
-        }
-        return true;
-    }
-    constexpr bool endsWith(BaseType c) const noexcept
-    {
-        return N_WITH_NULL > 1 && m_data[N_WITH_NULL - 2] == c;
-    }
-
-    template<size_t N2_WITH_NULL>
-    friend inline constexpr bool operator==(const String<N_WITH_NULL> &lhs,
-                                            const String<N2_WITH_NULL> &rhs) noexcept
-    {
-        if constexpr (N_WITH_NULL != N2_WITH_NULL) {
-            return false;
-        } else {
-            for (size_t i = 0; i < N_WITH_NULL - 1; ++i) {
-                if (lhs.at(i) != rhs.at(i))
-                    return false;
-            }
-        }
-        return true;
-    }
-
-    template<size_t N2_WITH_NULL>
-    friend inline constexpr bool operator!=(const String<N_WITH_NULL> &lhs,
-                                            const String<N2_WITH_NULL> &rhs) noexcept
-    {
-        return !operator==(lhs, rhs);
-    }
-
-    template<size_t N2_WITH_NULL>
-    friend inline constexpr bool operator==(const String<N_WITH_NULL> &lhs,
-                                            const BaseType (&rhs)[N2_WITH_NULL]) noexcept
-    {
-        return operator==(lhs, String<N2_WITH_NULL>(rhs));
-    }
-    template<size_t N2_WITH_NULL>
-    friend inline constexpr bool operator==(const BaseType (&lhs)[N2_WITH_NULL],
-                                            const String<N_WITH_NULL> &rhs) noexcept
-    {
-        return operator==(String<N2_WITH_NULL>(lhs), rhs);
-    }
-
-    template<size_t N2_WITH_NULL>
-    friend inline constexpr bool operator!=(const String<N_WITH_NULL> &lhs,
-                                            const BaseType (&rhs)[N2_WITH_NULL]) noexcept
-    {
-        return operator!=(lhs, String<N2_WITH_NULL>(rhs));
-    }
-    template<size_t N2_WITH_NULL>
-    friend inline constexpr bool operator!=(const BaseType (&lhs)[N2_WITH_NULL],
-                                            const String<N_WITH_NULL> &rhs) noexcept
-    {
-        return operator!=(String<N2_WITH_NULL>(lhs), rhs);
-    }
-
-    template<size_t N2_WITH_NULL>
-    friend inline constexpr auto operator+(const String<N_WITH_NULL> &lhs,
-                                           const String<N2_WITH_NULL> &rhs) noexcept
-    {
-        char data[N_WITH_NULL + N2_WITH_NULL - 1] = {};
-        for (size_t i = 0; i < N_WITH_NULL - 1; ++i)
-            data[i] = lhs[i];
-        for (size_t i = 0; i < N2_WITH_NULL - 1; ++i)
-            data[N_WITH_NULL - 1 + i] = rhs[i];
-        return String<N_WITH_NULL + N2_WITH_NULL - 1>(data);
-    }
-};
-
-
-// Helper types that allow us to disable variadic overloads that would conflict
-// with overloads that take a const char*.
-template<typename T, size_t N = 0> struct IsStringType : std::false_type {};
-template<> struct IsStringType<const char*, 0> : std::true_type {};
-template<size_t N> struct IsStringType<String<N>> : std::true_type {};
-template<size_t N> struct IsStringType<const char[N]> : std::true_type {};
-
-template<bool flag = false>
-static void staticAssertTypeMismatch()
-{
-    static_assert(flag, "The used type is not supported by this template call. "
-                        "Use a JNI based type instead.");
-}
-
-template<typename T>
-constexpr auto typeSignature()
-{
-    if constexpr(std::is_array_v<T>) {
-        using UnderlyingType = typename std::remove_extent<T>::type;
-        static_assert(!std::is_array_v<UnderlyingType>,
-                    "typeSignature() does not handle multi-dimensional arrays");
-        return String("[") + typeSignature<UnderlyingType>();
-    } else if constexpr(std::is_same_v<T, jobject>) {
-        return String("Ljava/lang/Object;");
-    } else if constexpr(std::is_same_v<T, jclass>) {
-        return String("Ljava/lang/Class;");
-    } else if constexpr(std::is_same_v<T, jstring>) {
-        return String("Ljava/lang/String;");
-    } else if constexpr(std::is_same_v<T, jobjectArray>) {
-        return String("[Ljava/lang/Object;");
-    } else if constexpr(std::is_same_v<T, jthrowable>) {
-        return String("Ljava/lang/Throwable;");
-    } else if constexpr(std::is_same_v<T, jbooleanArray>) {
-        return String("[Z");
-    } else if constexpr(std::is_same_v<T, jbyteArray>) {
-        return String("[B");
-    } else if constexpr(std::is_same_v<T, jshortArray>) {
-        return String("[S");
-    } else if constexpr(std::is_same_v<T, jintArray>) {
-        return String("[I");
-    } else if constexpr(std::is_same_v<T, jlongArray>) {
-        return String("[J");
-    } else if constexpr(std::is_same_v<T, jfloatArray>) {
-        return String("[F");
-    } else if constexpr(std::is_same_v<T, jdoubleArray>) {
-        return String("[D");
-    } else if constexpr(std::is_same_v<T, jcharArray>) {
-        return String("[C");
-    } else if constexpr(std::is_same_v<T, jboolean>) {
-        return String("Z");
-    } else if constexpr(std::is_same_v<T, bool>) {
-        return String("Z");
-    } else if constexpr(std::is_same_v<T, jbyte>) {
-        return String("B");
-    } else if constexpr(std::is_same_v<T, jchar>) {
-        return String("C");
-    } else if constexpr(std::is_same_v<T, char>) {
-        return String("C");
-    } else if constexpr(std::is_same_v<T, jshort>) {
-        return String("S");
-    } else if constexpr(std::is_same_v<T, short>) {
-        return String("S");
-    } else if constexpr(std::is_same_v<T, jint>) {
-        return String("I");
-    } else if constexpr(std::is_same_v<T, int>) {
-        return String("I");
-    } else if constexpr(std::is_same_v<T, uint>) {
-        return String("I");
-    } else if constexpr(std::is_same_v<T, jlong>) {
-        return String("J");
-    } else if constexpr(std::is_same_v<T, long>) {
-        return String("J");
-    } else if constexpr(std::is_same_v<T, jfloat>) {
-        return String("F");
-    } else if constexpr(std::is_same_v<T, float>) {
-        return String("F");
-    } else if constexpr(std::is_same_v<T, jdouble>) {
-        return String("D");
-    } else if constexpr(std::is_same_v<T, double>) {
-        return String("D");
-    } else if constexpr(std::is_same_v<T, void>) {
-        return String("V");
-    } else if constexpr(IsStringType<T>::value) {
-        static_assert(!IsStringType<T>::value, "Don't use a literal type, call data!");
-    } else {
-        staticAssertTypeMismatch();
-    }
-}
-
-template<bool flag = false>
-static void staticAssertClassNotRegistered()
-{
-    static_assert(flag, "Class not registered, use Q_DECLARE_JNI_CLASS");
-}
-
-template<typename T>
-constexpr auto className()
-{
-    if constexpr(std::is_same<T, jstring>::value)
-        return String("java/lang/String");
-    else
-        staticAssertClassNotRegistered();
-}
-
-template<typename T>
-static constexpr bool isPrimitiveType()
-{
-    return typeSignature<T>().size() == 2;
-}
-
-template<typename T>
-static constexpr bool isObjectType()
-{
-    if constexpr(std::is_convertible<T, jobject>::value) {
-        return true;
-    } else {
-        constexpr auto signature = typeSignature<T>();
-        return (signature.startsWith('L') || signature.startsWith('['))
-             && signature.endsWith(';');
-    }
-}
-
-template<typename T>
-static constexpr bool isArrayType()
-{
-    constexpr auto signature = typeSignature<T>();
-    return signature.startsWith('[');
-}
-
-template<typename T>
-static constexpr void assertPrimitiveType()
-{
-    static_assert(isPrimitiveType<T>(), "Type needs to be a primitive JNI type!");
-}
-
-template<typename T>
-static constexpr void assertObjectType()
-{
-    static_assert(isObjectType<T>(),
-                  "Type needs to be a JNI object type (convertible to jobject, or with "
-                  "an object type signature registered)!");
-}
-
-template<typename T>
-static constexpr void assertType()
-{
-    static_assert(isPrimitiveType<T>() || isObjectType<T>(),
-                  "Type needs to be a JNI type!");
-}
-
-template<typename R, typename ...Args>
-static constexpr auto methodSignature()
-{
-    return (String("(") +
-                ... + typeSignature<std::decay_t<Args>>())
-            + String(")")
-            + typeSignature<R>();
-}
-
-template<typename T>
-static constexpr auto fieldSignature()
-{
-    return QtJniTypes::typeSignature<T>();
-}
-
-template<typename ...Args>
-static constexpr auto constructorSignature()
-{
-    return methodSignature<void, Args...>();
-}
-
-template<typename Ret, typename ...Args>
-static constexpr auto nativeMethodSignature(Ret (*)(JNIEnv *, jobject, Args...))
-{
-    return methodSignature<Ret, Args...>();
-}
-
-template<typename Ret, typename ...Args>
-static constexpr auto nativeMethodSignature(Ret (*)(JNIEnv *, jclass, Args...))
-{
-    return methodSignature<Ret, Args...>();
-}
-
-// A generic thin wrapper around jobject, convertible to jobject.
-// We need this as a baseclass so that QJniObject can be implicitly
-// constructed from the various subclasses - we can't provide an
-// operator QJniObject() here as the class is not declared.
-struct Object
-{
-    jobject _object;
-    constexpr operator jobject() const { return _object; }
-};
-
-} // namespace QtJniTypes
-
+// QT_TECH_PREVIEW_API
 #define Q_DECLARE_JNI_TYPE_HELPER(Type)                         \
-namespace QtJniTypes {                                          \
-struct Type : Object                                            \
-{                                                               \
-    constexpr Type(jobject o) noexcept : Object{o} {}           \
-};                                                              \
-}                                                               \
+struct Type##Tag { explicit Type##Tag() = default; };           \
+using Type = JObject<Type##Tag>;                                \
 
-
+// QT_TECH_PREVIEW_API
 #define Q_DECLARE_JNI_TYPE(Type, Signature)                     \
+namespace QtJniTypes {                                          \
 Q_DECLARE_JNI_TYPE_HELPER(Type)                                 \
+}                                                               \
 template<>                                                      \
-constexpr auto QtJniTypes::typeSignature<QtJniTypes::Type>()    \
-{                                                               \
-    static_assert((Signature[0] == 'L' || Signature[0] == '[')  \
-                && Signature[sizeof(Signature) - 2] == ';',     \
-                "Type signature needs to start with 'L' or '['" \
-                " and end with ';'");                           \
-    return QtJniTypes::String(Signature);                       \
+struct ::QtJniTypes::Traits<QtJniTypes::Type##Tag> {            \
+    static constexpr auto signature()                           \
+    {                                                           \
+        constexpr QtJniTypes::CTString sig(Signature);          \
+        static_assert((sig.startsWith('L') || sig.startsWith("[L"))    \
+                    && sig.endsWith(';'),                       \
+                    "Type signature needs to start with 'L' or" \
+                    " '[L', and end with ';'");                 \
+        return sig;                                             \
+    }                                                           \
+};                                                              \
+
+#define Q_DECLARE_JNI_CLASS_2(Type, _)                          \
+Q_DECLARE_JNI_TYPE_HELPER(Type)                                 \
+
+#define Q_DECLARE_JNI_CLASS_SPECIALIZATION_2(Type, Signature)   \
+template<>                                                      \
+struct QtJniTypes::Traits<QtJniTypes::Type##Tag> {              \
+    static constexpr auto className()                           \
+    {                                                           \
+        return QtJniTypes::CTString(Signature);                 \
+    }                                                           \
+    static constexpr auto signature()                           \
+    {                                                           \
+        return QtJniTypes::CTString("L")                        \
+            + className()                                       \
+            + QtJniTypes::CTString(";");                        \
+    }                                                           \
+};                                                              \
+
+#define Q_DECLARE_JNI_CLASS_3(NS0, NS1, Type)                   \
+namespace NS0 {                                                 \
+namespace NS1 {                                                 \
+Q_DECLARE_JNI_CLASS_2(Type, Q_UNUSED(0))                        \
+}                                                               \
 }                                                               \
 
-#define Q_DECLARE_JNI_CLASS(Type, Signature)                    \
-Q_DECLARE_JNI_TYPE_HELPER(Type)                                 \
-template<>                                                      \
-constexpr auto QtJniTypes::className<QtJniTypes::Type>()        \
-{                                                               \
-    return QtJniTypes::String(Signature);                       \
-}                                                               \
-template<>                                                      \
-constexpr auto QtJniTypes::typeSignature<QtJniTypes::Type>()    \
-{                                                               \
-    return QtJniTypes::String("L")                              \
-         + QtJniTypes::String(Signature)                        \
-         + QtJniTypes::String(";");                             \
+#define Q_DECLARE_JNI_CLASS_SPECIALIZATION_3(NS0, NS1, Type)    \
+    Q_DECLARE_JNI_CLASS_SPECIALIZATION_2(NS0::NS1::Type,        \
+        #NS0 "/" #NS1 "/" #Type)
+
+#define Q_DECLARE_JNI_CLASS_4(NS0, NS1, NS2, Type)              \
+namespace NS0 {                                                 \
+Q_DECLARE_JNI_CLASS_3(NS1, NS2, Type)                           \
 }                                                               \
 
-#define Q_DECLARE_JNI_NATIVE_METHOD(...)                           \
+#define Q_DECLARE_JNI_CLASS_SPECIALIZATION_4(NS0, NS1, NS2, Type) \
+    Q_DECLARE_JNI_CLASS_SPECIALIZATION_2(NS0::NS1::NS2::Type,   \
+        #NS0 "/" #NS1 "/" #NS2 "/" #Type)
+
+#define Q_DECLARE_JNI_CLASS_5(NS0, NS1, NS2, NS3, Type)         \
+namespace NS0 {                                                 \
+Q_DECLARE_JNI_CLASS_4(NS1, NS2, NS3, Type)                      \
+}                                                               \
+
+#define Q_DECLARE_JNI_CLASS_SPECIALIZATION_5(NS0, NS1, NS2, NS3, Type) \
+    Q_DECLARE_JNI_CLASS_SPECIALIZATION_2(NS0::NS1::NS2::NS3::Type,  \
+        #NS0 "/" #NS1 "/" #NS2 "/" #NS3 "/" #Type)
+
+#define Q_DECLARE_JNI_CLASS_6(NS0, NS1, NS2, NS3, NS4, Type)    \
+namespace NS0 {                                                 \
+Q_DECLARE_JNI_CLASS_5(NS1, NS2, NS3, NS4, Type)                 \
+}                                                               \
+
+#define Q_DECLARE_JNI_CLASS_SPECIALIZATION_6(NS0, NS1, NS2, NS3, NS4, Type) \
+    Q_DECLARE_JNI_CLASS_SPECIALIZATION_2(NS0::NS1::NS2::NS3::NS4::Type, \
+        #NS0 "/" #NS1 "/" #NS2 "/" #NS3 "/" #NS4 "/" #Type)
+
+#define Q_DECLARE_JNI_CLASS_7(NS0, NS1, NS2, NS3, NS4, NS5, Type) \
+namespace NS0 {                                                 \
+Q_DECLARE_JNI_CLASS_6(NS1, NS2, NS3, NS4, NS5, Type)            \
+}                                                               \
+
+#define Q_DECLARE_JNI_CLASS_SPECIALIZATION_7(NS0, NS1, NS2, NS3, NS4, NS5, Type) \
+    Q_DECLARE_JNI_CLASS_SPECIALIZATION_2(NS0::NS1::NS2::NS3::NS4::NS5::Type,    \
+        #NS0 "/" #NS1 "/" #NS2 "/" #NS3 "/" #NS4 "/" #NS5 "/" #Type)
+
+#define Q_DECLARE_JNI_CLASS_8(NS0, NS1, NS2, NS3, NS4, NS5, NS6, Type) \
+namespace NS0 {                                                 \
+Q_DECLARE_JNI_CLASS_7(NS1, NS2, NS3, NS4, NS5, NS6, Type)       \
+}                                                               \
+
+#define Q_DECLARE_JNI_CLASS_SPECIALIZATION_8(NS0, NS1, NS2, NS3, NS4, NS5, NS6, Type) \
+    Q_DECLARE_JNI_CLASS_SPECIALIZATION_2(NS0::NS1::NS2::NS3::NS4::NS5::NS6::Type,   \
+        #NS0 "/" #NS1 "/" #NS2 "/" #NS3 "/" #NS4 "/" #NS5 "/" #NS6 "/" #Type)
+
+#define Q_DECLARE_JNI_CLASS_9(NS0, NS1, NS2, NS3, NS4, NS5, NS6, NS7, Type) \
+namespace NS0 {                                                 \
+Q_DECLARE_JNI_CLASS_8(NS1, NS2, NS3, NS4, NS5, NS6, NS7, Type)  \
+}                                                               \
+
+#define Q_DECLARE_JNI_CLASS_SPECIALIZATION_9(NS0, NS1, NS2, NS3, NS4, NS5, NS6, NS7, Type) \
+    Q_DECLARE_JNI_CLASS_SPECIALIZATION_2(NS0::NS1::NS2::NS3::NS4::NS5::NS6::NS7::Type,  \
+        #NS0 "/" #NS1 "/" #NS2 "/" #NS3 "/" #NS4 "/" #NS5 "/" #NS6 "/" #NS7 "/" #Type)
+
+#define Q_DECLARE_JNI_CLASS(...)                                \
+namespace QtJniTypes {                                          \
+QT_OVERLOADED_MACRO(Q_DECLARE_JNI_CLASS, __VA_ARGS__)           \
+}                                                               \
+QT_OVERLOADED_MACRO(Q_DECLARE_JNI_CLASS_SPECIALIZATION, __VA_ARGS__)
+
+// Macros for native methods
+
+namespace QtJniMethods {
+namespace Detail {
+// Various helpers to forward a call from a variadic argument function to
+// the real function with proper type conversion. This is needed because we
+// want to write functions that take QJniObjects (subclasses), while Java
+// can only call functions that take jobjects.
+
+// In Var-arg functions, any argument narrower than (unsigned) int or double
+// is promoted to (unsigned) int or double.
+template <typename Arg> struct PromotedType { using Type = Arg; };
+template <> struct PromotedType<bool> { using Type = int; };
+template <> struct PromotedType<char> { using Type = int; };
+template <> struct PromotedType<signed char> { using Type = int; };
+template <> struct PromotedType<unsigned char> { using Type = unsigned int; };
+template <> struct PromotedType<short> { using Type = int; };
+template <> struct PromotedType<unsigned short> { using Type = unsigned int; };
+template <> struct PromotedType<float> { using Type = double; };
+
+// Map any QJniObject type to jobject; that's what's on the va_list
+template <typename Arg>
+struct JNITypeForArgImpl
+{
+    using Type = std::conditional_t<std::disjunction_v<std::is_base_of<QJniObject, Arg>,
+                                                       std::is_base_of<QtJniTypes::JObjectBase, Arg>>,
+                                    jobject, typename PromotedType<Arg>::Type>;
+    static Arg fromVarArg(Type t)
+    {
+        return static_cast<Arg>(t);
+    }
+};
+
+template <>
+struct JNITypeForArgImpl<QString>
+{
+    using Type = jstring;
+
+    static QString fromVarArg(Type t)
+    {
+        return QJniObject(t).toString();
+    }
+};
+
+template <typename T>
+struct JNITypeForArgImpl<QJniArray<T>>
+{
+    using Type = jobject;
+
+    static QJniArray<T> fromVarArg(Type t)
+    {
+        return QJniArray<T>(t);
+    }
+};
+
+template <typename T>
+struct JNITypeForArgImpl<QList<T>>
+{
+private:
+    using ArrayType = decltype(QJniArrayBase::fromContainer(std::declval<QList<T>>()));
+    using ArrayObjectType = decltype(std::declval<ArrayType>().arrayObject());
+    using ElementType = typename ArrayType::value_type;
+public:
+    using Type = ArrayObjectType;
+
+    static QList<T> fromVarArg(Type t)
+    {
+        return QJniArray<ElementType>(t).toContainer();
+    }
+};
+
+template <typename Arg>
+using JNITypeForArg = typename JNITypeForArgImpl<std::decay_t<Arg>>::Type;
+template <typename Arg, typename Type>
+static inline auto methodArgFromVarArg(Type t) // Type comes from a va_arg, so is always POD
+{
+    return JNITypeForArgImpl<std::decay_t<Arg>>::fromVarArg(t);
+}
+
+// Turn a va_list into a tuple of typed arguments
+template <typename ...Args>
+static constexpr auto makeTupleFromArgsHelper(va_list args)
+{
+    return std::tuple(methodArgFromVarArg<Args>(va_arg(args, JNITypeForArg<Args>))...);
+}
+
+template <typename Ret, typename ...Args>
+static constexpr auto makeTupleFromArgs(Ret (*)(JNIEnv *, jobject, Args...), va_list args)
+{
+    return makeTupleFromArgsHelper<Args...>(args);
+}
+template <typename Ret, typename ...Args>
+static constexpr auto makeTupleFromArgs(Ret (*)(JNIEnv *, jclass, Args...), va_list args)
+{
+    return makeTupleFromArgsHelper<Args...>(args);
+}
+
+template <typename>
+struct NativeFunctionReturnType {};
+
+template<typename Ret, typename... Args>
+struct NativeFunctionReturnType<Ret(Args...)>
+{
+  using type = Ret;
+};
+
+} // namespace Detail
+} // namespace QtJniMethods
+
+// A va_ variadic arguments function that we register with JNI as a proxy
+// for the function we have. This function uses the helpers to unpack the
+// variadic arguments into a tuple of typed arguments, which we then call
+// the actual function with. This then takes care of implicit conversions,
+// e.g. a jobject becomes a QJniObject.
+#define Q_DECLARE_JNI_NATIVE_METHOD_HELPER(Method)                              \
+static QtJniMethods::Detail::NativeFunctionReturnType<decltype(Method)>::type   \
+va_##Method(JNIEnv *env, jclass thiz, ...)                                      \
+{                                                                               \
+    va_list args;                                                               \
+    va_start(args, thiz);                                                       \
+    auto va_cleanup = qScopeGuard([&args]{ va_end(args); });                    \
+    auto argTuple = QtJniMethods::Detail::makeTupleFromArgs(Method, args);      \
+    return std::apply([env, thiz](auto &&... args) {                            \
+        return Method(env, thiz, args...);                                      \
+    }, argTuple);                                                               \
+}                                                                               \
+
+#define Q_DECLARE_JNI_NATIVE_METHOD(...)                        \
     QT_OVERLOADED_MACRO(QT_DECLARE_JNI_NATIVE_METHOD, __VA_ARGS__) \
 
 #define QT_DECLARE_JNI_NATIVE_METHOD_2(Method, Name)            \
 namespace QtJniMethods {                                        \
+Q_DECLARE_JNI_NATIVE_METHOD_HELPER(Method)                      \
 static constexpr auto Method##_signature =                      \
     QtJniTypes::nativeMethodSignature(Method);                  \
 static const JNINativeMethod Method##_method = {                \
     #Name, Method##_signature.data(),                           \
-    reinterpret_cast<void *>(Method)                            \
+    reinterpret_cast<void *>(va_##Method)                       \
 };                                                              \
 }                                                               \
 
@@ -384,9 +273,10 @@ static const JNINativeMethod Method##_method = {                \
     QT_OVERLOADED_MACRO(QT_DECLARE_JNI_NATIVE_METHOD_IN_CURRENT_SCOPE, __VA_ARGS__)              \
 
 #define QT_DECLARE_JNI_NATIVE_METHOD_IN_CURRENT_SCOPE_2(Method, Name)                            \
+    Q_DECLARE_JNI_NATIVE_METHOD_HELPER(Method)                                                   \
     static inline constexpr auto Method##_signature = QtJniTypes::nativeMethodSignature(Method); \
     static inline const JNINativeMethod Method##_method = {                                      \
-        #Name, Method##_signature.data(), reinterpret_cast<void *>(Method)                       \
+        #Name, Method##_signature.data(), reinterpret_cast<void *>(va_##Method)                  \
     };
 
 #define QT_DECLARE_JNI_NATIVE_METHOD_IN_CURRENT_SCOPE_1(Method)                                  \
@@ -394,8 +284,35 @@ static const JNINativeMethod Method##_method = {                \
 
 #define Q_JNI_NATIVE_SCOPED_METHOD(Method, Scope) Scope::Method##_method
 
+// Classes for value types
+Q_DECLARE_JNI_CLASS(String, "java/lang/String")
+Q_DECLARE_JNI_CLASS(Integer, "java/lang/Integer");
+Q_DECLARE_JNI_CLASS(Long, "java/lang/Long");
+Q_DECLARE_JNI_CLASS(Double, "java/lang/Double");
+Q_DECLARE_JNI_CLASS(Float, "java/lang/Float");
+Q_DECLARE_JNI_CLASS(Boolean, "java/lang/Boolean");
+Q_DECLARE_JNI_CLASS(Void, "java/lang/Void");
+
+// Utility and I/O
+Q_DECLARE_JNI_CLASS(UUID, "java/util/UUID")
+Q_DECLARE_JNI_CLASS(ArrayList, "java/util/ArrayList")
+Q_DECLARE_JNI_CLASS(HashMap, "java/util/HashMap")
+Q_DECLARE_JNI_CLASS(Set, "java/util/Set")
+Q_DECLARE_JNI_CLASS(File, "java/io/File");
+
+// Android specific types
+Q_DECLARE_JNI_CLASS(Uri, "android/net/Uri");
+Q_DECLARE_JNI_CLASS(Parcelable, "android/os/Parcelable");
+Q_DECLARE_JNI_CLASS(Context, "android/content/Context");
+Q_DECLARE_JNI_CLASS(Intent, "android/content/Intent");
+Q_DECLARE_JNI_CLASS(ContentResolver, "android/content/ContentResolver");
+Q_DECLARE_JNI_CLASS(Activity, "android/app/Activity");
+Q_DECLARE_JNI_CLASS(Service, "android/app/Service");
+
+#define QT_DECLARE_JNI_CLASS_STANDARD_TYPES
+
 QT_END_NAMESPACE
 
-#endif
+#endif // defined(Q_QDOC) || defined(Q_OS_ANDROID)
 
 #endif // QJNITYPES_H

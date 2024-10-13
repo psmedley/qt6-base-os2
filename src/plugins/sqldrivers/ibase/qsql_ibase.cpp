@@ -3,10 +3,14 @@
 
 #include "qsql_ibase_p.h"
 #include <QtCore/qcoreapplication.h>
+#include <QtCore/qendian.h>
 #include <QtCore/qdatetime.h>
+#include <QtCore/qtimezone.h>
 #include <QtCore/qdeadlinetimer.h>
 #include <QtCore/qdebug.h>
 #include <QtCore/qlist.h>
+#include <QtCore/private/qlocale_tools_p.h>
+#include <QtCore/qloggingcategory.h>
 #include <QtCore/qmap.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qvariant.h>
@@ -20,8 +24,11 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <math.h>
+#include <mutex>
 
 QT_BEGIN_NAMESPACE
+
+static Q_LOGGING_CATEGORY(lcIbase, "qt.sql.ibase")
 
 using namespace Qt::StringLiterals;
 
@@ -36,7 +43,19 @@ using namespace Qt::StringLiterals;
 #define blr_boolean_dtype blr_bool
 #endif
 
-enum { QIBaseChunkSize = SHRT_MAX / 2 };
+#if (defined(QT_SUPPORTS_INT128) || defined(QT_USE_MSVC_INT128)) && (FB_API_VER >= 40)
+#define IBASE_INT128_SUPPORTED
+#endif
+
+constexpr qsizetype QIBaseChunkSize = SHRT_MAX / 2;
+
+#if (FB_API_VER >= 40)
+typedef QMap<quint16, QByteArray> QFbTzIdToIanaIdMap;
+typedef QMap<QByteArray, quint16> QIanaIdToFbTzIdMap;
+Q_GLOBAL_STATIC(QFbTzIdToIanaIdMap, qFbTzIdToIanaIdMap)
+Q_GLOBAL_STATIC(QIanaIdToFbTzIdMap, qIanaIdToFbTzIdMap)
+std::once_flag initTZMappingFlag;
+#endif
 
 static bool getIBaseError(QString& msg, const ISC_STATUS* status, ISC_LONG &sqlcode)
 {
@@ -78,37 +97,46 @@ static void enlargeDA(XSQLDA *&sqlda, int n)
 static void initDA(XSQLDA *sqlda)
 {
     for (int i = 0; i < sqlda->sqld; ++i) {
-        switch (sqlda->sqlvar[i].sqltype & ~1) {
+        XSQLVAR &sqlvar = sqlda->sqlvar[i];
+        const auto sqltype = (sqlvar.sqltype & ~1);
+        switch (sqltype) {
         case SQL_INT64:
         case SQL_LONG:
         case SQL_SHORT:
         case SQL_FLOAT:
         case SQL_DOUBLE:
         case SQL_TIMESTAMP:
+#if (FB_API_VER >= 40)
+        case SQL_TIMESTAMP_TZ:
+#ifdef IBASE_INT128_SUPPORTED
+        case SQL_INT128:
+#endif
+#endif
         case SQL_TYPE_TIME:
         case SQL_TYPE_DATE:
         case SQL_TEXT:
         case SQL_BLOB:
         case SQL_BOOLEAN:
-            sqlda->sqlvar[i].sqldata = new char[sqlda->sqlvar[i].sqllen];
+            sqlvar.sqldata = new char[sqlvar.sqllen];
             break;
         case SQL_ARRAY:
-            sqlda->sqlvar[i].sqldata = new char[sizeof(ISC_QUAD)];
-            memset(sqlda->sqlvar[i].sqldata, 0, sizeof(ISC_QUAD));
+            sqlvar.sqldata = new char[sizeof(ISC_QUAD)];
+            memset(sqlvar.sqldata, 0, sizeof(ISC_QUAD));
             break;
         case SQL_VARYING:
-            sqlda->sqlvar[i].sqldata = new char[sqlda->sqlvar[i].sqllen + sizeof(short)];
+            sqlvar.sqldata = new char[sqlvar.sqllen + sizeof(short)];
             break;
         default:
             // not supported - do not bind.
-            sqlda->sqlvar[i].sqldata = 0;
+            sqlvar.sqldata = 0;
+            qCWarning(lcIbase, "initDA: unknown sqltype: %d", sqltype);
             break;
         }
-        if (sqlda->sqlvar[i].sqltype & 1) {
-            sqlda->sqlvar[i].sqlind = new short[1];
-            *(sqlda->sqlvar[i].sqlind) = 0;
+        if (sqlvar.sqltype & 1) {
+            sqlvar.sqlind = new short[1];
+            *(sqlvar.sqlind) = 0;
         } else {
-            sqlda->sqlvar[i].sqlind = 0;
+            sqlvar.sqlind = 0;
         }
     }
 }
@@ -122,7 +150,7 @@ static void delDA(XSQLDA *&sqlda)
         delete [] sqlda->sqlvar[i].sqldata;
     }
     free(sqlda);
-    sqlda = 0;
+    sqlda = nullptr;
 }
 
 static QMetaType::Type qIBaseTypeName(int iType, bool hasScale)
@@ -139,6 +167,9 @@ static QMetaType::Type qIBaseTypeName(int iType, bool hasScale)
     case blr_sql_date:
         return QMetaType::QDate;
     case blr_timestamp:
+#if (FB_API_VER >= 40)
+    case blr_timestamp_tz:
+#endif
         return QMetaType::QDateTime;
     case blr_blob:
         return QMetaType::QByteArray;
@@ -155,7 +186,7 @@ static QMetaType::Type qIBaseTypeName(int iType, bool hasScale)
     case blr_boolean_dtype:
         return QMetaType::Bool;
     }
-    qWarning("qIBaseTypeName: unknown datatype: %d", iType);
+    qCWarning(lcIbase, "qIBaseTypeName: unknown datatype: %d", iType);
     return QMetaType::UnknownType;
 }
 
@@ -170,10 +201,17 @@ static QMetaType::Type qIBaseTypeName2(int iType, bool hasScale)
         return (hasScale ? QMetaType::Double : QMetaType::Int);
     case SQL_INT64:
         return (hasScale ? QMetaType::Double : QMetaType::LongLong);
+#ifdef IBASE_INT128_SUPPORTED
+    case SQL_INT128:
+        return (hasScale ? QMetaType::Double : QMetaType::LongLong);
+#endif
     case SQL_FLOAT:
     case SQL_DOUBLE:
         return QMetaType::Double;
     case SQL_TIMESTAMP:
+#if (FB_API_VER >= 40)
+    case SQL_TIMESTAMP_TZ:
+#endif
         return QMetaType::QDateTime;
     case SQL_TYPE_TIME:
         return QMetaType::QTime;
@@ -186,69 +224,84 @@ static QMetaType::Type qIBaseTypeName2(int iType, bool hasScale)
     case SQL_BOOLEAN:
         return QMetaType::Bool;
     default:
-        return QMetaType::UnknownType;
+        break;
     }
+    qCWarning(lcIbase, "qIBaseTypeName: unknown datatype: %d", iType);
+    return QMetaType::UnknownType;
 }
 
-static ISC_TIMESTAMP toTimeStamp(const QDateTime &dt)
+// InterBase and FireBird use the modified Julian Date with 1858-11-17 as day 0.
+static constexpr auto s_ibaseBaseDate = QDate::fromJulianDay(2400001);
+
+static inline ISC_TIMESTAMP toTimeStamp(const QDateTime &dt)
 {
-    static const QTime midnight(0, 0, 0, 0);
-    static const QDate basedate(1858, 11, 17);
     ISC_TIMESTAMP ts;
-    ts.timestamp_time = midnight.msecsTo(dt.time()) * 10;
-    ts.timestamp_date = basedate.daysTo(dt.date());
+    ts.timestamp_time = dt.time().msecsSinceStartOfDay() * 10;
+    ts.timestamp_date = s_ibaseBaseDate.daysTo(dt.date());
     return ts;
 }
 
-static QDateTime fromTimeStamp(char *buffer)
+static inline QDateTime fromTimeStamp(const char *buffer)
 {
-    static const QDate bd(1858, 11, 17);
-    QTime t(0, 0);
-    QDate d;
-
     // have to demangle the structure ourselves because isc_decode_time
     // strips the msecs
-    t = t.addMSecs(int(((ISC_TIMESTAMP*)buffer)->timestamp_time / 10));
-    d = bd.addDays(int(((ISC_TIMESTAMP*)buffer)->timestamp_date));
-
+    auto timebuf = reinterpret_cast<const ISC_TIMESTAMP *>(buffer);
+    const QTime t = QTime::fromMSecsSinceStartOfDay(timebuf->timestamp_time / 10);
+    const QDate d = s_ibaseBaseDate.addDays(timebuf->timestamp_date);
     return QDateTime(d, t);
 }
 
-static ISC_TIME toTime(QTime t)
+#if (FB_API_VER >= 40)
+static inline QDateTime fromTimeStampTz(const char *buffer)
 {
-    static const QTime midnight(0, 0, 0, 0);
-    return (ISC_TIME)midnight.msecsTo(t) * 10;
-}
-
-static QTime fromTime(char *buffer)
-{
-    QTime t(0, 0);
     // have to demangle the structure ourselves because isc_decode_time
     // strips the msecs
-    t = t.addMSecs(int((*(ISC_TIME*)buffer) / 10));
+    auto timebuf = reinterpret_cast<const ISC_TIMESTAMP_TZ *>(buffer);
+    const QTime t = QTime::fromMSecsSinceStartOfDay(timebuf->utc_timestamp.timestamp_time / 10);
+    const QDate d = s_ibaseBaseDate.addDays(timebuf->utc_timestamp.timestamp_date);
+    quint16 fpTzID = timebuf->time_zone;
 
-    return t;
+    QByteArray timeZoneName = qFbTzIdToIanaIdMap()->value(fpTzID);
+    if (!timeZoneName.isEmpty())
+        return QDateTime(d, t, QTimeZone(timeZoneName));
+    else
+        return {};
 }
 
-static ISC_DATE toDate(QDate t)
+static inline ISC_TIMESTAMP_TZ toTimeStampTz(const QDateTime &dt)
 {
-    static const QDate basedate(1858, 11, 17);
-    ISC_DATE date;
+    ISC_TIMESTAMP_TZ ts;
+    ts.utc_timestamp.timestamp_time = dt.time().msecsSinceStartOfDay() * 10;
+    ts.utc_timestamp.timestamp_date = s_ibaseBaseDate.daysTo(dt.date());
+    ts.time_zone = qIanaIdToFbTzIdMap()->value(dt.timeZone().id().simplified(), 0);
+    return ts;
+}
+#endif
 
-    date = basedate.daysTo(t);
-    return date;
+static inline ISC_TIME toTime(QTime t)
+{
+    return t.msecsSinceStartOfDay() * 10;
 }
 
-static QDate fromDate(char *buffer)
+static inline QTime fromTime(const char *buffer)
 {
-    static const QDate bd(1858, 11, 17);
-    QDate d;
-
     // have to demangle the structure ourselves because isc_decode_time
     // strips the msecs
-    d = bd.addDays(int(((ISC_TIMESTAMP*)buffer)->timestamp_date));
+    const auto timebuf = reinterpret_cast<const ISC_TIME *>(buffer);
+    return QTime::fromMSecsSinceStartOfDay(*timebuf / 10);
+}
 
-    return d;
+static inline ISC_DATE toDate(QDate t)
+{
+    return s_ibaseBaseDate.daysTo(t);
+ }
+
+static inline QDate fromDate(const char *buffer)
+{
+    // have to demangle the structure ourselves because isc_decode_time
+    // strips the msecs
+    const auto tsbuf = reinterpret_cast<const ISC_TIMESTAMP *>(buffer);
+    return s_ibaseBaseDate.addDays(int(tsbuf->timestamp_date));
 }
 
 struct QIBaseEventBuffer {
@@ -281,6 +334,27 @@ public:
                                   sqlcode != -1 ? QString::number(sqlcode) : QString()));
         return true;
     }
+
+#if (FB_API_VER >= 40)
+    void initTZMappingCache()
+    {
+        Q_Q(QIBaseDriver);
+        QSqlQuery qry(q->createResult());
+        qry.setForwardOnly(true);
+        qry.exec(QString("select * from RDB$TIME_ZONES"_L1));
+        if (qry.lastError().isValid()) {
+            qCInfo(lcIbase) << "Table 'RDB$TIME_ZONES' not found - not timezone support available";
+            return;
+        }
+
+        while (qry.next()) {
+            quint16 fbTzId = qry.value(0).value<quint16>();
+            QByteArray ianaId = qry.value(1).toByteArray().simplified();
+            qFbTzIdToIanaIdMap()->insert(fbTzId, ianaId);
+            qIanaIdToFbTzIdMap()->insert(ianaId, fbTzId);
+        }
+    }
+#endif
 
 public:
     isc_db_handle ibase;
@@ -320,6 +394,76 @@ protected:
     int size() override;
     int numRowsAffected() override;
     QSqlRecord record() const override;
+
+    template<typename T>
+    static QString numberToHighPrecision(T val, int scale)
+    {
+        const bool negative = val < 0;
+        QString number;
+#ifdef IBASE_INT128_SUPPORTED
+        if constexpr (std::is_same_v<qinternalint128, T>) {
+            number = negative ? qint128toBasicLatin(val * -1)
+                              : qint128toBasicLatin(val);
+        } else
+#endif
+            number = negative ? QString::number(qAbs(val))
+                              : QString::number(val);
+        auto len = number.size();
+        scale *= -1;
+        if (scale >= len) {
+            number = QString(scale - len + 1, u'0') + number;
+            len = number.size();
+        }
+        const auto sepPos = len - scale;
+        number = number.left(sepPos) + u'.' + number.mid(sepPos);
+        if (negative)
+            number = u'-' + number;
+        return number;
+    }
+
+    template<typename T>
+    QVariant applyScale(T val, int scale) const
+    {
+        if (scale >= 0)
+            return QVariant(val);
+
+        switch (numericalPrecisionPolicy()) {
+        case QSql::LowPrecisionInt32:
+            return QVariant(qint32(val * pow(10.0, scale)));
+        case QSql::LowPrecisionInt64:
+            return QVariant(qint64(val * pow(10.0, scale)));
+        case QSql::LowPrecisionDouble:
+            return QVariant(double(val * pow(10.0, scale)));
+        case QSql::HighPrecision:
+            return QVariant(numberToHighPrecision(val, scale));
+        }
+        return QVariant(val);
+    }
+
+    template<typename T>
+    void setWithScale(const QVariant &val, int scale, char *data)
+    {
+        auto ptr = reinterpret_cast<T *>(data);
+        if (scale < 0) {
+            double d = floor(0.5 + val.toDouble() * pow(10.0, scale * -1));
+#ifdef IBASE_INT128_SUPPORTED
+            if constexpr (std::is_same_v<qinternalint128, T>) {
+                quint64 lower = quint64(d);
+                quint64 tmp = quint64(std::numeric_limits<quint32>::max()) + 1;
+                d /= tmp;
+                d /= tmp;
+                quint64 higher = quint64(d);
+                qinternalint128 result = higher;
+                result <<= 64;
+                result += lower;
+                *ptr = static_cast<T>(result);
+            } else
+#endif
+                *ptr = static_cast<T>(d);
+        }
+        else
+            *ptr = val.value<T>();
+    }
 };
 
 class QIBaseResultPrivate: public QSqlCachedResultPrivate
@@ -352,9 +496,9 @@ public:
 
     bool isSelect();
     QVariant fetchBlob(ISC_QUAD *bId);
-    bool writeBlob(int i, const QByteArray &ba);
+    bool writeBlob(qsizetype iPos, const QByteArray &ba);
     QVariant fetchArray(int pos, ISC_QUAD *arr);
-    bool writeArray(int i, const QList<QVariant> &list);
+    bool writeArray(qsizetype i, const QList<QVariant> &list);
 public:
     ISC_STATUS status[20];
     isc_tr_handle trans;
@@ -365,6 +509,7 @@ public:
     XSQLDA *sqlda; // output sqlda
     XSQLDA *inda; // input parameters
     int queryType;
+    mutable QSqlRecord cachedRecord;
 };
 
 
@@ -374,8 +519,8 @@ QIBaseResultPrivate::QIBaseResultPrivate(QIBaseResult *q, const QIBaseDriver *dr
       localTransaction(!drv_d_func()->ibase),
       stmt(0),
       ibase(drv_d_func()->ibase),
-      sqlda(0),
-      inda(0),
+      sqlda(nullptr),
+      inda(nullptr),
       queryType(-1)
 {
 }
@@ -396,23 +541,24 @@ void QIBaseResultPrivate::cleanup()
     delDA(inda);
 
     queryType = -1;
+    cachedRecord.clear();
     q->cleanup();
 }
 
-bool QIBaseResultPrivate::writeBlob(int i, const QByteArray &ba)
+bool QIBaseResultPrivate::writeBlob(qsizetype iPos, const QByteArray &ba)
 {
     isc_blob_handle handle = 0;
-    ISC_QUAD *bId = (ISC_QUAD*)inda->sqlvar[i].sqldata;
+    ISC_QUAD *bId = (ISC_QUAD*)inda->sqlvar[iPos].sqldata;
     isc_create_blob2(status, &ibase, &trans, &handle, bId, 0, 0);
     if (!isError(QT_TRANSLATE_NOOP("QIBaseResult", "Unable to create BLOB"),
                  QSqlError::StatementError)) {
-        int i = 0;
+        qsizetype i = 0;
         while (i < ba.size()) {
-            isc_put_segment(status, &handle, qMin(ba.size() - i, int(QIBaseChunkSize)),
-                            const_cast<char*>(ba.data()) + i);
+            isc_put_segment(status, &handle, qMin(ba.size() - i, QIBaseChunkSize),
+                            ba.data() + i);
             if (isError(QT_TRANSLATE_NOOP("QIBaseResult", "Unable to write BLOB")))
                 return false;
-            i += qMin(ba.size() - i, int(QIBaseChunkSize));
+            i += qMin(ba.size() - i, QIBaseChunkSize);
         }
     }
     isc_close_blob(status, &handle);
@@ -429,10 +575,9 @@ QVariant QIBaseResultPrivate::fetchBlob(ISC_QUAD *bId)
         return QVariant();
 
     unsigned short len = 0;
-    QByteArray ba;
-    int chunkSize = QIBaseChunkSize;
-    ba.resize(chunkSize);
-    int read = 0;
+    constexpr auto chunkSize = QIBaseChunkSize;
+    QByteArray ba(chunkSize, Qt::Uninitialized);
+    qsizetype read = 0;
     while (isc_get_segment(status, &handle, &len, chunkSize, ba.data() + read) == 0 || status[1] == isc_segment) {
         read += len;
         ba.resize(read + chunkSize);
@@ -454,9 +599,10 @@ QVariant QIBaseResultPrivate::fetchBlob(ISC_QUAD *bId)
 }
 
 template<typename T>
-static QList<QVariant> toList(char** buf, int count, T* = nullptr)
+static QList<QVariant> toList(const char **buf, int count)
 {
     QList<QVariant> res;
+    res.reserve(count);
     for (int i = 0; i < count; ++i) {
         res.append(*(T*)(*buf));
         *buf += sizeof(T);
@@ -464,8 +610,8 @@ static QList<QVariant> toList(char** buf, int count, T* = nullptr)
     return res;
 }
 
-static char* readArrayBuffer(QList<QVariant>& list, char *buffer, short curDim,
-                             short* numElements, ISC_ARRAY_DESC *arrayDesc)
+static const char *readArrayBuffer(QList<QVariant>& list, const char *buffer, short curDim,
+                                   const short *numElements, ISC_ARRAY_DESC *arrayDesc)
 {
     const short dim = arrayDesc->array_desc_dimensions - 1;
     const unsigned char dataType = arrayDesc->array_desc_dtype;
@@ -493,7 +639,7 @@ static char* readArrayBuffer(QList<QVariant>& list, char *buffer, short curDim,
                 }
                 break; }
             case blr_long:
-                valList = toList<int>(&buffer, numElements[dim], static_cast<int *>(0));
+                valList = toList<int>(&buffer, numElements[dim]);
                 break;
             case blr_short:
                 valList = toList<short>(&buffer, numElements[dim]);
@@ -513,8 +659,16 @@ static char* readArrayBuffer(QList<QVariant>& list, char *buffer, short curDim,
                     buffer += sizeof(ISC_TIMESTAMP);
                 }
                 break;
+#if (FB_API_VER >= 40)
+            case blr_timestamp_tz:
+                for (int i = 0; i < numElements[dim]; ++i) {
+                    valList.append(fromTimeStampTz(buffer));
+                    buffer += sizeof(ISC_TIMESTAMP_TZ);
+                }
+                break;
+#endif
             case blr_sql_time:
-                for(int i = 0; i < numElements[dim]; ++i) {
+                for (int i = 0; i < numElements[dim]; ++i) {
                     valList.append(fromTime(buffer));
                     buffer += sizeof(ISC_TIME);
                 }
@@ -545,8 +699,9 @@ QVariant QIBaseResultPrivate::fetchArray(int pos, ISC_QUAD *arr)
     if (!arr)
         return list;
 
-    QByteArray relname(sqlda->sqlvar[pos].relname, sqlda->sqlvar[pos].relname_length);
-    QByteArray sqlname(sqlda->sqlvar[pos].sqlname, sqlda->sqlvar[pos].sqlname_length);
+    const XSQLVAR &sqlvar = sqlda->sqlvar[pos];
+    const auto relname = QByteArray::fromRawData(sqlvar.relname, sqlvar.relname_length);
+    const auto sqlname = QByteArray::fromRawData(sqlvar.sqlname, sqlvar.sqlname_length);
 
     isc_array_lookup_bounds(status, &ibase, &trans, relname.data(), sqlname.data(), &desc);
     if (isError(QT_TRANSLATE_NOOP("QIBaseResult", "Could not find array"),
@@ -554,19 +709,18 @@ QVariant QIBaseResultPrivate::fetchArray(int pos, ISC_QUAD *arr)
         return list;
 
 
-    int arraySize = 1, subArraySize;
+    int arraySize = 1;
     short dimensions = desc.array_desc_dimensions;
     QVarLengthArray<short> numElements(dimensions);
 
     for(int i = 0; i < dimensions; ++i) {
-        subArraySize = (desc.array_desc_bounds[i].array_bound_upper -
-                      desc.array_desc_bounds[i].array_bound_lower + 1);
+        short subArraySize = (desc.array_desc_bounds[i].array_bound_upper -
+                              desc.array_desc_bounds[i].array_bound_lower + 1);
         numElements[i] = subArraySize;
         arraySize = subArraySize * arraySize;
     }
 
     ISC_LONG bufLen;
-    QByteArray ba;
     /* varying arrayelements are stored with 2 trailing null bytes
        indicating the length of the string
      */
@@ -578,14 +732,13 @@ QVariant QIBaseResultPrivate::fetchArray(int pos, ISC_QUAD *arr)
         bufLen = desc.array_desc_length *  arraySize;
     }
 
-
-    ba.resize(int(bufLen));
+    QByteArray ba(bufLen, Qt::Uninitialized);
     isc_array_get_slice(status, &ibase, &trans, arr, &desc, ba.data(), &bufLen);
     if (isError(QT_TRANSLATE_NOOP("QIBaseResult", "Could not get array data"),
                 QSqlError::StatementError))
         return list;
 
-    readArrayBuffer(list, ba.data(), 0, numElements.data(), &desc);
+    readArrayBuffer(list, ba.constData(), 0, numElements.constData(), &desc);
 
     return QVariant(list);
 }
@@ -593,9 +746,8 @@ QVariant QIBaseResultPrivate::fetchArray(int pos, ISC_QUAD *arr)
 template<typename T>
 static char* fillList(char *buffer, const QList<QVariant> &list, T* = nullptr)
 {
-    for (int i = 0; i < list.size(); ++i) {
-        T val;
-        val = qvariant_cast<T>(list.at(i));
+    for (const auto &elem : list) {
+        T val = qvariant_cast<T>(elem);
         memcpy(buffer, &val, sizeof(T));
         buffer += sizeof(T);
     }
@@ -605,11 +757,9 @@ static char* fillList(char *buffer, const QList<QVariant> &list, T* = nullptr)
 template<>
 char* fillList<float>(char *buffer, const QList<QVariant> &list, float*)
 {
-    for (int i = 0; i < list.size(); ++i) {
-        double val;
-        float val2 = 0;
-        val = qvariant_cast<double>(list.at(i));
-        val2 = (float)val;
+    for (const auto &elem : list) {
+        double val = qvariant_cast<double>(elem);
+        float val2 = (float)val;
         memcpy(buffer, &val2, sizeof(float));
         buffer += sizeof(float);
     }
@@ -625,16 +775,16 @@ static char* qFillBufferWithString(char *buffer, const QString& string,
         if (str.length() < buflen)
             buflen = str.length();
         if (array) { // interbase stores varying arrayelements different than normal varying elements
-            memcpy(buffer, str.data(), buflen);
+            memcpy(buffer, str.constData(), buflen);
             memset(buffer + buflen, 0, tmpBuflen - buflen);
         } else {
             *(short*)buffer = buflen; // first two bytes is the length
-            memcpy(buffer + sizeof(short), str.data(), buflen);
+            memcpy(buffer + sizeof(short), str.constData(), buflen);
         }
         buffer += tmpBuflen;
     } else {
         str = str.leftJustified(buflen, ' ', true);
-        memcpy(buffer, str.data(), buflen);
+        memcpy(buffer, str.constData(), buflen);
         buffer += buflen;
     }
     return buffer;
@@ -644,7 +794,6 @@ static char* createArrayBuffer(char *buffer, const QList<QVariant> &list,
                                QMetaType::Type type, short curDim, ISC_ARRAY_DESC *arrayDesc,
                                QString& error)
 {
-    int i;
     ISC_ARRAY_BOUND *bounds = arrayDesc->array_desc_bounds;
     short dim = arrayDesc->array_desc_dimensions - 1;
 
@@ -652,21 +801,24 @@ static char* createArrayBuffer(char *buffer, const QList<QVariant> &list,
                     bounds[curDim].array_bound_lower + 1);
 
     if (list.size() != elements) { // size mismatch
-        error = "Expected size: %1. Supplied size: %2"_L1;
-        error = "Array size mismatch. Fieldname: %1 "_L1
-                + error.arg(elements).arg(list.size());
+        error = QCoreApplication::translate(
+                    "QIBaseResult",
+                    "Array size mismatch. Field name: %3, expected size: %1. Supplied size: %2")
+                .arg(elements).arg(list.size());
         return 0;
     }
 
     if (curDim != dim) {
-        for(i = 0; i < list.size(); ++i) {
+        for (const auto &elem : list) {
 
-          if (list.at(i).typeId() != QMetaType::QVariantList) { // dimensions mismatch
-              error = "Array dimensons mismatch. Fieldname: %1"_L1;
+          if (elem.typeId() != QMetaType::QVariantList) { // dimensions mismatch
+              error = QCoreApplication::translate(
+                          "QIBaseResult",
+                          "Array dimensions mismatch. Field name: %1");
               return 0;
           }
 
-          buffer = createArrayBuffer(buffer, list.at(i).toList(), type, curDim + 1,
+          buffer = createArrayBuffer(buffer, elem.toList(), type, curDim + 1,
                                      arrayDesc, error);
           if (!buffer)
               return 0;
@@ -693,29 +845,40 @@ static char* createArrayBuffer(char *buffer, const QList<QVariant> &list,
             buffer = fillList<quint64>(buffer, list);
             break;
         case QMetaType::QString:
-            for (i = 0; i < list.size(); ++i)
-                buffer = qFillBufferWithString(buffer, list.at(i).toString(),
+            for (const auto &elem : list)
+                buffer = qFillBufferWithString(buffer, elem.toString(),
                                                arrayDesc->array_desc_length,
                                                arrayDesc->array_desc_dtype == blr_varying,
                                                true);
             break;
         case QMetaType::QDate:
-            for (i = 0; i < list.size(); ++i) {
-                *((ISC_DATE*)buffer) = toDate(list.at(i).toDate());
+            for (const auto &elem : list) {
+                *((ISC_DATE*)buffer) = toDate(elem.toDate());
                 buffer += sizeof(ISC_DATE);
             }
             break;
         case QMetaType::QTime:
-            for (i = 0; i < list.size(); ++i) {
-                *((ISC_TIME*)buffer) = toTime(list.at(i).toTime());
+            for (const auto &elem : list) {
+                *((ISC_TIME*)buffer) = toTime(elem.toTime());
                 buffer += sizeof(ISC_TIME);
             }
             break;
-
         case QMetaType::QDateTime:
-            for (i = 0; i < list.size(); ++i) {
-                *((ISC_TIMESTAMP*)buffer) = toTimeStamp(list.at(i).toDateTime());
-                buffer += sizeof(ISC_TIMESTAMP);
+            for (const auto &elem : list) {
+                switch (arrayDesc->array_desc_dtype) {
+                case blr_timestamp:
+                    *((ISC_TIMESTAMP*)buffer) = toTimeStamp(elem.toDateTime());
+                    buffer += sizeof(ISC_TIMESTAMP);
+                    break;
+#if (FB_API_VER >= 40)
+                case blr_timestamp_tz:
+                    *((ISC_TIMESTAMP_TZ*)buffer) = toTimeStampTz(elem.toDateTime());
+                    buffer += sizeof(ISC_TIMESTAMP_TZ);
+                    break;
+#endif
+                default:
+                    break;
+                }
             }
             break;
         case QMetaType::Bool:
@@ -728,15 +891,16 @@ static char* createArrayBuffer(char *buffer, const QList<QVariant> &list,
     return buffer;
 }
 
-bool QIBaseResultPrivate::writeArray(int column, const QList<QVariant> &list)
+bool QIBaseResultPrivate::writeArray(qsizetype column, const QList<QVariant> &list)
 {
     Q_Q(QIBaseResult);
     QString error;
-    ISC_QUAD *arrayId = (ISC_QUAD*) inda->sqlvar[column].sqldata;
     ISC_ARRAY_DESC desc;
 
-    QByteArray relname(inda->sqlvar[column].relname, inda->sqlvar[column].relname_length);
-    QByteArray sqlname(inda->sqlvar[column].sqlname, inda->sqlvar[column].sqlname_length);
+    XSQLVAR &sqlvar = inda->sqlvar[column];
+    ISC_QUAD *arrayId = (ISC_QUAD*) sqlvar.sqldata;
+    const auto relname = QByteArray::fromRawData(sqlvar.relname, sqlvar.relname_length);
+    const auto sqlname = QByteArray::fromRawData(sqlvar.sqlname, sqlvar.sqlname_length);
 
     isc_array_lookup_bounds(status, &ibase, &trans, relname.data(), sqlname.data(), &desc);
     if (isError(QT_TRANSLATE_NOOP("QIBaseResult", "Could not find array"),
@@ -745,7 +909,6 @@ bool QIBaseResultPrivate::writeArray(int column, const QList<QVariant> &list)
 
     short arraySize = 1;
     ISC_LONG bufLen;
-    QList<QVariant> subList = list;
 
     short dimensions = desc.array_desc_dimensions;
     for(int i = 0; i < dimensions; ++i) {
@@ -761,20 +924,21 @@ bool QIBaseResultPrivate::writeArray(int column, const QList<QVariant> &list)
         desc.array_desc_length += 2;
 
     bufLen = desc.array_desc_length * arraySize;
-    QByteArray ba;
-    ba.resize(int(bufLen));
+    QByteArray ba(bufLen, Qt::Uninitialized);
 
     if (list.size() > arraySize) {
-        error = "Array size mismatch: size of %1 is %2, size of provided list is %3"_L1;
+        error = QCoreApplication::translate(
+                    "QIBaseResult",
+                    "Array size mismatch: size of %1 is %2, size of provided list is %3");
         error = error.arg(QLatin1StringView(sqlname)).arg(arraySize).arg(list.size());
-        q->setLastError(QSqlError(error, ""_L1, QSqlError::StatementError));
+        q->setLastError(QSqlError(error, {}, QSqlError::StatementError));
         return false;
     }
 
     if (!createArrayBuffer(ba.data(), list,
-                           qIBaseTypeName(desc.array_desc_dtype, inda->sqlvar[column].sqlscale < 0),
+                           qIBaseTypeName(desc.array_desc_dtype, sqlvar.sqlscale < 0),
                            0, &desc, error)) {
-        q->setLastError(QSqlError(error.arg(QLatin1StringView(sqlname)), ""_L1,
+        q->setLastError(QSqlError(error.arg(QLatin1StringView(sqlname)), {},
                         QSqlError::StatementError));
         return false;
     }
@@ -847,7 +1011,7 @@ QIBaseResult::QIBaseResult(const QIBaseDriver *db)
 bool QIBaseResult::prepare(const QString& query)
 {
     Q_D(QIBaseResult);
-//     qDebug("prepare: %s", qPrintable(query));
+//     qDebug("prepare: %ls", qUtf16Printable(query));
     if (!driver() || !driver()->isOpen() || driver()->isOpenError())
         return false;
     d->cleanup();
@@ -856,13 +1020,13 @@ bool QIBaseResult::prepare(const QString& query)
 
     createDA(d->sqlda);
     if (d->sqlda == (XSQLDA*)0) {
-        qWarning()<<"QIOBaseResult: createDA(): failed to allocate memory";
+        qCWarning(lcIbase) << "QIOBaseResult: createDA(): failed to allocate memory";
         return false;
     }
 
     createDA(d->inda);
     if (d->inda == (XSQLDA*)0){
-        qWarning()<<"QIOBaseResult: createDA():  failed to allocate memory";
+        qCWarning(lcIbase) << "QIOBaseResult: createDA():  failed to allocate memory";
         return false;
     }
 
@@ -886,7 +1050,7 @@ bool QIBaseResult::prepare(const QString& query)
     if (d->inda->sqld > d->inda->sqln) {
         enlargeDA(d->inda, d->inda->sqld);
         if (d->inda == (XSQLDA*)0) {
-            qWarning()<<"QIOBaseResult: enlargeDA(): failed to allocate memory";
+            qCWarning(lcIbase) << "QIOBaseResult: enlargeDA(): failed to allocate memory";
             return false;
         }
 
@@ -900,7 +1064,7 @@ bool QIBaseResult::prepare(const QString& query)
         // need more field descriptors
         enlargeDA(d->sqlda, d->sqlda->sqld);
         if (d->sqlda == (XSQLDA*)0) {
-            qWarning()<<"QIOBaseResult: enlargeDA(): failed to allocate memory";
+            qCWarning(lcIbase) << "QIOBaseResult: enlargeDA(): failed to allocate memory";
             return false;
         }
 
@@ -920,7 +1084,6 @@ bool QIBaseResult::prepare(const QString& query)
     return true;
 }
 
-
 bool QIBaseResult::exec()
 {
     Q_D(QIBaseResult);
@@ -936,84 +1099,80 @@ bool QIBaseResult::exec()
 
     if (d->inda) {
         const QList<QVariant> &values = boundValues();
-        int i;
         if (values.count() > d->inda->sqld) {
-            qWarning() << "QIBaseResult::exec: Parameter mismatch, expected"_L1 <<
-                          d->inda->sqld << ", got"_L1 << values.count() <<
-                          "parameters"_L1;
+            qCWarning(lcIbase) << "QIBaseResult::exec: Parameter mismatch, expected"_L1
+                               << d->inda->sqld << ", got"_L1 << values.count()
+                               << "parameters"_L1;
             return false;
         }
-        int para = 0;
-        for (i = 0; i < values.count(); ++i) {
-            para = i;
-            if (!d->inda->sqlvar[para].sqldata)
+        for (qsizetype para = 0; para < values.count(); ++para) {
+            const XSQLVAR &sqlvar = d->inda->sqlvar[para];
+            if (!sqlvar.sqldata)
                 // skip unknown datatypes
                 continue;
-            const QVariant val(values[i]);
-            if (d->inda->sqlvar[para].sqltype & 1) {
+            const QVariant &val = values[para];
+            if (sqlvar.sqltype & 1) {
                 if (QSqlResultPrivate::isVariantNull(val)) {
                     // set null indicator
-                    *(d->inda->sqlvar[para].sqlind) = -1;
+                    *(sqlvar.sqlind) = -1;
                     // and set the value to 0, otherwise it would count as empty string.
                     // it seems to be working with just setting sqlind to -1
-                    //*((char*)d->inda->sqlvar[para].sqldata) = 0;
+                    //*((char*)sqlvar.sqldata) = 0;
                     continue;
                 }
                 // a value of 0 means non-null.
-                *(d->inda->sqlvar[para].sqlind) = 0;
+                *(sqlvar.sqlind) = 0;
             } else {
                 if (QSqlResultPrivate::isVariantNull(val)) {
-                    qWarning() << "QIBaseResult::exec: Null value replaced by default (zero)"_L1
-                               << "value for type of column"_L1 << d->inda->sqlvar[para].ownname
-                               << ", which is not nullable."_L1;
+                    qCWarning(lcIbase) << "QIBaseResult::exec: Null value replaced by default (zero)"_L1
+                                       << "value for type of column"_L1 << sqlvar.ownname
+                                       << ", which is not nullable."_L1;
                 }
             }
-            switch(d->inda->sqlvar[para].sqltype & ~1) {
+            const auto sqltype = sqlvar.sqltype & ~1;
+            switch (sqltype) {
             case SQL_INT64:
-                if (d->inda->sqlvar[para].sqlscale < 0)
-                    *((qint64*)d->inda->sqlvar[para].sqldata) =
-                        (qint64)floor(0.5 + val.toDouble() * pow(10.0, d->inda->sqlvar[para].sqlscale * -1));
-                else
-                    *((qint64*)d->inda->sqlvar[para].sqldata) = val.toLongLong();
+                setWithScale<qint64>(val, sqlvar.sqlscale, sqlvar.sqldata);
                 break;
+#ifdef IBASE_INT128_SUPPORTED
+            case SQL_INT128:
+                setWithScale<qinternalint128>(val, sqlvar.sqlscale,
+                                              sqlvar.sqldata);
+                break;
+#endif
             case SQL_LONG:
-                if (d->inda->sqlvar[para].sqllen == 4) {
-                    if (d->inda->sqlvar[para].sqlscale < 0)
-                        *((qint32*)d->inda->sqlvar[para].sqldata) =
-                            (qint32)floor(0.5 + val.toDouble() * pow(10.0, d->inda->sqlvar[para].sqlscale * -1));
-                    else
-                        *((qint32*)d->inda->sqlvar[para].sqldata) = (qint32)val.toInt();
-                } else {
-                    *((qint64*)d->inda->sqlvar[para].sqldata) = val.toLongLong();
-                }
+                if (sqlvar.sqllen == 4)
+                    setWithScale<qint32>(val, sqlvar.sqlscale, sqlvar.sqldata);
+                else
+                    setWithScale<qint64>(val, 0, sqlvar.sqldata);
                 break;
             case SQL_SHORT:
-                if (d->inda->sqlvar[para].sqlscale < 0)
-                    *((short*)d->inda->sqlvar[para].sqldata) =
-                        (short)floor(0.5 + val.toDouble() * pow(10.0, d->inda->sqlvar[para].sqlscale * -1));
-                else
-                    *((short*)d->inda->sqlvar[para].sqldata) = (short)val.toInt();
+                setWithScale<qint16>(val, sqlvar.sqlscale, sqlvar.sqldata);
                 break;
             case SQL_FLOAT:
-                *((float*)d->inda->sqlvar[para].sqldata) = (float)val.toDouble();
+                *((float*)sqlvar.sqldata) = val.toFloat();
                 break;
             case SQL_DOUBLE:
-                *((double*)d->inda->sqlvar[para].sqldata) = val.toDouble();
+                *((double*)sqlvar.sqldata) = val.toDouble();
                 break;
             case SQL_TIMESTAMP:
-                *((ISC_TIMESTAMP*)d->inda->sqlvar[para].sqldata) = toTimeStamp(val.toDateTime());
+                *((ISC_TIMESTAMP*)sqlvar.sqldata) = toTimeStamp(val.toDateTime());
                 break;
+#if (FB_API_VER >= 40)
+            case SQL_TIMESTAMP_TZ:
+               *((ISC_TIMESTAMP_TZ*)sqlvar.sqldata) = toTimeStampTz(val.toDateTime());
+               break;
+#endif
             case SQL_TYPE_TIME:
-                *((ISC_TIME*)d->inda->sqlvar[para].sqldata) = toTime(val.toTime());
+                *((ISC_TIME*)sqlvar.sqldata) = toTime(val.toTime());
                 break;
             case SQL_TYPE_DATE:
-                *((ISC_DATE*)d->inda->sqlvar[para].sqldata) = toDate(val.toDate());
+                *((ISC_DATE*)sqlvar.sqldata) = toDate(val.toDate());
                 break;
             case SQL_VARYING:
             case SQL_TEXT:
-                qFillBufferWithString(d->inda->sqlvar[para].sqldata, val.toString(),
-                                      d->inda->sqlvar[para].sqllen,
-                                      (d->inda->sqlvar[para].sqltype & ~1) == SQL_VARYING, false);
+                qFillBufferWithString(sqlvar.sqldata, val.toString(), sqlvar.sqllen,
+                                      sqltype == SQL_VARYING, false);
                 break;
             case SQL_BLOB:
                     ok &= d->writeBlob(para, val.toByteArray());
@@ -1022,11 +1181,11 @@ bool QIBaseResult::exec()
                     ok &= d->writeArray(para, val.toList());
                     break;
             case SQL_BOOLEAN:
-                *((bool*)d->inda->sqlvar[para].sqldata) = val.toBool();
+                *((bool*)sqlvar.sqldata) = val.toBool();
                 break;
             default:
-                    qWarning("QIBaseResult::exec: Unknown datatype %d",
-                             d->inda->sqlvar[para].sqltype & ~1);
+                    qCWarning(lcIbase, "QIBaseResult::exec: Unknown datatype %d",
+                              sqltype);
                     break;
             }
         }
@@ -1104,15 +1263,12 @@ bool QIBaseResult::gotoNext(QSqlCachedResult::ValueCache& row, int rowIdx)
 
     for (int i = 0; i < d->sqlda->sqld; ++i) {
         int idx = rowIdx + i;
-        char *buf = d->sqlda->sqlvar[i].sqldata;
-        int size = d->sqlda->sqlvar[i].sqllen;
-        Q_ASSERT(buf);
+        const XSQLVAR &sqlvar = d->sqlda->sqlvar[i];
 
-        if ((d->sqlda->sqlvar[i].sqltype & 1) && *d->sqlda->sqlvar[i].sqlind) {
+        if ((sqlvar.sqltype & 1) && *sqlvar.sqlind) {
             // null value
             QVariant v;
-            v.convert(QMetaType(qIBaseTypeName2(d->sqlda->sqlvar[i].sqltype,
-                                                d->sqlda->sqlvar[i].sqlscale < 0)));
+            v.convert(QMetaType(qIBaseTypeName2(sqlvar.sqltype, sqlvar.sqlscale < 0)));
             if (v.userType() == QMetaType::Double) {
                 switch(numericalPrecisionPolicy()) {
                 case QSql::LowPrecisionInt32:
@@ -1133,32 +1289,47 @@ bool QIBaseResult::gotoNext(QSqlCachedResult::ValueCache& row, int rowIdx)
             continue;
         }
 
-        switch(d->sqlda->sqlvar[i].sqltype & ~1) {
+        const char *buf = sqlvar.sqldata;
+        int size = sqlvar.sqllen;
+        Q_ASSERT(buf);
+        const auto sqltype = sqlvar.sqltype & ~1;
+        switch (sqltype) {
         case SQL_VARYING:
             // pascal strings - a short with a length information followed by the data
             row[idx] = QString::fromUtf8(buf + sizeof(short), *(short*)buf);
             break;
-        case SQL_INT64:
-            if (d->sqlda->sqlvar[i].sqlscale < 0)
-                row[idx] = *(qint64*)buf * pow(10.0, d->sqlda->sqlvar[i].sqlscale);
-            else
-                row[idx] = QVariant(*(qint64*)buf);
+        case SQL_INT64: {
+            Q_ASSERT(sqlvar.sqllen == sizeof(qint64));
+            const auto val = *(qint64 *)buf;
+            const auto scale = sqlvar.sqlscale;
+            row[idx] = applyScale(val, scale);
             break;
+        }
+#ifdef IBASE_INT128_SUPPORTED
+        case SQL_INT128: {
+            Q_ASSERT(sqlvar.sqllen == sizeof(qinternalint128));
+            const qinternalint128 val128 = qFromUnaligned<qinternalint128>(buf);
+            const auto scale = sqlvar.sqlscale;
+            row[idx] = numberToHighPrecision(val128, scale);
+            if (numericalPrecisionPolicy() != QSql::HighPrecision)
+                row[idx] = applyScale(row[idx].toDouble(), 0);
+            break;
+        }
+#endif
         case SQL_LONG:
-            if (d->sqlda->sqlvar[i].sqllen == 4)
-                if (d->sqlda->sqlvar[i].sqlscale < 0)
-                    row[idx] = QVariant(*(qint32*)buf * pow(10.0, d->sqlda->sqlvar[i].sqlscale));
-                else
-                    row[idx] = QVariant(*(qint32*)buf);
-            else
+            if (sqlvar.sqllen == 4) {
+                const auto val = *(qint32 *)buf;
+                const auto scale = sqlvar.sqlscale;
+                row[idx] = applyScale(val, scale);
+            } else
                 row[idx] = QVariant(*(qint64*)buf);
             break;
-        case SQL_SHORT:
-            if (d->sqlda->sqlvar[i].sqlscale < 0)
-                row[idx] = QVariant(long((*(short*)buf)) * pow(10.0, d->sqlda->sqlvar[i].sqlscale));
-            else
-                row[idx] = QVariant(int((*(short*)buf)));
+        case SQL_SHORT: {
+            const auto val = *(short *)buf;
+            const auto scale = sqlvar.sqlscale;
+            row[idx] = applyScale(val, scale);
             break;
+        }
         case SQL_FLOAT:
             row[idx] = QVariant(double((*(float*)buf)));
             break;
@@ -1186,31 +1357,16 @@ bool QIBaseResult::gotoNext(QSqlCachedResult::ValueCache& row, int rowIdx)
         case SQL_BOOLEAN:
             row[idx] = QVariant(bool((*(bool*)buf)));
             break;
+#if (FB_API_VER >= 40)
+        case SQL_TIMESTAMP_TZ:
+            row[idx] = fromTimeStampTz(buf);
+            break;
+#endif
         default:
             // unknown type - don't even try to fetch
+            qCWarning(lcIbase, "gotoNext: unknown sqltype: %d", sqltype);
             row[idx] = QVariant();
             break;
-        }
-        if (d->sqlda->sqlvar[i].sqlscale < 0) {
-            QVariant v = row[idx];
-            switch(numericalPrecisionPolicy()) {
-            case QSql::LowPrecisionInt32:
-                if (v.convert(QMetaType(QMetaType::Int)))
-                    row[idx]=v;
-                break;
-            case QSql::LowPrecisionInt64:
-                if (v.convert(QMetaType(QMetaType::LongLong)))
-                    row[idx]=v;
-                break;
-            case QSql::LowPrecisionDouble:
-                if (v.convert(QMetaType(QMetaType::Double)))
-                    row[idx]=v;
-                break;
-            case QSql::HighPrecision:
-                if (v.convert(QMetaType(QMetaType::QString)))
-                    row[idx]=v;
-                break;
-            }
         }
     }
 
@@ -1292,7 +1448,7 @@ int QIBaseResult::numRowsAffected()
         bIsProcedure = true; // will sum all changes
         break;
     default:
-        qWarning() << "numRowsAffected: Unknown statement type (" << d->queryType << ")";
+        qCWarning(lcIbase) << "numRowsAffected: Unknown statement type (" << d->queryType << ")";
         return -1;
     }
 
@@ -1326,13 +1482,14 @@ int QIBaseResult::numRowsAffected()
 QSqlRecord QIBaseResult::record() const
 {
     Q_D(const QIBaseResult);
-    QSqlRecord rec;
     if (!isActive() || !d->sqlda)
-        return rec;
+        return {};
 
-    XSQLVAR v;
+    if (!d->cachedRecord.isEmpty())
+        return d->cachedRecord;
+
     for (int i = 0; i < d->sqlda->sqld; ++i) {
-        v = d->sqlda->sqlvar[i];
+        const XSQLVAR &v = d->sqlda->sqlvar[i];
         QSqlField f(QString::fromLatin1(v.aliasname, v.aliasname_length).simplified(),
                     QMetaType(qIBaseTypeName2(v.sqltype, v.sqlscale < 0)),
                                     QString::fromLatin1(v.relname, v.relname_length));
@@ -1358,10 +1515,9 @@ QSqlRecord QIBaseResult::record() const
                 f.setRequiredStatus(q.value(3).toBool() ? QSqlField::Required : QSqlField::Optional);
             }
         }
-        f.setSqlType(v.sqltype);
-        rec.append(f);
+        d->cachedRecord.append(f);
     }
-    return rec;
+    return d->cachedRecord;
 }
 
 QVariant QIBaseResult::handle() const
@@ -1414,26 +1570,26 @@ bool QIBaseDriver::hasFeature(DriverFeature f) const
     return false;
 }
 
-bool QIBaseDriver::open(const QString & db,
-          const QString & user,
-          const QString & password,
-          const QString & host,
-          int port,
-          const QString & connOpts)
+bool QIBaseDriver::open(const QString &db,
+                        const QString &user,
+                        const QString &password,
+                        const QString &host,
+                        int port,
+                        const QString &connOpts)
 {
     Q_D(QIBaseDriver);
     if (isOpen())
         close();
 
-    const QStringList opts(connOpts.split(u';', Qt::SkipEmptyParts));
+    const auto opts(QStringView(connOpts).split(u';', Qt::SkipEmptyParts));
 
     QByteArray role;
-    for (int i = 0; i < opts.count(); ++i) {
-        QString tmp(opts.at(i).simplified());
+    for (const auto &opt : opts) {
+        const auto tmp(opt.trimmed());
         qsizetype idx;
         if ((idx = tmp.indexOf(u'=')) != -1) {
-            QString val = tmp.mid(idx + 1).simplified();
-            QString opt = tmp.left(idx).simplified();
+            const auto val = tmp.mid(idx + 1).trimmed();
+            const auto opt = tmp.left(idx).trimmed().toString();
             if (opt.toUpper() == "ISC_DPB_SQL_ROLE_NAME"_L1) {
                 role = val.toLocal8Bit();
                 role.truncate(255);
@@ -1452,18 +1608,18 @@ bool QIBaseDriver::open(const QString & db,
     ba.append(char(isc_dpb_version1));
     ba.append(char(isc_dpb_user_name));
     ba.append(char(usr.length()));
-    ba.append(usr.data(), usr.length());
+    ba.append(usr.constData(), usr.length());
     ba.append(char(isc_dpb_password));
     ba.append(char(pass.length()));
-    ba.append(pass.data(), pass.length());
+    ba.append(pass.constData(), pass.length());
     ba.append(char(isc_dpb_lc_ctype));
     ba.append(char(enc.length()));
-    ba.append(enc.data(), enc.length());
+    ba.append(enc.constData(), enc.length());
 
     if (!role.isEmpty()) {
         ba.append(char(isc_dpb_sql_role_name));
         ba.append(char(role.length()));
-        ba.append(role.data(), role.length());
+        ba.append(role.constData(), role.length());
     }
 
     QString portString;
@@ -1475,7 +1631,7 @@ bool QIBaseDriver::open(const QString & db,
         ldb += host + portString + u':';
     ldb += db;
     isc_attach_database(d->status, 0, const_cast<char *>(ldb.toLocal8Bit().constData()),
-                        &d->ibase, ba.size(), ba.data());
+                        &d->ibase, ba.size(), ba.constData());
     if (d->isError(QT_TRANSLATE_NOOP("QIBaseDriver", "Error opening database"),
                    QSqlError::ConnectionError)) {
         setOpenError(true);
@@ -1484,6 +1640,9 @@ bool QIBaseDriver::open(const QString & db,
 
     setOpen(true);
     setOpenError(false);
+#if (FB_API_VER >= 40)
+    std::call_once(initTZMappingFlag, [d](){ d->initTZMappingCache(); });
+#endif
     return true;
 }
 
@@ -1502,13 +1661,6 @@ void QIBaseDriver::close()
                 qFreeEventBuffer(eBuffer);
             }
             d->eventBuffers.clear();
-
-#if defined(FB_API_VER)
-            // TODO check whether this workaround for Firebird crash is still needed
-            QDeadlineTimer timer(500);
-            while (!timer.hasExpired())
-                QCoreApplication::processEvents();
-#endif
         }
 
         isc_detach_database(d->status, &d->ibase);
@@ -1593,8 +1745,8 @@ QStringList QIBaseDriver::tables(QSql::TableType type) const
     q.setForwardOnly(true);
     if (!q.exec("select rdb$relation_name from rdb$relations "_L1 + typeFilter))
         return res;
-    while(q.next())
-            res << q.value(0).toString().simplified();
+    while (q.next())
+        res << q.value(0).toString().simplified();
 
     return res;
 }
@@ -1605,13 +1757,9 @@ QSqlRecord QIBaseDriver::record(const QString& tablename) const
     if (!isOpen())
         return rec;
 
+    const QString table = stripDelimiters(tablename, QSqlDriver::TableName);
     QSqlQuery q(createResult());
     q.setForwardOnly(true);
-    QString table = tablename;
-    if (isIdentifierEscaped(table, QSqlDriver::TableName))
-        table = stripDelimiters(table, QSqlDriver::TableName);
-    else
-        table = table.toUpper();
     q.exec("SELECT a.RDB$FIELD_NAME, b.RDB$FIELD_TYPE, b.RDB$FIELD_LENGTH, "
            "b.RDB$FIELD_SCALE, b.RDB$FIELD_PRECISION, a.RDB$NULL_FLAG "
            "FROM RDB$RELATION_FIELDS a, RDB$FIELDS b "
@@ -1631,7 +1779,6 @@ QSqlRecord QIBaseDriver::record(const QString& tablename) const
             f.setPrecision(0);
         }
         f.setRequired(q.value(5).toInt() > 0);
-        f.setSqlType(type);
 
         rec.append(f);
     }
@@ -1644,12 +1791,7 @@ QSqlIndex QIBaseDriver::primaryIndex(const QString &table) const
     if (!isOpen())
         return index;
 
-    QString tablename = table;
-    if (isIdentifierEscaped(tablename, QSqlDriver::TableName))
-        tablename = stripDelimiters(tablename, QSqlDriver::TableName);
-    else
-        tablename = tablename.toUpper();
-
+    const QString tablename = stripDelimiters(table, QSqlDriver::TableName);
     QSqlQuery q(createResult());
     q.setForwardOnly(true);
     q.exec("SELECT a.RDB$INDEX_NAME, b.RDB$FIELD_NAME, d.RDB$FIELD_TYPE, d.RDB$FIELD_SCALE "
@@ -1744,13 +1886,13 @@ bool QIBaseDriver::subscribeToNotification(const QString &name)
 {
     Q_D(QIBaseDriver);
     if (!isOpen()) {
-        qWarning("QIBaseDriver::subscribeFromNotificationImplementation: database not open.");
+        qCWarning(lcIbase, "QIBaseDriver::subscribeFromNotificationImplementation: database not open.");
         return false;
     }
 
     if (d->eventBuffers.contains(name)) {
-        qWarning("QIBaseDriver::subscribeToNotificationImplementation: already subscribing to '%s'.",
-            qPrintable(name));
+        qCWarning(lcIbase, "QIBaseDriver::subscribeToNotificationImplementation: already subscribing to '%ls'.",
+                  qUtf16Printable(name));
         return false;
     }
 
@@ -1778,7 +1920,7 @@ bool QIBaseDriver::subscribeToNotification(const QString &name)
                    eBuffer->resultBuffer);
 
     if (status[0] == 1 && status[1]) {
-        setLastError(QSqlError(QString::fromLatin1("Could not subscribe to event notifications for %1.").arg(name)));
+        setLastError(QSqlError(tr("Could not subscribe to event notifications for %1.").arg(name)));
         d->eventBuffers.remove(name);
         qFreeEventBuffer(eBuffer);
         return false;
@@ -1791,13 +1933,13 @@ bool QIBaseDriver::unsubscribeFromNotification(const QString &name)
 {
     Q_D(QIBaseDriver);
     if (!isOpen()) {
-        qWarning("QIBaseDriver::unsubscribeFromNotificationImplementation: database not open.");
+        qCWarning(lcIbase, "QIBaseDriver::unsubscribeFromNotificationImplementation: database not open.");
         return false;
     }
 
     if (!d->eventBuffers.contains(name)) {
-        qWarning("QIBaseDriver::QIBaseSubscriptionState not subscribed to '%s'.",
-            qPrintable(name));
+        qCWarning(lcIbase, "QIBaseDriver::QIBaseSubscriptionState not subscribed to '%ls'.",
+                  qUtf16Printable(name));
         return false;
     }
 
@@ -1807,7 +1949,7 @@ bool QIBaseDriver::unsubscribeFromNotification(const QString &name)
     isc_cancel_events(status, &d->ibase, &eBuffer->eventId);
 
     if (status[0] == 1 && status[1]) {
-        setLastError(QSqlError(QString::fromLatin1("Could not unsubscribe from event notifications for %1.").arg(name)));
+        setLastError(QSqlError(tr("Could not unsubscribe from event notifications for %1.").arg(name)));
         return false;
     }
 
@@ -1852,8 +1994,8 @@ void QIBaseDriver::qHandleEventNotification(void *updatedResultBuffer)
                                                                 (&qEventCallback)),
                                    eBuffer->resultBuffer);
             if (Q_UNLIKELY(status[0] == 1 && status[1])) {
-                qCritical("QIBaseDriver::qHandleEventNotification: could not resubscribe to '%s'",
-                    qPrintable(i.key()));
+                qCritical("QIBaseDriver::qHandleEventNotification: could not resubscribe to '%ls'",
+                    qUtf16Printable(i.key()));
             }
 
             return;
@@ -1866,8 +2008,8 @@ QString QIBaseDriver::escapeIdentifier(const QString &identifier, IdentifierType
     QString res = identifier;
     if (!identifier.isEmpty() && !identifier.startsWith(u'"') && !identifier.endsWith(u'"') ) {
         res.replace(u'"', "\"\""_L1);
-        res.prepend(u'"').append(u'"');
         res.replace(u'.', "\".\""_L1);
+        res = u'"' + res + u'"';
     }
     return res;
 }
@@ -1879,3 +2021,5 @@ int QIBaseDriver::maximumIdentifierLength(IdentifierType type) const
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qsql_ibase_p.cpp"

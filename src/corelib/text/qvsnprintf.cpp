@@ -10,10 +10,27 @@
 
 QT_BEGIN_NAMESPACE
 
+/*!
+    \macro QT_NO_QSNPRINTF
+    \since 6.8
+    \relates QByteArray
+
+    Defining this macro removes the availability of the qsnprintf() and
+    qvsnprintf() functions. See the functions' documentation for why you may
+    want to disable them.
+
+    \sa qsnprintf(), qvsnprintf().
+*/
+
 #if !defined(QT_VSNPRINTF) || defined(Q_QDOC)
 
 /*!
+    \fn int qvsnprintf(char *str, size_t n, const char *fmt, va_list ap)
     \relates QByteArray
+
+    \obsolete
+
+    Use C++11's \c{std::vsnprintf()} from \c{<cstdio>} instead.
 
     A portable \c vsnprintf() function. Will call \c ::vsnprintf(), \c
     ::_vsnprintf(), or \c ::vsnprintf_s depending on the system, or
@@ -26,7 +43,9 @@ QT_BEGIN_NAMESPACE
 
     \warning Since vsnprintf() shows different behavior on certain
     platforms, you should not rely on the return value or on the fact
-    that you will always get a 0 terminated string back.
+    that you will always get a 0 terminated string back. There are also
+    differences in how \c{%a} (hex floats) and \c{%ls} (wide strings) are
+    handled on WebAssembly and Android.
 
     Ideally, you should never call this function but use QString::asprintf()
     instead.
@@ -34,6 +53,7 @@ QT_BEGIN_NAMESPACE
     \sa qsnprintf(), QString::asprintf()
 */
 
+Q_CORE_EXPORT // QT_NO_QSNPRINTF is in effect
 int qvsnprintf(char *str, size_t n, const char *fmt, va_list ap)
 {
     if (!str || !fmt)
@@ -56,6 +76,7 @@ QT_BEGIN_INCLUDE_NAMESPACE
 #include <stdio.h>
 QT_END_INCLUDE_NAMESPACE
 
+Q_CORE_EXPORT // QT_NO_QSNPRINTF is in effect
 int qvsnprintf(char *str, size_t n, const char *fmt, va_list ap)
 {
     return QT_VSNPRINTF(str, n, fmt, ap);
@@ -64,8 +85,13 @@ int qvsnprintf(char *str, size_t n, const char *fmt, va_list ap)
 #endif
 
 /*!
+    \fn int qsnprintf(char *str, size_t n, const char *fmt, ...)
     \target bytearray-qsnprintf
     \relates QByteArray
+
+    \obsolete
+
+    Use C++11's \c{std::snprintf()} from \c{<cstdio>} instead.
 
     A portable snprintf() function, calls qvsnprintf.
 
@@ -79,6 +105,7 @@ int qvsnprintf(char *str, size_t n, const char *fmt, va_list ap)
     \sa qvsnprintf(), QString::asprintf()
 */
 
+Q_CORE_EXPORT // QT_NO_QSNPRINTF is in effect
 int qsnprintf(char *str, size_t n, const char *fmt, ...)
 {
     va_list ap;

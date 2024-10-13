@@ -110,7 +110,8 @@ void QEglFSIntegration::initialize()
 
 void QEglFSIntegration::destroy()
 {
-    foreach (QWindow *w, qGuiApp->topLevelWindows())
+    const auto toplevels = qGuiApp->topLevelWindows();
+    for (QWindow *w : toplevels)
         w->destroy();
 
     qt_egl_device_integration()->screenDestroy();
@@ -384,6 +385,14 @@ QPlatformNativeInterface::NativeResourceForContextFunction QEglFSIntegration::na
 QFunctionPointer QEglFSIntegration::platformFunction(const QByteArray &function) const
 {
     return qt_egl_device_integration()->platformFunction(function);
+}
+
+QVariant QEglFSIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
+{
+    if (hint == QPlatformIntegration::ShowIsFullScreen)
+        return true;
+
+    return QPlatformIntegration::styleHint(hint);
 }
 
 #if QT_CONFIG(evdev)

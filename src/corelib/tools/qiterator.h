@@ -5,10 +5,18 @@
 #define QITERATOR_H
 
 #include <QtCore/qglobal.h>
+#include <QtCore/qcontainertools_impl.h>
 
 QT_BEGIN_NAMESPACE
 
 #if !defined(QT_NO_JAVA_STYLE_ITERATORS)
+
+#ifdef Q_QDOC
+#define Q_DISABLE_BACKWARD_ITERATOR
+#else
+#define Q_DISABLE_BACKWARD_ITERATOR \
+        template<typename It = decltype(i), QtPrivate::IfIteratorCanMoveBackwards<It> = true>
+#endif
 
 #define Q_DECLARE_SEQUENTIAL_ITERATOR(C) \
 \
@@ -28,11 +36,15 @@ public: \
     inline bool hasNext() const { return i != c.constEnd(); } \
     inline const T &next() { return *i++; } \
     inline const T &peekNext() const { return *i; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline bool hasPrevious() const { return i != c.constBegin(); } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline const T &previous() { return *--i; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline const T &peekPrevious() const { const_iterator p = i; return *--p; } \
     inline bool findNext(const T &t) \
     { while (i != c.constEnd()) if (*i++ == t) return true; return false; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline bool findPrevious(const T &t) \
     { while (i != c.constBegin()) if (*(--i) == t) return true; \
       return false;  } \
@@ -59,8 +71,11 @@ public: \
     inline bool hasNext() const { return c->constEnd() != const_iterator(i); } \
     inline T &next() { n = i++; return *n; } \
     inline T &peekNext() const { return *i; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline bool hasPrevious() const { return c->constBegin() != const_iterator(i); } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline T &previous() { n = --i; return *n; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline T &peekPrevious() const { iterator p = i; return *--p; } \
     inline void remove() \
     { if (c->constEnd() != const_iterator(n)) { i = c->erase(n); n = c->end(); } } \
@@ -70,6 +85,7 @@ public: \
     inline void insert(const T &t) { n = i = c->insert(i, t); ++i; } \
     inline bool findNext(const T &t) \
     { while (c->constEnd() != const_iterator(n = i)) if (*i++ == t) return true; return false; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline bool findPrevious(const T &t) \
     { while (c->constBegin() != const_iterator(i)) if (*(n = --i) == t) return true; \
       n = c->end(); return false;  } \
@@ -95,13 +111,17 @@ public: \
     inline bool hasNext() const { return i != c.constEnd(); } \
     inline Item next() { n = i++; return n; } \
     inline Item peekNext() const { return i; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline bool hasPrevious() const { return i != c.constBegin(); } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline Item previous() { n = --i; return n; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline Item peekPrevious() const { const_iterator p = i; return --p; } \
     inline const T &value() const { Q_ASSERT(item_exists()); return *n; } \
     inline const Key &key() const { Q_ASSERT(item_exists()); return n.key(); } \
     inline bool findNext(const T &t) \
     { while ((n = i) != c.constEnd()) if (*i++ == t) return true; return false; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline bool findPrevious(const T &t) \
     { while (i != c.constBegin()) if (*(n = --i) == t) return true; \
       n = c.constEnd(); return false; } \
@@ -129,8 +149,11 @@ public: \
     inline bool hasNext() const { return const_iterator(i) != c->constEnd(); } \
     inline Item next() { n = i++; return n; } \
     inline Item peekNext() const { return i; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline bool hasPrevious() const { return const_iterator(i) != c->constBegin(); } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline Item previous() { n = --i; return n; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline Item peekPrevious() const { iterator p = i; return --p; } \
     inline void remove() \
     { if (const_iterator(n) != c->constEnd()) { i = c->erase(n); n = c->end(); } } \
@@ -140,6 +163,7 @@ public: \
     inline const Key &key() const { Q_ASSERT(item_exists()); return n.key(); } \
     inline bool findNext(const T &t) \
     { while (const_iterator(n = i) != c->constEnd()) if (*i++ == t) return true; return false; } \
+    Q_DISABLE_BACKWARD_ITERATOR \
     inline bool findPrevious(const T &t) \
     { while (const_iterator(i) != c->constBegin()) if (*(n = --i) == t) return true; \
       n = c->end(); return false; } \
@@ -230,26 +254,10 @@ public:
         return std::pair<Key, T>(i.key(), i.value());
     }
 
-    struct pointer
-    {
-        pointer(value_type &&r_) : r(std::move(r_)) { }
-
-        pointer() = default;
-        pointer(const pointer &other) = default;
-        pointer(pointer &&other) = default;
-        pointer &operator=(const pointer &other) = default;
-        pointer &operator=(pointer &&other) = default;
-
-        value_type &operator*() const { return r; }
-
-        value_type r;
-        const value_type *operator->() const {
-            return &r;
-        }
-    };
+    using pointer = QtPrivate::ArrowProxy<value_type>;
 
     pointer operator->() const {
-        return pointer(std::pair<Key, T>(i.key(), i.value()));
+        return pointer{std::pair<Key, T>(i.key(), i.value())};
     }
 
     friend bool operator==(QKeyValueIterator lhs, QKeyValueIterator rhs) noexcept { return lhs.i == rhs.i; }

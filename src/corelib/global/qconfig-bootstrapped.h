@@ -43,7 +43,6 @@
 #define QT_FEATURE_cborstreamreader -1
 #define QT_FEATURE_cborstreamwriter 1
 #define QT_CRYPTOGRAPHICHASH_ONLY_SHA1
-#define QT_FEATURE_cxx11_random (__has_include(<random>) ? 1 : -1)
 #define QT_FEATURE_cxx17_filesystem -1
 #define QT_NO_DATASTREAM
 #define QT_FEATURE_datestring 1
@@ -63,6 +62,7 @@
 #define QT_FEATURE_jalalicalendar -1
 #define QT_FEATURE_journald -1
 #define QT_FEATURE_futimens -1
+#undef QT_FEATURE_future
 #define QT_FEATURE_future -1
 #define QT_FEATURE_itemmodel -1
 #define QT_FEATURE_library -1
@@ -72,6 +72,8 @@
 # define QT_FEATURE_linkat -1
 #endif
 #define QT_FEATURE_lttng -1
+#define QT_FEATURE_memmem -1
+#define QT_FEATURE_memrchr -1
 #define QT_NO_QOBJECT
 #define QT_FEATURE_process -1
 #define QT_FEATURE_regularexpression 1
@@ -81,22 +83,18 @@
 # define QT_FEATURE_renameat2 -1
 #endif
 #define QT_FEATURE_shortcut -1
-#define QT_FEATURE_signaling_nan -1
 #define QT_FEATURE_slog2 -1
-#ifdef __GLIBC_PREREQ
-# define QT_FEATURE_statx (__GLIBC_PREREQ(2, 28) ? 1 : -1)
-#else
-# define QT_FEATURE_statx -1
-#endif
 #define QT_FEATURE_syslog -1
 #define QT_NO_SYSTEMLOCALE
-#define QT_FEATURE_temporaryfile 1
+#define QT_FEATURE_temporaryfile -1
 #define QT_FEATURE_textdate 1
+#undef QT_FEATURE_thread
 #define QT_FEATURE_thread -1
 #define QT_FEATURE_timezone -1
 #define QT_FEATURE_topleveldomain -1
 #define QT_NO_TRANSLATION
 #define QT_FEATURE_translation -1
+#define QT_NO_VARIANT -1
 
 #define QT_NO_COMPRESS
 

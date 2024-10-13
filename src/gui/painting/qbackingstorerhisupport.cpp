@@ -8,19 +8,9 @@
 #if QT_CONFIG(opengl)
 #include <QtGui/qoffscreensurface.h>
 #include <QtGui/private/qopenglcontext_p.h>
-#include <QtGui/private/qrhigles2_p.h>
-#endif
-
-#ifdef Q_OS_WIN
-#include <QtGui/private/qrhid3d11_p.h>
-#endif
-
-#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
-#include <QtGui/private/qrhimetal_p.h>
 #endif
 
 #if QT_CONFIG(vulkan)
-#include <QtGui/private/qrhivulkan_p.h>
 #include <QtGui/private/qvulkandefaultinstance_p.h>
 #endif
 
@@ -66,6 +56,19 @@ bool QBackingStoreRhiSupport::create()
     QOffscreenSurface *surface = nullptr;
     QRhi::Flags flags;
 
+    // These must be the same env.vars Qt Quick uses (as documented), in order
+    // to ensure symmetry in the behavior between a QQuickWindow and a
+    // (QRhi-based) widget top-level window.
+    if (qEnvironmentVariableIntValue("QSG_RHI_PREFER_SOFTWARE_RENDERER"))
+        flags |= QRhi::PreferSoftwareRenderer;
+    if (qEnvironmentVariableIntValue("QSG_RHI_PROFILE"))
+        flags |= QRhi::EnableDebugMarkers | QRhi::EnableTimestamps;
+
+    if (m_config.api() == QPlatformBackingStoreRhiConfig::Null) {
+        QRhiNullInitParams params;
+        rhi = QRhi::create(QRhi::Null, &params, flags);
+    }
+
 #if QT_CONFIG(opengl)
     if (!rhi && m_config.api() == QPlatformBackingStoreRhiConfig::OpenGL) {
         surface = QRhiGles2InitParams::newFallbackSurface(m_format);
@@ -79,28 +82,40 @@ bool QBackingStoreRhiSupport::create()
 #endif
 
 #ifdef Q_OS_WIN
-    if (!rhi && m_config.api() == QPlatformBackingStoreRhiConfig::D3D11) {
-        QRhiD3D11InitParams params;
-        params.enableDebugLayer = m_config.isDebugLayerEnabled();
-        rhi = QRhi::create(QRhi::D3D11, &params, flags);
-        if (!rhi && !flags.testFlag(QRhi::PreferSoftwareRenderer)) {
-            qCDebug(lcQpaBackingStore, "Failed to create a D3D device with default settings; "
-                                       "attempting to get a software rasterizer backed device instead");
-            flags |= QRhi::PreferSoftwareRenderer;
+    if (!rhi) {
+        if (m_config.api() == QPlatformBackingStoreRhiConfig::D3D11) {
+            QRhiD3D11InitParams params;
+            params.enableDebugLayer = m_config.isDebugLayerEnabled();
             rhi = QRhi::create(QRhi::D3D11, &params, flags);
+            if (!rhi && !flags.testFlag(QRhi::PreferSoftwareRenderer)) {
+                qCDebug(lcQpaBackingStore, "Failed to create a D3D11 device with default settings; "
+                                           "attempting to get a software rasterizer backed device instead");
+                flags |= QRhi::PreferSoftwareRenderer;
+                rhi = QRhi::create(QRhi::D3D11, &params, flags);
+            }
+        } else if (m_config.api() == QPlatformBackingStoreRhiConfig::D3D12) {
+            QRhiD3D12InitParams params;
+            params.enableDebugLayer = m_config.isDebugLayerEnabled();
+            rhi = QRhi::create(QRhi::D3D12, &params, flags);
+            if (!rhi && !flags.testFlag(QRhi::PreferSoftwareRenderer)) {
+                qCDebug(lcQpaBackingStore, "Failed to create a D3D12 device with default settings; "
+                                           "attempting to get a software rasterizer backed device instead");
+                flags |= QRhi::PreferSoftwareRenderer;
+                rhi = QRhi::create(QRhi::D3D12, &params, flags);
+            }
         }
     }
 #endif
 
-#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+#if QT_CONFIG(metal)
     if (!rhi && m_config.api() == QPlatformBackingStoreRhiConfig::Metal) {
         QRhiMetalInitParams params;
         // For parity with Qt Quick, fall back to OpenGL when there is no Metal (f.ex. in macOS virtual machines).
         if (QRhi::probe(QRhi::Metal, &params)) {
             rhi = QRhi::create(QRhi::Metal, &params, flags);
         } else {
-            qCDebug(lcQpaBackingStore, "Metal does not seem to be supported. Falling back to OpenGL.");
-            rhi = QRhi::create(QRhi::OpenGLES2, &params, flags);
+            qCDebug(lcQpaBackingStore, "Metal does not seem to be supported");
+            return false;
         }
     }
 #endif
@@ -181,13 +196,14 @@ QRhiSwapChain *QBackingStoreRhiSupport::swapChainForWindow(QWindow *window)
 
 bool QBackingStoreRhiSupportWindowWatcher::eventFilter(QObject *obj, QEvent *event)
 {
-    if (event->type() == QEvent::PlatformSurface
-            && static_cast<QPlatformSurfaceEvent *>(event)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed)
+    if (event->type() == QEvent::WindowAboutToChangeInternal
+        || (event->type() == QEvent::PlatformSurface
+            && static_cast<QPlatformSurfaceEvent *>(event)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed))
     {
         QWindow *window = qobject_cast<QWindow *>(obj);
         auto it = m_rhiSupport->m_swapchains.find(window);
         if (it != m_rhiSupport->m_swapchains.end()) {
-            qCDebug(lcQpaBackingStore) << "SurfaceAboutToBeDestroyed received for tracked window" << window << "cleaning up swapchain";
+            qCDebug(lcQpaBackingStore) << event << "received for" << window << "- cleaning up swapchain";
             auto data = *it;
             m_rhiSupport->m_swapchains.erase(it);
             data.reset(); // deletes 'this'
@@ -201,6 +217,7 @@ QSurface::SurfaceType QBackingStoreRhiSupport::surfaceTypeForConfig(const QPlatf
     QSurface::SurfaceType type = QSurface::RasterSurface;
     switch (config.api()) {
     case QPlatformBackingStoreRhiConfig::D3D11:
+    case QPlatformBackingStoreRhiConfig::D3D12:
         type = QSurface::Direct3DSurface;
         break;
     case QPlatformBackingStoreRhiConfig::Vulkan:
@@ -229,6 +246,8 @@ QRhi::Implementation QBackingStoreRhiSupport::apiToRhiBackend(QPlatformBackingSt
         return QRhi::Vulkan;
     case QPlatformBackingStoreRhiConfig::D3D11:
         return QRhi::D3D11;
+    case QPlatformBackingStoreRhiConfig::D3D12:
+        return QRhi::D3D12;
     case QPlatformBackingStoreRhiConfig::Null:
         return QRhi::Null;
     default:
@@ -246,14 +265,17 @@ bool QBackingStoreRhiSupport::checkForceRhi(QPlatformBackingStoreRhiConfig *outC
         checked = true;
 
         const bool alwaysRhi = qEnvironmentVariableIntValue("QT_WIDGETS_RHI");
-        if (alwaysRhi)
+        const bool highdpiDownscale = qEnvironmentVariableIntValue("QT_WIDGETS_HIGHDPI_DOWNSCALE");
+        if (highdpiDownscale)
+            qCDebug(lcQpaBackingStore) << "Enabling QT_WIDGETS_RHI due to QT_WIDGETS_HIGHDPI_DOWNSCALE";
+        if (alwaysRhi || highdpiDownscale)
             config.setEnabled(true);
 
         // if enabled, choose an api
         if (config.isEnabled()) {
 #if defined(Q_OS_WIN)
             config.setApi(QPlatformBackingStoreRhiConfig::D3D11);
-#elif defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+#elif QT_CONFIG(metal)
             config.setApi(QPlatformBackingStoreRhiConfig::Metal);
 #elif QT_CONFIG(opengl)
             config.setApi(QPlatformBackingStoreRhiConfig::OpenGL);
@@ -270,8 +292,10 @@ bool QBackingStoreRhiSupport::checkForceRhi(QPlatformBackingStoreRhiConfig *outC
 #ifdef Q_OS_WIN
                 if (backend == QStringLiteral("d3d11") || backend == QStringLiteral("d3d"))
                     config.setApi(QPlatformBackingStoreRhiConfig::D3D11);
+                if (backend == QStringLiteral("d3d12"))
+                    config.setApi(QPlatformBackingStoreRhiConfig::D3D12);
 #endif
-#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+#if QT_CONFIG(metal)
                 if (backend == QStringLiteral("metal"))
                     config.setApi(QPlatformBackingStoreRhiConfig::Metal);
 #endif

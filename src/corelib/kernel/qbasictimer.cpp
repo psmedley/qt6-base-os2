@@ -33,10 +33,8 @@ QT_BEGIN_NAMESPACE
     can maintain a list of basic timers by holding them in container
     that supports move-only types, e.g. std::vector.
 
-    The \l{widgets/tetrix}{Tetrix} example uses QBasicTimer to control
-    the rate at which pieces fall.
-
-    \sa QTimer, QTimerEvent, QObject::timerEvent(), Timers, {Affine Transformations}
+    \sa QTimer, QChronoTimer, QTimerEvent, QObject::timerEvent(),
+    Timers, {Affine Transformations}
 */
 
 
@@ -86,19 +84,39 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn QBasicTimer::swap(QBasicTimer &other)
-    \fn swap(QBasicTimer &lhs, QBasicTimer &rhs)
     \since 5.14
 
-    Swaps string \a other with this string, or \a lhs with \a rhs.
+    Swaps the timer \a other with this timer.
+    This operation is very fast and never fails.
+*/
+
+/*!
+    \fn swap(QBasicTimer &lhs, QBasicTimer &rhs)
+    \relates QBasicTimer
+    \since 5.14
+
+    Swaps the timer \a lhs with \a rhs.
     This operation is very fast and never fails.
 */
 
 /*!
     \fn int QBasicTimer::timerId() const
+    \obsolete
 
     Returns the timer's ID.
 
+    In new code use id() instead.
+
     \sa QTimerEvent::timerId()
+*/
+
+/*!
+    \fn Qt::TimerId QBasicTimer::id() const
+    \since 6.8
+
+    Returns the timer's ID.
+
+    \sa QTimerEvent::id()
 */
 
 /*!
@@ -159,7 +177,7 @@ void QBasicTimer::start(std::chrono::milliseconds duration, Qt::TimerType timerT
     }
     stop();
     if (obj)
-        id = eventDispatcher->registerTimer(duration.count(), timerType, obj);
+        m_id = eventDispatcher->registerTimer(duration, timerType, obj);
 }
 
 /*!
@@ -169,15 +187,15 @@ void QBasicTimer::start(std::chrono::milliseconds duration, Qt::TimerType timerT
 */
 void QBasicTimer::stop()
 {
-    if (id) {
+    if (isActive()) {
         QAbstractEventDispatcher *eventDispatcher = QAbstractEventDispatcher::instance();
-        if (eventDispatcher && !eventDispatcher->unregisterTimer(id)) {
+        if (eventDispatcher && !eventDispatcher->unregisterTimer(m_id)) {
             qWarning("QBasicTimer::stop: Failed. Possibly trying to stop from a different thread");
             return;
         }
-        QAbstractEventDispatcherPrivate::releaseTimerId(id);
+        QAbstractEventDispatcherPrivate::releaseTimerId(m_id);
     }
-    id = 0;
+    m_id = Qt::TimerId::Invalid;
 }
 
 QT_END_NAMESPACE

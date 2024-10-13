@@ -15,6 +15,24 @@
 */
 
 /*!
+    \module QtGuiPrivate
+    \title Qt GUI Private C++ Classes
+    \qtcmakepackage Gui
+    \qtcmaketargetitem GuiPrivate
+    \qtvariable gui-private
+
+    \brief Provides access to private GUI functionality.
+
+    Use the following CMake commands in your \c {CMakeLists.txt} to access
+    private Qt GUI APIs:
+
+    \badcode
+    find_package(Qt6 REQUIRED COMPONENTS Gui)
+    target_link_libraries(mytarget PRIVATE Qt6::GuiPrivate)
+    \endcode
+*/
+
+/*!
     \page qtgui-index.html
     \title Qt GUI
 
@@ -54,6 +72,8 @@
         \list
             \li \l {Application Windows} {Qt GUI Application Windows}
             \li \l {2D Graphics} {Qt GUI 2D Graphics}
+            \li \l {RHI Graphics} {Qt GUI Accelerated 2D and 3D Graphics using the Qt RHI}
+            \li \l {3D Matrix and Vector Math} {Qt GUI Matrix and Vector Math}
             \li \l {OpenGL and OpenGL ES Integration}
                    {Qt GUI OpenGL and OpenGL ES Integration}
             \li \l {Vulkan Integration} {Qt GUI Vulkan Integration}

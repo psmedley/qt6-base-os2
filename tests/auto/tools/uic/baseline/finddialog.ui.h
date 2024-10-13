@@ -1,7 +1,7 @@
 /*
 
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 */
 
@@ -56,7 +56,7 @@ public:
         if (FindDialog->objectName().isEmpty())
             FindDialog->setObjectName("FindDialog");
         FindDialog->resize(414, 170);
-        QSizePolicy sizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+        QSizePolicy sizePolicy(QSizePolicy::Policy::Preferred, QSizePolicy::Policy::Maximum);
         sizePolicy.setHorizontalStretch(0);
         sizePolicy.setVerticalStretch(0);
         sizePolicy.setHeightForWidth(FindDialog->sizePolicy().hasHeightForWidth());
@@ -142,7 +142,7 @@ public:
 
         vboxLayout1->addWidget(cancel);
 
-        spacerItem = new QSpacerItem(20, 51, QSizePolicy::Minimum, QSizePolicy::Expanding);
+        spacerItem = new QSpacerItem(20, 51, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
 
         vboxLayout1->addItem(spacerItem);
 

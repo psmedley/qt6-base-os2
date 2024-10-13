@@ -28,7 +28,6 @@ class QEventDispatcherWin32Private;
 
 // forward declaration
 LRESULT QT_WIN_CALLBACK qt_internal_proc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp);
-quint64 qt_msectime();
 
 class Q_CORE_EXPORT QEventDispatcherWin32 : public QAbstractEventDispatcher
 {
@@ -72,9 +71,9 @@ private:
 
 struct QSockNot {
     QSocketNotifier *obj;
-    int fd;
+    qintptr fd;
 };
-typedef QHash<int, QSockNot *> QSNDict;
+typedef QHash<qintptr, QSockNot *> QSNDict;
 
 struct QSockFd {
     long event;
@@ -83,7 +82,7 @@ struct QSockFd {
 
     explicit inline QSockFd(long ev = 0, long ma = 0) : event(ev), mask(ma), selected(false) { }
 };
-typedef QHash<int, QSockFd> QSFDict;
+typedef QHash<qintptr, QSockFd> QSFDict;
 
 struct WinTimerInfo {                           // internal timer info
     QObject *dispatcher;
@@ -136,7 +135,7 @@ public:
     QSFDict active_fd;
     bool activateNotifiersPosted;
     void postActivateSocketNotifiers();
-    void doWsaAsyncSelect(int socket, long event);
+    void doWsaAsyncSelect(qintptr socket, long event);
 
     bool closingDown = false;
 

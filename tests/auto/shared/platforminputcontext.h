@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qpa/qplatforminputcontext.h>
 
@@ -17,7 +17,6 @@ public:
         m_lastQueries(Qt::ImhNone),
         m_action(QInputMethod::Click),
         m_cursorPosition(0),
-        m_lastEventType(QEvent::None),
         m_setFocusObjectCallCount(0)
     {}
 
@@ -50,10 +49,6 @@ public:
     {
         m_action = action;
         m_cursorPosition = cursorPosition;
-    }
-    virtual bool filterEvent(const QEvent *event) override
-    {
-        m_lastEventType = event->type(); return false;
     }
     virtual void showInputPanel() override
     {
@@ -94,7 +89,6 @@ public:
     Qt::InputMethodQueries m_lastQueries;
     QInputMethod::Action m_action;
     int m_cursorPosition;
-    int m_lastEventType;
     QRectF m_keyboardRect;
     int m_setFocusObjectCallCount;
 };

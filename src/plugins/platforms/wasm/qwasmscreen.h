@@ -6,6 +6,8 @@
 
 #include "qwasmcursor.h"
 
+#include "qwasmwindowtreenode.h"
+
 #include <qpa/qplatformscreen.h>
 
 #include <QtCore/qscopedpointer.h>
@@ -23,7 +25,7 @@ class QWasmCompositor;
 class QWasmDeadKeySupport;
 class QOpenGLContext;
 
-class QWasmScreen : public QObject, public QPlatformScreen
+class QWasmScreen : public QObject, public QPlatformScreen, public QWasmWindowTreeNode
 {
     Q_OBJECT
 public:
@@ -37,9 +39,12 @@ public:
     QString eventTargetId() const;
     QString outerScreenId() const;
     QPointingDevice *touchDevice() { return m_touchDevice.get(); }
+    QPointingDevice *tabletDevice() { return m_tabletDevice.get(); }
 
     QWasmCompositor *compositor();
     QWasmDeadKeySupport *deadKeySupport() { return m_deadKeySupport.get(); }
+
+    QList<QWasmWindow *> allWindows();
 
     QRect geometry() const override;
     int depth() const override;
@@ -53,6 +58,10 @@ public:
     QWindow *topWindow() const;
     QWindow *topLevelAt(const QPoint &p) const override;
 
+    // QWasmWindowTreeNode:
+    emscripten::val containerElement() final;
+    QWasmWindowTreeNode *parentNode() final;
+
     QPointF mapFromLocal(const QPointF &p) const;
     QPointF clipPoint(const QPointF &p) const;
 
@@ -65,10 +74,16 @@ public slots:
     void setGeometry(const QRect &rect);
 
 private:
+    // QWasmWindowTreeNode:
+    void onSubtreeChanged(QWasmWindowTreeNodeChangeType changeType, QWasmWindowTreeNode *parent,
+                          QWasmWindow *child) final;
+
     emscripten::val m_container;
+    emscripten::val m_intermediateContainer;
     emscripten::val m_shadowContainer;
     std::unique_ptr<QWasmCompositor> m_compositor;
     std::unique_ptr<QPointingDevice> m_touchDevice;
+    std::unique_ptr<QPointingDevice> m_tabletDevice;
     std::unique_ptr<QWasmDeadKeySupport> m_deadKeySupport;
     QRect m_geometry = QRect(0, 0, 100, 100);
     int m_depth = 32;

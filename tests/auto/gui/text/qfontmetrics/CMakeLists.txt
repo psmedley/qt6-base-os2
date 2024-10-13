@@ -5,6 +5,12 @@
 ## tst_qfontmetrics Test:
 #####################################################################
 
+if(NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
+    cmake_minimum_required(VERSION 3.16)
+    project(tst_qfontmetrics LANGUAGES CXX)
+    find_package(Qt6BuildInternals REQUIRED COMPONENTS STANDALONE_TEST)
+endif()
+
 qt_internal_add_test(tst_qfontmetrics
     SOURCES
         tst_qfontmetrics.cpp
@@ -18,8 +24,12 @@ qt_internal_add_test(tst_qfontmetrics
 set_source_files_properties("../../../shared/resources/testfont.ttf"
     PROPERTIES QT_RESOURCE_ALIAS "testfont.ttf"
 )
+set_source_files_properties("../../../shared/resources/testfont_linemetrics.otf"
+    PROPERTIES QT_RESOURCE_ALIAS "testfont_linemetrics.otf"
+)
 set(testfont_resource_files
     "../../../shared/resources/testfont.ttf"
+    "../../../shared/resources/testfont_linemetrics.otf"
     "ucs4font.ttf"
 )
 

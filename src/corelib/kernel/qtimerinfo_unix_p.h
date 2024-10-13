@@ -17,73 +17,84 @@
 
 #include <QtCore/private/qglobal_p.h>
 
-// #define QTIMERINFO_DEBUG
-
 #include "qabstracteventdispatcher.h"
 
-#include <sys/time.h> // struct timeval
+#include <sys/time.h> // struct timespec
+#include <chrono>
 
 QT_BEGIN_NAMESPACE
 
 // internal timer info
-struct QTimerInfo {
-    int id;           // - timer identifier
-    Qt::TimerType timerType; // - timer type
-    qint64 interval;     // - timer interval in milliseconds
-    timespec timeout;  // - when to actually fire
-    QObject *obj;     // - object to receive event
-    QTimerInfo **activateRef; // - ref from activateTimers
+struct QTimerInfo
+{
+    using Duration = QAbstractEventDispatcher::Duration;
+    using TimePoint = std::chrono::time_point<std::chrono::steady_clock, Duration>;
+    QTimerInfo(Qt::TimerId timerId, Duration interval, Qt::TimerType type, QObject *obj)
+        : interval(interval), id(timerId), timerType(type), obj(obj)
+    {
+    }
 
-#ifdef QTIMERINFO_DEBUG
-    timespec expected; // when timer is expected to fire
-    float cumulativeError;
-    uint count;
-#endif
+    TimePoint timeout = {};                     // - when to actually fire
+    Duration interval = Duration{-1};           // - timer interval
+    Qt::TimerId id = Qt::TimerId::Invalid;      // - timer identifier
+    Qt::TimerType timerType; // - timer type
+    QObject *obj = nullptr; // - object to receive event
+    QTimerInfo **activateRef = nullptr; // - ref from activateTimers
 };
 
-class Q_CORE_EXPORT QTimerInfoList : public QList<QTimerInfo*>
+class Q_CORE_EXPORT QTimerInfoList
 {
-#if ((_POSIX_MONOTONIC_CLOCK-0 <= 0) && !defined(Q_OS_MAC)) || defined(QT_BOOTSTRAPPED)
-    timespec previousTime;
-    clock_t previousTicks;
-    int ticksPerSecond;
-    int msPerTick;
-
-    bool timeChanged(timespec *delta);
-    void timerRepair(const timespec &);
-#endif
-
-    // state variables used by activateTimers()
-    QTimerInfo *firstTimerInfo;
-
 #ifdef Q_OS_OS2
     int zeroTimers;
 #endif
 
 public:
+    using Duration = QAbstractEventDispatcher::Duration;
+    using TimerInfo = QAbstractEventDispatcher::TimerInfoV2;
     QTimerInfoList();
 
-    timespec currentTime;
-    timespec updateCurrentTime();
+    mutable std::chrono::steady_clock::time_point currentTime;
 
 #ifdef Q_OS_OS2
     int zeroTimerCount() const { return zeroTimers; };
 #endif
 
-    // must call updateCurrentTime() first!
-    void repairTimersIfNeeded();
-
-    bool timerWait(timespec &);
+    std::optional<Duration> timerWait();
     void timerInsert(QTimerInfo *);
 
-    qint64 timerRemainingTime(int timerId);
+    Duration remainingDuration(Qt::TimerId timerId) const;
 
-    void registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object);
-    bool unregisterTimer(int timerId);
+    void registerTimer(Qt::TimerId timerId, Duration interval,
+                       Qt::TimerType timerType, QObject *object);
+    bool unregisterTimer(Qt::TimerId timerId);
     bool unregisterTimers(QObject *object);
-    QList<QAbstractEventDispatcher::TimerInfo> registeredTimers(QObject *object) const;
+    QList<TimerInfo> registeredTimers(QObject *object) const;
 
     int activateTimers();
+    bool hasPendingTimers();
+
+    void clearTimers()
+    {
+        qDeleteAll(timers);
+        timers.clear();
+    }
+
+    bool isEmpty() const { return timers.empty(); }
+
+    qsizetype size() const { return timers.size(); }
+
+    auto findTimerById(Qt::TimerId timerId) const
+    {
+        auto matchesId = [timerId](const auto &t) { return t->id == timerId; };
+        return std::find_if(timers.cbegin(), timers.cend(), matchesId);
+    }
+
+private:
+    std::chrono::steady_clock::time_point updateCurrentTime() const;
+
+    // state variables used by activateTimers()
+    QTimerInfo *firstTimerInfo = nullptr;
+    QList<QTimerInfo *> timers;
 };
 
 QT_END_NAMESPACE

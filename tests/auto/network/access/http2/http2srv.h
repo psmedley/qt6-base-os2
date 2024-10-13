@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef HTTP2SRV_H
 #define HTTP2SRV_H
@@ -58,6 +58,8 @@ public:
     ~Http2Server();
 
 
+    // To send responses with status code 1xx
+    void setInformationalStatusCode(int code);
     // To be called before server started:
     void enablePushPromise(bool enabled, const QByteArray &path = QByteArray());
     void setResponseBody(const QByteArray &body);
@@ -65,6 +67,8 @@ public:
     void setContentEncoding(const QByteArray &contentEncoding);
     // No authentication data is generated for the method, the full header value must be set
     void setAuthenticationHeader(const QByteArray &authentication);
+    // Authentication always required, no challenge provided
+    void setAuthenticationRequired(bool enable);
     // Set the redirect URL and count. The server will return a redirect response with the url
     // 'count' amount of times
     void setRedirect(const QByteArray &redirectUrl, int count);
@@ -202,11 +206,13 @@ private:
 
     QByteArray contentEncoding;
     QByteArray authenticationHeader;
+    bool authenticationRequired = false;
 
     QByteArray redirectUrl;
     int redirectCount = 0;
 
     bool sendTrailingHEADERS = false;
+    int informationalStatusCode = 0;
 protected slots:
     void ignoreErrorSlot();
 };

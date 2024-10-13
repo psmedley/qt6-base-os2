@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
+
 #include <QTest>
 #include <QtXml/QtXml>
 #include <QtGui/QFontInfo>
@@ -49,12 +50,20 @@ private slots:
     void gradient();
     void extractFontFamily_data();
     void extractFontFamily();
+    void extractFontSize_data();
+    void extractFontSize();
     void extractBorder_data();
     void extractBorder();
     void noTextDecoration();
     void quotedAndUnquotedIdentifiers();
     void whitespaceValues_data();
     void whitespaceValues();
+    void strokeLineCapValues_data();
+    void strokeLineCapValues();
+    void strokeLineJoinValues_data();
+    void strokeLineJoinValues();
+    void borderColor_data();
+    void borderColor();
 };
 
 void tst_QCssParser::scanner_data()
@@ -69,7 +78,8 @@ void tst_QCssParser::scanner_data()
 #endif
     d.cd("testdata");
     d.cd("scanner");
-    foreach (QFileInfo test, d.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+    const auto entries = d.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo &test : entries) {
         QString dir = test.absoluteFilePath() + QDir::separator();
         QTest::newRow(qPrintable(test.baseName()))
             << dir + "input"
@@ -1543,20 +1553,26 @@ void tst_QCssParser::gradient()
     QList<QCss::StyleRule> rules = testSelector.styleRulesForNode(n);
     QList<QCss::Declaration> decls = rules.at(0).declarations;
     QCss::ValueExtractor ve(decls);
-    QBrush fg, sfg, pfg;
-    QBrush sbg, abg;
-    QVERIFY(ve.extractPalette(&fg, &sfg, &sbg, &abg, &pfg));
+    QBrush foreground;
+    QBrush selectedForeground;
+    QBrush selectedBackground;
+    QBrush alternateBackground;
+    QBrush placeHolderTextForeground;
+    QBrush accent;
+    QVERIFY(ve.extractPalette(&foreground, &selectedForeground, &selectedBackground,
+                              &alternateBackground, &placeHolderTextForeground, &accent));
+
     if (type == "linear") {
-        QCOMPARE(sbg.style(), Qt::LinearGradientPattern);
-        const QLinearGradient *lg = static_cast<const QLinearGradient *>(sbg.gradient());
+        QCOMPARE(selectedBackground.style(), Qt::LinearGradientPattern);
+        const auto *lg = static_cast<const QLinearGradient *>(selectedBackground.gradient());
         QCOMPARE(lg->start(), start);
         QCOMPARE(lg->finalStop(), finalStop);
     } else if (type == "conical") {
-        QCOMPARE(sbg.style(), Qt::ConicalGradientPattern);
-        const QConicalGradient *cg = static_cast<const QConicalGradient *>(sbg.gradient());
+        QCOMPARE(selectedBackground.style(), Qt::ConicalGradientPattern);
+        const auto *cg = static_cast<const QConicalGradient *>(selectedBackground.gradient());
         QCOMPARE(cg->center(), start);
     }
-    const QGradient *g = sbg.gradient();
+    const QGradient *g = selectedBackground.gradient();
     QCOMPARE(g->spread(), QGradient::Spread(spread));
     QCOMPARE(g->stops().at(0).first, stop0);
     QCOMPARE(g->stops().at(0).second, color0);
@@ -1610,6 +1626,65 @@ void tst_QCssParser::extractFontFamily()
     QFontInfo info(fnt);
 
     QTEST(info.family(), "expectedFamily");
+}
+
+void tst_QCssParser::extractFontSize_data()
+{
+    QTest::addColumn<QString>("css");
+    QTest::addColumn<int>("expectedPixelSize");
+    QTest::addColumn<int>("expectedPointSize");
+    QTest::addColumn<qreal>("expectedPointSizeF");
+
+    QTest::newRow("integer point size") << "font-size: 12pt" << -1 << 12 << 12.0;
+    QTest::newRow("float point size round down") << "font-size: 12.3pt" << -1 << 12 << 12.3;
+    QTest::newRow("float point size midpoint") << "font-size: 12.5pt" << -1 << 13 << 12.5;
+    QTest::newRow("float point size round up") << "font-size: 12.7pt" << -1 << 13 << 12.7;
+
+    QTest::newRow("integer pixel size") << "font-size: 12px" << 12 << -1 << -1.0;
+    QTest::newRow("float pixel size round down") << "font-size: 12.3px" << 12 << -1 << -1.0;
+    QTest::newRow("float pixel size midpoint") << "font-size: 12.5px" << 13 << -1 << -1.0;
+    QTest::newRow("float pixel size round up") << "font-size: 12.7px" << 13 << -1 << -1.0;
+
+    QTest::newRow("shorthand integer point size") << "font: 12pt Arial" << -1 << 12 << 12.0;
+    QTest::newRow("shorthand float point size round down") << "font: 12.3pt Arial" << -1 << 12 << 12.3;
+    QTest::newRow("shorthand float point size midpoint") << "font: 12.5pt Arial" << -1 << 13 << 12.5;
+    QTest::newRow("shorthand float point size round up") << "font: 12.7pt Arial" << -1 << 13 << 12.7;
+
+    QTest::newRow("shorthand integer pixel size") << "font: 12px Arial" << 12 << -1 << -1.0;
+    QTest::newRow("shorthand float pixel size round down") << "font: 12.3px Arial" << 12 << -1 << -1.0;
+    QTest::newRow("shorthand float pixel size midpoint") << "font: 12.5px Arial" << 13 << -1 << -1.0;
+    QTest::newRow("shorthand float pixel size round up") << "font: 12.7px Arial" << 13 << -1 << -1.0;
+}
+
+void tst_QCssParser::extractFontSize()
+{
+    QFETCH(QString, css);
+    css.prepend("dummy {");
+    css.append(QLatin1Char('}'));
+
+    QCss::Parser parser(css);
+    QCss::StyleSheet sheet;
+    QVERIFY(parser.parse(&sheet));
+
+    QCOMPARE(sheet.styleRules.size() + sheet.nameIndex.size(), 1);
+    QCss::StyleRule rule = (!sheet.styleRules.isEmpty()) ?
+            sheet.styleRules.at(0) : *sheet.nameIndex.begin();
+
+    const QList<QCss::Declaration> decls = rule.declarations;
+    QVERIFY(!decls.isEmpty());
+    QCss::ValueExtractor extractor(decls);
+
+    int adjustment = 0;
+    QFont font;
+    extractor.extractFont(&font, &adjustment);
+
+    QFETCH(int, expectedPixelSize);
+    QFETCH(int, expectedPointSize);
+    QFETCH(qreal, expectedPointSizeF);
+
+    QCOMPARE(font.pixelSize(), expectedPixelSize);
+    QCOMPARE(font.pointSize(), expectedPointSize);
+    QCOMPARE(font.pointSizeF(), expectedPointSizeF);
 }
 
 void tst_QCssParser::extractBorder_data()
@@ -1749,6 +1824,108 @@ void tst_QCssParser::whitespaceValues()
 
     QCOMPARE(rule.declarations.at(0).d->property, QLatin1String("white-space"));
     QCOMPARE(rule.declarations.at(0).d->values.first().toString(), value);
+}
+
+void tst_QCssParser::strokeLineCapValues_data()
+{
+    QTest::addColumn<QString>("value");
+
+    QTest::newRow("flatcap") << "flatcap";
+    QTest::newRow("roundcap") << "roundcap";
+    QTest::newRow("squarecap") << "squarecap";
+}
+
+void tst_QCssParser::strokeLineCapValues()
+{
+    QFETCH(QString, value);
+    QCss::Parser parser(QString("foo { -qt-stroke-linecap: %1 }").arg(value));
+    QCss::StyleSheet sheet;
+    QVERIFY(parser.parse(&sheet));
+
+    QCss::StyleRule rule = (!sheet.styleRules.isEmpty()) ?
+            sheet.styleRules.at(0) : *sheet.nameIndex.begin();
+    QCOMPARE(rule.declarations.size(), 1);
+
+    QCOMPARE(rule.declarations.at(0).d->property, QLatin1String("-qt-stroke-linecap"));
+    QCOMPARE(rule.declarations.at(0).d->values.first().type, QCss::Value::KnownIdentifier);
+    QCOMPARE(rule.declarations.at(0).d->values.first().toString(), value);
+}
+
+void tst_QCssParser::strokeLineJoinValues_data()
+{
+    QTest::addColumn<QString>("value");
+
+    QTest::newRow("beveljoin") << "beveljoin";
+    QTest::newRow("miterjoin") << "miterjoin";
+    QTest::newRow("roundjoin") << "roundjoin";
+    QTest::newRow("svgmiterjoin") << "svgmiterjoin";
+}
+
+void tst_QCssParser::strokeLineJoinValues()
+{
+    QFETCH(QString, value);
+    QCss::Parser parser(QString("foo { -qt-stroke-linejoin: %1 }").arg(value));
+    QCss::StyleSheet sheet;
+    QVERIFY(parser.parse(&sheet));
+
+    QCss::StyleRule rule = (!sheet.styleRules.isEmpty()) ?
+            sheet.styleRules.at(0) : *sheet.nameIndex.begin();
+    QCOMPARE(rule.declarations.size(), 1);
+
+    QCOMPARE(rule.declarations.at(0).d->property, QLatin1String("-qt-stroke-linejoin"));
+    QCOMPARE(rule.declarations.at(0).d->values.first().type, QCss::Value::KnownIdentifier);
+    QCOMPARE(rule.declarations.at(0).d->values.first().toString(), value);
+}
+
+void tst_QCssParser::borderColor_data()
+{
+    QTest::addColumn<QString>("css");
+    QTest::addColumn<QColor>("expectedTopColor");
+    QTest::addColumn<QColor>("expectedRightColor");
+    QTest::addColumn<QColor>("expectedBottomColor");
+    QTest::addColumn<QColor>("expectedLeftColor");
+
+    QTest::newRow("four values") << "border-color: red green blue white" << QColor("red") << QColor("green") << QColor("blue") << QColor("white");
+    QTest::newRow("three values") << "border-color: red green blue" << QColor("red") << QColor("green") << QColor("blue") << QColor("green");
+    QTest::newRow("two values") << "border-color: red green" << QColor("red") << QColor("green") << QColor("red") << QColor("green");
+    QTest::newRow("one value") << "border-color: red" << QColor("red") << QColor("red") << QColor("red") << QColor("red");
+}
+
+void tst_QCssParser::borderColor()
+{
+    QFETCH(QString, css);
+    QFETCH(QColor, expectedTopColor);
+    QFETCH(QColor, expectedRightColor);
+    QFETCH(QColor, expectedBottomColor);
+    QFETCH(QColor, expectedLeftColor);
+
+    css.prepend("dummy {");
+    css.append(QLatin1Char('}'));
+
+    QCss::Parser parser(css);
+    QCss::StyleSheet sheet;
+    QVERIFY(parser.parse(&sheet));
+
+    QCOMPARE(sheet.styleRules.size() + sheet.nameIndex.size(), 1);
+    QCss::StyleRule rule =  (!sheet.styleRules.isEmpty()) ?
+            sheet.styleRules.at(0) : *sheet.nameIndex.begin();
+    const QList<QCss::Declaration> decls = rule.declarations;
+    QVERIFY(decls.size() == 1);
+    QVERIFY(decls[0].d->propertyId == QCss::BorderColor);
+
+    QBrush colors[4];
+
+    decls[0].brushValues(colors);
+    QCOMPARE(colors[QCss::TopEdge].color(), expectedTopColor);
+    QCOMPARE(colors[QCss::RightEdge].color(), expectedRightColor);
+    QCOMPARE(colors[QCss::BottomEdge].color(), expectedBottomColor);
+    QCOMPARE(colors[QCss::LeftEdge].color(), expectedLeftColor);
+
+    //QTBUG-126381 : a second evaluation should give the same results
+    QCOMPARE(colors[QCss::TopEdge].color(), expectedTopColor);
+    QCOMPARE(colors[QCss::RightEdge].color(), expectedRightColor);
+    QCOMPARE(colors[QCss::BottomEdge].color(), expectedBottomColor);
+    QCOMPARE(colors[QCss::LeftEdge].color(), expectedLeftColor);
 }
 
 QTEST_MAIN(tst_QCssParser)

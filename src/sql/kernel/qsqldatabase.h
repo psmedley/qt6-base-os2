@@ -5,8 +5,10 @@
 #define QSQLDATABASE_H
 
 #include <QtSql/qtsqlglobal.h>
+#include <QtCore/qmetaobject.h>
 #include <QtCore/qstring.h>
 
+// clazy:excludeall=qproperty-without-notify
 QT_BEGIN_NAMESPACE
 
 
@@ -16,11 +18,12 @@ class QSqlIndex;
 class QSqlRecord;
 class QSqlQuery;
 class QSqlDatabasePrivate;
+class QThread;
 
 class Q_SQL_EXPORT QSqlDriverCreatorBase
 {
 public:
-    virtual ~QSqlDriverCreatorBase() {}
+    virtual ~QSqlDriverCreatorBase();
     virtual QSqlDriver *createObject() const = 0;
 };
 
@@ -33,7 +36,11 @@ public:
 
 class Q_SQL_EXPORT QSqlDatabase
 {
+    Q_GADGET
+    Q_PROPERTY(QSql::NumericalPrecisionPolicy numericalPrecisionPolicy READ numericalPrecisionPolicy WRITE setNumericalPrecisionPolicy)
+
 public:
+
     QSqlDatabase();
     QSqlDatabase(const QSqlDatabase &other);
     ~QSqlDatabase();
@@ -48,7 +55,10 @@ public:
     QStringList tables(QSql::TableType type = QSql::Tables) const;
     QSqlIndex primaryIndex(const QString& tablename) const;
     QSqlRecord record(const QString& tablename) const;
+#if QT_DEPRECATED_SINCE(6, 6)
+    QT_DEPRECATED_VERSION_X_6_6("Use QSqlQuery::exec() instead.")
     QSqlQuery exec(const QString& query = QString()) const;
+#endif
     QSqlError lastError() const;
     bool isValid() const;
 
@@ -72,6 +82,8 @@ public:
     QString connectionName() const;
     void setNumericalPrecisionPolicy(QSql::NumericalPrecisionPolicy precisionPolicy);
     QSql::NumericalPrecisionPolicy numericalPrecisionPolicy() const;
+    bool moveToThread(QThread *targetThread);
+    QThread *thread() const;
 
     QSqlDriver* driver() const;
 

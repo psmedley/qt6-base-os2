@@ -5,6 +5,11 @@
 ## XcbQpaPrivate Module:
 #####################################################################
 
+if(GCC)
+    # Work around GCC ABI issues
+    add_compile_options(-Wno-psabi)
+endif()
+
 qt_internal_add_module(XcbQpaPrivate
     CONFIG_MODULE_NAME xcb_qpa_lib
     INTERNAL_MODULE
@@ -57,7 +62,6 @@ qt_internal_add_module(XcbQpaPrivate
         XCB::SYNC
         XCB::XCB
         XCB::XFIXES
-        # XCB::XINPUT # special case remove handled below
         XCB::XKB
         XKB::XKB
     NO_UNITY_BUILD # X11 define clashes
@@ -67,11 +71,6 @@ qt_disable_apple_app_extension_api_only(XcbQpaPrivate)
 
 ## Scopes:
 #####################################################################
-
-qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_opengl
-    PUBLIC_LIBRARIES
-        Qt::OpenGLPrivate
-)
 
 qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_glib
     LIBRARIES
@@ -147,6 +146,10 @@ qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_fontconfig AND QT_F
 if(QT_FEATURE_system_xcb_xinput)
     qt_internal_extend_target(XcbQpaPrivate LIBRARIES XCB::XINPUT)
 else()
+    qt_internal_extend_target(XcbQpaPrivate
+        ATTRIBUTION_FILE_DIR_PATHS
+            ../../../3rdparty/xcb
+    )
     set(xinput_source "${PROJECT_SOURCE_DIR}/src/3rdparty/xcb/libxcb/xinput.c")
     set_source_files_properties(
         "${xinput_source}"
@@ -165,7 +168,7 @@ endif()
 qt_internal_add_plugin(QXcbIntegrationPlugin
     OUTPUT_NAME qxcb
     PLUGIN_TYPE platforms
-    DEFAULT_IF ${QT_QPA_DEFAULT_PLATFORM} MATCHES xcb
+    DEFAULT_IF "xcb" IN_LIST QT_QPA_PLATFORMS
     SOURCES
         qxcbmain.cpp
     DEFINES
@@ -178,5 +181,5 @@ qt_internal_add_plugin(QXcbIntegrationPlugin
 
 add_subdirectory(gl_integrations)
 if(OFF)
-    add_subdirectory(xcb-static) # special case TODO: xcb-static sub folder
+    add_subdirectory(xcb-static)
 endif()

@@ -3,7 +3,6 @@
 
 #include "qlistwidget.h"
 
-#include <qitemdelegate.h>
 #include <private/qlistview_p.h>
 #include <private/qwidgetitemdata_p.h>
 #include <private/qlistwidget_p.h>
@@ -308,7 +307,7 @@ void QListModel::sort(int column, Qt::SortOrder order)
     }
 
     const auto compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
-    std::sort(sorting.begin(), sorting.end(), compare);
+    std::stable_sort(sorting.begin(), sorting.end(), compare);
     QModelIndexList fromIndexes;
     QModelIndexList toIndexes;
     const int sortingCount = sorting.size();
@@ -328,76 +327,34 @@ void QListModel::sort(int column, Qt::SortOrder order)
 /**
  * This function assumes that all items in the model except the items that are between
  * (inclusive) start and end are sorted.
- * With these assumptions, this function can ensure that the model is sorted in a
- * much more efficient way than doing a naive 'sort everything'.
- * (provided that the range is relatively small compared to the total number of items)
  */
 void QListModel::ensureSorted(int column, Qt::SortOrder order, int start, int end)
 {
     if (column != 0)
         return;
 
-    const int count = end - start + 1;
-    QList<QPair<QListWidgetItem *, int>> sorting(count);
-    for (int i = 0; i < count; ++i) {
-        sorting[i].first = items.at(start + i);
-        sorting[i].second = start + i;
-    }
+    const auto compareLt = [](const QListWidgetItem *left, const QListWidgetItem *right) -> bool {
+        return *left < *right;
+    };
 
-    const auto compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
-    std::sort(sorting.begin(), sorting.end(), compare);
+    const auto compareGt = [](const QListWidgetItem *left, const QListWidgetItem *right) -> bool {
+        return *right < *left;
+    };
 
-    QModelIndexList oldPersistentIndexes = persistentIndexList();
-    QModelIndexList newPersistentIndexes = oldPersistentIndexes;
-    QList<QListWidgetItem*> tmp = items;
-    QList<QListWidgetItem*>::iterator lit = tmp.begin();
-    bool changed = false;
-    for (int i = 0; i < count; ++i) {
-        int oldRow = sorting.at(i).second;
-        int tmpitepos = lit - tmp.begin();
-        QListWidgetItem *item = tmp.takeAt(oldRow);
-        if (tmpitepos > tmp.size())
-            --tmpitepos;
-        lit = tmp.begin() + tmpitepos;
-        lit = sortedInsertionIterator(lit, tmp.end(), order, item);
-        int newRow = qMax<qsizetype>(lit - tmp.begin(), 0);
-        lit = tmp.insert(lit, item);
-        if (newRow != oldRow) {
-            if (!changed) {
-                emit layoutAboutToBeChanged({}, QAbstractItemModel::VerticalSortHint);
-                oldPersistentIndexes = persistentIndexList();
-                newPersistentIndexes = oldPersistentIndexes;
-                changed = true;
-            }
-            for (int j = i + 1; j < count; ++j) {
-                int otherRow = sorting.at(j).second;
-                if (oldRow < otherRow && newRow >= otherRow)
-                    --sorting[j].second;
-                else if (oldRow > otherRow && newRow <= otherRow)
-                    ++sorting[j].second;
-            }
-            for (int k = 0; k < newPersistentIndexes.size(); ++k) {
-                QModelIndex pi = newPersistentIndexes.at(k);
-                int oldPersistentRow = pi.row();
-                int newPersistentRow = oldPersistentRow;
-                if (oldPersistentRow == oldRow)
-                    newPersistentRow = newRow;
-                else if (oldRow < oldPersistentRow && newRow >= oldPersistentRow)
-                    newPersistentRow = oldPersistentRow - 1;
-                else if (oldRow > oldPersistentRow && newRow <= oldPersistentRow)
-                    newPersistentRow = oldPersistentRow + 1;
-                if (newPersistentRow != oldPersistentRow)
-                    newPersistentIndexes[k] = createIndex(newPersistentRow,
-                                                          pi.column(), pi.internalPointer());
-            }
-        }
-    }
+    /** Check if range [start,end] is already in sorted position in list.
+     *  Take for this the assumption, that outside [start,end] the list
+     *  is already sorted. Therefore the sorted check has to be extended
+     *  to the first element that is known to be sorted before the range
+     *  [start, end], which is (start-1) and the first element after the
+     *  range [start, end], which is (end+2) due to end being included.
+    */
+    const auto beginChangedIterator = items.constBegin() + qMax(start - 1, 0);
+    const auto endChangedIterator = items.constBegin() + qMin(end + 2, items.size());
+    const bool needsSorting = !std::is_sorted(beginChangedIterator, endChangedIterator,
+                                              order == Qt::AscendingOrder ? compareLt : compareGt);
 
-    if (changed) {
-        items = tmp;
-        changePersistentIndexList(oldPersistentIndexes, newPersistentIndexes);
-        emit layoutChanged({}, QAbstractItemModel::VerticalSortHint);
-    }
+    if (needsSorting)
+        sort(column, order);
 }
 
 bool QListModel::itemLessThan(const QPair<QListWidgetItem*,int> &left,
@@ -1126,57 +1083,71 @@ void QListWidgetPrivate::setup()
     Q_Q(QListWidget);
     q->QListView::setModel(new QListModel(q));
     // view signals
-    QObject::connect(q, SIGNAL(pressed(QModelIndex)), q, SLOT(_q_emitItemPressed(QModelIndex)));
-    QObject::connect(q, SIGNAL(clicked(QModelIndex)), q, SLOT(_q_emitItemClicked(QModelIndex)));
-    QObject::connect(q, SIGNAL(doubleClicked(QModelIndex)),
-                     q, SLOT(_q_emitItemDoubleClicked(QModelIndex)));
-    QObject::connect(q, SIGNAL(activated(QModelIndex)),
-                     q, SLOT(_q_emitItemActivated(QModelIndex)));
-    QObject::connect(q, SIGNAL(entered(QModelIndex)), q, SLOT(_q_emitItemEntered(QModelIndex)));
-    QObject::connect(model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-                     q, SLOT(_q_emitItemChanged(QModelIndex)));
-    QObject::connect(model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-                     q, SLOT(_q_dataChanged(QModelIndex,QModelIndex)));
-    QObject::connect(model, SIGNAL(columnsRemoved(QModelIndex,int,int)), q, SLOT(_q_sort()));
+    connections = {
+        QObjectPrivate::connect(q, &QListWidget::pressed,
+                                this, &QListWidgetPrivate::emitItemPressed),
+        QObjectPrivate::connect(q, &QListWidget::clicked,
+                                this, &QListWidgetPrivate::emitItemClicked),
+        QObjectPrivate::connect(q, &QListWidget::doubleClicked,
+                                this, &QListWidgetPrivate::emitItemDoubleClicked),
+        QObjectPrivate::connect(q, &QListWidget::activated,
+                                this, &QListWidgetPrivate::emitItemActivated),
+        QObjectPrivate::connect(q, &QListWidget::entered,
+                                this, &QListWidgetPrivate::emitItemEntered),
+        QObjectPrivate::connect(model, &QAbstractItemModel::dataChanged,
+                                this, &QListWidgetPrivate::emitItemChanged),
+        QObjectPrivate::connect(model, &QAbstractItemModel::dataChanged,
+                                this, &QListWidgetPrivate::dataChanged),
+        QObjectPrivate::connect(model, &QAbstractItemModel::columnsRemoved,
+                                this, &QListWidgetPrivate::sort)
+    };
 }
 
-void QListWidgetPrivate::_q_emitItemPressed(const QModelIndex &index)
+void QListWidgetPrivate::clearConnections()
+{
+    for (const QMetaObject::Connection &connection : connections)
+        QObject::disconnect(connection);
+    for (const QMetaObject::Connection &connection : selectionModelConnections)
+        QObject::disconnect(connection);
+}
+
+void QListWidgetPrivate::emitItemPressed(const QModelIndex &index)
 {
     Q_Q(QListWidget);
     emit q->itemPressed(listModel()->at(index.row()));
 }
 
-void QListWidgetPrivate::_q_emitItemClicked(const QModelIndex &index)
+void QListWidgetPrivate::emitItemClicked(const QModelIndex &index)
 {
     Q_Q(QListWidget);
     emit q->itemClicked(listModel()->at(index.row()));
 }
 
-void QListWidgetPrivate::_q_emitItemDoubleClicked(const QModelIndex &index)
+void QListWidgetPrivate::emitItemDoubleClicked(const QModelIndex &index)
 {
     Q_Q(QListWidget);
     emit q->itemDoubleClicked(listModel()->at(index.row()));
 }
 
-void QListWidgetPrivate::_q_emitItemActivated(const QModelIndex &index)
+void QListWidgetPrivate::emitItemActivated(const QModelIndex &index)
 {
     Q_Q(QListWidget);
     emit q->itemActivated(listModel()->at(index.row()));
 }
 
-void QListWidgetPrivate::_q_emitItemEntered(const QModelIndex &index)
+void QListWidgetPrivate::emitItemEntered(const QModelIndex &index)
 {
     Q_Q(QListWidget);
     emit q->itemEntered(listModel()->at(index.row()));
 }
 
-void QListWidgetPrivate::_q_emitItemChanged(const QModelIndex &index)
+void QListWidgetPrivate::emitItemChanged(const QModelIndex &index)
 {
     Q_Q(QListWidget);
     emit q->itemChanged(listModel()->at(index.row()));
 }
 
-void QListWidgetPrivate::_q_emitCurrentItemChanged(const QModelIndex &current,
+void QListWidgetPrivate::emitCurrentItemChanged(const QModelIndex &current,
                                                 const QModelIndex &previous)
 {
     Q_Q(QListWidget);
@@ -1194,14 +1165,14 @@ void QListWidgetPrivate::_q_emitCurrentItemChanged(const QModelIndex &current,
     emit q->currentRowChanged(persistentCurrent.row());
 }
 
-void QListWidgetPrivate::_q_sort()
+void QListWidgetPrivate::sort()
 {
     if (sortingEnabled)
         model->sort(0, sortOrder);
 }
 
-void QListWidgetPrivate::_q_dataChanged(const QModelIndex &topLeft,
-                                        const QModelIndex &bottomRight)
+void QListWidgetPrivate::dataChanged(const QModelIndex &topLeft,
+                                     const QModelIndex &bottomRight)
 {
     if (sortingEnabled && topLeft.isValid() && bottomRight.isValid())
         listModel()->ensureSorted(topLeft.column(), sortOrder,
@@ -1407,6 +1378,8 @@ QListWidget::QListWidget(QWidget *parent)
 
 QListWidget::~QListWidget()
 {
+    Q_D(QListWidget);
+    d->clearConnections();
 }
 
 /*!
@@ -1417,20 +1390,18 @@ void QListWidget::setSelectionModel(QItemSelectionModel *selectionModel)
 {
     Q_D(QListWidget);
 
-    if (d->selectionModel) {
-        QObject::disconnect(d->selectionModel, SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-                            this, SLOT(_q_emitCurrentItemChanged(QModelIndex,QModelIndex)));
-        QObject::disconnect(d->selectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)),
-                            this, SIGNAL(itemSelectionChanged()));
-    }
+    for (const QMetaObject::Connection &connection : d->selectionModelConnections)
+        disconnect(connection);
 
     QListView::setSelectionModel(selectionModel);
 
     if (d->selectionModel) {
-        QObject::connect(d->selectionModel, SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-                         this, SLOT(_q_emitCurrentItemChanged(QModelIndex,QModelIndex)));
-        QObject::connect(d->selectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)),
-                         this, SIGNAL(itemSelectionChanged()));
+        d->selectionModelConnections = {
+            QObjectPrivate::connect(d->selectionModel, &QItemSelectionModel::currentChanged,
+                                    d, &QListWidgetPrivate::emitCurrentItemChanged),
+            QObject::connect(d->selectionModel, &QItemSelectionModel::selectionChanged,
+                             this, &QListWidget::itemSelectionChanged)
+        };
     }
 }
 
@@ -1741,6 +1712,8 @@ QWidget *QListWidget::itemWidget(QListWidgetItem *item) const
     a list widget item. If you want to display custom dynamic content or
     implement a custom editor widget, use QListView and subclass QStyledItemDelegate
     instead.
+
+    \note The list takes ownership of the \a widget.
 
     \sa itemWidget(), removeItemWidget(), {Delegate Classes}
 */

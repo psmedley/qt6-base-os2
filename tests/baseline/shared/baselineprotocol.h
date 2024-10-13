@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef BASELINEPROTOCOL_H
 #define BASELINEPROTOCOL_H
@@ -115,7 +115,8 @@ public:
     // For client:
 
     // For advanced client:
-    bool connect(const QString &testCase, bool *dryrun = nullptr, const PlatformInfo& clientInfo = PlatformInfo());
+    bool connect(const QString &testCase, bool *dryrun = nullptr,
+                 const PlatformInfo &clientInfo = PlatformInfo(), const QString &server = QString());
     bool disconnect();
     bool requestBaselineChecksums(const QString &testFunction, ImageItemList *itemList);
     bool submitMatch(const ImageItem &item, QByteArray *serverMsg);

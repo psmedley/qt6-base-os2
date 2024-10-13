@@ -405,27 +405,27 @@ Q_GUI_EXPORT QDataStream &operator<<(QDataStream &stream, const QTextFormat &fmt
 {
     QMap<int, QVariant> properties = fmt.properties();
     if (stream.version() < QDataStream::Qt_6_0) {
-        auto it = properties.find(QTextFormat::FontLetterSpacingType);
-        if (it != properties.end()) {
+        auto it = properties.constFind(QTextFormat::FontLetterSpacingType);
+        if (it != properties.cend()) {
             properties[QTextFormat::OldFontLetterSpacingType] = it.value();
             properties.erase(it);
         }
 
-        it = properties.find(QTextFormat::FontStretch);
-        if (it != properties.end()) {
+        it = properties.constFind(QTextFormat::FontStretch);
+        if (it != properties.cend()) {
             properties[QTextFormat::OldFontStretch] = it.value();
             properties.erase(it);
         }
 
-        it = properties.find(QTextFormat::TextUnderlineColor);
-        if (it != properties.end()) {
+        it = properties.constFind(QTextFormat::TextUnderlineColor);
+        if (it != properties.cend()) {
             properties[QTextFormat::OldTextUnderlineColor] = it.value();
             properties.erase(it);
         }
 
-        it = properties.find(QTextFormat::FontFamilies);
-        if (it != properties.end()) {
-            properties[QTextFormat::OldFontFamily] = QVariant(it.value().toStringList().first());
+        it = properties.constFind(QTextFormat::FontFamilies);
+        if (it != properties.cend()) {
+            properties[QTextFormat::OldFontFamily] = QVariant(it.value().toStringList().constFirst());
             properties.erase(it);
         }
     }
@@ -684,6 +684,8 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextTableCellFormat &
                             numeric lists.
     \value ListNumberSuffix Defines the text which is appended to item numbers in
                             numeric lists.
+    \value [since 6.6] ListStart
+                            Defines the first value of a list.
 
     Table and frame properties
 
@@ -743,6 +745,7 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextTableCellFormat &
     \value ImageWidth
     \value ImageHeight
     \value ImageQuality
+    \value ImageMaxWidth    This enum value has been added in Qt 6.8.
 
     Selection properties
 
@@ -953,7 +956,11 @@ void QTextFormat::merge(const QTextFormat &other)
     p->props.reserve(p->props.size() + otherProps.size());
     for (int i = 0; i < otherProps.size(); ++i) {
         const QT_PREPEND_NAMESPACE(Property) &prop = otherProps.at(i);
-        p->insertProperty(prop.key, prop.value);
+        if (prop.value.isValid()) {
+            p->insertProperty(prop.key, prop.value);
+        } else {
+            p->clearProperty(prop.key);
+        }
     }
 }
 
@@ -1210,10 +1217,8 @@ void QTextFormat::setProperty(int propertyId, const QVariant &value)
 {
     if (!d)
         d = new QTextFormatPrivate;
-    if (!value.isValid())
-        clearProperty(propertyId);
-    else
-        d->insertProperty(propertyId, value);
+
+    d->insertProperty(propertyId, value);
 }
 
 /*!
@@ -2238,13 +2243,8 @@ void QTextBlockFormat::setTabPositions(const QList<QTextOption::Tab> &tabs)
 {
     QList<QVariant> list;
     list.reserve(tabs.size());
-    QList<QTextOption::Tab>::ConstIterator iter = tabs.constBegin();
-    while (iter != tabs.constEnd()) {
-        QVariant v;
-        v.setValue(*iter);
-        list.append(v);
-        ++iter;
-    }
+    for (const auto &e : tabs)
+        list.append(QVariant::fromValue(e));
     setProperty(TabPositions, list);
 }
 
@@ -2260,13 +2260,10 @@ QList<QTextOption::Tab> QTextBlockFormat::tabPositions() const
     if (variant.isNull())
         return QList<QTextOption::Tab>();
     QList<QTextOption::Tab> answer;
-    QList<QVariant> variantsList = qvariant_cast<QList<QVariant> >(variant);
-    QList<QVariant>::Iterator iter = variantsList.begin();
+    const QList<QVariant> variantsList = qvariant_cast<QList<QVariant> >(variant);
     answer.reserve(variantsList.size());
-    while(iter != variantsList.end()) {
-        answer.append( qvariant_cast<QTextOption::Tab>(*iter));
-        ++iter;
-    }
+    for (const auto &e: variantsList)
+        answer.append(qvariant_cast<QTextOption::Tab>(e));
     return answer;
 }
 
@@ -2610,7 +2607,8 @@ QList<QTextOption::Tab> QTextBlockFormat::tabPositions() const
     The style used to decorate each item is set with setStyle() and can be read
     with the style() function. The style controls the type of bullet points and
     numbering scheme used for items in the list. Note that lists that use the
-    decimal numbering scheme begin counting at 1 rather than 0.
+    decimal numbering scheme begin counting at 1 rather than 0, unless it has
+    been overridden via setStart().
 
     Style properties can be set to further configure the appearance of list
     items; for example, the ListNumberPrefix and ListNumberSuffix properties
@@ -2647,6 +2645,7 @@ QTextListFormat::QTextListFormat()
     : QTextFormat(ListFormat)
 {
     setIndent(1);
+    setStart(1);
 }
 
 /*!
@@ -2748,6 +2747,32 @@ QTextListFormat::QTextListFormat(const QTextFormat &fmt)
     Returns the list format's number suffix.
 
     \sa setNumberSuffix()
+*/
+
+/*!
+    \fn void QTextListFormat::setStart(int start)
+    \since 6.6
+
+    Sets the list format's \a start index.
+
+    This allows you to start a list with an index other than 1. This can be
+    used with all sorted list types: for example if the style() is
+    QTextListFormat::ListLowerAlpha and start() is \c 4, the first list item
+    begins with "d". It does not have any effect on unsorted list types.
+
+    The default start is \c 1.
+
+    \sa start()
+*/
+
+/*!
+    \fn int QTextListFormat::start() const
+    \since 6.6
+
+    Returns the number to be shown by the first list item, if the style() is
+    QTextListFormat::ListDecimal, or to offset other sorted list types.
+
+    \sa setStart()
 */
 
 /*!
@@ -3132,7 +3157,8 @@ QTextTableFormat::QTextTableFormat()
  : QTextFrameFormat()
 {
     setObjectType(TableObject);
-    setCellSpacing(2);
+    setCellPadding(4);
+    setBorderCollapse(true);
     setBorder(1);
 }
 
@@ -3401,7 +3427,7 @@ QTextImageFormat::QTextImageFormat(const QTextFormat &fmt)
 
     Sets the \a width of the rectangle occupied by the image.
 
-    \sa width(), setHeight()
+    \sa width(), setHeight(), maximumWidth()
 */
 
 
@@ -3411,6 +3437,24 @@ QTextImageFormat::QTextImageFormat(const QTextFormat &fmt)
     Returns the width of the rectangle occupied by the image.
 
     \sa height(), setWidth()
+*/
+
+/*!
+    \fn void QTextImageFormat::setMaximumWidth(QTextLength maximumWidth)
+
+    Sets the \a maximumWidth of the rectangle occupied by the image. This
+    can be an absolute number or a percentage of the available document size.
+
+    \sa width(), setHeight()
+*/
+
+
+/*!
+    \fn QTextLength QTextImageFormat::maximumWidth() const
+
+    Returns the maximum width of the rectangle occupied by the image.
+
+    \sa width(), setMaximumWidth()
 */
 
 
@@ -3969,7 +4013,7 @@ bool QTextFormatCollection::hasFormatCached(const QTextFormat &format) const
 
 int QTextFormatCollection::objectFormatIndex(int objectIndex) const
 {
-    if (objectIndex == -1)
+    if (objectIndex == -1 || objectIndex >= objFormats.size())
         return -1;
     return objFormats.at(objectIndex);
 }

@@ -36,10 +36,30 @@ void QCocoaAccessibility::notifyAccessibilityUpdate(QAccessibleEvent *event)
     }
 
     switch (event->type()) {
+    case QAccessible::Announcement: {
+        auto *announcementEvent = static_cast<QAccessibleAnnouncementEvent *>(event);
+        auto priorityLevel = (announcementEvent->politeness() == QAccessible::AnnouncementPoliteness::Assertive)
+                ? NSAccessibilityPriorityHigh
+                : NSAccessibilityPriorityMedium;
+        NSDictionary *announcementInfo = @{
+            NSAccessibilityPriorityKey: [NSNumber numberWithInt:priorityLevel],
+            NSAccessibilityAnnouncementKey: announcementEvent->message().toNSString()
+        };
+        // post event for application element, as the comment for
+        // NSAccessibilityAnnouncementRequestedNotification in the
+        // NSAccessibilityConstants.h header says
+        NSAccessibilityPostNotificationWithUserInfo(NSApp,
+                                                    NSAccessibilityAnnouncementRequestedNotification,
+                                                    announcementInfo);
+        break;
+    }
     case QAccessible::Focus: {
         NSAccessibilityPostNotification(element, NSAccessibilityFocusedUIElementChangedNotification);
         break;
     }
+    case QAccessible::PopupMenuStart:
+        NSAccessibilityPostNotification(element, NSAccessibilityFocusedUIElementChangedNotification);
+        break;
     case QAccessible::StateChanged:
     case QAccessible::ValueChanged:
     case QAccessible::TextInserted:
@@ -155,6 +175,8 @@ NSString *macRole(QAccessibleInterface *interface)
 
     if (roleMap.contains(qtRole)) {
        // MAC_ACCESSIBILTY_DEBUG() << "return" <<  roleMap[qtRole];
+        if (roleMap[qtRole] == NSAccessibilityComboBoxRole && !interface->state().editable)
+            return NSAccessibilityMenuButtonRole;
         if (roleMap[qtRole] == NSAccessibilityTextFieldRole && interface->state().multiLine)
             return NSAccessibilityTextAreaRole;
         return roleMap[qtRole];
@@ -202,7 +224,8 @@ bool shouldBeIgnored(QAccessibleInterface *interface)
         role == QAccessible::Application || // We use the system-provided application element.
         role == QAccessible::ToolBar ||     // Access the tool buttons directly.
         role == QAccessible::Pane ||        // Scroll areas.
-        role == QAccessible::Client)        // The default for QWidget.
+        role == QAccessible::Client ||      // The default for QWidget.
+        role == QAccessible::PopupMenu)     // Access the menu items directly
         return true;
 
     NSString *mac_role = macRole(interface);
@@ -233,7 +256,6 @@ bool shouldBeIgnored(QAccessibleInterface *interface)
 NSArray<QMacAccessibilityElement *> *unignoredChildren(QAccessibleInterface *interface)
 {
     int numKids = interface->childCount();
-    // qDebug() << "Children for: " << axid << iface << " are: " << numKids;
 
     NSMutableArray<QMacAccessibilityElement *> *kids = [NSMutableArray<QMacAccessibilityElement *> arrayWithCapacity:numKids];
     for (int i = 0; i < numKids; ++i) {
@@ -242,7 +264,6 @@ NSArray<QMacAccessibilityElement *> *unignoredChildren(QAccessibleInterface *int
             continue;
 
         QAccessible::Id childId = QAccessible::uniqueId(child);
-        //qDebug() << "    kid: " << childId << child;
 
         QMacAccessibilityElement *element = [QMacAccessibilityElement elementWithId: childId];
         if (element)

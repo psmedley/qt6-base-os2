@@ -35,6 +35,7 @@ public:
     const QFont *font(Font type = SystemFont) const override;
     QPixmap standardPixmap(StandardPixmap sp, const QSizeF &size) const override;
     QIcon fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptions options = {}) const override;
+    QIconEngine *createIconEngine(const QString &iconName) const override;
 
     QVariant themeHint(ThemeHint hint) const override;
     Qt::ColorScheme colorScheme() const override;
@@ -43,6 +44,7 @@ public:
 
     static const char *name;
 
+    void requestColorScheme(Qt::ColorScheme scheme) override;
     void handleSystemThemeChange();
 
 #ifndef QT_NO_SHORTCUT
@@ -54,6 +56,9 @@ private:
     QMacNotificationObserver m_systemColorObserver;
     mutable QHash<QPlatformTheme::Palette, QPalette*> m_palettes;
     QMacKeyValueObserver m_appearanceObserver;
+
+    Qt::ColorScheme m_colorScheme = Qt::ColorScheme::Unknown;
+    void updateColorScheme();
 };
 
 QT_END_NAMESPACE

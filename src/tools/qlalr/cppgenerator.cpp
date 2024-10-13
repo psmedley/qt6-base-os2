@@ -1,5 +1,7 @@
+// REUSE-IgnoreStart
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// REUSE-IgnoreEnd
 
 #include "cppgenerator.h"
 
@@ -39,7 +41,7 @@ void generateList(const QList<int> &list, QTextStream &out)
 }
 
 }
-
+// REUSE-IgnoreStart
 QString CppGenerator::copyrightHeader() const
 {
   return
@@ -47,6 +49,7 @@ QString CppGenerator::copyrightHeader() const
     "// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0\n"
     "\n"_L1;
 }
+// REUSE-IgnoreEnd
 
 QString CppGenerator::privateCopyrightHeader() const
 {
@@ -193,7 +196,15 @@ void CppGenerator::operator () ()
     {
       if (shift_reduce_conflict_count != grammar.expected_shift_reduce
           || reduce_reduce_conflict_count != grammar.expected_reduce_reduce)
-        qerr() << "*** Conflicts: " << shift_reduce_conflict_count << " shift/reduce, " << reduce_reduce_conflict_count << " reduce/reduce" << Qt::endl;
+        {
+          qerr() << "*** Conflicts: " << shift_reduce_conflict_count << " shift/reduce, " << reduce_reduce_conflict_count << " reduce/reduce" << Qt::endl;
+          if (warnings_are_errors)
+            {
+              qerr() << "qlalr: error: warning occurred, treating as error due to "
+                        "--exit-on-warn." << Qt::endl;
+              exit(2);
+            }
+        }
 
       if (verbose)
         qout() << Qt::endl << "*** Conflicts: " << shift_reduce_conflict_count << " shift/reduce, " << reduce_reduce_conflict_count << " reduce/reduce" << Qt::endl
@@ -220,7 +231,15 @@ void CppGenerator::operator () ()
       if (! used_rules.testBit (i))
         {
           if (rule != grammar.goal)
-            qerr() << "*** Warning: Rule ``" << *rule << "'' is useless!" << Qt::endl;
+            {
+              qerr() << "*** Warning: Rule ``" << *rule << "'' is useless!" << Qt::endl;
+              if (warnings_are_errors)
+                {
+                  qerr() << "qlalr: error: warning occurred, treating as error due to "
+                            "--exit-on-warn." << Qt::endl;
+                  exit(2);
+                }
+            }
         }
     }
 
@@ -332,7 +351,12 @@ void CppGenerator::operator () ()
 
   { // decls...
     QFile f (declFileName);
-    f.open (QFile::WriteOnly);
+    if (! f.open (QFile::WriteOnly))
+      {
+        fprintf (stderr, "*** cannot create %s: %s\n",
+                 qPrintable(declFileName), qPrintable(f.errorString()));
+        return;
+      }
     QTextStream out (&f);
 
     QString prot = declFileName.toUpper ().replace (QLatin1Char ('.'), QLatin1Char ('_'));
@@ -364,7 +388,12 @@ void CppGenerator::operator () ()
 
   { // bits...
     QFile f (bitsFileName);
-    f.open (QFile::WriteOnly);
+    if (! f.open (QFile::WriteOnly))
+      {
+        fprintf (stderr, "*** cannot create %s: %s\n",
+                 qPrintable(bitsFileName), qPrintable(f.errorString()));
+        return;
+      }
     QTextStream out (&f);
 
     // copyright headers must come first, otherwise the headers tests will fail
@@ -385,7 +414,12 @@ void CppGenerator::operator () ()
   if (! grammar.decl_file_name.isEmpty ())
     {
       QFile f (grammar.decl_file_name);
-      f.open (QFile::WriteOnly);
+      if (! f.open (QFile::WriteOnly))
+        {
+          fprintf (stderr, "*** cannot create %s: %s\n",
+                   qPrintable(grammar.decl_file_name), qPrintable(f.errorString()));
+          return;
+        }
       QTextStream out (&f);
       out << p.decls();
     }
@@ -393,7 +427,12 @@ void CppGenerator::operator () ()
   if (! grammar.impl_file_name.isEmpty ())
     {
       QFile f (grammar.impl_file_name);
-      f.open (QFile::WriteOnly);
+      if (! f.open (QFile::WriteOnly))
+        {
+          fprintf (stderr, "*** cannot create %s: %s\n",
+                   qPrintable(grammar.impl_file_name), qPrintable(f.errorString()));
+          return;
+        }
       QTextStream out (&f);
       out << p.impls();
     }

@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -258,18 +258,16 @@ void tst_QSqlThread::generic_data(const QString& engine)
 
 void tst_QSqlThread::dropTestTables()
 {
-    for (int i = 0; i < dbs.dbNames.size(); ++i) {
-        QSqlDatabase db = QSqlDatabase::database(dbs.dbNames.at(i));
-        QSqlQuery q(db);
-
-        tst_Databases::safeDropTables(db, QStringList() << qtest << qTableName("qtest2", __FILE__, db) << qTableName("emptytable", __FILE__, db));
+    for (const auto &dbName : dbs.dbNames) {
+        QSqlDatabase db = QSqlDatabase::database(dbName);
+        tst_Databases::safeDropTables(db, { qtest, qTableName("qtest2", __FILE__, db), qTableName("emptytable", __FILE__, db) });
     }
 }
 
 void tst_QSqlThread::createTestTables()
 {
-    for (int i = 0; i < dbs.dbNames.size(); ++i) {
-        QSqlDatabase db = QSqlDatabase::database(dbs.dbNames.at(i));
+    for (const auto &dbName : dbs.dbNames) {
+        QSqlDatabase db = QSqlDatabase::database(dbName);
         QSqlQuery q(db);
 
         QVERIFY_SQL(q, exec("create table " + qtest
@@ -285,8 +283,8 @@ void tst_QSqlThread::createTestTables()
 
 void tst_QSqlThread::repopulateTestTables()
 {
-    for (int i = 0; i < dbs.dbNames.size(); ++i) {
-        QSqlDatabase db = QSqlDatabase::database(dbs.dbNames.at(i));
+    for (const auto &dbName : dbs.dbNames) {
+        QSqlDatabase db = QSqlDatabase::database(dbName);
         QSqlQuery q(db);
 
         QVERIFY_SQL(q, exec("delete from " + qtest));

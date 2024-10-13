@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QImageReader>
@@ -41,11 +41,15 @@ private slots:
     void streamAvailableSizes();
     void fromTheme();
     void fromThemeCache();
+    void fromThemeConstant();
 
 #ifndef QT_NO_WIDGETS
     void task184901_badCache();
 #endif
     void task223279_inconsistentAddFile();
+
+    void themeFromPlugin_data();
+    void themeFromPlugin();
 
 private:
     bool haveImageFormat(QByteArray const&);
@@ -191,21 +195,21 @@ void tst_QIcon::isNull() {
     // test string constructor with empty string
     QIcon iconEmptyString = QIcon(QString());
     QVERIFY(iconEmptyString.isNull());
-    QVERIFY(!iconEmptyString.actualSize(QSize(32, 32)).isValid());;
+    QVERIFY(!iconEmptyString.actualSize(QSize(32, 32)).isValid());
 
     // test string constructor with non-existing file
     QIcon iconNoFile = QIcon("imagedoesnotexist");
-    QVERIFY(!iconNoFile.isNull());
+    QVERIFY(iconNoFile.isNull());
     QVERIFY(!iconNoFile.actualSize(QSize(32, 32)).isValid());
 
     // test string constructor with non-existing file with suffix
     QIcon iconNoFileSuffix = QIcon("imagedoesnotexist.png");
-    QVERIFY(!iconNoFileSuffix.isNull());
+    QVERIFY(iconNoFileSuffix.isNull());
     QVERIFY(!iconNoFileSuffix.actualSize(QSize(32, 32)).isValid());
 
     // test string constructor with existing file but unsupported format
     QIcon iconUnsupportedFormat = QIcon(m_sourceFileName);
-    QVERIFY(!iconUnsupportedFormat.isNull());
+    QVERIFY(iconUnsupportedFormat.isNull());
     QVERIFY(!iconUnsupportedFormat.actualSize(QSize(32, 32)).isValid());
 
     // test string constructor with existing file and supported format
@@ -552,6 +556,10 @@ void tst_QIcon::availableSizes()
 
 void tst_QIcon::name()
 {
+    const auto reset = qScopeGuard([]{
+        QIcon::setThemeName({});
+        QIcon::setThemeSearchPaths({});
+    });
     {
         // No name if icon does not come from a theme
         QIcon icon(":/image.png");
@@ -629,6 +637,7 @@ void tst_QIcon::task184901_badCache()
 
 void tst_QIcon::fromTheme()
 {
+    const bool abIconFromPlatform = !QIcon::fromTheme("address-book-new").isNull();
     QString firstSearchPath = QLatin1String(":/icons");
     QString secondSearchPath = QLatin1String(":/second_icons");
     QIcon::setThemeSearchPaths(QStringList() << firstSearchPath << secondSearchPath);
@@ -717,15 +726,21 @@ void tst_QIcon::fromTheme()
         QCOMPARE(i.availableSizes(), abIcon.availableSizes());
     }
 
-    // Check that setting a fallback theme invalidates earlier lookups
-    QVERIFY(QIcon::fromTheme("edit-cut").isNull());
-    QIcon::setFallbackThemeName("fallbacktheme");
-    QVERIFY(!QIcon::fromTheme("edit-cut").isNull());
+    // Setting or changing the fallback theme should invalidate earlier lookups.
+    // We can only test this if the system doesn't provide an icon, because once
+    // we got a valid icon, it will be cached, and even if we proxy to a different
+    // engine when a fallback theme is set, the cacheKey of the icon will be the
+    // same.
+    const QIcon editCut = QIcon::fromTheme("edit-cut");
+    if (editCut.isNull()) {
+        QIcon::setFallbackThemeName("fallbacktheme");
+        QVERIFY(!QIcon::fromTheme("edit-cut").isNull());
+    }
 
     // Make sure setting the theme name clears the state
     QIcon::setThemeName("");
     abIcon = QIcon::fromTheme("address-book-new");
-    QVERIFY(abIcon.isNull());
+    QCOMPARE_NE(abIcon.isNull(), abIconFromPlatform);
 
     // Test fallback icon behavior for empty theme names.
     // Can only reliably test this on systems that don't have a
@@ -809,7 +824,7 @@ void tst_QIcon::fromThemeCache()
     QTest::qWait(1000); // wait enough to have a different modification time in seconds
     QVERIFY(QFile(QStringLiteral(":/styles/commonstyle/images/standardbutton-save-16.png"))
         .copy(dir.path() + QLatin1String("/testcache/16x16/actions/button-save.png")));
-    QVERIFY(QFileInfo(cacheName).lastModified() < QFileInfo(dir.path() + QLatin1String("/testcache/16x16/actions")).lastModified());
+    QVERIFY(QFileInfo(cacheName).lastModified(QTimeZone::UTC) < QFileInfo(dir.path() + QLatin1String("/testcache/16x16/actions")).lastModified(QTimeZone::UTC));
     QIcon::setThemeSearchPaths(QStringList() << dir.path()); // reload themes
     QVERIFY(!QIcon::fromTheme("button-open").isNull());
 
@@ -830,11 +845,16 @@ void tst_QIcon::fromThemeCache()
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     QCOMPARE(process.exitCode(), 0);
 #endif // QT_CONFIG(process)
-    QVERIFY(QFileInfo(cacheName).lastModified() >= QFileInfo(dir.path() + QLatin1String("/testcache/16x16/actions")).lastModified());
+    QVERIFY(QFileInfo(cacheName).lastModified(QTimeZone::UTC) >= QFileInfo(dir.path() + QLatin1String("/testcache/16x16/actions")).lastModified(QTimeZone::UTC));
     QIcon::setThemeSearchPaths(QStringList() << dir.path()); // reload themes
     QVERIFY(!QIcon::fromTheme("button-open").isNull());
     QVERIFY(!QIcon::fromTheme("button-open-fallback").isNull());
     QVERIFY(QIcon::fromTheme("notexist-fallback").isNull());
+}
+
+void tst_QIcon::fromThemeConstant()
+{
+    const QIcon icon = QIcon::fromTheme(QIcon::ThemeIcon::EditCut);
 }
 
 void tst_QIcon::task223279_inconsistentAddFile()
@@ -855,6 +875,32 @@ void tst_QIcon::task223279_inconsistentAddFile()
     QCOMPARE(pm1.size(), pm2.size());
 }
 
+Q_IMPORT_PLUGIN(TestIconPlugin)
+
+void tst_QIcon::themeFromPlugin_data()
+{
+    QTest::addColumn<QString>("themeName");
+
+    QTest::addRow("plugintheme") << "plugintheme";
+    QTest::addRow("specialtheme") << "specialTheme"; // deliberately not matching case
+}
+
+void tst_QIcon::themeFromPlugin()
+{
+    QFETCH(const QString, themeName);
+    auto restoreTheme = qScopeGuard([oldTheme = QIcon::themeName()]{
+        QIcon::setThemeName(oldTheme);
+    });
+
+    QIcon icon = QIcon::fromTheme("icon1");
+    QVERIFY(icon.isNull());
+
+    QIcon::setThemeName(themeName);
+
+    icon = QIcon::fromTheme("icon1");
+    QVERIFY(!icon.isNull());
+    QCOMPARE(icon.name(), themeName + "/icon1");
+}
 
 QTEST_MAIN(tst_QIcon)
 #include "tst_qicon.moc"

@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
+#undef QT_NO_FOREACH // this file contains unported legacy Q_FOREACH uses
 
 /*
     !!!!!! Warning !!!!!
@@ -1815,6 +1816,8 @@ void tst_QTextLayout::testTabDPIScale()
                 return 72;
             case QPaintDevice::PdmDevicePixelRatio:
             case QPaintDevice::PdmDevicePixelRatioScaled:
+            case QPaintDevice::PdmDevicePixelRatioF_EncodedA:
+            case QPaintDevice::PdmDevicePixelRatioF_EncodedB:
                 ; // fall through
             }
             return 0;
@@ -2560,6 +2563,7 @@ void tst_QTextLayout::softHyphens()
     QFont font;
     font.setPixelSize(fontSize);
     font.setHintingPreference(QFont::PreferNoHinting);
+    font.setKerning(false);
     const float xAdvance = QFontMetricsF(font).horizontalAdvance(QChar::fromLatin1('x'));
     float shyWidth = 0.0f;
     QTextLayout layout(text, font);
@@ -2736,13 +2740,25 @@ void tst_QTextLayout::min_maximumWidth()
 
 void tst_QTextLayout::negativeLineWidth()
 {
-    QTextLayout layout;
-    layout.setText("Foo bar");
-    layout.beginLayout();
-    QTextLine line = layout.createLine();
-    line.setLineWidth(-1);
-    QVERIFY(line.textLength() > 0);
-    layout.endLayout();
+    {
+        QTextLayout layout;
+        layout.setText("Foo bar");
+        layout.beginLayout();
+        QTextLine line = layout.createLine();
+        line.setLineWidth(-1);
+        QVERIFY(line.textLength() > 0);
+        layout.endLayout();
+    }
+
+    {
+        QTextLayout layout;
+        layout.setText("Foo bar");
+        layout.beginLayout();
+        QTextLine line = layout.createLine();
+        line.setNumColumns(2, -1);
+        QVERIFY(line.textLength() > 0);
+        layout.endLayout();
+    }
 }
 
 QTEST_MAIN(tst_QTextLayout)

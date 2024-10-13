@@ -1,7 +1,7 @@
 /*
 
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 */
 
@@ -71,7 +71,7 @@ public:
 
         lblPreview = new QLabel(NewForm);
         lblPreview->setObjectName("lblPreview");
-        QSizePolicy sizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        QSizePolicy sizePolicy(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Preferred);
         sizePolicy.setHorizontalStretch(0);
         sizePolicy.setVerticalStretch(0);
         sizePolicy.setHeightForWidth(lblPreview->sizePolicy().hasHeightForWidth());

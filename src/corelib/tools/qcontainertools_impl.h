@@ -72,10 +72,12 @@ template <typename T, typename N>
 void q_uninitialized_relocate_n(T* first, N n, T* out)
 {
     if constexpr (QTypeInfo<T>::isRelocatable) {
-        if (n != N(0)) { // even if N == 0, out == nullptr or first == nullptr are UB for memmove()
-            std::memmove(static_cast<void*>(out),
-                         static_cast<const void*>(first),
-                         n * sizeof(T));
+        static_assert(std::is_copy_constructible_v<T> || std::is_move_constructible_v<T>,
+                      "Refusing to relocate this non-copy/non-move-constructible type.");
+        if (n != N(0)) { // even if N == 0, out == nullptr or first == nullptr are UB for memcpy()
+            std::memcpy(static_cast<void *>(out),
+                        static_cast<const void *>(first),
+                        n * sizeof(T));
         }
     } else {
         q_uninitialized_move_if_noexcept_n(first, n, out);
@@ -104,6 +106,41 @@ void q_rotate(T *first, T *mid, T *last)
     } else {
         std::rotate(first, mid, last);
     }
+}
+
+/*!
+    \internal
+    Copies all elements, except the ones for which \a pred returns \c true, from
+    range [first, last), to the uninitialized memory buffer starting at \a out.
+
+    It's undefined behavior if \a out points into [first, last).
+
+    Returns a pointer one past the last copied element.
+
+    If an exception is thrown, all the already copied elements in the destination
+    buffer are destroyed.
+*/
+template <typename T, typename Predicate>
+T *q_uninitialized_remove_copy_if(T *first, T *last, T *out, Predicate &pred)
+{
+    static_assert(std::is_nothrow_destructible_v<T>,
+                  "This algorithm requires that T has a non-throwing destructor");
+    Q_ASSERT(!q_points_into_range(out, first, last));
+
+    T *dest_begin = out;
+    QT_TRY {
+        while (first != last) {
+            if (!pred(*first)) {
+                new (std::addressof(*out)) T(*first);
+                ++out;
+            }
+            ++first;
+        }
+    } QT_CATCH (...) {
+        std::destroy(std::reverse_iterator(out), std::reverse_iterator(dest_begin));
+        QT_RETHROW;
+    }
+    return out;
 }
 
 template<typename iterator, typename N>
@@ -217,6 +254,13 @@ void q_relocate_overlap_n(T *first, N n, T *d_first)
     }
 }
 
+template <typename T>
+struct ArrowProxy
+{
+    T t;
+    T *operator->() noexcept { return &t; }
+};
+
 template <typename Iterator>
 using IfIsInputIterator = typename std::enable_if<
     std::is_convertible<typename std::iterator_traits<Iterator>::iterator_category, std::input_iterator_tag>::value,
@@ -255,8 +299,8 @@ using KeyAndValueTest = decltype(
 
 template <typename Iterator>
 using FirstAndSecondTest = decltype(
-    std::declval<Iterator &>()->first,
-    std::declval<Iterator &>()->second
+    (*std::declval<Iterator &>()).first,
+    (*std::declval<Iterator &>()).second
 );
 
 template <typename Iterator>
@@ -265,7 +309,20 @@ using IfAssociativeIteratorHasKeyAndValue =
 
 template <typename Iterator>
 using IfAssociativeIteratorHasFirstAndSecond =
-    std::enable_if_t<qxp::is_detected_v<FirstAndSecondTest, Iterator>, bool>;
+    std::enable_if_t<
+        std::conjunction_v<
+            std::negation<qxp::is_detected<KeyAndValueTest, Iterator>>,
+            qxp::is_detected<FirstAndSecondTest, Iterator>
+        >, bool>;
+
+template <typename Iterator>
+using MoveBackwardsTest = decltype(
+    std::declval<Iterator &>().operator--()
+);
+
+template <typename Iterator>
+using IfIteratorCanMoveBackwards =
+    std::enable_if_t<qxp::is_detected_v<MoveBackwardsTest, Iterator>, bool>;
 
 template <typename T, typename U>
 using IfIsNotSame =
@@ -323,8 +380,7 @@ template <typename Container, typename T>
 auto sequential_erase_with_copy(Container &c, const T &t)
 {
     using CopyProxy = std::conditional_t<std::is_copy_constructible_v<T>, T, const T &>;
-    const T &tCopy = CopyProxy(t);
-    return sequential_erase(c, tCopy);
+    return sequential_erase(c, CopyProxy(t));
 }
 
 template <typename Container, typename T>

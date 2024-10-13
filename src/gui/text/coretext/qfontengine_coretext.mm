@@ -12,6 +12,9 @@
 #include <QtGui/qpainterpath.h>
 #include <private/qcoregraphics_p.h>
 #include <private/qimage_p.h>
+#include <private/qguiapplication_p.h>
+#include <private/qstringiterator_p.h>
+#include <qpa/qplatformtheme.h>
 
 #include <cmath>
 
@@ -125,9 +128,13 @@ public:
     QByteArray m_fontData;
 };
 
-QCoreTextFontEngine *QCoreTextFontEngine::create(const QByteArray &fontData, qreal pixelSize, QFont::HintingPreference hintingPreference)
+QCoreTextFontEngine *QCoreTextFontEngine::create(const QByteArray &fontData,
+                                                 qreal pixelSize,
+                                                 QFont::HintingPreference hintingPreference,
+                                                 const QMap<QFont::Tag, float> &variableAxisValues)
 {
     Q_UNUSED(hintingPreference);
+    Q_UNUSED(variableAxisValues);
 
     QCFType<CFDataRef> fontDataReference = fontData.toRawCFData();
     QCFType<CGDataProviderRef> dataProvider = CGDataProviderCreateWithCFData(fontDataReference);
@@ -186,6 +193,7 @@ void QCoreTextFontEngine::init()
     face_id.index = 0;
     QCFString name = CTFontCopyName(ctfont, kCTFontUniqueNameKey);
     face_id.filename = QString::fromCFString(name).toUtf8();
+    face_id.variableAxes = fontDef.variableAxisValues;
 
     QCFString family = CTFontCopyFamilyName(ctfont);
     fontDef.families = QStringList(family);
@@ -230,7 +238,7 @@ void QCoreTextFontEngine::init()
         synthesisFlags |= SynthesizedItalic;
 
     avgCharWidth = 0;
-    QByteArray os2Table = getSfntTable(MAKE_TAG('O', 'S', '/', '2'));
+    QByteArray os2Table = getSfntTable(QFont::Tag("OS/2").value());
     unsigned emSize = CTFontGetUnitsPerEm(ctfont);
     if (os2Table.size() >= 10) {
         fsType = qFromBigEndian<quint16>(os2Table.constData() + 8);
@@ -267,29 +275,30 @@ glyph_t QCoreTextFontEngine::glyphIndex(uint ucs4) const
     return glyphIndices[0];
 }
 
-bool QCoreTextFontEngine::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs,
-                                       int *nglyphs, QFontEngine::ShaperFlags flags) const
+int QCoreTextFontEngine::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs,
+                                      int *nglyphs, QFontEngine::ShaperFlags flags) const
 {
     Q_ASSERT(glyphs->numGlyphs >= *nglyphs);
     if (*nglyphs < len) {
         *nglyphs = len;
-        return false;
+        return -1;
     }
 
     QVarLengthArray<CGGlyph> cgGlyphs(len);
     CTFontGetGlyphsForCharacters(ctfont, (const UniChar*)str, cgGlyphs.data(), len);
 
     int glyph_pos = 0;
-    for (int i = 0; i < len; ++i) {
-        glyphs->glyphs[glyph_pos] = cgGlyphs[i];
-        if (glyph_pos < i)
-            cgGlyphs[glyph_pos] = cgGlyphs[i];
-        glyph_pos++;
-
-        // If it's a non-BMP char, skip the lower part of surrogate pair and go
-        // directly to the next char without increasing glyph_pos
-        if (str[i].isHighSurrogate() && i < len-1 && str[i+1].isLowSurrogate())
-            ++i;
+    int mappedGlyphs = 0;
+    QStringIterator it(str, str + len);
+    while (it.hasNext()) {
+      qsizetype idx = it.index();
+      char32_t ucs4 = it.next();
+      glyphs->glyphs[glyph_pos] = cgGlyphs[idx];
+      if (glyph_pos < idx)
+          cgGlyphs[glyph_pos] = cgGlyphs[idx];
+      if (glyphs->glyphs[glyph_pos] != 0 || isIgnorableChar(ucs4))
+          mappedGlyphs++;
+      glyph_pos++;
     }
 
     *nglyphs = glyph_pos;
@@ -298,7 +307,7 @@ bool QCoreTextFontEngine::stringToCMap(const QChar *str, int len, QGlyphLayout *
     if (!(flags & GlyphIndicesOnly))
         loadAdvancesForGlyphs(cgGlyphs, glyphs);
 
-    return true;
+    return mappedGlyphs;
 }
 
 glyph_metrics_t QCoreTextFontEngine::boundingBox(glyph_t glyph)
@@ -327,7 +336,10 @@ void QCoreTextFontEngine::initializeHeightMetrics() const
     m_descent = QFixed::fromReal(CTFontGetDescent(ctfont));
     m_leading = QFixed::fromReal(CTFontGetLeading(ctfont));
 
-    m_heightMetricsQueried = true;
+    if (preferTypoLineMetrics())
+        QFontEngine::initializeHeightMetrics();
+    else
+        m_heightMetricsQueried = true;
 }
 
 QFixed QCoreTextFontEngine::capHeight() const
@@ -716,10 +728,12 @@ QImage QCoreTextFontEngine::imageForGlyph(glyph_t glyph, const QFixedPoint &subP
             // draw with white or black fill, and then invert the glyph image in the latter case,
             // producing an alpha map. This covers the most common use-cases, but longer term we
             // should propagate the fill color all the way from the paint engine, and include it
-            //in the key for the glyph cache.
+            // in the key for the glyph cache.
 
-            if (!qt_mac_applicationIsInDarkMode())
-                return kCGColorBlack;
+            if (auto *platformTheme = QGuiApplicationPrivate::platformTheme()) {
+                if (platformTheme->colorScheme() != Qt::ColorScheme::Dark)
+                    return kCGColorBlack;
+            }
         }
         return kCGColorWhite;
     }();

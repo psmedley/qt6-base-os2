@@ -56,8 +56,11 @@
 #include <QtCore/private/qcfsocketnotifier_p.h>
 #include <QtCore/private/qtimerinfo_unix_p.h>
 #include <QtCore/qloggingcategory.h>
+#include <QtCore/qpointer.h>
 
 #include <CoreFoundation/CoreFoundation.h>
+
+Q_FORWARD_DECLARE_OBJC_CLASS(NSWindow);
 
 QT_BEGIN_NAMESPACE
 
@@ -67,11 +70,11 @@ typedef struct _NSModalSession *NSModalSession;
 typedef struct _QCocoaModalSessionInfo {
     QPointer<QWindow> window;
     NSModalSession session;
-    void *nswindow;
+    NSWindow *nswindow;
 } QCocoaModalSessionInfo;
 
 class QCocoaEventDispatcherPrivate;
-class QCocoaEventDispatcher : public QAbstractEventDispatcher
+class QCocoaEventDispatcher : public QAbstractEventDispatcherV2
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QCocoaEventDispatcher)
@@ -86,12 +89,12 @@ public:
     void registerSocketNotifier(QSocketNotifier *notifier);
     void unregisterSocketNotifier(QSocketNotifier *notifier);
 
-    void registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object);
-    bool unregisterTimer(int timerId);
-    bool unregisterTimers(QObject *object);
-    QList<TimerInfo> registeredTimers(QObject *object) const;
-
-    int remainingTime(int timerId);
+    void registerTimer(Qt::TimerId timerId, Duration interval, Qt::TimerType timerType,
+                       QObject *object) final;
+    bool unregisterTimer(Qt::TimerId timerId) final;
+    bool unregisterTimers(QObject *object) final;
+    QList<TimerInfoV2> timersForObject(QObject *object) const final;
+    Duration remainingTime(Qt::TimerId timerId) const final;
 
     void wakeUp();
     void interrupt();

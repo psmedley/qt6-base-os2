@@ -1,5 +1,5 @@
 // Copyright (C) 2023 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
@@ -7,114 +7,7 @@
 #include <private/qguiapplication_p.h>
 #include <qpa/qplatformintegration.h>
 
-#if defined(Q_OS_MACOS)
-#  include <AppKit/AppKit.h>
-#elif defined(Q_OS_WIN)
-#  include <winuser.h>
-#endif
-
-Q_LOGGING_CATEGORY(lcTests, "qt.gui.tests")
-
-class NativeWindow
-{
-    Q_DISABLE_COPY(NativeWindow)
-public:
-    NativeWindow();
-    ~NativeWindow();
-
-    operator WId() const { return reinterpret_cast<WId>(m_handle); }
-
-    void setGeometry(const QRect &rect);
-    QRect geometry() const;
-
-private:
-#if defined(Q_OS_MACOS)
-    NSView *m_handle = nullptr;
-#elif defined(Q_OS_WIN)
-    HWND m_handle = nullptr;
-#endif
-};
-
-#if defined(Q_OS_MACOS)
-
-@interface View : NSView
-@end
-
-@implementation View
-- (instancetype)init
-{
-    if ((self = [super init])) {
-        qCDebug(lcTests) << "Initialized" << self;
-    }
-    return self;
-}
-
-- (void)dealloc
-{
-    qCDebug(lcTests) << "Deallocating" << self;
-    [super dealloc];
-}
-@end
-
-NativeWindow::NativeWindow()
-    : m_handle([View new])
-{
-}
-
-NativeWindow::~NativeWindow()
-{
-    [m_handle release];
-}
-
-void NativeWindow::setGeometry(const QRect &rect)
-{
-    m_handle.frame = QRectF(rect).toCGRect();
-}
-
-QRect NativeWindow::geometry() const
-{
-    return QRectF::fromCGRect(m_handle.frame).toRect();
-}
-
-#elif defined(Q_OS_WIN)
-
-NativeWindow::NativeWindow()
-{
-    static const LPCWSTR className = []{
-        WNDCLASS wc = {};
-        wc.lpfnWndProc = DefWindowProc;
-        wc.hInstance = GetModuleHandle(nullptr);
-        wc.lpszClassName = L"Native Window";
-        RegisterClass(&wc);
-        return wc.lpszClassName;
-    }();
-    m_handle = CreateWindowEx(0, className, nullptr, WS_POPUP,
-                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
-}
-
-NativeWindow::~NativeWindow()
-{
-    DestroyWindow(m_handle);
-}
-
-void NativeWindow::setGeometry(const QRect &rect)
-{
-    MoveWindow(m_handle, rect.x(), rect.y(), rect.width(), rect.height(), false);
-}
-
-QRect NativeWindow::geometry() const
-{
-    WINDOWPLACEMENT wp;
-    wp.length = sizeof(WINDOWPLACEMENT);
-    if (GetWindowPlacement(m_handle, &wp)) {
-        RECT r = wp.rcNormalPosition;
-        return QRect(r.left, r.top, r.right - r.left, r.bottom - r.top);
-    }
-    return {};
-}
-
-#endif
+#include "../../../../shared/nativewindow.h"
 
 class tst_ForeignWindow: public QObject
 {
@@ -130,6 +23,12 @@ private slots:
 
     void fromWinId();
     void initialState();
+
+    void embedForeignWindow();
+    void embedInForeignWindow();
+
+    void destroyExplicitly();
+    void destroyWhenParentIsDestroyed();
 };
 
 void tst_ForeignWindow::fromWinId()
@@ -165,6 +64,7 @@ void tst_ForeignWindow::initialState()
 
     const QRect initialGeometry(123, 456, 321, 654);
     nativeWindow.setGeometry(initialGeometry);
+    QTRY_COMPARE(nativeWindow.geometry(), initialGeometry);
 
     std::unique_ptr<QWindow> foreignWindow(QWindow::fromWinId(nativeWindow));
     QCOMPARE(nativeWindow.geometry(), initialGeometry);
@@ -172,6 +72,124 @@ void tst_ForeignWindow::initialState()
     // For extra bonus points, the foreign window should actually
     // reflect the state of the native window.
     QCOMPARE(foreignWindow->geometry(), initialGeometry);
+}
+
+void tst_ForeignWindow::embedForeignWindow()
+{
+    // A foreign window embedded into a Qt UI requires that the rest of Qt
+    // is to be able to treat the foreign child window as any other window
+    // that it can show, hide, stack, and move around.
+
+    QWindow parentWindow;
+
+    NativeWindow nativeWindow;
+    QVERIFY(nativeWindow);
+
+    // As a prerequisite to that, we must be able to reparent the foreign window
+    std::unique_ptr<QWindow> foreignWindow(QWindow::fromWinId(nativeWindow));
+    foreignWindow->setParent(&parentWindow);
+    QTRY_COMPARE(nativeWindow.parentWinId(), parentWindow.winId());
+
+    // FIXME: This test is flakey on Linux. Figure out why
+#if !defined(Q_OS_LINUX)
+    foreignWindow->setParent(nullptr);
+    QTRY_VERIFY(nativeWindow.parentWinId() != parentWindow.winId());
+#endif
+}
+
+void tst_ForeignWindow::embedInForeignWindow()
+{
+    // When a foreign window is used as a container to embed a Qt UI
+    // in a foreign window hierarchy, the foreign window merely acts
+    // as a parent, and should not be modified.
+
+    {
+        // At a minimum, we must be able to reparent into the window
+        NativeWindow nativeWindow;
+        QVERIFY(nativeWindow);
+
+        std::unique_ptr<QWindow> foreignWindow(QWindow::fromWinId(nativeWindow));
+
+        QWindow embeddedWindow;
+        embeddedWindow.setParent(foreignWindow.get());
+        QTRY_VERIFY(nativeWindow.isParentOf(embeddedWindow.winId()));
+    }
+
+    {
+        // The foreign window's native window should not be reparent as a
+        // result of creating the foreign window, adding and removing children,
+        // or destroying the foreign window.
+
+        NativeWindow topLevelNativeWindow;
+        NativeWindow childNativeWindow;
+        childNativeWindow.setParent(topLevelNativeWindow);
+        QVERIFY(topLevelNativeWindow.isParentOf(childNativeWindow));
+
+        std::unique_ptr<QWindow> foreignWindow(QWindow::fromWinId(childNativeWindow));
+        QVERIFY(topLevelNativeWindow.isParentOf(childNativeWindow));
+
+        QWindow embeddedWindow;
+        embeddedWindow.setParent(foreignWindow.get());
+        QTRY_VERIFY(childNativeWindow.isParentOf(embeddedWindow.winId()));
+        QVERIFY(topLevelNativeWindow.isParentOf(childNativeWindow));
+
+        embeddedWindow.setParent(nullptr);
+        QVERIFY(topLevelNativeWindow.isParentOf(childNativeWindow));
+
+        foreignWindow.reset();
+        QVERIFY(topLevelNativeWindow.isParentOf(childNativeWindow));
+    }
+}
+
+void tst_ForeignWindow::destroyExplicitly()
+{
+    NativeWindow nativeWindow;
+    QVERIFY(nativeWindow);
+
+    std::unique_ptr<QWindow> foreignWindow(QWindow::fromWinId(nativeWindow));
+    QVERIFY(foreignWindow->handle());
+
+    // Explicitly destroying a foreign window is a no-op, as
+    // the documentation claims that it "releases the native
+    // platform resources associated with this window.", which
+    // is not technically true for foreign windows.
+    auto *windowHandleBeforeDestroy = foreignWindow->handle();
+    foreignWindow->destroy();
+    QCOMPARE(foreignWindow->handle(), windowHandleBeforeDestroy);
+}
+
+void tst_ForeignWindow::destroyWhenParentIsDestroyed()
+{
+    QWindow parentWindow;
+
+    NativeWindow nativeWindow;
+    QVERIFY(nativeWindow);
+
+    std::unique_ptr<QWindow> foreignWindow(QWindow::fromWinId(nativeWindow));
+    foreignWindow->setParent(&parentWindow);
+    QTRY_COMPARE(nativeWindow.parentWinId(), parentWindow.winId());
+
+    // Reparenting into a window will result in creating it
+    QVERIFY(parentWindow.handle());
+
+    parentWindow.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parentWindow));
+
+    // Destroying the parent window of the foreign window results
+    // in destroying the foreign window as well, as the foreign
+    // window no longer has a parent it can be embedded in.
+    QVERIFY(foreignWindow->handle());
+    parentWindow.destroy();
+    QVERIFY(!foreignWindow->handle());
+
+    // But the foreign window can be recreated again, and will
+    // continue to be a native child of the parent window.
+    foreignWindow->create();
+    QVERIFY(foreignWindow->handle());
+    QTRY_COMPARE(nativeWindow.parentWinId(), parentWindow.winId());
+
+    parentWindow.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parentWindow));
 }
 
 #include <tst_foreignwindow.moc>

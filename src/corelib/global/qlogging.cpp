@@ -14,7 +14,6 @@
 #include "qdebug.h"
 #include "qmutex.h"
 #include <QtCore/private/qlocking_p.h>
-#include <QtCore/private/qsimd_p.h>
 #include "qloggingcategory.h"
 #ifndef QT_BOOTSTRAPPED
 #include "qelapsedtimer.h"
@@ -70,17 +69,19 @@
 extern char *__progname;
 #endif
 
-#ifndef QT_BOOTSTRAPPED
-#if __has_include(<cxxabi.h>) && QT_CONFIG(backtrace) && QT_CONFIG(regularexpression)
+#ifdef QLOGGING_HAVE_BACKTRACE
 #  include <qregularexpression.h>
+#endif
+
+#ifdef QLOGGING_USE_EXECINFO_BACKTRACE
 #  if QT_CONFIG(dladdr)
 #    include <dlfcn.h>
 #  endif
 #  include BACKTRACE_HEADER
 #  include <cxxabi.h>
-#  define QLOGGING_HAVE_BACKTRACE
-#endif
+#endif // QLOGGING_USE_EXECINFO_BACKTRACE
 
+#ifndef QT_BOOTSTRAPPED
 #if defined(Q_OS_LINUX) && (defined(__GLIBC__) || __has_include(<sys/syscall.h>))
 #  include <sys/syscall.h>
 
@@ -161,14 +162,19 @@ Q_TRACE_POINT(qtcore, qt_message_print, int type, const char *category, const ch
     Example:
 
     \snippet code/src_corelib_global_qglobal.cpp 4
+
+    \sa QLoggingCategory
 */
 
-#if !defined(Q_CC_MSVC)
+template <typename String>
+#if !defined(Q_CC_MSVC_ONLY)
 Q_NORETURN
 #endif
-static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const QString &message);
+static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, String &&message);
 static void qt_message_print(QtMsgType, const QMessageLogContext &context, const QString &message);
-static void qt_message_print(const QString &message);
+static void preformattedMessageHandler(QtMsgType type, const QMessageLogContext &context,
+                                       const QString &formattedMessage);
+static QString formatLogMessage(QtMsgType type, const QMessageLogContext &context, const QString &str);
 
 static int checked_var_value(const char *varname)
 {
@@ -213,10 +219,7 @@ static bool isFatal(QtMsgType msgType)
     return false;
 }
 
-static bool isDefaultCategory(const char *category)
-{
-    return !category || strcmp(category, "default") == 0;
-}
+#ifndef Q_OS_WASM
 
 /*!
     Returns true if writing to \c stderr is supported.
@@ -313,6 +316,8 @@ bool shouldLogToStderr()
 
 using namespace QtPrivate;
 
+#endif // ifndef Q_OS_WASM
+
 /*!
     \class QMessageLogContext
     \inmodule QtCore
@@ -347,7 +352,7 @@ using namespace QtPrivate;
     \sa QMessageLogContext, qDebug(), qInfo(), qWarning(), qCritical(), qFatal()
 */
 
-#if defined(Q_CC_MSVC) && defined(QT_DEBUG) && defined(_DEBUG) && defined(_CRT_ERROR)
+#if defined(Q_CC_MSVC_ONLY) && defined(QT_DEBUG) && defined(_DEBUG) && defined(_CRT_ERROR)
 static inline void convert_to_wchar_t_elided(wchar_t *d, size_t space, const char *s) noexcept
 {
     size_t len = qstrlen(s);
@@ -368,14 +373,15 @@ static inline void convert_to_wchar_t_elided(wchar_t *d, size_t space, const cha
     \internal
 */
 Q_NEVER_INLINE
-static QString qt_message(QtMsgType msgType, const QMessageLogContext &context, const char *msg, va_list ap)
+static void qt_message(QtMsgType msgType, const QMessageLogContext &context, const char *msg, va_list ap)
 {
     QString buf = QString::vasprintf(msg, ap);
     qt_message_print(msgType, context, buf);
-    return buf;
+
+    if (isFatal(msgType))
+        qt_message_fatal(msgType, context, buf);
 }
 
-#undef qDebug
 /*!
     Logs a debug message specified with format \a msg. Additional
     parameters, specified by \a msg, may be used.
@@ -384,17 +390,13 @@ static QString qt_message(QtMsgType msgType, const QMessageLogContext &context, 
 */
 void QMessageLogger::debug(const char *msg, ...) const
 {
+    QInternalMessageLogContext ctxt(context);
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtDebugMsg, context, msg, ap);
+    qt_message(QtDebugMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtDebugMsg))
-        qt_message_fatal(QtDebugMsg, context, message);
 }
 
-
-#undef qInfo
 /*!
     Logs an informational message specified with format \a msg. Additional
     parameters, specified by \a msg, may be used.
@@ -404,13 +406,11 @@ void QMessageLogger::debug(const char *msg, ...) const
 */
 void QMessageLogger::info(const char *msg, ...) const
 {
+    QInternalMessageLogContext ctxt(context);
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtInfoMsg, context, msg, ap);
+    qt_message(QtInfoMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtInfoMsg))
-        qt_message_fatal(QtInfoMsg, context, message);
 }
 
 /*!
@@ -425,6 +425,8 @@ void QMessageLogger::info(const char *msg, ...) const
     with this signature, and \c Q_LOGGING_CATEGORY generates its definition.
 
     \since 5.3
+
+    \sa QLoggingCategory
 */
 
 /*!
@@ -439,17 +441,12 @@ void QMessageLogger::debug(const QLoggingCategory &cat, const char *msg, ...) co
     if (!cat.isDebugEnabled())
         return;
 
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtDebugMsg, ctxt, msg, ap);
+    qt_message(QtDebugMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtDebugMsg))
-        qt_message_fatal(QtDebugMsg, ctxt, message);
 }
 
 /*!
@@ -466,17 +463,12 @@ void QMessageLogger::debug(QMessageLogger::CategoryFunction catFunc,
     if (!cat.isDebugEnabled())
         return;
 
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtDebugMsg, ctxt, msg, ap);
+    qt_message(QtDebugMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtDebugMsg))
-        qt_message_fatal(QtDebugMsg, ctxt, message);
 }
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -550,17 +542,12 @@ void QMessageLogger::info(const QLoggingCategory &cat, const char *msg, ...) con
     if (!cat.isInfoEnabled())
         return;
 
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtInfoMsg, ctxt, msg, ap);
+    qt_message(QtInfoMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtInfoMsg))
-        qt_message_fatal(QtInfoMsg, ctxt, message);
 }
 
 /*!
@@ -577,17 +564,12 @@ void QMessageLogger::info(QMessageLogger::CategoryFunction catFunc,
     if (!cat.isInfoEnabled())
         return;
 
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtInfoMsg, ctxt, msg, ap);
+    qt_message(QtInfoMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtInfoMsg))
-        qt_message_fatal(QtInfoMsg, ctxt, message);
 }
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -638,7 +620,6 @@ QDebug QMessageLogger::info(QMessageLogger::CategoryFunction catFunc) const
 
 #endif
 
-#undef qWarning
 /*!
     Logs a warning message specified with format \a msg. Additional
     parameters, specified by \a msg, may be used.
@@ -647,13 +628,11 @@ QDebug QMessageLogger::info(QMessageLogger::CategoryFunction catFunc) const
 */
 void QMessageLogger::warning(const char *msg, ...) const
 {
+    QInternalMessageLogContext ctxt(context);
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtWarningMsg, context, msg, ap);
+    qt_message(QtWarningMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtWarningMsg))
-        qt_message_fatal(QtWarningMsg, context, message);
 }
 
 /*!
@@ -668,17 +647,12 @@ void QMessageLogger::warning(const QLoggingCategory &cat, const char *msg, ...) 
     if (!cat.isWarningEnabled())
         return;
 
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtWarningMsg, ctxt, msg, ap);
+    qt_message(QtWarningMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtWarningMsg))
-        qt_message_fatal(QtWarningMsg, ctxt, message);
 }
 
 /*!
@@ -695,17 +669,12 @@ void QMessageLogger::warning(QMessageLogger::CategoryFunction catFunc,
     if (!cat.isWarningEnabled())
         return;
 
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtWarningMsg, ctxt, msg, ap);
+    qt_message(QtWarningMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtWarningMsg))
-        qt_message_fatal(QtWarningMsg, ctxt, message);
 }
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -753,8 +722,6 @@ QDebug QMessageLogger::warning(QMessageLogger::CategoryFunction catFunc) const
 
 #endif
 
-#undef qCritical
-
 /*!
     Logs a critical message specified with format \a msg. Additional
     parameters, specified by \a msg, may be used.
@@ -763,13 +730,11 @@ QDebug QMessageLogger::warning(QMessageLogger::CategoryFunction catFunc) const
 */
 void QMessageLogger::critical(const char *msg, ...) const
 {
+    QInternalMessageLogContext ctxt(context);
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtCriticalMsg, context, msg, ap);
+    qt_message(QtCriticalMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtCriticalMsg))
-        qt_message_fatal(QtCriticalMsg, context, message);
 }
 
 /*!
@@ -784,17 +749,12 @@ void QMessageLogger::critical(const QLoggingCategory &cat, const char *msg, ...)
     if (!cat.isCriticalEnabled())
         return;
 
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtCriticalMsg, ctxt, msg, ap);
+    qt_message(QtCriticalMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtCriticalMsg))
-        qt_message_fatal(QtCriticalMsg, ctxt, message);
 }
 
 /*!
@@ -811,17 +771,12 @@ void QMessageLogger::critical(QMessageLogger::CategoryFunction catFunc,
     if (!cat.isCriticalEnabled())
         return;
 
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    const QString message = qt_message(QtCriticalMsg, ctxt, msg, ap);
+    qt_message(QtCriticalMsg, ctxt, msg, ap);
     va_end(ap);
-
-    if (isFatal(QtCriticalMsg))
-        qt_message_fatal(QtCriticalMsg, ctxt, message);
 }
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -870,8 +825,6 @@ QDebug QMessageLogger::critical(QMessageLogger::CategoryFunction catFunc) const
 
 #endif
 
-#undef qFatal
-
 /*!
     Logs a fatal message specified with format \a msg for the context \a cat.
     Additional parameters, specified by \a msg, may be used.
@@ -881,18 +834,16 @@ QDebug QMessageLogger::critical(QMessageLogger::CategoryFunction catFunc) const
 */
 void QMessageLogger::fatal(const QLoggingCategory &cat, const char *msg, ...) const noexcept
 {
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
-
-    QString message;
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    QT_TERMINATE_ON_EXCEPTION(message = qt_message(QtFatalMsg, ctxt, msg, ap));
+    qt_message(QtFatalMsg, ctxt, msg, ap);
     va_end(ap);
 
-    qt_message_fatal(QtCriticalMsg, ctxt, message);
+#ifndef Q_CC_MSVC_ONLY
+    Q_UNREACHABLE();
+#endif
 }
 
 /*!
@@ -907,18 +858,16 @@ void QMessageLogger::fatal(QMessageLogger::CategoryFunction catFunc,
 {
     const QLoggingCategory &cat = (*catFunc)();
 
-    QMessageLogContext ctxt;
-    ctxt.copyContextFrom(context);
-    ctxt.category = cat.categoryName();
-
-    QString message;
+    QInternalMessageLogContext ctxt(context, cat());
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    QT_TERMINATE_ON_EXCEPTION(message = qt_message(QtFatalMsg, ctxt, msg, ap));
+    qt_message(QtFatalMsg, ctxt, msg, ap);
     va_end(ap);
 
-    qt_message_fatal(QtFatalMsg, ctxt, message);
+#ifndef Q_CC_MSVC_ONLY
+    Q_UNREACHABLE();
+#endif
 }
 
 /*!
@@ -929,14 +878,15 @@ void QMessageLogger::fatal(QMessageLogger::CategoryFunction catFunc,
 */
 void QMessageLogger::fatal(const char *msg, ...) const noexcept
 {
-    QString message;
-
+    QInternalMessageLogContext ctxt(context);
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    QT_TERMINATE_ON_EXCEPTION(message = qt_message(QtFatalMsg, context, msg, ap));
+    qt_message(QtFatalMsg, ctxt, msg, ap);
     va_end(ap);
 
-    qt_message_fatal(QtFatalMsg, context, message);
+#ifndef Q_CC_MSVC_ONLY
+    Q_UNREACHABLE();
+#endif
 }
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -983,6 +933,12 @@ QDebug QMessageLogger::fatal(QMessageLogger::CategoryFunction catFunc) const
     return fatal((*catFunc)());
 }
 #endif // QT_NO_DEBUG_STREAM
+
+#if !defined(QT_BOOTSTRAPPED)
+static bool isDefaultCategory(const char *category)
+{
+    return !category || strcmp(category, "default") == 0;
+}
 
 /*!
     \internal
@@ -1197,6 +1153,7 @@ struct QMessagePattern
         int backtraceDepth;
     };
     QList<BacktraceParams> backtraceArgs; // backtrace arguments in sequence of %{backtrace
+    int maxBacktraceDepth = 0;
 #endif
 
     bool fromEnvironment;
@@ -1230,6 +1187,7 @@ void QMessagePattern::setPattern(const QString &pattern)
     timeArgs.clear();
 #ifdef QLOGGING_HAVE_BACKTRACE
     backtraceArgs.clear();
+    maxBacktraceDepth = 0;
 #endif
 
     // scanner
@@ -1324,6 +1282,7 @@ void QMessagePattern::setPattern(const QString &pattern)
                 backtraceParams.backtraceDepth = backtraceDepth;
                 backtraceParams.backtraceSeparator = backtraceSeparator;
                 backtraceArgs.append(backtraceParams);
+                maxBacktraceDepth = qMax(maxBacktraceDepth, backtraceDepth);
 #else
                 error += "QT_MESSAGE_PATTERN: %{backtrace} is not supported by this Qt build\n"_L1;
                 tokens[i] = "";
@@ -1351,8 +1310,7 @@ void QMessagePattern::setPattern(const QString &pattern)
                 inIf = false;
             } else {
                 tokens[i] = emptyTokenC;
-                error += QStringLiteral("QT_MESSAGE_PATTERN: Unknown placeholder %1\n")
-                        .arg(lexeme);
+                error += "QT_MESSAGE_PATTERN: Unknown placeholder "_L1 + lexeme + '\n'_L1;
             }
         } else {
             using UP = std::unique_ptr<char[]>;
@@ -1364,35 +1322,94 @@ void QMessagePattern::setPattern(const QString &pattern)
     else if (inIf)
         error += "QT_MESSAGE_PATTERN: missing %{endif}\n"_L1;
 
-    if (!error.isEmpty())
-        qt_message_print(error);
+    if (!error.isEmpty()) {
+        // remove the last '\n' because the sinks deal with that on their own
+        error.chop(1);
+
+        QMessageLogContext ctx(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE,
+                               "QMessagePattern::setPattern", nullptr);
+        preformattedMessageHandler(QtWarningMsg, ctx, error);
+    }
 
     literals.reset(new std::unique_ptr<const char[]>[literalsVar.size() + 1]);
     std::move(literalsVar.begin(), literalsVar.end(), &literals[0]);
 }
 
-#if defined(QLOGGING_HAVE_BACKTRACE) && !defined(QT_BOOTSTRAPPED)
+#if defined(QLOGGING_HAVE_BACKTRACE)
 // make sure the function has "Message" in the name so the function is removed
 /*
   A typical backtrace in debug mode looks like:
-    #0  backtraceFramesForLogMessage (frameCount=5) at qlogging.cpp:1296
-    #1  formatBacktraceForLogMessage (backtraceParams=..., function=0x4040b8 "virtual void MyClass::myFunction(int)") at qlogging.cpp:1344
-    #2  qFormatLogMessage (type=QtDebugMsg, context=..., str=...) at qlogging.cpp:1452
-    #3  stderr_message_handler (type=QtDebugMsg, context=..., message=...) at qlogging.cpp:1744
-    #4  qDefaultMessageHandler (type=QtDebugMsg, context=..., message=...) at qlogging.cpp:1795
-    #5  qt_message_print (msgType=QtDebugMsg, context=..., message=...) at qlogging.cpp:1840
-    #6  qt_message_output (msgType=QtDebugMsg, context=..., message=...) at qlogging.cpp:1891
-    #7  QDebug::~QDebug (this=<optimized out>, __in_chrg=<optimized out>) at qdebug.h:111
+    #0  QInternalMessageLogContext::populateBacktrace (this=0x7fffffffd660, frameCount=5) at qlogging.cpp:1342
+    #1  QInternalMessageLogContext::QInternalMessageLogContext (logContext=..., this=<optimized out>) at qlogging_p.h:42
+    #2  QDebug::~QDebug (this=0x7fffffffdac8, __in_chrg=<optimized out>) at qdebug.cpp:160
+
+  In release mode, the QInternalMessageLogContext constructor will be usually
+  inlined. Empirical testing with GCC 13 and Clang 17 suggest they do obey the
+  Q_ALWAYS_INLINE in that constructor even in debug mode and do inline it.
+  Unfortunately, we can't know for sure if it has been.
 */
-static constexpr int TypicalBacktraceFrameCount = 8;
+static constexpr int TypicalBacktraceFrameCount = 3;
+static constexpr const char *QtCoreLibraryName = "Qt" QT_STRINGIFY(QT_VERSION_MAJOR) "Core";
 
-#  if defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
-// force skipping the frame pointer, to save the backtrace() function some work
-#    pragma GCC push_options
-#    pragma GCC optimize ("omit-frame-pointer")
-#  endif
+#if defined(QLOGGING_USE_STD_BACKTRACE)
+Q_NEVER_INLINE void QInternalMessageLogContext::populateBacktrace(int frameCount)
+{
+    assert(frameCount >= 0);
+    backtrace = std::stacktrace::current(0, TypicalBacktraceFrameCount + frameCount);
+}
 
-static QStringList backtraceFramesForLogMessage(int frameCount)
+static QStringList
+backtraceFramesForLogMessage(int frameCount,
+                             const QInternalMessageLogContext::BacktraceStorage &buffer)
+{
+    QStringList result;
+    result.reserve(buffer.size());
+
+    const auto shouldSkipFrame = [](QByteArrayView description)
+    {
+#if defined(_MSVC_STL_VERSION)
+        const auto libraryNameEnd = description.indexOf('!');
+        if (libraryNameEnd != -1) {
+            const auto libraryName = description.first(libraryNameEnd);
+            if (!libraryName.contains(QtCoreLibraryName))
+                return false;
+        }
+#endif
+        if (description.contains("populateBacktrace"))
+            return true;
+        if (description.contains("QInternalMessageLogContext"))
+            return true;
+        if (description.contains("~QDebug"))
+            return true;
+        return false;
+    };
+
+    for (const auto &entry : buffer) {
+        const std::string description = entry.description();
+        if (result.isEmpty() && shouldSkipFrame(description))
+            continue;
+        result.append(QString::fromStdString(description));
+    }
+
+    return result;
+}
+
+#elif defined(QLOGGING_USE_EXECINFO_BACKTRACE)
+
+Q_NEVER_INLINE void QInternalMessageLogContext::populateBacktrace(int frameCount)
+{
+    assert(frameCount >= 0);
+    BacktraceStorage &result = backtrace.emplace(TypicalBacktraceFrameCount + frameCount);
+    int n = ::backtrace(result.data(), result.size());
+    if (n <= 0)
+        result.clear();
+    else
+        result.resize(n);
+}
+
+static QStringList
+backtraceFramesForLogMessage(int frameCount,
+                             const QInternalMessageLogContext::BacktraceStorage &buffer)
 {
     struct DecodedFrame {
         QString library;
@@ -1403,20 +1420,18 @@ static QStringList backtraceFramesForLogMessage(int frameCount)
     if (frameCount == 0)
         return result;
 
-    QVarLengthArray<void *, 32> buffer(TypicalBacktraceFrameCount + frameCount);
-    int n = backtrace(buffer.data(), buffer.size());
-    if (n <= 0)
-        return result;
-    buffer.resize(n);
-
     auto shouldSkipFrame = [&result](const auto &library, const auto &function) {
-        if (!result.isEmpty() || !library.contains("Qt6Core"_L1))
+        if (!result.isEmpty() || !library.contains(QLatin1StringView(QtCoreLibraryName)))
             return false;
         if (function.isEmpty())
             return true;
         if (function.contains("6QDebug"_L1))
             return true;
-        if (function.contains("Message"_L1) || function.contains("_message"_L1))
+        if (function.contains("14QMessageLogger"_L1))
+            return true;
+        if (function.contains("17qt_message_output"_L1))
+            return true;
+        if (function.contains("26QInternalMessageLogContext"_L1))
             return true;
         return false;
     };
@@ -1495,7 +1510,7 @@ static QStringList backtraceFramesForLogMessage(int frameCount)
     };
 #  endif
 
-    for (void *&addr : buffer) {
+    for (void *const &addr : buffer) {
         DecodedFrame frame = decodeFrame(addr);
         if (!frame.library.isEmpty()) {
             if (frame.function.isEmpty())
@@ -1513,27 +1528,34 @@ static QStringList backtraceFramesForLogMessage(int frameCount)
     }
     return result;
 }
+#else
+#error "Internal error: backtrace enabled, but no way to gather backtraces available"
+#endif // QLOGGING_USE_..._BACKTRACE
 
 static QString formatBacktraceForLogMessage(const QMessagePattern::BacktraceParams backtraceParams,
-                                            const char *function)
+                                            const QMessageLogContext &ctx)
 {
+    // do we have a backtrace stored?
+    if (ctx.version <= QMessageLogContext::CurrentVersion)
+        return QString();
+
+    auto &fullctx = static_cast<const QInternalMessageLogContext &>(ctx);
+    if (!fullctx.backtrace.has_value())
+        return QString();
+
     QString backtraceSeparator = backtraceParams.backtraceSeparator;
     int backtraceDepth = backtraceParams.backtraceDepth;
 
-    QStringList frames = backtraceFramesForLogMessage(backtraceDepth);
+    QStringList frames = backtraceFramesForLogMessage(backtraceDepth, *fullctx.backtrace);
     if (frames.isEmpty())
         return QString();
 
     // if the first frame is unknown, replace it with the context function
-    if (function && frames.at(0).startsWith(u'?'))
-        frames[0] = QString::fromUtf8(qCleanupFuncinfo(function));
+    if (ctx.function && frames.at(0).startsWith(u'?'))
+        frames[0] = QString::fromUtf8(qCleanupFuncinfo(ctx.function));
 
     return frames.join(backtraceSeparator);
 }
-
-#  if defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
-#    pragma GCC pop_options
-#  endif
 #endif // QLOGGING_HAVE_BACKTRACE && !QT_BOOTSTRAPPED
 
 Q_GLOBAL_STATIC(QMessagePattern, qMessagePattern)
@@ -1554,6 +1576,14 @@ Q_GLOBAL_STATIC(QMessagePattern, qMessagePattern)
  */
 QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, const QString &str)
 {
+    return formatLogMessage(type, context, str);
+}
+
+// Separate function so the default message handler can bypass the public,
+// exported function above. Static functions can't get added to the dynamic
+// symbol tables, so they never show up in backtrace_symbols() or equivalent.
+static QString formatLogMessage(QtMsgType type, const QMessageLogContext &context, const QString &str)
+{
     QString message;
 
     const auto locker = qt_scoped_lock(QMessagePattern::mutex);
@@ -1567,11 +1597,9 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
 
     bool skip = false;
 
-#ifndef QT_BOOTSTRAPPED
     int timeArgsIdx = 0;
 #ifdef QLOGGING_HAVE_BACKTRACE
     int backtraceArgsIdx = 0;
-#endif
 #endif
 
     // we do not convert file, function, line literals to local encoding due to overhead
@@ -1582,13 +1610,11 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
         } else if (skip) {
             // we skip adding messages, but we have to iterate over
             // timeArgsIdx and backtraceArgsIdx anyway
-#ifndef QT_BOOTSTRAPPED
             if (token == timeTokenC)
                 timeArgsIdx++;
 #ifdef QLOGGING_HAVE_BACKTRACE
             else if (token == backtraceTokenC)
                 backtraceArgsIdx++;
-#endif
 #endif
         } else if (token == messageTokenC) {
             message.append(str);
@@ -1617,7 +1643,6 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
                 message.append(QString::fromLatin1(qCleanupFuncinfo(context.function)));
             else
                 message.append("unknown"_L1);
-#ifndef QT_BOOTSTRAPPED
         } else if (token == pidTokenC) {
             message.append(QString::number(QCoreApplication::applicationPid()));
         } else if (token == appnameTokenC) {
@@ -1632,18 +1657,18 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
         } else if (token == backtraceTokenC) {
             QMessagePattern::BacktraceParams backtraceParams = pattern->backtraceArgs.at(backtraceArgsIdx);
             backtraceArgsIdx++;
-            message.append(formatBacktraceForLogMessage(backtraceParams, context.function));
+            message.append(formatBacktraceForLogMessage(backtraceParams, context));
 #endif
         } else if (token == timeTokenC) {
             QString timeFormat = pattern->timeArgs.at(timeArgsIdx);
             timeArgsIdx++;
             if (timeFormat == "process"_L1) {
-                    quint64 ms = pattern->timer.elapsed();
-                    message.append(QString::asprintf("%6d.%03d", uint(ms / 1000), uint(ms % 1000)));
+                quint64 ms = pattern->timer.elapsed();
+                message.append(QString::asprintf("%6d.%03d", uint(ms / 1000), uint(ms % 1000)));
             } else if (timeFormat == "boot"_L1) {
                 // just print the milliseconds since the elapsed timer reference
                 // like the Linux kernel does
-                uint ms = QDeadlineTimer::current().deadline();
+                qint64 ms = QDeadlineTimer::current().deadline();
                 message.append(QString::asprintf("%6d.%03d", uint(ms / 1000), uint(ms % 1000)));
 #if QT_CONFIG(datestring)
             } else if (timeFormat.isEmpty()) {
@@ -1652,7 +1677,6 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
                 message.append(QDateTime::currentDateTime().toString(timeFormat));
 #endif // QT_CONFIG(datestring)
             }
-#endif // !QT_BOOTSTRAPPED
         } else if (token == ifCategoryTokenC) {
             if (isDefaultCategory(context.category))
                 skip = true;
@@ -1671,6 +1695,20 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
     }
     return message;
 }
+#else // QT_BOOTSTRAPPED
+static QString formatLogMessage(QtMsgType type, const QMessageLogContext &context, const QString &str)
+{
+    Q_UNUSED(type);
+    Q_UNUSED(context);
+    return str;
+}
+#endif
+#ifndef QLOGGING_HAVE_BACKTRACE
+void QInternalMessageLogContext::populateBacktrace(int)
+{
+    Q_UNREACHABLE();
+}
+#endif
 
 static void qDefaultMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &buf);
 
@@ -1688,12 +1726,13 @@ Q_CONSTINIT static QBasicAtomicPointer<void (QtMsgType, const QMessageLogContext
 #define QT_LOG_CODE 9000
 #endif
 
-static bool slog2_default_handler(QtMsgType type, const QMessageLogContext &context, const QString &message)
+static bool slog2_default_handler(QtMsgType type, const QMessageLogContext &,
+                                  const QString &message)
 {
     if (shouldLogToStderr())
         return false; // Leave logging up to stderr handler
 
-    QString formattedMessage = qFormatLogMessage(type, context, message);
+    QString formattedMessage = message;
     formattedMessage.append(u'\n');
     if (slog2_set_default_buffer((slog2_buffer_t)-1) == 0) {
         slog2_buffer_set_config_t buffer_config;
@@ -1744,12 +1783,10 @@ static bool slog2_default_handler(QtMsgType type, const QMessageLogContext &cont
 #if QT_CONFIG(journald)
 static bool systemd_default_message_handler(QtMsgType type,
                                             const QMessageLogContext &context,
-                                            const QString &message)
+                                            const QString &formattedMessage)
 {
     if (shouldLogToStderr())
         return false; // Leave logging up to stderr handler
-
-    QString formattedMessage = qFormatLogMessage(type, context, message);
 
     int priority = LOG_INFO; // Informational
     switch (type) {
@@ -1783,12 +1820,11 @@ static bool systemd_default_message_handler(QtMsgType type,
 #endif
 
 #if QT_CONFIG(syslog)
-static bool syslog_default_message_handler(QtMsgType type, const QMessageLogContext &context, const QString &message)
+static bool syslog_default_message_handler(QtMsgType type, const QMessageLogContext &context,
+                                           const QString &formattedMessage)
 {
     if (shouldLogToStderr())
         return false; // Leave logging up to stderr handler
-
-    QString formattedMessage = qFormatLogMessage(type, context, message);
 
     int priority = LOG_INFO; // Informational
     switch (type) {
@@ -1818,12 +1854,10 @@ static bool syslog_default_message_handler(QtMsgType type, const QMessageLogCont
 #ifdef Q_OS_ANDROID
 static bool android_default_message_handler(QtMsgType type,
                                   const QMessageLogContext &context,
-                                  const QString &message)
+                                  const QString &formattedMessage)
 {
     if (shouldLogToStderr())
         return false; // Leave logging up to stderr handler
-
-    QString formattedMessage = qFormatLogMessage(type, context, message);
 
     android_LogPriority priority = ANDROID_LOG_DEBUG;
     switch (type) {
@@ -1876,13 +1910,13 @@ static void win_outputDebugString_helper(const QString &message)
     }
 }
 
-static bool win_message_handler(QtMsgType type, const QMessageLogContext &context, const QString &message)
+static bool win_message_handler(QtMsgType, const QMessageLogContext &,
+                                const QString &formattedMessage)
 {
     if (shouldLogToStderr())
         return false; // Leave logging up to stderr handler
 
-    const QString formattedMessage = qFormatLogMessage(type, context, message).append(u'\n');
-    win_outputDebugString_helper(formattedMessage);
+    win_outputDebugString_helper(formattedMessage + u'\n');
 
     return true; // Prevent further output to stderr
 }
@@ -1890,15 +1924,15 @@ static bool win_message_handler(QtMsgType type, const QMessageLogContext &contex
 
 #ifdef Q_OS_WASM
 static bool wasm_default_message_handler(QtMsgType type,
-                                  const QMessageLogContext &context,
-                                  const QString &message)
+                                  const QMessageLogContext &,
+                                  const QString &formattedMessage)
 {
-    if (shouldLogToStderr())
-        return false; // Leave logging up to stderr handler
+    static bool forceStderrLogging = qEnvironmentVariableIntValue("QT_FORCE_STDERR_LOGGING");
+    if (forceStderrLogging)
+        return false;
 
-    QString formattedMessage = qFormatLogMessage(type, context, message);
-    int emOutputFlags = (EM_LOG_CONSOLE | EM_LOG_DEMANGLE);
-    QByteArray localMsg = message.toLocal8Bit();
+    int emOutputFlags = EM_LOG_CONSOLE;
+    QByteArray localMsg = formattedMessage.toLocal8Bit();
     switch (type) {
     case QtDebugMsg:
         break;
@@ -1923,17 +1957,61 @@ static bool wasm_default_message_handler(QtMsgType type,
 
 // --------------------------------------------------------------------------
 
-static void stderr_message_handler(QtMsgType type, const QMessageLogContext &context, const QString &message)
+static void stderr_message_handler(QtMsgType type, const QMessageLogContext &context,
+                                   const QString &formattedMessage)
 {
-    QString formattedMessage = qFormatLogMessage(type, context, message);
+    Q_UNUSED(type);
+    Q_UNUSED(context);
 
     // print nothing if message pattern didn't apply / was empty.
     // (still print empty lines, e.g. because message itself was empty)
     if (formattedMessage.isNull())
         return;
-
     fprintf(stderr, "%s\n", formattedMessage.toLocal8Bit().constData());
     fflush(stderr);
+}
+
+namespace {
+struct SystemMessageSink
+{
+    using Fn = bool(QtMsgType, const QMessageLogContext &, const QString &);
+    Fn *sink;
+    bool messageIsUnformatted = false;
+};
+}
+
+static constexpr SystemMessageSink systemMessageSink = {
+#if defined(QT_BOOTSTRAPPED)
+        nullptr
+#elif defined(Q_OS_WIN)
+        win_message_handler
+#elif QT_CONFIG(slog2)
+        slog2_default_handler
+#elif QT_CONFIG(journald)
+        systemd_default_message_handler
+#elif QT_CONFIG(syslog)
+        syslog_default_message_handler
+#elif defined(Q_OS_ANDROID)
+        android_default_message_handler
+#elif defined(QT_USE_APPLE_UNIFIED_LOGGING)
+        AppleUnifiedLogger::messageHandler, true
+#elif defined Q_OS_WASM
+        wasm_default_message_handler
+#else
+        nullptr
+#endif
+};
+
+static void preformattedMessageHandler(QtMsgType type, const QMessageLogContext &context,
+                                       const QString &formattedMessage)
+{
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_GCC("-Waddress") // "the address of ~~ will never be NULL
+    if (systemMessageSink.sink && systemMessageSink.sink(type, context, formattedMessage))
+        return;
+QT_WARNING_POP
+
+    stderr_message_handler(type, context, formattedMessage);
 }
 
 /*!
@@ -1942,37 +2020,24 @@ static void stderr_message_handler(QtMsgType type, const QMessageLogContext &con
 static void qDefaultMessageHandler(QtMsgType type, const QMessageLogContext &context,
                                    const QString &message)
 {
-    bool handledStderr = false;
-
     // A message sink logs the message to a structured or unstructured destination,
     // optionally formatting the message if the latter, and returns true if the sink
     // handled stderr output as well, which will shortcut our default stderr output.
-    // In the future, if we allow multiple/dynamic sinks, this will be iterating
-    // a list of sinks.
 
-#if !defined(QT_BOOTSTRAPPED)
-# if defined(Q_OS_WIN)
-    handledStderr |= win_message_handler(type, context, message);
-# elif QT_CONFIG(slog2)
-    handledStderr |= slog2_default_handler(type, context, message);
-# elif QT_CONFIG(journald)
-    handledStderr |= systemd_default_message_handler(type, context, message);
-# elif QT_CONFIG(syslog)
-    handledStderr |= syslog_default_message_handler(type, context, message);
-# elif defined(Q_OS_ANDROID)
-    handledStderr |= android_default_message_handler(type, context, message);
-# elif defined(QT_USE_APPLE_UNIFIED_LOGGING)
-    handledStderr |= AppleUnifiedLogger::messageHandler(type, context, message);
-# elif defined Q_OS_WASM
-    handledStderr |= wasm_default_message_handler(type, context, message);
-# endif
-#endif
+    if (systemMessageSink.messageIsUnformatted) {
+        if (systemMessageSink.sink(type, context, message))
+            return;
+    }
 
-    if (!handledStderr)
-        stderr_message_handler(type, context, message);
+    preformattedMessageHandler(type, context, formatLogMessage(type, context, message));
 }
 
-#if defined(Q_COMPILER_THREAD_LOCAL)
+#if defined(QT_BOOTSTRAPPED)
+// there's no message handler in bootstrapped mode; force everything to stderr
+static bool grabMessageHandler() { return false; }
+static void ungrabMessageHandler() { }
+
+#elif defined(Q_COMPILER_THREAD_LOCAL)
 
 Q_CONSTINIT static thread_local bool msgHandlerGrabbed = false;
 
@@ -2016,25 +2081,14 @@ static void qt_message_print(QtMsgType msgType, const QMessageLogContext &contex
         auto msgHandler = messageHandler.loadAcquire();
         (msgHandler ? msgHandler : qDefaultMessageHandler)(msgType, context, message);
     } else {
-        fprintf(stderr, "%s\n", message.toLocal8Bit().constData());
+        stderr_message_handler(msgType, context, message);
     }
 }
 
-static void qt_message_print(const QString &message)
+template <typename String>
+static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, String &&message)
 {
-#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED)
-    if (!shouldLogToStderr()) {
-        win_outputDebugString_helper(message);
-        return;
-    }
-#endif
-    fprintf(stderr, "%s", message.toLocal8Bit().constData());
-    fflush(stderr);
-}
-
-static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const QString &message)
-{
-#if defined(Q_CC_MSVC) && defined(QT_DEBUG) && defined(_DEBUG) && defined(_CRT_ERROR)
+#if defined(Q_CC_MSVC_ONLY) && defined(QT_DEBUG) && defined(_DEBUG) && defined(_CRT_ERROR)
     wchar_t contextFileL[256];
     // we probably should let the compiler do this for us, by declaring QMessageLogContext::file to
     // be const wchar_t * in the first place, but the #ifdefery above is very complex  and we
@@ -2053,21 +2107,24 @@ static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const
         _CrtDbgBreak();
 #else
     Q_UNUSED(context);
-    Q_UNUSED(message);
 #endif
 
+    if constexpr (std::is_class_v<String> && !std::is_const_v<String>)
+        message.clear();
+    else
+        Q_UNUSED(message);
     qAbort();
 }
-
 
 /*!
     \internal
 */
 void qt_message_output(QtMsgType msgType, const QMessageLogContext &context, const QString &message)
 {
-    qt_message_print(msgType, context, message);
+    QInternalMessageLogContext ctx(context);
+    qt_message_print(msgType, ctx, message);
     if (isFatal(msgType))
-        qt_message_fatal(msgType, context, message);
+        qt_message_fatal(msgType, ctx, message);
 }
 
 void qErrnoWarning(const char *msg, ...)
@@ -2082,8 +2139,8 @@ void qErrnoWarning(const char *msg, ...)
     va_end(ap);
 
     buf += " ("_L1 + error_string + u')';
-    QMessageLogContext context;
-    qt_message_output(QtCriticalMsg, context, buf);
+    QInternalMessageLogContext context{QMessageLogContext()};
+    qt_message_output(QtWarningMsg, context, buf);
 }
 
 void qErrnoWarning(int code, const char *msg, ...)
@@ -2096,8 +2153,8 @@ void qErrnoWarning(int code, const char *msg, ...)
     va_end(ap);
 
     buf += " ("_L1 + qt_error_string(code) + u')';
-    QMessageLogContext context;
-    qt_message_output(QtCriticalMsg, context, buf);
+    QInternalMessageLogContext context{QMessageLogContext()};
+    qt_message_output(QtWarningMsg, context, buf);
 }
 
 /*!
@@ -2118,34 +2175,61 @@ void qErrnoWarning(int code, const char *msg, ...)
     \relates <QtLogging>
     \since 5.0
 
-    Installs a Qt message \a handler which has been defined
-    previously. Returns a pointer to the previous message handler.
+    Installs a Qt message \a handler.
+    Returns a pointer to the previously installed message handler.
 
-    The message handler is a function that prints out debug messages,
-    warnings, critical and fatal error messages. The Qt library (debug
-    mode) contains hundreds of warning messages that are printed
-    when internal errors (usually invalid function arguments)
-    occur. Qt built in release mode also contains such warnings unless
-    QT_NO_WARNING_OUTPUT and/or QT_NO_DEBUG_OUTPUT have been set during
-    compilation. If you implement your own message handler, you get total
-    control of these messages.
+    A message handler is a function that prints out debug, info,
+    warning, critical, and fatal messages from Qt's logging infrastructure.
+    By default, Qt uses a standard message handler that formats and
+    prints messages to different sinks specific to the operating system
+    and Qt configuration. Installing your own message handler allows you
+    to assume full control, and for instance log messages to the
+    file system.
 
-    The default message handler prints the message to the standard output
-    under X11 or to the debugger under Windows. If it is a fatal message, the
-    application aborts immediately after handling that message. Custom
-    message handlers should not attempt to exit an application on their own.
+    Note that Qt supports \l{QLoggingCategory}{logging categories} for
+    grouping related messages in semantic categories. You can use these
+    to enable or disable logging per category and \l{QtMsgType}{message type}.
+    As the filtering for logging categories is done even before a message
+    is created, messages for disabled types and categories will not reach
+    the message handler.
 
-    Only one message handler can be defined, since this is usually
-    done on an application-wide basis to control debug output.
+    A message handler needs to be
+    \l{Reentrancy and Thread-Safety}{reentrant}. That is, it might be called
+    from different threads, in parallel. Therefore, writes to common sinks
+    (like a database, or a file) often need to be synchronized.
 
-    To restore the message handler, call \c qInstallMessageHandler(0).
+    Qt allows to enrich logging messages with further meta-information
+    by calling \l qSetMessagePattern(), or setting the \c QT_MESSAGE_PATTERN
+    environment variable. To keep this formatting, a custom message handler
+    can use \l qFormatLogMessage().
 
-    Example:
+    Try to keep the code in the message handler itself minimal, as expensive
+    operations might block the application. Also, to avoid recursion, any
+    logging messages generated in the message handler itself will be ignored.
+
+    The message handler should always return. For
+    \l{QtFatalMsg}{fatal messages}, the application aborts immediately after
+    handling that message.
+
+    Only one message handler can be installed at a time, for the whole application.
+    If there was a previous custom message handler installed,
+    the function will return a pointer to it. This handler can then
+    be later reinstalled by another call to the method. Also, calling
+    \c qInstallMessageHandler(nullptr) will restore the default
+    message handler.
+
+    Here is an example of a message handler that logs to a local file
+    before calling the default handler:
 
     \snippet code/src_corelib_global_qglobal.cpp 23
 
+    Note that the C++ standard guarantees that \c{static FILE *f} is
+    initialized in a thread-safe way. We can also expect \c{fprintf()}
+    and \c{fflush()} to be thread-safe, so no further synchronization
+    is necessary.
+
     \sa QtMessageHandler, QtMsgType, qDebug(), qInfo(), qWarning(), qCritical(), qFatal(),
-    {Debugging Techniques}
+    {Debugging Techniques}, qFormatLogMessage()
 */
 
 /*!
@@ -2184,8 +2268,18 @@ void qErrnoWarning(int code, const char *msg, ...)
         specified by the optional \c depth parameter (defaults to 5), and separated by the optional
         \c separator parameter (defaults to "|").
 
-        This expansion is available only on some platforms (currently only platfoms using glibc).
-        Names are only known for exported functions. If you want to see the name of every function
+        This expansion is available only on some platforms:
+
+        \list
+        \li platforms using glibc;
+        \li platforms shipping C++23's \c{<stacktrace>} header (requires compiling Qt in C++23 mode).
+        \endlist
+
+        Depending on the platform, there are some restrictions on the function
+        names printed by this expansion.
+
+        On some platforms,
+        names are only known for exported functions. If you want to see the name of every function
         in your application, make sure your application is compiled and linked with \c{-rdynamic},
         or an equivalent of it.
 
@@ -2231,6 +2325,7 @@ QtMessageHandler qInstallMessageHandler(QtMessageHandler h)
         return qDefaultMessageHandler;
 }
 
+#ifndef QT_BOOTSTRAPPED
 void qSetMessagePattern(const QString &pattern)
 {
     const auto locker = qt_scoped_lock(QMessagePattern::mutex);
@@ -2238,7 +2333,38 @@ void qSetMessagePattern(const QString &pattern)
     if (!qMessagePattern()->fromEnvironment)
         qMessagePattern()->setPattern(pattern);
 }
+#endif
 
+static void copyInternalContext(QInternalMessageLogContext *self,
+                                const QMessageLogContext &logContext) noexcept
+{
+    if (logContext.version == self->version) {
+        auto other = static_cast<const QInternalMessageLogContext *>(&logContext);
+        self->backtrace = other->backtrace;
+    }
+}
+
+/*!
+    \internal
+    Copies context information from \a logContext into this QMessageLogContext.
+    Returns the number of backtrace frames that are desired.
+*/
+int QInternalMessageLogContext::initFrom(const QMessageLogContext &logContext)
+{
+    version = CurrentVersion + 1;
+    copyContextFrom(logContext);
+
+#ifdef QLOGGING_HAVE_BACKTRACE
+    if (backtrace.has_value())
+        return 0;       // we have a stored backtrace, no need to get it again
+
+    // initializes the message pattern, if needed
+    if (auto pattern = qMessagePattern())
+        return pattern->maxBacktraceDepth;
+#endif
+
+    return 0;
+}
 
 /*!
     Copies context information from \a logContext into this QMessageLogContext.
@@ -2254,6 +2380,8 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
     this->file = logContext.file;
     this->line = logContext.line;
     this->function = logContext.function;
+    if (Q_UNLIKELY(version == CurrentVersion + 1))
+        copyInternalContext(static_cast<QInternalMessageLogContext *>(this), logContext);
     return *this;
 }
 
@@ -2275,6 +2403,8 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
 
     Constructs a QMessageLogger to record \a category messages for \a file at \a line
     in \a function.
+
+    \sa QLoggingCategory
 */
 
 /*!
@@ -2299,6 +2429,8 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
 
     Constructs a QMessageLogContext with for file \a fileName at line
     \a lineNumber, in function \a functionName, and category \a categoryName.
+
+    \sa QLoggingCategory
 */
 
 /*!
@@ -2334,8 +2466,8 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
     To suppress the output at runtime, install your own message handler
     with qInstallMessageHandler().
 
-    \sa qInfo(), qWarning(), qCritical(), qFatal(), qInstallMessageHandler(),
-        {Debugging Techniques}
+    \sa qCDebug(), qInfo(), qWarning(), qCritical(), qFatal(),
+        qInstallMessageHandler(), {Debugging Techniques}
 */
 
 /*!
@@ -2372,8 +2504,8 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
     To suppress the output at runtime, install your own message handler
     using qInstallMessageHandler().
 
-    \sa qDebug(), qWarning(), qCritical(), qFatal(), qInstallMessageHandler(),
-        {Debugging Techniques}
+    \sa qCInfo(), qDebug(), qWarning(), qCritical(), qFatal(),
+        qInstallMessageHandler(), {Debugging Techniques}
 */
 
 /*!
@@ -2416,8 +2548,8 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
     on the first call; if it contains the value 10, it will exit on the 10th
     call. Any non-numeric value in the environment variable is equivalent to 1.
 
-    \sa qDebug(), qInfo(), qCritical(), qFatal(), qInstallMessageHandler(),
-        {Debugging Techniques}
+    \sa qCWarning(), qDebug(), qInfo(), qCritical(), qFatal(),
+        qInstallMessageHandler(), {Debugging Techniques}
 */
 
 /*!
@@ -2459,8 +2591,8 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
     on the first call; if it contains the value 10, it will exit on the 10th
     call. Any non-numeric value in the environment variable is equivalent to 1.
 
-    \sa qDebug(), qInfo(), qWarning(), qFatal(), qInstallMessageHandler(),
-        {Debugging Techniques}
+    \sa qCCritical(), qDebug(), qInfo(), qWarning(), qFatal(),
+        qInstallMessageHandler(), {Debugging Techniques}
 */
 
 /*!
@@ -2486,8 +2618,8 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
     To suppress the output at runtime, install your own message handler
     with qInstallMessageHandler().
 
-    \sa qDebug(), qInfo(), qWarning(), qCritical(), qInstallMessageHandler(),
-        {Debugging Techniques}
+    \sa qCFatal(), qDebug(), qInfo(), qWarning(), qCritical(),
+        qInstallMessageHandler(), {Debugging Techniques}
 */
 
 /*!
@@ -2497,7 +2629,7 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
     This enum describes the messages that can be sent to a message
     handler (QtMessageHandler). You can use the enum to identify and
     associate the various message types with the appropriate
-    actions.
+    actions. Its values are, in order of increasing severity:
 
     \value QtDebugMsg
            A message generated by the qDebug() function.
@@ -2509,11 +2641,9 @@ QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext
            A message generated by the qCritical() function.
     \value QtFatalMsg
            A message generated by the qFatal() function.
-    \value QtSystemMsg
+    \omitvalue QtSystemMsg
 
-    \c QtInfoMsg was added in Qt 5.5.
-
-    \sa QtMessageHandler, qInstallMessageHandler()
+    \sa QtMessageHandler, qInstallMessageHandler(), QLoggingCategory
 */
 
 QT_END_NAMESPACE

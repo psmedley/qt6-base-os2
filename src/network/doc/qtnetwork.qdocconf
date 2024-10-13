@@ -40,5 +40,12 @@ imagedirs   += images \
 navigation.landingpage = "Qt Network"
 navigation.cppclassespage = "Qt Network C++ Classes"
 
-# Fail the documentation build if there are more warnings than the limit
+manifestmeta.highlighted.names = \
+    "QtNetwork/Fortune Client" \
+    "QtNetwork/Fortune Server" \
+    "QtNetwork/HTTP Client" \
+    "QtNetwork/Secure Socket Client" \
+    "QtNetwork/Torrent Example"
+
+# Enforce zero documentation warnings
 warninglimit = 0

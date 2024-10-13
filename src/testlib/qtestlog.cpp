@@ -30,10 +30,11 @@
 #include <QtCore/QRegularExpression>
 #endif
 
+#include <cstdio>
+
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <vector>
 
 #include <vector>
 #include <memory>
@@ -195,8 +196,8 @@ namespace QTest {
 
             const size_t maxMsgLen = 1024;
             char msg[maxMsgLen] = {'\0'};
-            qsnprintf(msg, maxMsgLen, "Received a warning that resulted in a failure:\n%s",
-                      qPrintable(message));
+            std::snprintf(msg, maxMsgLen, "Received a warning that resulted in a failure:\n%s",
+                          qPrintable(message));
             QTestResult::addFailure(msg, context.file, context.line);
             return true;
         }
@@ -318,7 +319,6 @@ void QTestLog::clearIgnoreMessages()
     QTest::IgnoreResultList::clearList(QTest::ignoreResultList);
 }
 
-
 void QTestLog::clearFailOnWarnings()
 {
     QTest::failOnWarningList.clear();
@@ -326,6 +326,8 @@ void QTestLog::clearFailOnWarnings()
 
 void QTestLog::clearCurrentTestState()
 {
+    clearIgnoreMessages();
+    clearFailOnWarnings();
     QTest::currentTestState = QTest::Unresolved;
 }
 
@@ -559,6 +561,21 @@ bool QTestLog::hasLoggers()
     return !QTest::loggers()->empty();
 }
 
+/*!
+    \internal
+
+    Returns true if all loggers support repeated test runs
+*/
+bool QTestLog::isRepeatSupported()
+{
+    FOREACH_TEST_LOGGER {
+        if (!logger->isRepeatSupported())
+            return false;
+    }
+
+    return true;
+}
+
 bool QTestLog::loggerUsingStdout()
 {
     FOREACH_TEST_LOGGER {
@@ -612,6 +629,11 @@ void QTestLog::ignoreMessage(QtMsgType type, const QRegularExpression &expressio
     QTest::IgnoreResultList::append(QTest::ignoreResultList, type, QVariant(expression));
 }
 #endif // QT_CONFIG(regularexpression)
+
+void QTestLog::failOnWarning()
+{
+    QTest::failOnWarningList.push_back({});
+}
 
 void QTestLog::failOnWarning(const char *msg)
 {

@@ -178,12 +178,11 @@ Q_DECLARE_LOGGING_CATEGORY(lcGuiVk)
   As an exception to this rule, \c robustBufferAccess is never enabled. Use the
   callback mechanism described below, if enabling that feature is desired.
 
-  Just enabling the 1.0 core features is not always sufficient, and therefore
-  full control over the VkPhysicalDeviceFeatures used for device creation is
-  possible too by registering a callback function with
+  This is not always desirable, and may be insufficient with Vulkan 1.1 and
+  higher. Therefore, full control over the VkPhysicalDeviceFeatures used for
+  device creation is possible too by registering a callback function with
   setEnabledFeaturesModifier(). When set, the callback function is invoked,
-  letting it alter the VkPhysicalDeviceFeatures, instead of enabling only the
-  1.0 core features.
+  letting it alter the VkPhysicalDeviceFeatures or VkPhysicalDeviceFeatures2.
 
   \sa QVulkanInstance, QWindow
  */
@@ -379,7 +378,7 @@ QVulkanInfoVector<QVulkanExtension> QVulkanWindow::supportedDeviceExtensions()
                 exts.append(ext);
             }
             d->supportedDevExtensions.insert(physDev, exts);
-            qDebug(lcGuiVk) << "Supported device extensions:" << exts;
+            qCDebug(lcGuiVk) << "Supported device extensions:" << exts;
             return exts;
         }
     }
@@ -702,17 +701,22 @@ void QVulkanWindowPrivate::init()
     devInfo.enabledExtensionCount = devExts.size();
     devInfo.ppEnabledExtensionNames = devExts.constData();
 
-    VkPhysicalDeviceFeatures features;
-    memset(&features, 0, sizeof(features));
-    if (enabledFeaturesModifier) {
+    VkPhysicalDeviceFeatures features = {};
+    VkPhysicalDeviceFeatures2 features2 = {};
+    if (enabledFeatures2Modifier) {
+        features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        enabledFeatures2Modifier(features2);
+        devInfo.pNext = &features2;
+    } else if (enabledFeaturesModifier) {
         enabledFeaturesModifier(features);
+        devInfo.pEnabledFeatures = &features;
     } else {
         // Enable all supported 1.0 core features, except ones that likely
         // involve a performance penalty.
         f->vkGetPhysicalDeviceFeatures(physDev, &features);
         features.robustBufferAccess = VK_FALSE;
+        devInfo.pEnabledFeatures = &features;
     }
-    devInfo.pEnabledFeatures = &features;
 
     // Device layers are not supported by QVulkanWindow since that's an already deprecated
     // API. However, have a workaround for systems with older API and layers (f.ex. L4T
@@ -1625,16 +1629,12 @@ void QVulkanWindow::setQueueCreateInfoModifier(const QueueCreateInfoModifier &mo
     praticular, \c robustBufferAccess is always disabled in order to avoid
     unexpected performance hits.
 
-    This however is not always sufficient when working with Vulkan 1.1 or 1.2
-    features and extensions. Hence this callback mechanism.
-
     The VkPhysicalDeviceFeatures reference passed in is all zeroed out at the
     point when the function is invoked. It is up to the function to change
-    members to true, or set up \c pNext chains as it sees fit.
+    members as it sees fit.
 
-    \note When setting up \c pNext chains, make sure the referenced objects
-    have a long enough lifetime, for example by storing them as member
-    variables in the QVulkanWindow subclass.
+    \note To control Vulkan 1.1, 1.2, or 1.3 features, use
+    EnabledFeatures2Modifier instead.
 
     \sa setEnabledFeaturesModifier()
  */
@@ -1642,14 +1642,58 @@ void QVulkanWindow::setQueueCreateInfoModifier(const QueueCreateInfoModifier &mo
 /*!
     Sets the enabled device features modification function \a modifier.
 
-    \sa EnabledFeaturesModifier
+    \note To control Vulkan 1.1, 1.2, or 1.3 features, use
+    the overload taking a EnabledFeatures2Modifier instead.
 
-    \since 6.4
+    \note \a modifier is passed to the callback function with all members set
+    to false. It is up to the function to change members as it sees fit.
+
+    \since 6.7
+    \sa EnabledFeaturesModifier
  */
 void QVulkanWindow::setEnabledFeaturesModifier(const EnabledFeaturesModifier &modifier)
 {
     Q_D(QVulkanWindow);
     d->enabledFeaturesModifier = modifier;
+}
+
+/*!
+    \typedef QVulkanWindow::EnabledFeatures2Modifier
+
+    A function that is called during graphics initialization to alter the
+    VkPhysicalDeviceFeatures2 that is changed to the VkDeviceCreateInfo.
+
+    By default QVulkanWindow enables all Vulkan 1.0 core features that the
+    physical device reports as supported, with certain exceptions. In
+    praticular, \c robustBufferAccess is always disabled in order to avoid
+    unexpected performance hits.
+
+    This however is not always sufficient when working with Vulkan 1.1, 1.2, or
+    1.3 features and extensions. Hence this callback mechanism. If only Vulkan
+    1.0 is relevant at run time, use setEnabledFeaturesModifier() instead.
+
+    The VkPhysicalDeviceFeatures2 reference passed to the callback function
+    with \c sType set, but the rest zeroed out. It is up to the function to
+    change members to true, or set up \c pNext chains as it sees fit.
+
+    \note When setting up \c pNext chains, make sure the referenced objects
+    have a long enough lifetime, for example by storing them as member
+    variables in the QVulkanWindow subclass.
+
+    \since 6.7
+    \sa setEnabledFeaturesModifier()
+ */
+
+/*!
+    Sets the enabled device features modification function \a modifier.
+    \overload
+    \since 6.7
+    \sa EnabledFeatures2Modifier
+*/
+void QVulkanWindow::setEnabledFeaturesModifier(EnabledFeatures2Modifier modifier)
+{
+    Q_D(QVulkanWindow);
+    d->enabledFeatures2Modifier = std::move(modifier);
 }
 
 /*!
@@ -1852,13 +1896,26 @@ void QVulkanWindowRenderer::logicalDeviceLost()
 {
 }
 
+QSize QVulkanWindowPrivate::surfacePixelSize() const
+{
+    Q_Q(const QVulkanWindow);
+    VkSurfaceCapabilitiesKHR surfaceCaps = {};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDevs.at(physDevIndex), surface, &surfaceCaps);
+    VkExtent2D bufferSize = surfaceCaps.currentExtent;
+    if (bufferSize.width == uint32_t(-1)) {
+        Q_ASSERT(bufferSize.height == uint32_t(-1));
+        return q->size() * q->devicePixelRatio();
+    }
+    return QSize(int(bufferSize.width), int(bufferSize.height));
+}
+
 void QVulkanWindowPrivate::beginFrame()
 {
     if (!swapChain || framePending)
         return;
 
     Q_Q(QVulkanWindow);
-    if (q->size() * q->devicePixelRatio() != swapChainImageSize) {
+    if (swapChainImageSize != surfacePixelSize()) {
         recreateSwapChain();
         if (!swapChain)
             return;
@@ -1927,7 +1984,7 @@ void QVulkanWindowPrivate::beginFrame()
     }
 
     if (frameGrabbing)
-        frameGrabTargetImage = QImage(swapChainImageSize, QImage::Format_RGBA8888);
+        frameGrabTargetImage = QImage(swapChainImageSize, QImage::Format_RGBA8888); // the format is as documented
 
     if (renderer) {
         framePending = true;
@@ -2443,6 +2500,19 @@ VkFormat QVulkanWindow::depthStencilFormat() const
     This usually matches the size of the window, but may also differ in case
     \c vkGetPhysicalDeviceSurfaceCapabilitiesKHR reports a fixed size.
 
+    In addition, it has been observed on some platforms that the
+    Vulkan-reported surface size is different with high DPI scaling active,
+    meaning the QWindow-reported
+    \l{QWindow::}{size()} multiplied with the \l{QWindow::}{devicePixelRatio()}
+    was 1 pixel less or more when compared to the value returned from here,
+    presumably due to differences in rounding. Rendering code should be aware
+    of this, and any related rendering logic must be based in the value returned
+    from here, never on the QWindow-reported size. Regardless of which pixel size
+    is correct in theory, Vulkan rendering must only ever rely on the Vulkan
+    API-reported surface size. Otherwise validation errors may occur, e.g. when
+    setting the viewport, because the application-provided values may become
+    out-of-bounds from Vulkan's perspective.
+
     \note Calling this function is only valid from the invocation of
     QVulkanWindowRenderer::initSwapChainResources() up until
     QVulkanWindowRenderer::releaseSwapChainResources().
@@ -2714,6 +2784,12 @@ bool QVulkanWindow::supportsGrab() const
     incomplete image, that has the correct size but not the content yet. The
     content will be delivered via the frameGrabbed() signal in the latter case.
 
+    The returned QImage always has a format of QImage::Format_RGBA8888. If the
+    colorFormat() is \c VK_FORMAT_B8G8R8A8_UNORM, the red and blue channels are
+    swapped automatically since this format is commonly used as the default
+    choice for swapchain color buffers. With any other color buffer format,
+    there is no conversion performed by this function.
+
     \note This function should not be called when a frame is in progress
     (that is, frameReady() has not yet been called back by the application).
 
@@ -2741,6 +2817,9 @@ QImage QVulkanWindow::grab()
 
     d->frameGrabbing = true;
     d->beginFrame();
+
+    if (d->colorFormat == VK_FORMAT_B8G8R8A8_UNORM)
+        d->frameGrabTargetImage = std::move(d->frameGrabTargetImage).rgbSwapped();
 
     return d->frameGrabTargetImage;
 }

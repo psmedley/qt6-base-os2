@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtTest/QTest>
 #include <QtTest/QSignalSpy>
@@ -24,6 +24,7 @@
 #  undef min
 #endif // Q_CC_MSVC
 
+using namespace std::chrono_literals;
 
 class tst_QSocketNotifier : public QObject
 {
@@ -188,8 +189,8 @@ void tst_QSocketNotifier::unexpectedDisconnection()
     writeEnd2->waitForBytesWritten();
 
     // ensure both read ends are ready for reading, before the event loop
-    QVERIFY(readEnd1.waitForRead(5000));
-    QVERIFY(readEnd2.waitForRead(5000));
+    QVERIFY(readEnd1.waitForRead(5s));
+    QVERIFY(readEnd2.waitForRead(5s));
 
     UnexpectedDisconnectTester tester(&readEnd1, &readEnd2);
 
@@ -375,7 +376,7 @@ void tst_QSocketNotifier::asyncMultipleDatagram()
             &tst_QSocketNotifier::async_readDatagramSlot);
 
     // activate socket notifiers
-    QTestEventLoop::instance().enterLoopMSecs(100);
+    QTestEventLoop::instance().enterLoop(100ms);
 
     m_asyncSender->writeDatagram("1", makeNonAny(m_asyncReceiver->localAddress()), port);
     m_asyncSender->writeDatagram("2", makeNonAny(m_asyncReceiver->localAddress()), port);

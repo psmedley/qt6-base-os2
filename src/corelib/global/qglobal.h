@@ -27,19 +27,20 @@
 
 #include <QtCore/qtpreprocessorsupport.h>
 
-#include <QtCore/qtnoop.h>
-
 #include <QtCore/qsystemdetection.h>
 #include <QtCore/qprocessordetection.h>
 #include <QtCore/qcompilerdetection.h>
 
-#include <QtCore/qassert.h>
-#include <QtCore/qtypes.h>
-#include <QtCore/qtclasshelpermacros.h>
-
+#ifndef __ASSEMBLER__
+#  include <QtCore/qassert.h>
+#  include <QtCore/qtnoop.h>
+#  include <QtCore/qtypes.h>
+#endif /* !__ASSEMBLER__ */
 #include <QtCore/qtversion.h>
 
 #if defined(__cplusplus)
+
+#include <QtCore/qtclasshelpermacros.h>
 
 // We need to keep QTypeInfo, QSysInfo, QFlags, qDebug & family in qglobal.h for compatibility with Qt 4.
 // Be careful when changing the order of these files.
@@ -66,8 +67,9 @@
 #include <QtCore/qtresource.h>
 #include <QtCore/qttranslation.h>
 #include <QtCore/qttypetraits.h>
+#if QT_CONFIG(version_tagging)
 #include <QtCore/qversiontagging.h>
-
+#endif
 #endif /* __cplusplus */
 
 #endif /* QGLOBAL_H */

@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #include <QCoreApplication>
 #include <QDebug>
 #include <QElapsedTimer>
@@ -9,6 +9,7 @@
 #include <private/qfutureinterface_p.h>
 
 using namespace QtConcurrent;
+using namespace std::chrono_literals;
 
 #include <QTest>
 
@@ -25,6 +26,7 @@ private slots:
     void cancelAndFinish();
     void resultAt();
     void resultReadyAt();
+    void orderedResultReadyAt();
     void futureSignals();
     void watchFinishedFuture();
     void watchCanceledFuture();
@@ -277,6 +279,28 @@ void tst_QFutureWatcher::resultReadyAt()
     futureWatcher.setFuture(future);
 
     QVERIFY(resultSpy.wait());
+}
+
+void tst_QFutureWatcher::orderedResultReadyAt()
+{
+    for (int i = 0; i < 1000; ++i) {
+        QObject context;
+        QFuture<QString> f = run([](QPromise<QString> &fi) {
+            fi.addResult("First");
+            fi.addResult("Second");
+        });
+        QList<int> actualIndices;
+
+        QFutureWatcher<QString> watcher;
+        connect(&watcher, &QFutureWatcherBase::resultReadyAt, &context,
+                [&actualIndices](int index) { actualIndices.append(index); });
+        watcher.setFuture(f);
+        f.waitForFinished();
+        QCoreApplication::processEvents();
+        const QList<int> expectedIndices{0, 1};
+        QCOMPARE(actualIndices.size(), expectedIndices.size());
+        QCOMPARE(actualIndices, expectedIndices);
+    }
 }
 
 class SignalSlotObject : public QObject
@@ -900,13 +924,13 @@ QT_WARNING_POP
     QFuture<int> future = QtConcurrent::mapped(&pool, values, [&](int value) {
         ++count;
         // Sleep, to make sure not all threads will start at once.
-        QThread::msleep(50);
+        QThread::sleep(50ms);
         return value;
     });
     watcher.setFuture(future);
 
     // Allow some threads to start before suspending.
-    QThread::msleep(200);
+    QThread::sleep(200ms);
 
     watcher.suspend();
     watcher.suspend();
@@ -921,7 +945,7 @@ QT_WARNING_POP
     QCOMPARE(resultReadyAfterPaused, count);
 
     // Make sure no more results are reported before resuming.
-    QThread::msleep(200);
+    QThread::sleep(200ms);
     QCOMPARE(resultReadyAfterPaused, resultReadySpy.size());
     resultReadySpy.clear();
 
@@ -1139,7 +1163,7 @@ public:
 
 void tst_QFutureWatcher::warnRace()
 {
-#ifndef Q_OS_MAC //I don't know why it is not working on mac
+#ifndef Q_OS_DARWIN // I don't know why it is not working on mac
 #ifndef QT_NO_DEBUG
     QTest::ignoreMessage(QtWarningMsg, "QFutureWatcher::connect: connecting after calling setFuture() is likely to produce race");
 #endif

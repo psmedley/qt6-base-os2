@@ -12,6 +12,7 @@
 #include <QtCore/QUrl>
 #include <QtCore/private/qeventdispatcher_unix_p.h>
 #include <QtCore/private/qthread_p.h>
+#include <QtCore/qapplicationstatic.h>
 
 #include <proxy.h>
 #include <dlfcn.h>
@@ -72,7 +73,7 @@ private:
     Data *request;
 };
 
-Q_GLOBAL_STATIC(QLibProxyWrapper, libProxyWrapper);
+Q_APPLICATION_STATIC(QLibProxyWrapper, libProxyWrapper)
 
 QLibProxyWrapper::QLibProxyWrapper()
 {
@@ -165,13 +166,15 @@ QList<QNetworkProxy> QNetworkProxyFactory::systemProxyForQuery(const QNetworkPro
         break;
     // fake URLs to get libproxy to tell us the SOCKS proxy
     case QNetworkProxyQuery::TcpSocket:
-        queryUrl.setScheme(QStringLiteral("tcp"));
+        if (queryUrl.scheme().isEmpty())
+            queryUrl.setScheme(QStringLiteral("tcp"));
         queryUrl.setHost(query.peerHostName());
         queryUrl.setPort(query.peerPort());
         requiredCapabilities |= QNetworkProxy::TunnelingCapability;
         break;
     case QNetworkProxyQuery::UdpSocket:
-        queryUrl.setScheme(QStringLiteral("udp"));
+        if (queryUrl.scheme().isEmpty())
+            queryUrl.setScheme(QStringLiteral("udp"));
         queryUrl.setHost(query.peerHostName());
         queryUrl.setPort(query.peerPort());
         requiredCapabilities |= QNetworkProxy::UdpTunnelingCapability;

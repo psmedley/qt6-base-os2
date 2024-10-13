@@ -85,7 +85,7 @@ void QErrorMessagePrivate::helperPrepareShow(QPlatformDialogHelper *helper)
     options->setWindowTitle(q->windowTitle());
     options->setText(QErrorMessage::tr("An error occurred"));
     options->setInformativeText(currentMessage);
-    options->setIcon(QMessageDialogOptions::Critical);
+    options->setStandardIcon(QMessageDialogOptions::Critical);
     options->setCheckBox(again->text(), again->checkState());
     messageDialogHelper->setOptions(options);
 }
@@ -257,7 +257,9 @@ QErrorMessage::QErrorMessage(QWidget * parent)
     grid->setRowStretch(0, 42);
 
 #if QT_CONFIG(messagebox)
-    d->icon->setPixmap(style()->standardPixmap(QStyle::SP_MessageBoxInformation));
+    const auto iconSize = style()->pixelMetric(QStyle::PM_MessageBoxIconSize, nullptr, this);
+    const auto icon = style()->standardIcon(QStyle::SP_MessageBoxInformation, nullptr, this);
+    d->icon->setPixmap(icon.pixmap(QSize(iconSize, iconSize), devicePixelRatio()));
     d->icon->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
 #endif
     d->again->setChecked(true);
@@ -381,7 +383,6 @@ void QErrorMessage::showMessage(const QString &message)
 }
 
 /*!
-    \since 4.5
     \overload
 
     Shows the given message, \a message, and returns immediately. If the user
@@ -407,8 +408,6 @@ void QErrorMessage::showMessage(const QString &message, const QString &type)
 void QErrorMessagePrivate::setVisible(bool visible)
 {
     Q_Q(QErrorMessage);
-    if (q->testAttribute(Qt::WA_WState_ExplicitShowHide) && q->testAttribute(Qt::WA_WState_Hidden) != visible)
-        return;
 
     if (canBeNativeDialog())
         setNativeDialogVisible(visible);

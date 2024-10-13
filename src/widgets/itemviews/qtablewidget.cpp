@@ -3,7 +3,6 @@
 
 #include "qtablewidget.h"
 
-#include <qitemdelegate.h>
 #include <qpainter.h>
 #include <private/qtablewidget_p.h>
 
@@ -115,6 +114,46 @@ bool QTableModel::removeColumns(int column, int count, const QModelIndex &)
     return true;
 }
 
+bool QTableModel::moveRows(const QModelIndex &sourceParent, int sourceRow, int count, const QModelIndex &destinationParent, int destinationChild)
+{
+    if (sourceRow < 0
+        || sourceRow + count - 1 >= rowCount(sourceParent)
+        || destinationChild < 0
+        || destinationChild > rowCount(destinationParent)
+        || sourceRow == destinationChild
+        || sourceRow == destinationChild - 1
+        || count <= 0
+        || sourceParent.isValid()
+        || destinationParent.isValid()) {
+        return false;
+    }
+    if (!beginMoveRows(sourceParent, sourceRow, sourceRow + count - 1, destinationParent, destinationChild))
+        return false;
+
+    // Table items
+    int numItems = count * columnCount();
+    int fromIndex = tableIndex(sourceRow, 0);
+    int destinationIndex = tableIndex(destinationChild, 0);
+    if (destinationChild < sourceRow)
+        fromIndex += numItems - 1;
+    else
+        destinationIndex--;
+    while (numItems--)
+        tableItems.move(fromIndex, destinationIndex);
+
+    // Header items
+    int fromRow = sourceRow;
+    if (destinationChild < sourceRow)
+        fromRow += count - 1;
+    else
+        destinationChild--;
+    while (count--)
+        verticalHeaderItems.move(fromRow, destinationChild);
+
+    endMoveRows();
+    return true;
+}
+
 void QTableModel::setItem(int row, int column, QTableWidgetItem *item)
 {
     int i = tableIndex(row, column);
@@ -153,27 +192,8 @@ void QTableModel::setItem(int row, int column, QTableWidgetItem *item)
             sortedRow = qMax((int)(it - colItems.begin()), 0);
         }
         if (sortedRow != row) {
-            emit layoutAboutToBeChanged({}, QAbstractItemModel::VerticalSortHint);
-            // move the items @ row to sortedRow
-            int cc = columnCount();
-            QList<QTableWidgetItem *> rowItems(cc);
-            for (int j = 0; j < cc; ++j)
-                rowItems[j] = tableItems.at(tableIndex(row, j));
-            tableItems.remove(tableIndex(row, 0), cc);
-            tableItems.insert(tableIndex(sortedRow, 0), cc, 0);
-            for (int j = 0; j < cc; ++j)
-                tableItems[tableIndex(sortedRow, j)] = rowItems.at(j);
-            QTableWidgetItem *header = verticalHeaderItems.at(row);
-            verticalHeaderItems.remove(row);
-            verticalHeaderItems.insert(sortedRow, header);
-            // update persistent indexes
-            QModelIndexList oldPersistentIndexes = persistentIndexList();
-            QModelIndexList newPersistentIndexes = oldPersistentIndexes;
-            updateRowIndexes(newPersistentIndexes, row, sortedRow);
-            changePersistentIndexList(oldPersistentIndexes,
-                                      newPersistentIndexes);
-
-            emit layoutChanged({}, QAbstractItemModel::VerticalSortHint);
+            const int destinationChild = sortedRow > row ? sortedRow + 1 : sortedRow;
+            moveRows(QModelIndex(), row, 1, QModelIndex(), destinationChild);
             return;
         }
     }
@@ -1592,28 +1612,41 @@ QTableWidgetItem &QTableWidgetItem::operator=(const QTableWidgetItem &other)
 void QTableWidgetPrivate::setup()
 {
     Q_Q(QTableWidget);
-    // view signals
-    QObject::connect(q, SIGNAL(pressed(QModelIndex)), q, SLOT(_q_emitItemPressed(QModelIndex)));
-    QObject::connect(q, SIGNAL(clicked(QModelIndex)), q, SLOT(_q_emitItemClicked(QModelIndex)));
-    QObject::connect(q, SIGNAL(doubleClicked(QModelIndex)),
-                     q, SLOT(_q_emitItemDoubleClicked(QModelIndex)));
-    QObject::connect(q, SIGNAL(activated(QModelIndex)), q, SLOT(_q_emitItemActivated(QModelIndex)));
-    QObject::connect(q, SIGNAL(entered(QModelIndex)), q, SLOT(_q_emitItemEntered(QModelIndex)));
-    // model signals
-    QObject::connect(model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-                     q, SLOT(_q_emitItemChanged(QModelIndex)));
-    // selection signals
-    QObject::connect(q->selectionModel(), SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-                     q, SLOT(_q_emitCurrentItemChanged(QModelIndex,QModelIndex)));
-    QObject::connect(q->selectionModel(), SIGNAL(selectionChanged(QItemSelection,QItemSelection)),
-                     q, SIGNAL(itemSelectionChanged()));
-    // sorting
-    QObject::connect(model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-                     q, SLOT(_q_dataChanged(QModelIndex,QModelIndex)));
-    QObject::connect(model, SIGNAL(columnsRemoved(QModelIndex,int,int)), q, SLOT(_q_sort()));
+    connections = {
+        // view signals
+        QObjectPrivate::connect(q, &QTableWidget::pressed,
+                                this, &QTableWidgetPrivate::emitItemPressed),
+        QObjectPrivate::connect(q, &QTableWidget::clicked,
+                                this, &QTableWidgetPrivate::emitItemClicked),
+        QObjectPrivate::connect(q, &QTableWidget::doubleClicked,
+                                this, &QTableWidgetPrivate::emitItemDoubleClicked),
+        QObjectPrivate::connect(q, &QTableWidget::activated,
+                                this, &QTableWidgetPrivate::emitItemActivated),
+        QObjectPrivate::connect(q, &QTableWidget::entered,
+                                this, &QTableWidgetPrivate::emitItemEntered),
+        // model signals
+        QObjectPrivate::connect(model, &QAbstractItemModel::dataChanged,
+                                this, &QTableWidgetPrivate::emitItemChanged),
+        // selection signals
+        QObjectPrivate::connect(q->selectionModel(), &QItemSelectionModel::currentChanged,
+                                this, &QTableWidgetPrivate::emitCurrentItemChanged),
+        QObject::connect(q->selectionModel(), &QItemSelectionModel::selectionChanged,
+                         q, &QTableWidget::itemSelectionChanged),
+        // sorting
+        QObjectPrivate::connect(model, &QAbstractItemModel::dataChanged,
+                                this, &QTableWidgetPrivate::dataChanged),
+        QObjectPrivate::connect(model, &QAbstractItemModel::columnsRemoved,
+                                this, &QTableWidgetPrivate::sort)
+    };
 }
 
-void QTableWidgetPrivate::_q_emitItemPressed(const QModelIndex &index)
+void QTableWidgetPrivate::clearConnections()
+{
+    for (const QMetaObject::Connection &connection : connections)
+        QObject::disconnect(connection);
+}
+
+void QTableWidgetPrivate::emitItemPressed(const QModelIndex &index)
 {
     Q_Q(QTableWidget);
     if (QTableWidgetItem *item = tableModel()->item(index))
@@ -1621,7 +1654,7 @@ void QTableWidgetPrivate::_q_emitItemPressed(const QModelIndex &index)
     emit q->cellPressed(index.row(), index.column());
 }
 
-void QTableWidgetPrivate::_q_emitItemClicked(const QModelIndex &index)
+void QTableWidgetPrivate::emitItemClicked(const QModelIndex &index)
 {
     Q_Q(QTableWidget);
     if (QTableWidgetItem *item = tableModel()->item(index))
@@ -1629,7 +1662,7 @@ void QTableWidgetPrivate::_q_emitItemClicked(const QModelIndex &index)
     emit q->cellClicked(index.row(), index.column());
 }
 
-void QTableWidgetPrivate::_q_emitItemDoubleClicked(const QModelIndex &index)
+void QTableWidgetPrivate::emitItemDoubleClicked(const QModelIndex &index)
 {
     Q_Q(QTableWidget);
     if (QTableWidgetItem *item = tableModel()->item(index))
@@ -1637,7 +1670,7 @@ void QTableWidgetPrivate::_q_emitItemDoubleClicked(const QModelIndex &index)
     emit q->cellDoubleClicked(index.row(), index.column());
 }
 
-void QTableWidgetPrivate::_q_emitItemActivated(const QModelIndex &index)
+void QTableWidgetPrivate::emitItemActivated(const QModelIndex &index)
 {
     Q_Q(QTableWidget);
     if (QTableWidgetItem *item = tableModel()->item(index))
@@ -1645,7 +1678,7 @@ void QTableWidgetPrivate::_q_emitItemActivated(const QModelIndex &index)
     emit q->cellActivated(index.row(), index.column());
 }
 
-void QTableWidgetPrivate::_q_emitItemEntered(const QModelIndex &index)
+void QTableWidgetPrivate::emitItemEntered(const QModelIndex &index)
 {
     Q_Q(QTableWidget);
     if (QTableWidgetItem *item = tableModel()->item(index))
@@ -1653,7 +1686,7 @@ void QTableWidgetPrivate::_q_emitItemEntered(const QModelIndex &index)
     emit q->cellEntered(index.row(), index.column());
 }
 
-void QTableWidgetPrivate::_q_emitItemChanged(const QModelIndex &index)
+void QTableWidgetPrivate::emitItemChanged(const QModelIndex &index)
 {
     Q_Q(QTableWidget);
     if (QTableWidgetItem *item = tableModel()->item(index))
@@ -1661,7 +1694,7 @@ void QTableWidgetPrivate::_q_emitItemChanged(const QModelIndex &index)
     emit q->cellChanged(index.row(), index.column());
 }
 
-void QTableWidgetPrivate::_q_emitCurrentItemChanged(const QModelIndex &current,
+void QTableWidgetPrivate::emitCurrentItemChanged(const QModelIndex &current,
                                                  const QModelIndex &previous)
 {
     Q_Q(QTableWidget);
@@ -1672,7 +1705,7 @@ void QTableWidgetPrivate::_q_emitCurrentItemChanged(const QModelIndex &current,
     emit q->currentCellChanged(current.row(), current.column(), previous.row(), previous.column());
 }
 
-void QTableWidgetPrivate::_q_sort()
+void QTableWidgetPrivate::sort()
 {
     if (sortingEnabled) {
         int column = horizontalHeader->sortIndicatorSection();
@@ -1681,8 +1714,8 @@ void QTableWidgetPrivate::_q_sort()
     }
 }
 
-void QTableWidgetPrivate::_q_dataChanged(const QModelIndex &topLeft,
-                                         const QModelIndex &bottomRight)
+void QTableWidgetPrivate::dataChanged(const QModelIndex &topLeft,
+                                      const QModelIndex &bottomRight)
 {
     if (sortingEnabled && topLeft.isValid() && bottomRight.isValid()) {
         int column = horizontalHeader->sortIndicatorSection();
@@ -1880,6 +1913,8 @@ QTableWidget::QTableWidget(int rows, int columns, QWidget *parent)
 */
 QTableWidget::~QTableWidget()
 {
+    Q_D(QTableWidget);
+    d->clearConnections();
 }
 
 /*!
@@ -2687,7 +2722,8 @@ void QTableWidget::dropEvent(QDropEvent *event) {
         int col = -1;
         int row = -1;
         // check whether a subclass has already accepted the event, ie. moved the data
-        if (!event->isAccepted() && d->dropOn(event, &row, &col, &topIndex)) {
+        if (!event->isAccepted() && d->dropOn(event, &row, &col, &topIndex) && row == -1 && col == -1) {
+            // Drop onto item
             const QModelIndexList indexes = selectedIndexes();
             int top = INT_MAX;
             int left = INT_MAX;
@@ -2695,7 +2731,6 @@ void QTableWidget::dropEvent(QDropEvent *event) {
                 top = qMin(index.row(), top);
                 left = qMin(index.column(), left);
             }
-
             QList<QTableWidgetItem *> taken;
             const int indexesCount = indexes.size();
             taken.reserve(indexesCount);
@@ -2710,7 +2745,7 @@ void QTableWidget::dropEvent(QDropEvent *event) {
 
             event->accept();
         }
-        // either we or a subclass accepted the move event, so assume that the data was
+        // either we or a subclass accepted the drop event, so assume that the data was
         // moved and that QAbstractItemView shouldn't remove the source when QDrag::exec returns
         if (event->isAccepted())
             d->dropEventMoved = true;

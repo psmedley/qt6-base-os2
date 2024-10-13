@@ -119,7 +119,7 @@ enum WindowsEventType // Simplify event types
     NonClientPointerEvent = NonClientEventFlag + PointerEventFlag + 4,
     KeyEvent = KeyEventFlag + 1,
     KeyDownEvent = KeyEventFlag + KeyDownEventFlag + 1,
-    KeyboardLayoutChangeEvent = KeyEventFlag + 2,
+    InputLanguageChangeEvent = KeyEventFlag + 2,
     InputMethodKeyEvent = InputMethodEventFlag + KeyEventFlag + 1,
     InputMethodKeyDownEvent = InputMethodEventFlag + KeyEventFlag + KeyDownEventFlag + 1,
     ClipboardEvent = ClipboardEventFlag + 1,
@@ -150,13 +150,14 @@ enum WindowsEventType // Simplify event types
 Q_DECLARE_MIXED_ENUM_OPERATORS(bool, WindowsEventTypeFlags, WindowsEventType);
 Q_DECLARE_MIXED_ENUM_OPERATORS(bool, WindowsEventType, WindowsEventTypeFlags);
 
-// Matches Process_DPI_Awareness (Windows 8.1 onwards), used for SetProcessDpiAwareness()
-enum ProcessDpiAwareness
+enum class DpiAwareness
 {
-    ProcessDpiUnaware,
-    ProcessSystemDpiAware,
-    ProcessPerMonitorDpiAware,
-    ProcessPerMonitorV2DpiAware // Qt extension (not in Process_DPI_Awareness)
+    Invalid = -1,
+    Unaware,
+    System,
+    PerMonitor,
+    PerMonitorVersion2,
+    Unaware_GdiScaled
 };
 
 } // namespace QtWindows
@@ -229,7 +230,7 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         return QtWindows::InputMethodKeyDownEvent;
 #ifdef WM_INPUTLANGCHANGE
     case WM_INPUTLANGCHANGE:
-        return QtWindows::KeyboardLayoutChangeEvent;
+        return QtWindows::InputLanguageChangeEvent;
 #endif // WM_INPUTLANGCHANGE
     case WM_TOUCH:
         return QtWindows::TouchEvent;
@@ -325,6 +326,10 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         return QtWindows::TaskbarButtonCreated;
     return QtWindows::UnknownEvent;
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+extern QDebug operator<<(QDebug, QtWindows::DpiAwareness);
+#endif
 
 QT_END_NAMESPACE
 

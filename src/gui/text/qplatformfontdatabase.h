@@ -25,7 +25,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_DECLARE_LOGGING_CATEGORY(lcQpaFonts)
+Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcQpaFonts, Q_GUI_EXPORT)
 
 class QWritingSystemsPrivate;
 
@@ -88,6 +88,8 @@ public:
     virtual QString resolveFontFamilyAlias(const QString &family) const;
     virtual bool fontsAlwaysScalable() const;
     virtual QList<int> standardSizes() const;
+
+    virtual bool supportsVariableApplicationFonts() const;
 
     // helper
     static QSupportedWritingSystems writingSystemsFromTrueTypeBits(quint32 unicodeRange[4], quint32 codePageRange[2]);

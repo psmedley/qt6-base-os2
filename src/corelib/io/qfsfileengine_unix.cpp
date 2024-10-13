@@ -169,9 +169,9 @@ bool QFSFileEnginePrivate::nativeSyncToDisk()
     Q_Q(QFSFileEngine);
     int ret;
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
-    EINTR_LOOP(ret, fdatasync(nativeHandle()));
+    QT_EINTR_LOOP(ret, fdatasync(nativeHandle()));
 #else
-    EINTR_LOOP(ret, fsync(nativeHandle()));
+    QT_EINTR_LOOP(ret, fsync(nativeHandle()));
 #endif
     if (ret != 0)
         q->setError(QFile::WriteError, qt_error_string(errno));
@@ -487,6 +487,12 @@ QString QFSFileEngine::fileName(FileName file) const
             return entry.filePath();
         }
         return QString();
+    case RawLinkPath:
+        if (d->isSymlink()) {
+            QFileSystemEntry entry = QFileSystemEngine::getRawLinkPath(d->fileEntry, d->metaData);
+            return entry.filePath();
+        }
+        return QString();
     case JunctionName:
         return QString();
     case DefaultName:
@@ -556,7 +562,7 @@ bool QFSFileEngine::setSize(qint64 size)
     return ret;
 }
 
-bool QFSFileEngine::setFileTime(const QDateTime &newDate, FileTime time)
+bool QFSFileEngine::setFileTime(const QDateTime &newDate, QFile::FileTime time)
 {
     Q_D(QFSFileEngine);
 
@@ -596,11 +602,11 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
     }
 
     if (offset < 0 || offset > maxFileOffset
-            || size < 0 || quint64(size) > quint64(size_t(-1))) {
+        || size <= 0
+        || quint64(size) > quint64(size_t(-1))) {
         q->setError(QFile::UnspecifiedError, qt_error_string(EINVAL));
         return nullptr;
     }
-
     // If we know the mapping will extend beyond EOF, fail early to avoid
     // undefined behavior. Otherwise, let mmap have its say.
     if (doStat(QFileSystemMetaData::SizeAttribute)

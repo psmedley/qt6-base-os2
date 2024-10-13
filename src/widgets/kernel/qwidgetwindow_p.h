@@ -22,6 +22,8 @@
 #include <QtGui/private/qevent_p.h>
 #include <QtWidgets/qwidget.h>
 
+#include <QtCore/qpointer.h>
+
 QT_BEGIN_NAMESPACE
 
 
@@ -81,9 +83,10 @@ protected:
 
 private slots:
     void updateObjectName();
-    void handleScreenChange();
 
 private:
+    void handleScreenChange();
+    void handleDevicePixelRatioChange();
     void repaintWindow();
     bool updateSize();
     void updateMargins();

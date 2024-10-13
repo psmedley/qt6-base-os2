@@ -5,6 +5,11 @@
 ## tst_moc Test:
 #####################################################################
 
+if(NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
+    cmake_minimum_required(VERSION 3.16)
+    project(tst_moc LANGUAGES CXX)
+    find_package(Qt6BuildInternals REQUIRED COMPONENTS STANDALONE_TEST)
+endif()
 
 set(JSON_HEADERS
         backslash-newlines.h
@@ -25,6 +30,7 @@ set(JSON_HEADERS
         moc_include.h
         namespace.h
         namespaced-flags.h
+        namespaced-base-class.h
         no-keywords.h
         non-gadget-parent-class.h
         oldstyle-casts.h
@@ -40,7 +46,6 @@ set(JSON_HEADERS
         related-metaobjects-name-conflict.h
         signal-with-default-arg.h
         single-quote-digit-separator-n3781.h
-        single_function_keyword.h
         slots-with-void-template.h
         task192552.h
         task234909.h
@@ -65,6 +70,7 @@ list(TRANSFORM comparison_relevant_moc_list  APPEND ".json" OUTPUT_VARIABLE moc_
 qt_internal_add_test(tst_moc
     SOURCES
         cxx-attributes.h
+        single_function_keyword.h
         tst_moc.cpp
         ${comparison_relevant_moc_list}
     INCLUDE_DIRECTORIES

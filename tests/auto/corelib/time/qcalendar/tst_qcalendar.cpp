@@ -1,5 +1,5 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
@@ -31,6 +31,49 @@ private slots:
     void gregory();
 };
 
+static void checkCenturyResolution(const QCalendar &cal, const QCalendar::YearMonthDay &base)
+{
+    quint8 weekDayMask = 0;
+    for (int offset = -7; offset < 8; ++offset) {
+        const auto probe = QDate(base.year, base.month, base.day, cal).addYears(100 * offset, cal);
+        const int dow = cal.dayOfWeek(probe);
+        if (probe.isValid() && dow > 0 && dow < 8)
+            weekDayMask |= 1 << quint8(dow - 1);
+    }
+    for (int j = 1; j < 8; ++j) {
+        const bool seen = weekDayMask & (1 << quint8(j - 1));
+        const QDate check = cal.matchCenturyToWeekday(base, j);
+        if (check.isValid()) {
+            const auto parts = cal.partsFromDate(check);
+            const int dow = cal.dayOfWeek(check);
+            QCOMPARE(dow, j);
+            QCOMPARE(parts.day, base.day);
+            QCOMPARE(parts.month, base.month);
+            int gap = parts.year - base.year;
+            if (!cal.hasYearZero() && (parts.year > 0) != (base.year > 0))
+                gap += parts.year > 0 ? -1 : +1;
+            auto report = qScopeGuard([parts, base]() {
+                qDebug("Wrongly matched year: %d replaced %d", parts.year, base.year);
+            });
+            QCOMPARE(gap % 100, 0);
+            // We searched 7 centuries each side of base.
+            if (seen) {
+                QCOMPARE_LT(gap / 100, 8);
+                QCOMPARE_GT(gap / 100, -8);
+            } else {
+                QVERIFY(gap / 100 >= 8 || gap / 100 <= -8);
+            }
+            report.dismiss();
+        } else {
+            auto report = qScopeGuard([j, base]() {
+                qDebug("Missed dow[%d] for %d/%d/%d", j, base.year, base.month, base.day);
+            });
+            QVERIFY(!seen);
+            report.dismiss();
+        }
+    }
+}
+
 // Support for basic():
 void tst_QCalendar::checkYear(const QCalendar &cal, int year, bool normal)
 {
@@ -49,7 +92,7 @@ void tst_QCalendar::checkYear(const QCalendar &cal, int year, bool normal)
 
     int sum = 0;
     const int longest = cal.maximumDaysInMonth();
-    for (int i = moons; i > 0; i--) {
+    for (int i = moons; i > 0; --i) {
         const int last = cal.daysInMonth(i, year);
         sum += last;
         // Valid month has some days and no more than max:
@@ -62,6 +105,10 @@ void tst_QCalendar::checkYear(const QCalendar &cal, int year, bool normal)
         QVERIFY(!cal.isDateValid(year, i, last + 1));
         if (normal) // Unspecified year gets same daysInMonth():
             QCOMPARE(cal.daysInMonth(i), last);
+
+        checkCenturyResolution(cal, {year, i, (last + 1) / 2});
+        if (QTest::currentTestFailed())
+            return;
     }
     // Months add up to the whole year:
     QCOMPARE(sum, days);
@@ -368,13 +415,12 @@ void tst_QCalendar::gregory()
         // dateToJulianDay() and weekDayOfJulian():
         if (!year) // No year zero.
             continue;
-        qint64 first, last;
-        QVERIFY2(QGregorianCalendar::julianFromParts(year, 1, 1, &first),
-                 "Only year zero should lack a first day");
+        const auto first = QGregorianCalendar::julianFromParts(year, 1, 1);
+        QVERIFY2(first, "Only year zero should lack a first day");
         QCOMPARE(QGregorianCalendar::yearStartWeekDay(year),
-                 QGregorianCalendar::weekDayOfJulian(first));
-        QVERIFY2(QGregorianCalendar::julianFromParts(year, 12, 31, &last),
-                 "Only year zero should lack a last day");
+                 QGregorianCalendar::weekDayOfJulian(*first));
+        const auto last = QGregorianCalendar::julianFromParts(year, 12, 31);
+        QVERIFY2(last, "Only year zero should lack a last day");
 
         const int lastTwo = (year + (year < 0 ? 1 : 0)) % 100 + (year < -1 ? 100 : 0);
         const QDate probe(year, lastTwo && lastTwo <= 12 ? lastTwo : 8,
@@ -392,13 +438,14 @@ void tst_QCalendar::gregory()
             if (year > 0 && lastTwo > 31)
                 QCOMPARE(match % 100, lastTwo);
             // Its first and last days of the year match those of year:
-            qint64 day;
-            QVERIFY(QGregorianCalendar::julianFromParts(match, 1, 1, &day));
-            QCOMPARE(QGregorianCalendar::weekDayOfJulian(day),
-                     QGregorianCalendar::weekDayOfJulian(first));
-            QVERIFY(QGregorianCalendar::julianFromParts(match, 12, 31, &day));
-            QCOMPARE(QGregorianCalendar::weekDayOfJulian(day),
-                     QGregorianCalendar::weekDayOfJulian(last));
+            auto day = QGregorianCalendar::julianFromParts(match, 1, 1);
+            QVERIFY(day);
+            QCOMPARE(QGregorianCalendar::weekDayOfJulian(*day),
+                     QGregorianCalendar::weekDayOfJulian(*first));
+            day = QGregorianCalendar::julianFromParts(match, 12, 31);
+            QVERIFY(day);
+            QCOMPARE(QGregorianCalendar::weekDayOfJulian(*day),
+                     QGregorianCalendar::weekDayOfJulian(*last));
         }
     }
 }

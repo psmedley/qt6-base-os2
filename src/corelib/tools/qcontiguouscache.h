@@ -5,7 +5,14 @@
 #define QCONTIGUOUSCACHE_H
 
 #include <QtCore/qatomic.h>
-#include <limits.h>
+#include <QtCore/qassert.h>
+#include <QtCore/qtclasshelpermacros.h>
+#include <QtCore/qtcoreexports.h>
+#include <QtCore/qttypetraits.h>
+#include <QtCore/qtypeinfo.h>
+
+#include <climits>
+#include <limits>
 #include <new>
 
 QT_BEGIN_NAMESPACE

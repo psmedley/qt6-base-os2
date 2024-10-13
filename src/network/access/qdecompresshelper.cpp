@@ -3,7 +3,6 @@
 
 #include "qdecompresshelper_p.h"
 
-#include <QtCore/private/qbytearray_p.h>
 #include <QtCore/qiodevice.h>
 #include <QtCore/qcoreapplication.h>
 
@@ -24,7 +23,7 @@ QT_BEGIN_NAMESPACE
 namespace {
 struct ContentEncodingMapping
 {
-    char name[8];
+    QByteArrayView name;
     QDecompressHelper::ContentEncoding encoding;
 };
 
@@ -39,10 +38,10 @@ constexpr ContentEncodingMapping contentEncodingMapping[] {
     { "deflate", QDecompressHelper::Deflate },
 };
 
-QDecompressHelper::ContentEncoding encodingFromByteArray(const QByteArray &ce) noexcept
+QDecompressHelper::ContentEncoding encodingFromByteArray(QByteArrayView ce) noexcept
 {
     for (const auto &mapping : contentEncodingMapping) {
-        if (ce.compare(QByteArrayView(mapping.name, strlen(mapping.name)), Qt::CaseInsensitive) == 0)
+        if (ce.compare(mapping.name, Qt::CaseInsensitive) == 0)
             return mapping.encoding;
     }
     return QDecompressHelper::None;
@@ -68,22 +67,19 @@ ZSTD_DStream *toZstandardPointer(void *ptr)
 #endif
 }
 
-bool QDecompressHelper::isSupportedEncoding(const QByteArray &encoding)
+bool QDecompressHelper::isSupportedEncoding(QByteArrayView encoding)
 {
     return encodingFromByteArray(encoding) != QDecompressHelper::None;
 }
 
 QByteArrayList QDecompressHelper::acceptedEncoding()
 {
-    static QByteArrayList accepted = []() {
-        QByteArrayList list;
-        list.reserve(sizeof(contentEncodingMapping) / sizeof(contentEncodingMapping[0]));
-        for (const auto &mapping : contentEncodingMapping) {
-            list << QByteArray(mapping.name);
-        }
-        return list;
-    }();
-    return accepted;
+    QByteArrayList list;
+    list.reserve(std::size(contentEncodingMapping));
+    for (const auto &mapping : contentEncodingMapping) {
+        list << mapping.name.toByteArray();
+    }
+    return list;
 }
 
 QDecompressHelper::~QDecompressHelper()
@@ -91,7 +87,7 @@ QDecompressHelper::~QDecompressHelper()
     clear();
 }
 
-bool QDecompressHelper::setEncoding(const QByteArray &encoding)
+bool QDecompressHelper::setEncoding(QByteArrayView encoding)
 {
     Q_ASSERT(contentEncoding == QDecompressHelper::None);
     if (contentEncoding != QDecompressHelper::None) {

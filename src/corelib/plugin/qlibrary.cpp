@@ -11,12 +11,11 @@
 #include <qfile.h>
 #include <qfileinfo.h>
 #include <qjsondocument.h>
-#include <qmap.h>
 #include <qmutex.h>
 #include <qoperatingsystemversion.h>
 #include <qstringlist.h>
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
 #  include <private/qcore_mac_p.h>
 #endif
 #include <private/qcoreapplication_p.h>
@@ -29,6 +28,8 @@
 #include "qmachparser_p.h"
 
 #include <qtcore_tracepoints_p.h>
+
+#include <QtCore/q20map.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -321,7 +322,7 @@ private:
     static inline QLibraryStore *instance();
 
     // all members and instance() are protected by qt_library_mutex
-    typedef QMap<QString, QLibraryPrivate *> LibraryMap;
+    typedef std::map<QString, QLibraryPrivate *> LibraryMap;
     LibraryMap libraryMap;
 };
 
@@ -341,9 +342,7 @@ inline void QLibraryStore::cleanup()
         return;
 
     // find any libraries that are still loaded but have a no one attached to them
-    LibraryMap::Iterator it = data->libraryMap.begin();
-    for (; it != data->libraryMap.end(); ++it) {
-        QLibraryPrivate *lib = it.value();
+    for (auto &[_, lib] : data->libraryMap) {
         if (lib->libraryRefCount.loadRelaxed() == 1) {
             if (lib->libraryUnloadCount.loadRelaxed() > 0) {
                 Q_ASSERT(lib->pHnd.loadRelaxed());
@@ -357,16 +356,15 @@ inline void QLibraryStore::cleanup()
                 lib->unload();
 #endif
             }
-            delete lib;
-            it.value() = nullptr;
+            delete std::exchange(lib, nullptr);
         }
     }
 
     // dump all objects that remain
     if (lcDebugLibrary().isDebugEnabled()) {
-        for (QLibraryPrivate *lib : std::as_const(data->libraryMap)) {
+        for (auto &[_, lib] : data->libraryMap) {
             if (lib)
-                qDebug(lcDebugLibrary)
+                qCDebug(lcDebugLibrary)
                         << "On QtCore unload," << lib->fileName << "was leaked, with"
                         << lib->libraryRefCount.loadRelaxed() << "users";
         }
@@ -395,26 +393,34 @@ QLibraryStore *QLibraryStore::instance()
 inline QLibraryPrivate *QLibraryStore::findOrCreate(const QString &fileName, const QString &version,
                                                     QLibrary::LoadHints loadHints)
 {
+    auto lazyNewLib = [&] {
+        auto result = new QLibraryPrivate(fileName, version, loadHints);
+        result->libraryRefCount.ref();
+        return result;
+    };
+
+    if (fileName.isEmpty())   // request for empty d-pointer in QLibrary::setLoadHints();
+        return lazyNewLib();  // must return an independent (new) object
+
     QMutexLocker locker(&qt_library_mutex);
     QLibraryStore *data = instance();
 
+    if (Q_UNLIKELY(!data)) {
+        locker.unlock();
+        return lazyNewLib();
+    }
+
     QString mapName = version.isEmpty() ? fileName : fileName + u'\0' + version;
 
-    // check if this library is already loaded
-    QLibraryPrivate *lib = nullptr;
-    if (Q_LIKELY(data)) {
-        lib = data->libraryMap.value(mapName);
-        if (lib)
-            lib->mergeLoadHints(loadHints);
+    QLibraryPrivate *&lib = data->libraryMap[std::move(mapName)];
+    if (lib) {
+        // already loaded
+        lib->libraryRefCount.ref();
+        lib->mergeLoadHints(loadHints);
+    } else {
+        lib = lazyNewLib();
     }
-    if (!lib)
-        lib = new QLibraryPrivate(fileName, version, loadHints);
 
-    // track this library
-    if (Q_LIKELY(data) && !fileName.isEmpty())
-        data->libraryMap.insert(mapName, lib);
-
-    lib->libraryRefCount.ref();
     return lib;
 }
 
@@ -432,8 +438,9 @@ inline void QLibraryStore::releaseLibrary(QLibraryPrivate *lib)
     Q_ASSERT(lib->libraryUnloadCount.loadRelaxed() == 0);
 
     if (Q_LIKELY(data) && !lib->fileName.isEmpty()) {
-        qsizetype n = erase_if(data->libraryMap, [lib](LibraryMap::iterator it) {
-            return it.value() == lib;
+        using q20::erase_if;
+        const auto n = erase_if(data->libraryMap, [lib](const auto &e) {
+            return e.second == lib;
         });
         Q_ASSERT_X(n, "~QLibrary", "Did not find this library in the library map");
         Q_UNUSED(n);
@@ -465,7 +472,7 @@ void QLibraryPrivate::mergeLoadHints(QLibrary::LoadHints lh)
     if (pHnd.loadRelaxed())
         return;
 
-    loadHintsInt.storeRelaxed(lh.toInt());
+    loadHintsInt.fetchAndOrRelaxed(lh.toInt());
 }
 
 QFunctionPointer QLibraryPrivate::resolve(const char *symbol)
@@ -477,6 +484,13 @@ QFunctionPointer QLibraryPrivate::resolve(const char *symbol)
 
 void QLibraryPrivate::setLoadHints(QLibrary::LoadHints lh)
 {
+    // Set the load hints directly for a dummy if this object is not associated
+    // with a file. Such object is not shared between multiple instances.
+    if (fileName.isEmpty()) {
+        loadHintsInt.storeRelaxed(lh.toInt());
+        return;
+    }
+
     // this locks a global mutex
     QMutexLocker lock(&qt_library_mutex);
     mergeLoadHints(lh);
@@ -575,7 +589,9 @@ QtPluginInstanceFunction QLibraryPrivate::loadPlugin()
     if (load()) {
         auto ptr = reinterpret_cast<QtPluginInstanceFunction>(resolve("qt_plugin_instance"));
         instanceFactory.storeRelease(ptr); // two threads may store the same value
-        return ptr;
+        if (Q_LIKELY(ptr))
+            return ptr;
+        errorString = QLibrary::tr("Could not resolve 'qt_plugin_instance' function");
     }
     qCDebug(qt_lcDebugPlugins) << "QLibraryPrivate::loadPlugin failed on" << fileName << ":" << errorString;
     pluginState = IsNotAPlugin;
@@ -712,7 +728,7 @@ void QLibraryPrivate::updatePluginState()
 
     bool success = false;
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN)
     if (fileName.endsWith(".debug"_L1)) {
         // refuse to load a file that ends in .debug
         // these are the debug symbols from the libraries
@@ -836,13 +852,17 @@ bool QLibrary::unload()
 }
 
 /*!
-    Returns \c true if the library is loaded; otherwise returns \c false.
+    Returns \c true if load() succeeded; otherwise returns \c false.
+
+    \note Prior to Qt 6.6, this function would return \c true even without a
+    call to load() if another QLibrary object on the same library had caused it
+    to be loaded.
 
     \sa load()
  */
 bool QLibrary::isLoaded() const
 {
-    return d && d->pHnd.loadRelaxed();
+    return d.tag() == Loaded;
 }
 
 
@@ -982,8 +1002,7 @@ void QLibrary::setFileNameAndVersion(const QString &fileName, const QString &ver
         d->release();
     }
     QLibraryPrivate *dd = QLibraryPrivate::findOrCreate(fileName, version, lh);
-    d = dd;
-    d.setTag(isLoaded() ? Loaded : NotLoaded);
+    d = QTaggedPointer(dd, NotLoaded);      // we haven't load()ed
 }
 
 /*!
@@ -1117,6 +1136,10 @@ QString QLibrary::errorString() const
     By default, none of these flags are set, so libraries will be loaded with
     lazy symbol resolution, and will not export external symbols for resolution
     in other dynamically-loaded libraries.
+
+    \note Hints can only be cleared when this object is not associated with a
+    file. Hints can only be added once the file name is set (\a hints will
+    be or'ed with the old hints).
 
     \note Setting this property after the library has been loaded has no effect
     and loadHints() will not reflect those changes.

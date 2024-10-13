@@ -700,25 +700,73 @@ public:
     void glNamedFramebufferParameteri(GLuint framebuffer, GLenum pname, GLint param);
     void glNamedFramebufferRenderbuffer(GLuint framebuffer, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
     void glCreateFramebuffers(GLsizei n, GLuint *framebuffers);
-    void glGetNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizei size, void *data);
+#if QT_OPENGL_REMOVED_SINCE(6, 8)
+    void glGetNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizei size, void *data)
+    {
+        glGetNamedBufferSubData(buffer, offset, GLsizeiptr(size), data);
+    }
+#endif
+    void glGetNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizeiptr size, void *data);
     void glGetNamedBufferPointerv(GLuint buffer, GLenum pname, void * *params);
     void glGetNamedBufferParameteri64v(GLuint buffer, GLenum pname, GLint64 *params);
     void glGetNamedBufferParameteriv(GLuint buffer, GLenum pname, GLint *params);
-    void glFlushMappedNamedBufferRange(GLuint buffer, GLintptr offset, GLsizei length);
+#if QT_OPENGL_REMOVED_SINCE(6, 8)
+    void glFlushMappedNamedBufferRange(GLuint buffer, GLintptr offset, GLsizei length)
+    {
+        glFlushMappedNamedBufferRange(buffer, offset, GLsizeiptr(length));
+    }
+#endif
+    void glFlushMappedNamedBufferRange(GLuint buffer, GLintptr offset, GLsizeiptr length);
     GLboolean glUnmapNamedBuffer(GLuint buffer);
-    void * glMapNamedBufferRange(GLuint buffer, GLintptr offset, GLsizei length, GLbitfield access);
+#if QT_OPENGL_REMOVED_SINCE(6, 8)
+    void * glMapNamedBufferRange(GLuint buffer, GLintptr offset, GLsizei length, GLbitfield access)
+    {
+        return glMapNamedBufferRange(buffer, offset, GLsizeiptr(length), access);
+    }
+#endif
+    void * glMapNamedBufferRange(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access);
     void * glMapNamedBuffer(GLuint buffer, GLenum access);
-    void glClearNamedBufferSubData(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizei size, GLenum format, GLenum type, const void *data);
+#if QT_OPENGL_REMOVED_SINCE(6, 8)
+    void glClearNamedBufferSubData(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizei size, GLenum format, GLenum type, const void *data)
+    {
+        glClearNamedBufferSubData(buffer, internalformat, offset, GLsizeiptr(size), format, type, data);
+    }
+#endif
+    void glClearNamedBufferSubData(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const void *data);
     void glClearNamedBufferData(GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const void *data);
-    void glCopyNamedBufferSubData(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizei size);
-    void glNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizei size, const void *data);
-    void glNamedBufferData(GLuint buffer, GLsizei size, const void *data, GLenum usage);
-    void glNamedBufferStorage(GLuint buffer, GLsizei size, const void *data, GLbitfield flags);
+#if QT_OPENGL_REMOVED_SINCE(6, 8)
+    void glCopyNamedBufferSubData(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizei size)
+    {
+        glCopyNamedBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, GLsizeiptr(size));
+    }
+    void glNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizei size, const void *data)
+    {
+        glNamedBufferSubData(buffer, offset, GLsizeiptr(size), data);
+    }
+    void glNamedBufferData(GLuint buffer, GLsizei size, const void *data, GLenum usage)
+    {
+        glNamedBufferData(buffer, GLsizeiptr(size), data, usage);
+    }
+    void glNamedBufferStorage(GLuint buffer, GLsizei size, const void *data, GLbitfield flags)
+    {
+        glNamedBufferStorage(buffer, GLsizeiptr(size), data, flags);
+    }
+#endif
+    void glCopyNamedBufferSubData(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size);
+    void glNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizeiptr size, const void *data);
+    void glNamedBufferData(GLuint buffer, GLsizeiptr size, const void *data, GLenum usage);
+    void glNamedBufferStorage(GLuint buffer, GLsizeiptr size, const void *data, GLbitfield flags);
     void glCreateBuffers(GLsizei n, GLuint *buffers);
     void glGetTransformFeedbacki64_v(GLuint xfb, GLenum pname, GLuint index, GLint64 *param);
     void glGetTransformFeedbacki_v(GLuint xfb, GLenum pname, GLuint index, GLint *param);
     void glGetTransformFeedbackiv(GLuint xfb, GLenum pname, GLint *param);
-    void glTransformFeedbackBufferRange(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizei size);
+#if QT_OPENGL_REMOVED_SINCE(6, 8)
+    void glTransformFeedbackBufferRange(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizei size)
+    {
+        glTransformFeedbackBufferRange(xfb, index, buffer, offset, GLsizeiptr(size));
+    }
+#endif
+    void glTransformFeedbackBufferRange(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
     void glTransformFeedbackBufferBase(GLuint xfb, GLuint index, GLuint buffer);
     void glCreateTransformFeedbacks(GLsizei n, GLuint *ids);
     void glClipControl(GLenum origin, GLenum depth);
@@ -4381,7 +4429,7 @@ inline void QOpenGLFunctions_4_5_Compatibility::glCreateFramebuffers(GLsizei n, 
     d_4_5_Core->f.CreateFramebuffers(n, framebuffers);
 }
 
-inline void QOpenGLFunctions_4_5_Compatibility::glGetNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizei size, void *data)
+inline void QOpenGLFunctions_4_5_Compatibility::glGetNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizeiptr size, void *data)
 {
     d_4_5_Core->f.GetNamedBufferSubData(buffer, offset, size, data);
 }
@@ -4401,7 +4449,7 @@ inline void QOpenGLFunctions_4_5_Compatibility::glGetNamedBufferParameteriv(GLui
     d_4_5_Core->f.GetNamedBufferParameteriv(buffer, pname, params);
 }
 
-inline void QOpenGLFunctions_4_5_Compatibility::glFlushMappedNamedBufferRange(GLuint buffer, GLintptr offset, GLsizei length)
+inline void QOpenGLFunctions_4_5_Compatibility::glFlushMappedNamedBufferRange(GLuint buffer, GLintptr offset, GLsizeiptr length)
 {
     d_4_5_Core->f.FlushMappedNamedBufferRange(buffer, offset, length);
 }
@@ -4411,7 +4459,7 @@ inline GLboolean QOpenGLFunctions_4_5_Compatibility::glUnmapNamedBuffer(GLuint b
     return d_4_5_Core->f.UnmapNamedBuffer(buffer);
 }
 
-inline void * QOpenGLFunctions_4_5_Compatibility::glMapNamedBufferRange(GLuint buffer, GLintptr offset, GLsizei length, GLbitfield access)
+inline void * QOpenGLFunctions_4_5_Compatibility::glMapNamedBufferRange(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access)
 {
     return d_4_5_Core->f.MapNamedBufferRange(buffer, offset, length, access);
 }
@@ -4421,7 +4469,7 @@ inline void * QOpenGLFunctions_4_5_Compatibility::glMapNamedBuffer(GLuint buffer
     return d_4_5_Core->f.MapNamedBuffer(buffer, access);
 }
 
-inline void QOpenGLFunctions_4_5_Compatibility::glClearNamedBufferSubData(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizei size, GLenum format, GLenum type, const void *data)
+inline void QOpenGLFunctions_4_5_Compatibility::glClearNamedBufferSubData(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const void *data)
 {
     d_4_5_Core->f.ClearNamedBufferSubData(buffer, internalformat, offset, size, format, type, data);
 }
@@ -4431,22 +4479,22 @@ inline void QOpenGLFunctions_4_5_Compatibility::glClearNamedBufferData(GLuint bu
     d_4_5_Core->f.ClearNamedBufferData(buffer, internalformat, format, type, data);
 }
 
-inline void QOpenGLFunctions_4_5_Compatibility::glCopyNamedBufferSubData(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizei size)
+inline void QOpenGLFunctions_4_5_Compatibility::glCopyNamedBufferSubData(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)
 {
     d_4_5_Core->f.CopyNamedBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, size);
 }
 
-inline void QOpenGLFunctions_4_5_Compatibility::glNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizei size, const void *data)
+inline void QOpenGLFunctions_4_5_Compatibility::glNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizeiptr size, const void *data)
 {
     d_4_5_Core->f.NamedBufferSubData(buffer, offset, size, data);
 }
 
-inline void QOpenGLFunctions_4_5_Compatibility::glNamedBufferData(GLuint buffer, GLsizei size, const void *data, GLenum usage)
+inline void QOpenGLFunctions_4_5_Compatibility::glNamedBufferData(GLuint buffer, GLsizeiptr size, const void *data, GLenum usage)
 {
     d_4_5_Core->f.NamedBufferData(buffer, size, data, usage);
 }
 
-inline void QOpenGLFunctions_4_5_Compatibility::glNamedBufferStorage(GLuint buffer, GLsizei size, const void *data, GLbitfield flags)
+inline void QOpenGLFunctions_4_5_Compatibility::glNamedBufferStorage(GLuint buffer, GLsizeiptr size, const void *data, GLbitfield flags)
 {
     d_4_5_Core->f.NamedBufferStorage(buffer, size, data, flags);
 }
@@ -4471,7 +4519,7 @@ inline void QOpenGLFunctions_4_5_Compatibility::glGetTransformFeedbackiv(GLuint 
     d_4_5_Core->f.GetTransformFeedbackiv(xfb, pname, param);
 }
 
-inline void QOpenGLFunctions_4_5_Compatibility::glTransformFeedbackBufferRange(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizei size)
+inline void QOpenGLFunctions_4_5_Compatibility::glTransformFeedbackBufferRange(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)
 {
     d_4_5_Core->f.TransformFeedbackBufferRange(xfb, index, buffer, offset, size);
 }

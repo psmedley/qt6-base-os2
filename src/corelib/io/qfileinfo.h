@@ -4,11 +4,13 @@
 #ifndef QFILEINFO_H
 #define QFILEINFO_H
 
+#include <QtCore/qcompare.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qshareddata.h>
 #include <QtCore/qmetatype.h>
 #include <QtCore/qdatetime.h>
+#include <QtCore/qtimezone.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -20,6 +22,7 @@ class QFileInfoPrivate;
 class Q_CORE_EXPORT QFileInfo
 {
     friend class QDirIteratorPrivate;
+    friend class QDirListingPrivate;
 public:
     explicit QFileInfo(QFileInfoPrivate *d);
 
@@ -57,8 +60,10 @@ public:
     void swap(QFileInfo &other) noexcept
     { d_ptr.swap(other.d_ptr); }
 
+#if QT_CORE_REMOVED_SINCE(6, 8)
     bool operator==(const QFileInfo &fileinfo) const;
     inline bool operator!=(const QFileInfo &fileinfo) const { return !(operator==(fileinfo)); }
+#endif
 
     void setFile(const QString &file);
     void setFile(const QFileDevice &file);
@@ -126,11 +131,15 @@ public:
     bool isBundle() const;
 
     QString symLinkTarget() const;
+    QString readSymLink() const;
     QString junctionTarget() const;
 
 #if QT_CONFIG(cxx17_filesystem) || defined(Q_QDOC)
     std::filesystem::path filesystemSymLinkTarget() const
     { return QtPrivate::toFilesystemPath(symLinkTarget()); }
+
+    std::filesystem::path filesystemReadSymLink() const
+    { return QtPrivate::toFilesystemPath(readSymLink()); }
 
     std::filesystem::path filesystemJunctionTarget() const
     { return QtPrivate::toFilesystemPath(junctionTarget()); }
@@ -152,6 +161,12 @@ public:
     QDateTime lastRead() const { return fileTime(QFile::FileAccessTime); }
     QDateTime fileTime(QFile::FileTime time) const;
 
+    QDateTime birthTime(const QTimeZone &tz) const { return fileTime(QFile::FileBirthTime, tz); }
+    QDateTime metadataChangeTime(const QTimeZone &tz) const { return fileTime(QFile::FileMetadataChangeTime, tz); }
+    QDateTime lastModified(const QTimeZone &tz) const { return fileTime(QFile::FileModificationTime, tz); }
+    QDateTime lastRead(const QTimeZone &tz) const { return fileTime(QFile::FileAccessTime, tz); }
+    QDateTime fileTime(QFile::FileTime time, const QTimeZone &tz) const;
+
     bool caching() const;
     void setCaching(bool on);
     void stat();
@@ -160,6 +175,8 @@ protected:
     QSharedDataPointer<QFileInfoPrivate> d_ptr;
 
 private:
+    friend Q_CORE_EXPORT bool comparesEqual(const QFileInfo &lhs, const QFileInfo &rhs);
+    Q_DECLARE_EQUALITY_COMPARABLE_NON_NOEXCEPT(QFileInfo)
     QFileInfoPrivate* d_func();
     inline const QFileInfoPrivate* d_func() const
     {

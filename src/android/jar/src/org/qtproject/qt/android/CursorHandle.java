@@ -3,26 +3,26 @@
 
 package org.qtproject.qt.android;
 
+import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
-import android.os.Bundle;
-import android.util.DisplayMetrics;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.widget.LinearLayout;
-import android.widget.ImageView;
 import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
-import android.view.MotionEvent;
-import android.widget.PopupWindow;
-import android.app.Activity;
+import android.util.DisplayMetrics;
+import android.util.Log;
 import android.util.TypedValue;
+import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewTreeObserver;
+import android.widget.ImageView;
+import android.widget.PopupWindow;
 
 /* This view represents one of the handle (selection or cursor handle) */
+@SuppressLint("ViewConstructor")
 class CursorView extends ImageView
 {
-    private CursorHandle mHandle;
-    // The coordinare which where clicked
+    private final CursorHandle mHandle;
+    // The coordinate which where clicked
     private float m_offsetX;
     private float m_offsetY;
     private boolean m_pressed = false;
@@ -33,7 +33,7 @@ class CursorView extends ImageView
     }
 
     // Called when the handle was moved programmatically , with the delta amount in pixels
-    public void adjusted(int dx, int dy) {
+    void adjusted(int dx, int dy) {
         m_offsetX += dx;
         m_offsetY += dy;
     }
@@ -43,7 +43,7 @@ class CursorView extends ImageView
         switch (ev.getActionMasked()) {
         case MotionEvent.ACTION_DOWN: {
             m_offsetX = ev.getRawX();
-            m_offsetY = ev.getRawY() + getHeight() / 2;
+            m_offsetY = ev.getRawY() + (float) getHeight() / 2;
             m_pressed = true;
             break;
         }
@@ -52,7 +52,7 @@ class CursorView extends ImageView
             if (!m_pressed)
                 return false;
             mHandle.updatePosition(Math.round(ev.getRawX() - m_offsetX),
-                                    Math.round(ev.getRawY() - m_offsetY));
+                    Math.round(ev.getRawY() - m_offsetY));
             break;
         }
 
@@ -63,27 +63,33 @@ class CursorView extends ImageView
         }
         return true;
     }
-
 }
 
 // Helper class that manages a cursor or selection handle
-public class CursorHandle implements ViewTreeObserver.OnPreDrawListener
+class CursorHandle implements ViewTreeObserver.OnPreDrawListener
 {
-    private View m_layout = null;
+    private static final String QtTag = "QtCursorHandle";
+
+    // Handle IDs
+    static final int IdCursorHandle = 1;
+    static final int IdLeftHandle = 2;
+    static final int IdRightHandle = 3;
+
+    private final View m_layout;
     private CursorView m_cursorView = null;
     private PopupWindow m_popup = null;
-    private int m_id;
-    private int m_attr;
-    private Activity m_activity;
+    private final int m_id;
+    private final int m_attr;
+    private final Activity m_activity;
     private int m_posX = 0;
     private int m_posY = 0;
     private int m_lastX;
     private int m_lastY;
     int tolerance;
-    private boolean m_rtl;
+    private final boolean m_rtl;
     int m_yShift;
 
-    public CursorHandle(Activity activity, View layout, int id, int attr, boolean rtl) {
+    CursorHandle(Activity activity, View layout, int id, int attr, boolean rtl) {
         m_activity = activity;
         m_id = id;
         m_attr = attr;
@@ -95,31 +101,35 @@ public class CursorHandle implements ViewTreeObserver.OnPreDrawListener
         m_rtl = rtl;
     }
 
-    private boolean initOverlay(){
-        if (m_popup == null){
+    private void initOverlay(){
+        if (m_popup != null)
+            return;
 
-            Context context = m_layout.getContext();
-            int[] attrs = {m_attr};
-            TypedArray a = context.getTheme().obtainStyledAttributes(attrs);
-            Drawable drawable = a.getDrawable(0);
+        Context context = m_layout.getContext();
+        int[] attrs = {m_attr};
+        TypedArray a = context.getTheme().obtainStyledAttributes(attrs);
+        Drawable drawable = a.getDrawable(0);
 
-            m_cursorView = new CursorView(context, this);
-            m_cursorView.setImageDrawable(drawable);
+        m_cursorView = new CursorView(context, this);
+        m_cursorView.setImageDrawable(drawable);
 
-            m_popup = new PopupWindow(context, null, android.R.attr.textSelectHandleWindowStyle);
-            m_popup.setSplitTouchEnabled(true);
-            m_popup.setClippingEnabled(false);
-            m_popup.setContentView(m_cursorView);
+        m_popup = new PopupWindow(context, null, android.R.attr.textSelectHandleWindowStyle);
+        m_popup.setSplitTouchEnabled(true);
+        m_popup.setClippingEnabled(false);
+        m_popup.setContentView(m_cursorView);
+        if (drawable != null) {
             m_popup.setWidth(drawable.getIntrinsicWidth());
             m_popup.setHeight(drawable.getIntrinsicHeight());
-
-            m_layout.getViewTreeObserver().addOnPreDrawListener(this);
+        } else {
+            Log.w(QtTag, "initOverlay(): cannot get width/height for popup " +
+                    "from null drawable for attribute " + m_attr);
         }
-        return true;
+
+        m_layout.getViewTreeObserver().addOnPreDrawListener(this);
     }
 
     // Show the handle at a given position (or move it if it is already shown)
-    public void setPosition(final int x, final int y){
+    void setPosition(final int x, final int y){
         initOverlay();
 
         final int[] layoutLocation = new int[2];
@@ -134,9 +144,9 @@ public class CursorHandle implements ViewTreeObserver.OnPreDrawListener
         int x2 = x + layoutLocation[0] - activityLocation[0];
         int y2 = y + layoutLocation[1] + m_yShift + (activityLocationInWindow[1] - activityLocation[1]);
 
-        if (m_id == QtNative.IdCursorHandle) {
+        if (m_id == IdCursorHandle) {
             x2 -= m_popup.getWidth() / 2 ;
-        } else if ((m_id == QtNative.IdLeftHandle && !m_rtl) || (m_id == QtNative.IdRightHandle && m_rtl)) {
+        } else if ((m_id == IdLeftHandle && !m_rtl) || (m_id == IdRightHandle && m_rtl)) {
             x2 -= m_popup.getWidth() * 3 / 4;
         } else {
             x2 -= m_popup.getWidth() / 4;
@@ -153,7 +163,7 @@ public class CursorHandle implements ViewTreeObserver.OnPreDrawListener
         m_posY = y;
     }
 
-    public int bottom()
+    int bottom()
     {
         initOverlay();
         final int[] location = new int[2];
@@ -161,22 +171,22 @@ public class CursorHandle implements ViewTreeObserver.OnPreDrawListener
         return location[1] + m_cursorView.getHeight();
     }
 
-    public void hide() {
+    void hide() {
         if (m_popup != null) {
             m_popup.dismiss();
         }
     }
 
-    public int width()
+    int width()
     {
         return m_cursorView.getDrawable().getIntrinsicWidth();
     }
 
     // The handle was dragged by a given relative position
-    public void updatePosition(int x, int y) {
+    void updatePosition(int x, int y) {
         y -= m_yShift;
         if (Math.abs(m_lastX - x) > tolerance || Math.abs(m_lastY - y) > tolerance) {
-            QtNative.handleLocationChanged(m_id, x + m_posX, y + m_posY);
+            QtInputDelegate.handleLocationChanged(m_id, x + m_posX, y + m_posY);
             m_lastX = x;
             m_lastY = y;
         }

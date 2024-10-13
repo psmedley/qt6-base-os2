@@ -110,7 +110,7 @@
 #endif
 
 #include <QtCore/qdir.h>
-#include <QtCore/qdiriterator.h>
+#include <QtCore/qdirlisting.h>
 #include <QtCore/qfile.h>
 
 QT_BEGIN_NAMESPACE
@@ -133,6 +133,8 @@ QSslCertificatePrivate::QSslCertificatePrivate()
 }
 
 QSslCertificatePrivate::~QSslCertificatePrivate() = default;
+
+QT_DEFINE_QESDP_SPECIALIZATION_DTOR(QSslCertificatePrivate)
 
 /*!
     Constructs a QSslCertificate by reading \a format encoded data
@@ -186,7 +188,7 @@ QSslCertificate::QSslCertificate(const QByteArray &data, QSsl::EncodingFormat fo
         return;
     }
 
-    QList<QSslCertificate> certs = X509Reader(data, 1);
+    const QList<QSslCertificate> certs = X509Reader(data, 1);
     if (!certs.isEmpty())
         d = certs.first().d;
 }
@@ -197,6 +199,18 @@ QSslCertificate::QSslCertificate(const QByteArray &data, QSsl::EncodingFormat fo
 QSslCertificate::QSslCertificate(const QSslCertificate &other) : d(other.d)
 {
 }
+
+/*!
+    \fn QSslCertificate::QSslCertificate(QSslCertificate &&other)
+
+    \since 6.8
+
+    Move-constructs a new QSslCertificate from \a other.
+
+    \note The moved-from object \a other is placed in a partially-formed state,
+    in which the only valid operations are destructions and assignment of a new
+    value.
+*/
 
 /*!
     Destroys the QSslCertificate.
@@ -624,7 +638,7 @@ QList<QSslCertificate> QSslCertificate::fromPath(const QString &path,
     QString sourcePath = QDir::fromNativeSeparators(path);
 
     // Find the path without the filename
-    QString pathPrefix = sourcePath.left(sourcePath.lastIndexOf(u'/'));
+    QStringView pathPrefix = QStringView(sourcePath).left(sourcePath.lastIndexOf(u'/'));
 
     // Check if the path contains any special chars
     int pos = -1;
@@ -647,7 +661,7 @@ QList<QSslCertificate> QSslCertificate::fromPath(const QString &path,
         if (lastIndexOfSlash != -1)
             pathPrefix = pathPrefix.left(lastIndexOfSlash);
         else
-            pathPrefix.clear();
+            pathPrefix = {};
     } else {
         // Check if the path is a file.
         if (QFileInfo(sourcePath).isFile()) {
@@ -664,9 +678,11 @@ QList<QSslCertificate> QSslCertificate::fromPath(const QString &path,
     // Special case - if the prefix ends up being nothing, use "." instead.
     int startIndex = 0;
     if (pathPrefix.isEmpty()) {
-        pathPrefix = "."_L1;
+        pathPrefix = u".";
         startIndex = 2;
     }
+
+    const QString pathPrefixString = pathPrefix.toString();
 
     // The path can be a file or directory.
     QList<QSslCertificate> certs;
@@ -678,9 +694,12 @@ QList<QSslCertificate> QSslCertificate::fromPath(const QString &path,
     QRegularExpression pattern(QRegularExpression::anchoredPattern(sourcePath));
 #endif
 
-    QDirIterator it(pathPrefix, QDir::Files, QDirIterator::FollowSymlinks | QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        QString filePath = startIndex == 0 ? it.next() : it.next().mid(startIndex);
+    using F = QDirListing::IteratorFlag;
+    constexpr auto iterFlags = F::FollowDirSymlinks | F::Recursive | F::FilesOnly;
+    for (const auto &dirEntry : QDirListing(pathPrefixString, iterFlags)) {
+        QString filePath = dirEntry.filePath();
+        if (startIndex > 0)
+            filePath.remove(0, startIndex);
 
 #if QT_CONFIG(regularexpression)
         if (!pattern.match(filePath).hasMatch())
@@ -878,7 +897,7 @@ static const char *const certificate_blacklist[] = {
 bool QSslCertificatePrivate::isBlacklisted(const QSslCertificate &certificate)
 {
     for (int a = 0; certificate_blacklist[a] != nullptr; a++) {
-        QString blacklistedCommonName = QString::fromUtf8(certificate_blacklist[(a+1)]);
+        auto blacklistedCommonName = QAnyStringView(QUtf8StringView(certificate_blacklist[(a+1)]));
         if (certificate.serialNumber() == certificate_blacklist[a++] &&
             (certificate.subjectInfo(QSslCertificate::CommonName).contains(blacklistedCommonName) ||
              certificate.issuerInfo(QSslCertificate::CommonName).contains(blacklistedCommonName)))
@@ -889,19 +908,18 @@ bool QSslCertificatePrivate::isBlacklisted(const QSslCertificate &certificate)
 
 QByteArray QSslCertificatePrivate::subjectInfoToString(QSslCertificate::SubjectInfo info)
 {
-    QByteArray str;
     switch (info) {
-    case QSslCertificate::Organization: str = QByteArray("O"); break;
-    case QSslCertificate::CommonName: str = QByteArray("CN"); break;
-    case QSslCertificate::LocalityName: str = QByteArray("L"); break;
-    case QSslCertificate::OrganizationalUnitName: str = QByteArray("OU"); break;
-    case QSslCertificate::CountryName: str = QByteArray("C"); break;
-    case QSslCertificate::StateOrProvinceName: str = QByteArray("ST"); break;
-    case QSslCertificate::DistinguishedNameQualifier: str = QByteArray("dnQualifier"); break;
-    case QSslCertificate::SerialNumber: str = QByteArray("serialNumber"); break;
-    case QSslCertificate::EmailAddress: str = QByteArray("emailAddress"); break;
+    case QSslCertificate::Organization: return "O"_ba;
+    case QSslCertificate::CommonName: return "CN"_ba;
+    case QSslCertificate::LocalityName: return"L"_ba;
+    case QSslCertificate::OrganizationalUnitName: return "OU"_ba;
+    case QSslCertificate::CountryName: return "C"_ba;
+    case QSslCertificate::StateOrProvinceName: return "ST"_ba;
+    case QSslCertificate::DistinguishedNameQualifier: return "dnQualifier"_ba;
+    case QSslCertificate::SerialNumber: return "serialNumber"_ba;
+    case QSslCertificate::EmailAddress: return "emailAddress"_ba;
     }
-    return str;
+    return QByteArray();
 }
 
 /*!
@@ -918,13 +936,13 @@ QString QSslCertificate::issuerDisplayName() const
     QStringList names;
     names = issuerInfo(QSslCertificate::CommonName);
     if (!names.isEmpty())
-        return names.first();
+        return names.constFirst();
     names = issuerInfo(QSslCertificate::Organization);
     if (!names.isEmpty())
-        return names.first();
+        return names.constFirst();
     names = issuerInfo(QSslCertificate::OrganizationalUnitName);
     if (!names.isEmpty())
-        return names.first();
+        return names.constFirst();
 
     return QString();
 }
@@ -943,13 +961,13 @@ QString QSslCertificate::subjectDisplayName() const
     QStringList names;
     names = subjectInfo(QSslCertificate::CommonName);
     if (!names.isEmpty())
-        return names.first();
+        return names.constFirst();
     names = subjectInfo(QSslCertificate::Organization);
     if (!names.isEmpty())
-        return names.first();
+        return names.constFirst();
     names = subjectInfo(QSslCertificate::OrganizationalUnitName);
     if (!names.isEmpty())
-        return names.first();
+        return names.constFirst();
 
     return QString();
 }

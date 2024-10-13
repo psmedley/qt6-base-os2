@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef TST_QMIMEDATABASE_H
 #define TST_QMIMEDATABASE_H
@@ -25,7 +25,6 @@ private slots:
     void mimeTypeForFileName();
     void mimeTypesForFileName_data();
     void mimeTypesForFileName();
-    void mimeTypesForFileName_glob_deleteall();
     void inheritance();
     void aliases();
     void listAliases_data();
@@ -36,8 +35,8 @@ private slots:
     void mimeTypeForUrl();
     void mimeTypeForData_data();
     void mimeTypeForData();
-    void mimeTypeForFileAndContent_data();
-    void mimeTypeForFileAndContent();
+    void mimeTypeForFileNameAndData_data();
+    void mimeTypeForFileNameAndData();
 #ifdef Q_OS_UNIX
     void mimeTypeForUnixSpecials_data();
     void mimeTypeForUnixSpecials();
@@ -46,6 +45,8 @@ private slots:
     void suffixes_data();
     void suffixes();
     void knownSuffix();
+    void filterString_data();
+    void filterString();
     void symlinkToFifo();
     void fromThreads();
 
@@ -63,10 +64,13 @@ private slots:
     //
 
     void installNewGlobalMimeType();
+    void installNewLocalMimeType_data();
     void installNewLocalMimeType();
 
 private:
     void initTestCaseInternal(); // test-specific
+    bool useCacheProvider() const; // test-specific
+    bool useFreeDesktopOrgXml() const; // test-specific
 
     QString m_globalXdgDir;
     QString m_localMimeDir;
@@ -75,6 +79,7 @@ private:
     QTemporaryDir m_temporaryDir;
     QString m_testSuite;
     bool m_isUsingCacheProvider;
+    bool m_hasFreedesktopOrg = false;
 };
 
 #endif   // TST_QMIMEDATABASE_H

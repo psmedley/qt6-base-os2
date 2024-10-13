@@ -1,7 +1,8 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
+#include <QtTest/private/qcomparisontesthelper_p.h>
 #include <QRunnable>
 #include <QThreadPool>
 
@@ -19,8 +20,11 @@ public:
 
 private slots:
     void constructors();
+    void ctad();
+    void conversion();
     void destructor();
     void assignment_operators();
+    void compareCompiles();
     void equality_operators();
     void swap();
     void isNull();
@@ -34,14 +38,114 @@ private slots:
     void constQPointer();
 };
 
+// check that nullptr QPointer construction is Q_CONSTINIT:
+[[maybe_unused]] Q_CONSTINIT static QPointer<QFile> s_file1;
+[[maybe_unused]] Q_CONSTINIT static QPointer<QFile> s_file2 = {};
+[[maybe_unused]] Q_CONSTINIT static QPointer<QFile> s_file3 = nullptr;
+[[maybe_unused]] Q_CONSTINIT static QPointer<QFile> s_file4 = 0; // legacy nullptr
+
 void tst_QPointer::constructors()
 {
+    struct Derived : QObject {};
+    Derived derived;
+
     QPointer<QObject> p1;
     QPointer<QObject> p2(this);
     QPointer<QObject> p3(p2);
+    QPointer<QObject> p4 = &derived;
     QCOMPARE(p1, QPointer<QObject>(0));
     QCOMPARE(p2, QPointer<QObject>(this));
     QCOMPARE(p3, QPointer<QObject>(this));
+    QCOMPARE(p4, &derived);
+}
+
+void tst_QPointer::ctad()
+{
+
+    {
+        QObject o;
+        QPointer po = &o;
+        static_assert(std::is_same_v<decltype(po), QPointer<QObject>>);
+        QPointer poc = po;
+        static_assert(std::is_same_v<decltype(poc), QPointer<QObject>>);
+        QPointer pom = std::move(po);
+        static_assert(std::is_same_v<decltype(pom), QPointer<QObject>>);
+    }
+    {
+        const QObject co;
+        QPointer pco = &co;
+        static_assert(std::is_same_v<decltype(pco), QPointer<const QObject>>);
+        QPointer pcoc = pco;
+        static_assert(std::is_same_v<decltype(pcoc), QPointer<const QObject>>);
+        QPointer pcom = std::move(pco);
+        static_assert(std::is_same_v<decltype(pcom), QPointer<const QObject>>);
+    }
+    {
+        QFile f;
+        QPointer pf = &f;
+        static_assert(std::is_same_v<decltype(pf), QPointer<QFile>>);
+        QPointer pfc = pf;
+        static_assert(std::is_same_v<decltype(pfc), QPointer<QFile>>);
+        QPointer pfm = std::move(pf);
+        static_assert(std::is_same_v<decltype(pfm), QPointer<QFile>>);
+    }
+    {
+        const QFile cf;
+        QPointer pcf = &cf;
+        static_assert(std::is_same_v<decltype(pcf), QPointer<const QFile>>);
+        QPointer pcfc = pcf;
+        static_assert(std::is_same_v<decltype(pcfc), QPointer<const QFile>>);
+        QPointer pcfm = std::move(pcf);
+        static_assert(std::is_same_v<decltype(pcfm), QPointer<const QFile>>);
+    }
+}
+
+void tst_QPointer::conversion()
+{
+    // copy-conversion:
+    {
+        QFile file;
+        QPointer<QFile> pf = &file;
+        QCOMPARE_EQ(pf, &file);
+        QPointer<const QIODevice> pio = pf;
+        QCOMPARE_EQ(pio, &file);
+        QCOMPARE_EQ(pio.get(), &file);
+        QCOMPARE_EQ(pio, pf);
+        QCOMPARE_EQ(pio.get(), pf.get());
+
+        // reset
+        pio = nullptr;
+        QCOMPARE_EQ(pio, nullptr);
+        QCOMPARE_EQ(pio.get(), nullptr);
+
+        // copy-assignment
+        QCOMPARE_EQ(pf, &file);
+        pio = pf;
+        QCOMPARE_EQ(pio, &file);
+        QCOMPARE_EQ(pio.get(), &file);
+        QCOMPARE_EQ(pio, pf);
+        QCOMPARE_EQ(pio.get(), pf.get());
+    }
+    // move-conversion:
+    {
+        QFile file;
+        QPointer<QFile> pf = &file;
+        QCOMPARE_EQ(pf, &file);
+        QPointer<const QIODevice> pio = std::move(pf);
+        QCOMPARE_EQ(pf, nullptr);
+        QCOMPARE_EQ(pio, &file);
+        QCOMPARE_EQ(pio.get(), &file);
+
+        // reset
+        pio = nullptr;
+        QCOMPARE_EQ(pio, nullptr);
+        QCOMPARE_EQ(pio.get(), nullptr);
+
+        // move-assignment
+        pio = QPointer<QFile>(&file);
+        QCOMPARE_EQ(pio, &file);
+        QCOMPARE_EQ(pio.get(), &file);
+    }
 }
 
 void tst_QPointer::destructor()
@@ -101,12 +205,21 @@ void tst_QPointer::assignment_operators()
     delete object;
 }
 
+void tst_QPointer::compareCompiles()
+{
+    QTestPrivate::testEqualityOperatorsCompile<QPointer<QObject>>();
+    QTestPrivate::testEqualityOperatorsCompile<QPointer<QObject>, QObject*>();
+    QTestPrivate::testEqualityOperatorsCompile<QPointer<QObject>, QWidget*>();
+    QTestPrivate::testEqualityOperatorsCompile<QPointer<QObject>, QPointer<QWidget>>();
+    QTestPrivate::testEqualityOperatorsCompile<QPointer<QObject>, std::nullptr_t>();
+}
+
 void tst_QPointer::equality_operators()
 {
     QPointer<QObject> p1;
     QPointer<QObject> p2;
 
-    QVERIFY(p1 == p2);
+    QT_TEST_EQUALITY_OPS(p1, p2, true);
 
     QObject *object = nullptr;
 #ifndef QT_NO_WIDGETS
@@ -114,16 +227,15 @@ void tst_QPointer::equality_operators()
 #endif
 
     p1 = object;
-    QVERIFY(p1 == p2);
-    QVERIFY(p1 == object);
+    QT_TEST_EQUALITY_OPS(p1, p2, true);
+    QT_TEST_EQUALITY_OPS(p1, object, true);
     p2 = object;
-    QVERIFY(p2 == p1);
-    QVERIFY(p2 == object);
-
+    QT_TEST_EQUALITY_OPS(p2, p1, true);
+    QT_TEST_EQUALITY_OPS(p2, object, true);
     p1 = this;
-    QVERIFY(p1 != p2);
+    QT_TEST_EQUALITY_OPS(p1, p2, false);
     p2 = p1;
-    QVERIFY(p1 == p2);
+    QT_TEST_EQUALITY_OPS(p1, p2, true);
 
     // compare to zero
     p1 = nullptr;
@@ -131,19 +243,13 @@ void tst_QPointer::equality_operators()
     QVERIFY(0 == p1);
     QVERIFY(p2 != 0);
     QVERIFY(0 != p2);
-    QVERIFY(p1 == nullptr);
-    QVERIFY(nullptr == p1);
-    QVERIFY(p2 != nullptr);
-    QVERIFY(nullptr != p2);
-    QVERIFY(p1 == object);
-    QVERIFY(object == p1);
-    QVERIFY(p2 != object);
-    QVERIFY(object != p2);
+    QT_TEST_EQUALITY_OPS(p1, nullptr, true);
+    QT_TEST_EQUALITY_OPS(p2, nullptr, false);
+    QT_TEST_EQUALITY_OPS(p1, object, true);
+    QT_TEST_EQUALITY_OPS(p2, object, false);
 #ifndef QT_NO_WIDGETS
-    QVERIFY(p1 == widget);
-    QVERIFY(widget == p1);
-    QVERIFY(p2 != widget);
-    QVERIFY(widget != p2);
+    QT_TEST_EQUALITY_OPS(p1, widget, true);
+    QT_TEST_EQUALITY_OPS(p2, widget, false);
 #endif
 }
 

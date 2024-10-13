@@ -5,7 +5,6 @@
 
 #include "qmetatype.h"
 #include "qmetatype_p.h"
-#include "qobject.h"
 #include "qobjectdefs.h"
 #include "qdatetime.h"
 #include "qbytearray.h"
@@ -21,14 +20,14 @@
 #include "qeasingcurve.h"
 #endif
 #include "quuid.h"
-#include "qvariant.h"
-#include "qdatastream.h"
 
 #if QT_CONFIG(regularexpression)
 #  include "qregularexpression.h"
 #endif
 
 #ifndef QT_BOOTSTRAPPED
+#  include "qdatastream.h"
+
 #  include "qbitarray.h"
 #  include "qurl.h"
 #  include "qvariant.h"
@@ -43,6 +42,7 @@
 #  include "qmetaobject.h"
 #  include "qsequentialiterable.h"
 #  include "qassociativeiterable.h"
+#  include "qobject.h"
 #endif
 
 #if QT_CONFIG(itemmodel)
@@ -56,7 +56,6 @@
 # include "qline.h"
 #endif
 
-#include <bitset>
 #include <new>
 #include <cstring>
 
@@ -151,13 +150,7 @@ struct QMetaTypeCustomRegistry
         auto &ti = registry[idx];
 
         // We must unregister all names.
-        auto it = aliases.begin();
-        while (it != aliases.end()) {
-            if (it.value() == ti)
-                it = aliases.erase(it);
-            else
-                ++it;
-        }
+        aliases.removeIf([ti] (const auto &kv) { return kv.value() == ti; });
 
         ti = nullptr;
 
@@ -269,7 +262,7 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
     \li Pointers to classes derived from QObject
     \li QList<T>, QQueue<T>, QStack<T> or QSet<T>
         where T is a registered meta type
-    \li QHash<T1, T2>, QMap<T1, T2> or QPair<T1, T2> where T1 and T2 are
+    \li QHash<T1, T2>, QMap<T1, T2> or std::pair<T1, T2> where T1 and T2 are
         registered meta types
     \li QPointer<T>, QSharedPointer<T>, QWeakPointer<T>, where T is a class that derives from QObject
     \li Enumerations registered with Q_ENUM or Q_FLAG
@@ -460,7 +453,7 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
     \value IsPointer This type is a pointer to another type.
     \omitvalue WeakPointerToQObject
     \omitvalue TrackingPointerToQObject
-    \omitvalue IsGadget \omit This type is a Q_GADGET and it's corresponding QMetaObject can be accessed with QMetaType::metaObject Since 5.5. \endomit
+    \omitvalue IsGadget \omit (since Qt 5.5) This type is a Q_GADGET and its corresponding QMetaObject can be accessed with QMetaType::metaObject. \endomit
     \omitvalue PointerToGadget
     \omitvalue IsQmlList
     \value IsConst Indicates that values of this type are immutable; for instance, because they are pointers to const objects.
@@ -481,6 +474,7 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
 
     \ingroup objectmodel
     \threadsafe
+    \compares equality
 
     The class is used as a helper to marshall types in QVariant and
     in queued signals and slots connections. It associates a type
@@ -907,13 +901,22 @@ bool QMetaType::isOrdered() const
 */
 void QMetaType::unregisterMetaType(QMetaType type)
 {
-    if (type.d_ptr && type.d_ptr->typeId.loadRelaxed() >= QMetaType::User) {
-        // this is a custom meta type (not read-only)
-        auto d = const_cast<QtPrivate::QMetaTypeInterface *>(type.d_ptr);
-        if (auto reg = customTypeRegistry())
-            reg->unregisterDynamicType(d->typeId.loadRelaxed());
-        d->typeId.storeRelease(0);
+    const QtPrivate::QMetaTypeInterface *d_ptr = type.d_ptr;
+    if (!d_ptr)
+        return;
+
+    const int typeId = d_ptr->typeId.loadRelaxed();
+    if (typeId < QMetaType::User)
+        return;
+
+    // this is a custom meta type (not read-only)
+
+    if (auto reg = customTypeRegistry()) {
+        Q_ASSERT(reg->getCustomType(typeId) == d_ptr);
+        reg->unregisterDynamicType(typeId);
     }
+
+    const_cast<QtPrivate::QMetaTypeInterface *>(d_ptr)->typeId.storeRelease(0);
 }
 
 /*!
@@ -923,21 +926,27 @@ void QMetaType::unregisterMetaType(QMetaType type)
     Returns the QMetaType corresponding to the type in the template parameter.
 */
 
-/*! \fn bool QMetaType::operator==(QMetaType a, QMetaType b)
+/*! \fn bool QMetaType::operator==(const QMetaType &lhs, const QMetaType &rhs)
     \since 5.15
     \overload
 
-    Returns \c true if the QMetaType \a a represents the same type
-    as the QMetaType \a b, otherwise returns \c false.
+    Returns \c true if the QMetaType \a lhs represents the same type
+    as the QMetaType \a rhs, otherwise returns \c false.
 */
 
-/*! \fn bool QMetaType::operator!=(QMetaType a, QMetaType b)
+/*! \fn bool QMetaType::operator!=(const QMetaType &lhs, const QMetaType &rhs)
     \since 5.15
     \overload
 
-    Returns \c true if the QMetaType \a a represents a different type
-    than the QMetaType \a b, otherwise returns \c false.
+    Returns \c true if the QMetaType \a lhs represents a different type
+    than the QMetaType \a rhs, otherwise returns \c false.
 */
+
+/*! \internal */
+bool QMetaTypeModuleHelper::convert(const void *, int, void *, int) const
+{
+    return false;
+}
 
 #define QT_ADD_STATIC_METATYPE(MetaTypeName, MetaTypeId, RealName) \
     { #RealName, sizeof(#RealName) - 1, MetaTypeId },
@@ -954,7 +963,8 @@ static const struct { const char * typeName; int typeNameLength; int type; } typ
     {nullptr, 0, QMetaType::UnknownType}
 };
 
-static const struct : QMetaTypeModuleHelper
+// NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor): this is not a base class
+static constexpr struct : QMetaTypeModuleHelper
 {
     template<typename T, typename LiteralWrapper =
              std::conditional_t<std::is_same_v<T, QString>, QLatin1StringView, const char *>>
@@ -1001,6 +1011,8 @@ static const struct : QMetaTypeModuleHelper
         using Double = double;
         using Bool = bool;
         using Nullptr = std::nullptr_t;
+        using Char16 = char16_t;
+        using Char32 = char32_t;
 
 #define QMETATYPE_CONVERTER_ASSIGN_DOUBLE(To, From) \
     QMETATYPE_CONVERTER(To, From, result = double(source); return true;)
@@ -1155,6 +1167,9 @@ static const struct : QMetaTypeModuleHelper
         QMETATYPE_CONVERTER_ASSIGN_QCHAR(ULong);
         QMETATYPE_CONVERTER_ASSIGN_QCHAR(UInt);
         QMETATYPE_CONVERTER_ASSIGN_QCHAR(ULongLong);
+        QMETATYPE_CONVERTER_ASSIGN_QCHAR(Char16);
+
+        QMETATYPE_CONVERTER(Char16, QChar, result = source.unicode(); return true;)
 
         // conversions to QString
         QMETATYPE_CONVERTER_ASSIGN(QString, QChar);
@@ -1190,6 +1205,14 @@ static const struct : QMetaTypeModuleHelper
         QMETATYPE_CONVERTER(QString, UChar,
             char s = source;
             result = QString::fromLatin1(&s, 1);
+            return true;
+        );
+        QMETATYPE_CONVERTER(QString, Char16,
+            result = QChar(source);
+            return true;
+        );
+        QMETATYPE_CONVERTER(QString, Char32,
+            result = QChar::fromUcs4(source).operator QStringView().toString();
             return true;
         );
 #if QT_CONFIG(datestring)
@@ -1254,34 +1277,36 @@ static const struct : QMetaTypeModuleHelper
         QMETATYPE_CONVERTER_ASSIGN(QRectF, QRect);
         QMETATYPE_CONVERTER(QPoint, QPointF, result = source.toPoint(); return true;);
         QMETATYPE_CONVERTER_ASSIGN(QPointF, QPoint);
- #endif
+#endif
 
+        QMETATYPE_CONVERTER(QStringList, QString, result = QStringList() << source; return true;);
+
+#ifndef QT_NO_VARIANT
         QMETATYPE_CONVERTER(QByteArrayList, QVariantList,
             result.reserve(source.size());
-            for (auto v: source)
+            for (const auto &v: source)
                 result.append(v.toByteArray());
             return true;
         );
         QMETATYPE_CONVERTER(QVariantList, QByteArrayList,
             result.reserve(source.size());
-            for (auto v: source)
+            for (const auto &v: source)
                 result.append(QVariant(v));
             return true;
         );
 
         QMETATYPE_CONVERTER(QStringList, QVariantList,
             result.reserve(source.size());
-            for (auto v: source)
+            for (const auto &v: source)
                 result.append(v.toString());
             return true;
         );
         QMETATYPE_CONVERTER(QVariantList, QStringList,
             result.reserve(source.size());
-            for (auto v: source)
+            for (const auto &v: source)
                 result.append(QVariant(v));
             return true;
         );
-        QMETATYPE_CONVERTER(QStringList, QString, result = QStringList() << source; return true;);
 
         QMETATYPE_CONVERTER(QVariantHash, QVariantMap,
             for (auto it = source.begin(); it != source.end(); ++it)
@@ -1293,7 +1318,7 @@ static const struct : QMetaTypeModuleHelper
                 result.insert(it.key(), it.value());
             return true;
         );
-
+#endif // !QT_NO_VARIANT
 #ifndef QT_BOOTSTRAPPED
         QMETATYPE_CONVERTER_ASSIGN(QCborValue, QString);
         QMETATYPE_CONVERTER(QString, QCborValue,
@@ -1693,17 +1718,17 @@ private:
     QHash<Key, T> map;
 };
 
-typedef QMetaTypeFunctionRegistry<QMetaType::ConverterFunction,QPair<int,int> >
-QMetaTypeConverterRegistry;
+using QMetaTypeConverterRegistry
+        = QMetaTypeFunctionRegistry<QMetaType::ConverterFunction, std::pair<int,int>>;
 
 Q_GLOBAL_STATIC(QMetaTypeConverterRegistry, customTypesConversionRegistry)
 
 using QMetaTypeMutableViewRegistry
-        = QMetaTypeFunctionRegistry<QMetaType::MutableViewFunction, QPair<int,int>>;
+        = QMetaTypeFunctionRegistry<QMetaType::MutableViewFunction, std::pair<int,int>>;
 Q_GLOBAL_STATIC(QMetaTypeMutableViewRegistry, customTypesMutableViewRegistry)
 
 /*!
-    \fn bool QMetaType::registerConverter()
+    \fn template<typename From, typename To> bool QMetaType::registerConverter()
     \since 5.2
     Registers the possibility of an implicit conversion from type From to type To in the meta
     type system. Returns \c true if the registration succeeded, otherwise false.
@@ -1755,7 +1780,7 @@ Q_GLOBAL_STATIC(QMetaTypeMutableViewRegistry, customTypesMutableViewRegistry)
 */
 bool QMetaType::registerConverterFunction(const ConverterFunction &f, QMetaType from, QMetaType to)
 {
-    if (!customTypesConversionRegistry()->insertIfNotContains(qMakePair(from.id(), to.id()), f)) {
+    if (!customTypesConversionRegistry()->insertIfNotContains({from.id(), to.id()}, f)) {
         qWarning("Type conversion already registered from type %s to type %s",
                  from.name(), to.name());
         return false;
@@ -1788,7 +1813,7 @@ bool QMetaType::registerConverterFunction(const ConverterFunction &f, QMetaType 
 */
 bool QMetaType::registerMutableViewFunction(const MutableViewFunction &f, QMetaType from, QMetaType to)
 {
-    if (!customTypesMutableViewRegistry()->insertIfNotContains(qMakePair(from.id(), to.id()), f)) {
+    if (!customTypesMutableViewRegistry()->insertIfNotContains({from.id(), to.id()}, f)) {
         qWarning("Mutable view on type already registered from type %s to type %s",
                  from.name(), to.name());
         return false;
@@ -1856,7 +1881,7 @@ bool QMetaType::debugStream(QDebug& dbg, const void *rhs)
 */
 
 /*!
-    \fn bool QMetaType::hasRegisteredDebugStreamOperator()
+    \fn template<typename T> bool QMetaType::hasRegisteredDebugStreamOperator()
     \deprecated
     \since 5.2
 
@@ -1965,13 +1990,13 @@ static bool convertFromEnum(QMetaType fromType, const void *from, QMetaType toTy
     QMetaEnum en = metaEnumFromType(fromType);
     if (en.isValid()) {
         if (en.isFlag()) {
-            const QByteArray keys = en.valueToKeys(ll);
+            const QByteArray keys = en.valueToKeys(static_cast<int>(ll));
             if (toType.id() == QMetaType::QString)
                 *static_cast<QString *>(to) = QString::fromUtf8(keys);
             else
                 *static_cast<QByteArray *>(to) = keys;
         } else {
-            const char *key = en.valueToKey(ll);
+            const char *key = en.valueToKey(static_cast<int>(ll));
             if (toType.id() == QMetaType::QString)
                 *static_cast<QString *>(to) = QString::fromUtf8(key);
             else
@@ -2075,13 +2100,12 @@ static bool convertIterableToVariantHash(QMetaType fromType, const void *from, v
         h.insert(it.key().toString(), it.value());
     return true;
 }
-#endif
 
 static bool convertIterableToVariantPair(QMetaType fromType, const void *from, void *to)
 {
-    const QMetaType::ConverterFunction * const f =
-        customTypesConversionRegistry()->function(qMakePair(fromType.id(),
-                                                            qMetaTypeId<QtMetaTypePrivate::QPairVariantInterfaceImpl>()));
+    const int targetId = qMetaTypeId<QtMetaTypePrivate::QPairVariantInterfaceImpl>();
+    const auto f = customTypesConversionRegistry()->function({fromType.id(), targetId});
+
     if (!f)
         return false;
 
@@ -2107,7 +2131,6 @@ static bool convertIterableToVariantPair(QMetaType fromType, const void *from, v
     return true;
 }
 
-#ifndef QT_BOOTSTRAPPED
 static bool convertToSequentialIterable(QMetaType fromType, const void *from, void *to)
 {
     using namespace QtMetaTypePrivate;
@@ -2318,7 +2341,7 @@ static bool convertMetaObject(QMetaType fromType, const void *from, QMetaType to
     }
     return false;
 }
-#endif
+#endif // !QT_BOOTSTRAPPED
 
 /*!
     \fn bool QMetaType::convert(const void *from, int fromTypeId, void *to, int toTypeId)
@@ -2359,8 +2382,7 @@ bool QMetaType::convert(QMetaType fromType, const void *from, QMetaType toType, 
         if (moduleHelper->convert(from, fromTypeId, to, toTypeId))
             return true;
     }
-    const QMetaType::ConverterFunction * const f =
-        customTypesConversionRegistry()->function(qMakePair(fromTypeId, toTypeId));
+    const auto f = customTypesConversionRegistry()->function({fromTypeId, toTypeId});
     if (f)
         return (*f)(from, to);
 
@@ -2376,10 +2398,11 @@ bool QMetaType::convert(QMetaType fromType, const void *from, QMetaType toType, 
         }
     }
 
+#ifndef QT_BOOTSTRAPPED
+# ifndef QT_NO_VARIANT
     if (toTypeId == QVariantPair && convertIterableToVariantPair(fromType, from, to))
         return true;
 
-#ifndef QT_BOOTSTRAPPED
     // handle iterables
     if (toTypeId == QVariantList && convertIterableToVariantList(fromType, from, to))
         return true;
@@ -2389,6 +2412,7 @@ bool QMetaType::convert(QMetaType fromType, const void *from, QMetaType toType, 
 
     if (toTypeId == QVariantHash && convertIterableToVariantHash(fromType, from, to))
         return true;
+#  endif
 
     if (toTypeId == qMetaTypeId<QSequentialIterable>())
         return convertToSequentialIterable(fromType, from, to);
@@ -2415,8 +2439,7 @@ bool QMetaType::view(QMetaType fromType, void *from, QMetaType toType, void *to)
     int fromTypeId = fromType.id();
     int toTypeId = toType.id();
 
-    const QMetaType::MutableViewFunction * const f =
-        customTypesMutableViewRegistry()->function(qMakePair(fromTypeId, toTypeId));
+    const auto f = customTypesMutableViewRegistry()->function({fromTypeId, toTypeId});
     if (f)
         return (*f)(from, to);
 
@@ -2458,8 +2481,7 @@ bool QMetaType::canView(QMetaType fromType, QMetaType toType)
     if (fromTypeId == UnknownType || toTypeId == UnknownType)
         return false;
 
-    const MutableViewFunction * const f =
-        customTypesMutableViewRegistry()->function(qMakePair(fromTypeId, toTypeId));
+    const auto f = customTypesMutableViewRegistry()->function({fromTypeId, toTypeId});
     if (f)
         return true;
 
@@ -2574,7 +2596,8 @@ bool QMetaType::canConvert(QMetaType fromType, QMetaType toType)
 
     if (toTypeId == qMetaTypeId<QAssociativeIterable>())
         return canConvertToAssociativeIterable(fromType);
-
+#endif
+#ifndef QT_NO_VARIANT
     if (toTypeId == QVariantList
             && canConvert(fromType, QMetaType::fromType<QSequentialIterable>())) {
         return true;
@@ -2584,11 +2607,11 @@ bool QMetaType::canConvert(QMetaType fromType, QMetaType toType)
             && canConvert(fromType, QMetaType::fromType<QAssociativeIterable>())) {
         return true;
     }
-#endif
 
     if (toTypeId == QVariantPair && hasRegisteredConverterFunction(
                     fromType, QMetaType::fromType<QtMetaTypePrivate::QPairVariantInterfaceImpl>()))
         return true;
+#endif
 
     if (fromType.flags() & IsEnumeration) {
         if (toTypeId == QString || toTypeId == QByteArray)
@@ -2620,7 +2643,7 @@ bool QMetaType::canConvert(QMetaType fromType, QMetaType toType)
 */
 
 /*!
-    \fn bool QMetaType::hasRegisteredConverterFunction()
+    \fn template<typename From, typename To> bool QMetaType::hasRegisteredConverterFunction()
     Returns \c true, if the meta type system has a registered conversion from type From to type To.
     \since 5.2
     \overload
@@ -2633,11 +2656,41 @@ bool QMetaType::canConvert(QMetaType fromType, QMetaType toType)
 */
 bool QMetaType::hasRegisteredConverterFunction(QMetaType fromType, QMetaType toType)
 {
-    return customTypesConversionRegistry()->contains(qMakePair(fromType.id(), toType.id()));
+    return customTypesConversionRegistry()->contains({fromType.id(), toType.id()});
 }
 
 /*!
-    \fn bool QMetaType::hasRegisteredMutableViewFunction()
+    \internal
+    Non-template helper ("SCARY") for IsMetaTypePair::registerConverter().
+*/
+bool QtPrivate::hasRegisteredConverterFunctionToPairVariantInterface(QMetaType m)
+{
+    const QMetaType to = QMetaType::fromType<QtMetaTypePrivate::QPairVariantInterfaceImpl>();
+    return QMetaType::hasRegisteredConverterFunction(m, to);
+}
+
+/*!
+    \internal
+    Non-template helper ("SCARY") for SequentialValueTypeIsMetaType::registerConverter().
+*/
+bool QtPrivate::hasRegisteredConverterFunctionToIterableMetaSequence(QMetaType m)
+{
+    const QMetaType to = QMetaType::fromType<QIterable<QMetaSequence>>();
+    return QMetaType::hasRegisteredConverterFunction(m, to);
+}
+
+/*!
+    \internal
+    Non-template helper ("SCARY") for AssociativeKeyTypeIsMetaType::registerConverter().
+*/
+bool QtPrivate::hasRegisteredConverterFunctionToIterableMetaAssociation(QMetaType m)
+{
+    const QMetaType to = QMetaType::fromType<QIterable<QMetaAssociation>>();
+    return QMetaType::hasRegisteredConverterFunction(m, to);
+}
+
+/*!
+    \fn template<typename From, typename To> bool QMetaType::hasRegisteredMutableViewFunction()
     Returns \c true, if the meta type system has a registered mutable view on type From of type To.
     \since 6.0
     \overload
@@ -2650,7 +2703,27 @@ bool QMetaType::hasRegisteredConverterFunction(QMetaType fromType, QMetaType toT
 */
 bool QMetaType::hasRegisteredMutableViewFunction(QMetaType fromType, QMetaType toType)
 {
-    return customTypesMutableViewRegistry()->contains(qMakePair(fromType.id(), toType.id()));
+    return customTypesMutableViewRegistry()->contains({fromType.id(), toType.id()});
+}
+
+/*!
+    \internal
+    Non-template helper ("SCARY") for SequentialValueTypeIsMetaType::registerMutableView().
+*/
+bool QtPrivate::hasRegisteredMutableViewFunctionToIterableMetaSequence(QMetaType m)
+{
+    const QMetaType to = QMetaType::fromType<QIterable<QMetaSequence>>();
+    return QMetaType::hasRegisteredMutableViewFunction(m, to);
+}
+
+/*!
+    \internal
+    Non-template helper ("SCARY") for AssociativeKeyTypeIsMetaType::registerMutableView().
+*/
+bool QtPrivate::hasRegisteredMutableViewFunctionToIterableMetaAssociation(QMetaType m)
+{
+    const QMetaType to = QMetaType::fromType<QIterable<QMetaAssociation>>();
+    return QMetaType::hasRegisteredMutableViewFunction(m, to);
 }
 
 /*!
@@ -2901,6 +2974,59 @@ bool QMetaType::hasRegisteredDataStreamOperators() const
 }
 
 /*!
+   \since 6.6
+
+   If this metatype represents an enumeration, this method returns a
+   metatype of a numeric class of the same signedness and size as the
+   enums underlying type.
+   If it represents a QFlags type, it returns QMetaType::Int.
+   In all other cases an invalid QMetaType is returned.
+ */
+QMetaType QMetaType::underlyingType() const
+{
+    if (!d_ptr || !(flags() & IsEnumeration))
+        return {};
+    /* QFlags has enumeration set so that's handled here (qint32
+       case), as QFlags uses int as the underlying type
+       Note that we do some approximation here, as we cannot
+       differentiate between different underlying types of the
+       same size and signedness (consider char <-> (un)signed char,
+       int <-> long <-> long long).
+
+       ### TODO PENDING: QTBUG-111926 - QFlags supporting >32 bit int
+    */
+    if (flags() & IsUnsignedEnumeration) {
+        switch (sizeOf()) {
+        case 1:
+            return QMetaType::fromType<quint8>();
+        case 2:
+            return QMetaType::fromType<quint16>();
+        case 4:
+            return QMetaType::fromType<quint32>();
+        case 8:
+            return QMetaType::fromType<quint64>();
+        default:
+            break;
+        }
+    } else {
+        switch (sizeOf()) {
+        case 1:
+            return QMetaType::fromType<qint8>();
+        case 2:
+            return QMetaType::fromType<qint16>();
+        case 4:
+            return QMetaType::fromType<qint32>();
+        case 8:
+            return QMetaType::fromType<qint64>();
+        default:
+            break;
+        }
+    }
+    // int128 can be handled above once we have qint128
+    return QMetaType();
+}
+
+/*!
    \fn bool QMetaType::load(QDataStream &stream, int type, void *data)
    \overload
    \deprecated
@@ -3012,7 +3138,7 @@ QMetaType QMetaType::fromName(QByteArrayView typeName)
 */
 
 /*!
-    \fn int qRegisterMetaType(const char *typeName)
+    \fn template <typename T> int qRegisterMetaType(const char *typeName)
     \relates QMetaType
     \obsolete
     \threadsafe
@@ -3046,7 +3172,7 @@ QMetaType QMetaType::fromName(QByteArrayView typeName)
 */
 
 /*!
-    \fn int qRegisterMetaType()
+    \fn template <typename T> int qRegisterMetaType()
     \relates QMetaType
     \threadsafe
     \since 4.2
@@ -3102,7 +3228,7 @@ QMetaType QMetaType::fromName(QByteArrayView typeName)
  */
 
 /*!
-    \fn int qMetaTypeId()
+    \fn template <typename T> int qMetaTypeId()
     \relates QMetaType
     \threadsafe
     \since 4.1
@@ -3167,6 +3293,7 @@ QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_CLASS(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_POINTER(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_TEMPLATE(QT_METATYPE_DECLARE_TEMPLATE_ITER)
+
 #undef QT_METATYPE_DECLARE_TEMPLATE_ITER
 #endif
 }

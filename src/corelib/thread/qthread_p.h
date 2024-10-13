@@ -183,6 +183,7 @@ public:
     ~QThreadPrivate();
 
     void setPriority(QThread::Priority prio);
+    Qt::HANDLE threadId() const noexcept;
 
     mutable QMutex mutex;
     QAtomicInt quitLockRef;
@@ -190,7 +191,10 @@ public:
     bool running;
     bool finished;
     bool isInFinish; //when in QThreadPrivate::finish
-    std::atomic<bool> interruptionRequested;
+    std::atomic<bool> interruptionRequested = false;
+#ifdef Q_OS_UNIX
+    bool terminated = false; // when (the first) terminate has been called
+#endif
 
     bool exited;
     int returnCode;
@@ -348,11 +352,8 @@ class QScopedScopeLevelCounter
 {
     QThreadData *threadData;
 public:
-    inline QScopedScopeLevelCounter(QThreadData *threadData)
-        : threadData(threadData)
-    { ++threadData->scopeLevel; }
-    inline ~QScopedScopeLevelCounter()
-    { --threadData->scopeLevel; }
+    QScopedScopeLevelCounter(QThreadData *threadData);
+    ~QScopedScopeLevelCounter();
 };
 
 // thread wrapper for the main() thread

@@ -21,6 +21,7 @@ QT_BEGIN_NAMESPACE
 
 template <typename T> class QFuture;
 class QThreadPool;
+class QFutureInterfaceBase;
 class QFutureInterfaceBasePrivate;
 class QFutureWatcherBase;
 class QFutureWatcherBasePrivate;
@@ -38,6 +39,10 @@ class CanceledHandler;
 template<class Function, class ResultType>
 class FailureHandler;
 #endif
+
+void Q_CORE_EXPORT watchContinuationImpl(const QObject *context,
+                                         QtPrivate::QSlotObjectBase *slotObj,
+                                         QFutureInterfaceBase &fi);
 }
 
 class Q_CORE_EXPORT QFutureInterfaceBase
@@ -176,6 +181,9 @@ private:
     friend class QtPrivate::FailureHandler;
 #endif
 
+    friend Q_CORE_EXPORT void QtPrivate::watchContinuationImpl(
+            const QObject *context, QtPrivate::QSlotObjectBase *slotObj, QFutureInterfaceBase &fi);
+
     template<class T>
     friend class QPromise;
 
@@ -236,6 +244,8 @@ public:
 
     inline QFuture<T> future(); // implemented in qfuture.h
 
+    template <typename...Args, std::enable_if_t<std::is_constructible_v<T, Args...>, bool> = true>
+    inline bool reportAndEmplaceResult(int index, Args&&...args);
     inline bool reportResult(const T *result, int index = -1);
     inline bool reportAndMoveResult(T &&result, int index = -1);
     inline bool reportResult(T &&result, int index = -1);
@@ -301,7 +311,8 @@ inline bool QFutureInterface<T>::reportResult(const T *result, int index)
 }
 
 template<typename T>
-bool QFutureInterface<T>::reportAndMoveResult(T &&result, int index)
+template<typename...Args, std::enable_if_t<std::is_constructible_v<T, Args...>, bool>>
+bool QFutureInterface<T>::reportAndEmplaceResult(int index, Args&&...args)
 {
     QMutexLocker<QMutex> locker{&mutex()};
     if (queryState(Canceled) || queryState(Finished))
@@ -311,11 +322,17 @@ bool QFutureInterface<T>::reportAndMoveResult(T &&result, int index)
     QtPrivate::ResultStoreBase &store = resultStoreBase();
 
     const int oldResultCount = store.count();
-    const int insertIndex = store.moveResult(index, std::move(result));
+    const int insertIndex = store.emplaceResult<T>(index, std::forward<Args>(args)...);
     // Let's make sure it's not in pending results.
     if (insertIndex != -1 && (!store.filterMode() || oldResultCount < store.count()))
         reportResultsReady(insertIndex, store.count());
     return insertIndex != -1;
+}
+
+template<typename T>
+bool QFutureInterface<T>::reportAndMoveResult(T &&result, int index)
+{
+    return reportAndEmplaceResult(index, std::move(result));
 }
 
 template<typename T>
@@ -448,11 +465,14 @@ std::vector<T> QFutureInterface<T>::takeResults()
 }
 #endif
 
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_CLANG("-Wweak-vtables") // QTBUG-125115
+
 template <>
 class QFutureInterface<void> : public QFutureInterfaceBase
 {
 public:
-    explicit QFutureInterface<void>(State initialState = NoState)
+    explicit QFutureInterface(State initialState = NoState)
         : QFutureInterfaceBase(initialState)
     { }
 
@@ -477,6 +497,8 @@ public:
         QFutureInterfaceBase::runContinuation();
     }
 };
+
+QT_WARNING_POP // Clang -Wweak-vtables
 
 template<typename T>
 inline void swap(QFutureInterface<T> &a, QFutureInterface<T> &b) noexcept

@@ -1,5 +1,5 @@
 // Copyright (C) 2016 Sune Vuorela <sune@kde.org>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QCoreApplication>
 #include <QCommandLineParser>
@@ -61,9 +61,6 @@ static const StringEnum lookupTableData[] = {
     { "ApplicationsLocation", QStandardPaths::ApplicationsLocation, false },
     { "CacheLocation", QStandardPaths::CacheLocation, true },
     { "ConfigLocation", QStandardPaths::ConfigLocation, false },
-#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
-    { "DataLocation", QStandardPaths::DataLocation, true },
-#endif
     { "DesktopLocation", QStandardPaths::DesktopLocation, false },
     { "DocumentsLocation", QStandardPaths::DocumentsLocation, false },
     { "DownloadLocation", QStandardPaths::DownloadLocation, false },
@@ -71,12 +68,14 @@ static const StringEnum lookupTableData[] = {
     { "GenericCacheLocation", QStandardPaths::GenericCacheLocation, false },
     { "GenericConfigLocation", QStandardPaths::GenericConfigLocation, false },
     { "GenericDataLocation", QStandardPaths::GenericDataLocation, false },
+    { "GenericStateLocation", QStandardPaths::GenericStateLocation, false },
     { "HomeLocation", QStandardPaths::HomeLocation, false },
     { "MoviesLocation", QStandardPaths::MoviesLocation, false },
     { "MusicLocation", QStandardPaths::MusicLocation, false },
     { "PicturesLocation", QStandardPaths::PicturesLocation, false },
     { "PublicShareLocation", QStandardPaths::PublicShareLocation, false },
     { "RuntimeLocation", QStandardPaths::RuntimeLocation, false },
+    { "StateLocation", QStandardPaths::StateLocation, true },
     { "TemplatesLocation", QStandardPaths::TemplatesLocation, false },
     { "TempLocation", QStandardPaths::TempLocation, false }
 };
@@ -222,7 +221,7 @@ int main(int argc, char **argv)
 #if QT_CONFIG(settings)
     if (parser.isSet(qtconf)) {
         qtconfManualPath = parser.value(qtconf);
-        QLibraryInfoPrivate::qtconfManualPath = &qtconfManualPath;
+        QLibraryInfoPrivate::setQtconfManualPath(&qtconfManualPath);
     }
 #endif
 
@@ -253,7 +252,7 @@ int main(int argc, char **argv)
     }
 
     QT_WARNING_PUSH
-#if defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 1300 && Q_CC_GNU < 1400
+#if defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 1300 && Q_CC_GNU < 1500
     QT_WARNING_DISABLE_GCC("-Wdangling-reference")
 #endif
     if (parser.isSet(display)) {
@@ -345,7 +344,7 @@ int main(int argc, char **argv)
     if (results.isEmpty()) {
         parser.showHelp();
     } else if (results.size() == 1) {
-        const QString &item = results.first();
+        const QString &item = results.constFirst();
         message(item);
         if (item.isEmpty())
             return EXIT_FAILURE;

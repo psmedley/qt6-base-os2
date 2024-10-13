@@ -18,6 +18,32 @@ QT_BEGIN_NAMESPACE
 // Defined in gui/text/qfontdatabase.cpp
 Q_GUI_EXPORT QFontDatabase::WritingSystem qt_writing_system_for_script(int script);
 
+template<typename T>
+struct DirectWriteScope {
+    DirectWriteScope(T *res = nullptr) : m_res(res) {}
+    ~DirectWriteScope() {
+        if (m_res != nullptr)
+            m_res->Release();
+    }
+
+    T **operator&()
+    {
+        return &m_res;
+    }
+
+    T *operator->()
+    {
+        return m_res;
+    }
+
+    T *operator*() {
+        return m_res;
+    }
+
+private:
+    T *m_res;
+};
+
 QWindowsDirectWriteFontDatabase::QWindowsDirectWriteFontDatabase()
 {
     qCDebug(lcQpaFonts) << "Creating DirectWrite database";
@@ -80,6 +106,12 @@ static QFont::Style fromDirectWriteStyle(DWRITE_FONT_STYLE style)
 void QWindowsDirectWriteFontDatabase::populateFamily(const QString &familyName)
 {
     auto it = m_populatedFonts.find(familyName);
+    if (it == m_populatedFonts.end() && m_populatedBitmapFonts.contains(familyName)) {
+        qCDebug(lcQpaFonts) << "Populating bitmap font" << familyName;
+        QWindowsFontDatabase::populateFamily(familyName);
+        return;
+    }
+
     IDWriteFontFamily *fontFamily = it != m_populatedFonts.end() ? it.value() : nullptr;
     if (fontFamily == nullptr) {
         qCWarning(lcQpaFonts) << "Cannot find" << familyName << "in list of fonts";
@@ -98,7 +130,7 @@ void QWindowsDirectWriteFontDatabase::populateFamily(const QString &familyName)
     const bool antialias = false;
     const int size = SMOOTH_SCALABLE;
 
-    IDWriteFontList *matchingFonts;
+    DirectWriteScope<IDWriteFontList> matchingFonts;
     if (SUCCEEDED(fontFamily->GetMatchingFonts(DWRITE_FONT_WEIGHT_REGULAR,
                                                DWRITE_FONT_STRETCH_NORMAL,
                                                DWRITE_FONT_STYLE_NORMAL,
@@ -106,7 +138,7 @@ void QWindowsDirectWriteFontDatabase::populateFamily(const QString &familyName)
         for (uint j = 0; j < matchingFonts->GetFontCount(); ++j) {
             IDWriteFont *font;
             if (SUCCEEDED(matchingFonts->GetFont(j, &font))) {
-                IDWriteFont1 *font1 = nullptr;
+                DirectWriteScope<IDWriteFont1> font1;
                 if (!SUCCEEDED(font->QueryInterface(__uuidof(IDWriteFont1),
                                                    reinterpret_cast<void **>(&font1)))) {
                     qCWarning(lcQpaFonts) << "COM object does not support IDWriteFont1";
@@ -116,27 +148,23 @@ void QWindowsDirectWriteFontDatabase::populateFamily(const QString &familyName)
                 QString defaultLocaleFamilyName;
                 QString englishLocaleFamilyName;
 
-                IDWriteFontFamily *fontFamily2;
+                DirectWriteScope<IDWriteFontFamily> fontFamily2;
                 if (SUCCEEDED(font1->GetFontFamily(&fontFamily2))) {
-                    IDWriteLocalizedStrings *names;
+                    DirectWriteScope<IDWriteLocalizedStrings> names;
                     if (SUCCEEDED(fontFamily2->GetFamilyNames(&names))) {
-                        defaultLocaleFamilyName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
-                        englishLocaleFamilyName = localeString(names, englishLocale);
-
-                        names->Release();
+                        defaultLocaleFamilyName = hasDefaultLocale ? localeString(*names, defaultLocale) : QString();
+                        englishLocaleFamilyName = localeString(*names, englishLocale);
                     }
-
-                    fontFamily2->Release();
                 }
 
                 if (defaultLocaleFamilyName.isEmpty() && englishLocaleFamilyName.isEmpty())
                     englishLocaleFamilyName = familyName;
 
                 {
-                    IDWriteLocalizedStrings *names;
+                    DirectWriteScope<IDWriteLocalizedStrings> names;
                     if (SUCCEEDED(font1->GetFaceNames(&names))) {
-                        QString defaultLocaleStyleName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
-                        QString englishLocaleStyleName = localeString(names, englishLocale);
+                        QString defaultLocaleStyleName = hasDefaultLocale ? localeString(*names, defaultLocale) : QString();
+                        QString englishLocaleStyleName = localeString(*names, englishLocale);
 
                         QFont::Stretch stretch = fromDirectWriteStretch(font1->GetStretch());
                         QFont::Style style = fromDirectWriteStyle(font1->GetStyle());
@@ -145,77 +173,233 @@ void QWindowsDirectWriteFontDatabase::populateFamily(const QString &familyName)
 
                         qCDebug(lcQpaFonts) << "Family" << familyName << "has english variant" << englishLocaleStyleName << ", in default locale:" << defaultLocaleStyleName << stretch << style << weight << fixed;
 
-                        IDWriteFontFace *face = nullptr;
+                        DirectWriteScope<IDWriteFontFace> face;
                         if (SUCCEEDED(font->CreateFontFace(&face))) {
-                            QSupportedWritingSystems writingSystems;
-
-                            const void *tableData = nullptr;
-                            UINT32 tableSize;
-                            void *tableContext = nullptr;
-                            BOOL exists;
-                            HRESULT hr = face->TryGetFontTable(qbswap<quint32>(MAKE_TAG('O','S','/','2')),
-                                                               &tableData,
-                                                               &tableSize,
-                                                               &tableContext,
-                                                               &exists);
-                            if (SUCCEEDED(hr) && exists) {
-                                writingSystems = QPlatformFontDatabase::writingSystemsFromOS2Table(reinterpret_cast<const char *>(tableData), tableSize);
-                            } else { // Fall back to checking first character of each Unicode range in font (may include too many writing systems)
-                                quint32 rangeCount;
-                                hr = font1->GetUnicodeRanges(0, nullptr, &rangeCount);
-
-                                if (rangeCount > 0) {
-                                    QVarLengthArray<DWRITE_UNICODE_RANGE, QChar::ScriptCount> ranges(rangeCount);
-
-                                    hr = font1->GetUnicodeRanges(rangeCount, ranges.data(), &rangeCount);
-                                    if (SUCCEEDED(hr)) {
-                                        for (uint i = 0; i < rangeCount; ++i) {
-                                            QChar::Script script = QChar::script(ranges.at(i).first);
-
-                                            QFontDatabase::WritingSystem writingSystem = qt_writing_system_for_script(script);
-
-                                            if (writingSystem > QFontDatabase::Any && writingSystem < QFontDatabase::WritingSystemsCount)
-                                                writingSystems.setSupported(writingSystem);
-                                        }
-                                    } else {
-                                        const QString errorString = qt_error_string(int(hr));
-                                        qCWarning(lcQpaFonts) << "Failed to get unicode ranges for font" << englishLocaleFamilyName << englishLocaleStyleName << ":" << errorString;
-                                    }
-                                }
-                            }
+                            QSupportedWritingSystems writingSystems = supportedWritingSystems(*face);
 
                             if (!englishLocaleStyleName.isEmpty() || defaultLocaleStyleName.isEmpty()) {
                                 qCDebug(lcQpaFonts) << "Font" << englishLocaleFamilyName << englishLocaleStyleName << "supports writing systems:" << writingSystems;
 
-                                QPlatformFontDatabase::registerFont(englishLocaleFamilyName, englishLocaleStyleName, QString(), weight, style, stretch, antialias, scalable, size, fixed, writingSystems, face);
-                                face->AddRef();
+                                QPlatformFontDatabase::registerFont(englishLocaleFamilyName,
+                                                                    englishLocaleStyleName,
+                                                                    QString(),
+                                                                    weight,
+                                                                    style,
+                                                                    stretch,
+                                                                    antialias,
+                                                                    scalable,
+                                                                    size,
+                                                                    fixed,
+                                                                    writingSystems,
+                                                                    new FontHandle(*face, englishLocaleFamilyName));
                             }
 
                             if (!defaultLocaleFamilyName.isEmpty() && defaultLocaleFamilyName != englishLocaleFamilyName) {
-                                QPlatformFontDatabase::registerFont(defaultLocaleFamilyName, defaultLocaleStyleName, QString(), weight, style, stretch, antialias, scalable, size, fixed, writingSystems, face);
-                                face->AddRef();
+                                QPlatformFontDatabase::registerFont(defaultLocaleFamilyName,
+                                                                    defaultLocaleStyleName,
+                                                                    QString(),
+                                                                    weight,
+                                                                    style,
+                                                                    stretch,
+                                                                    antialias,
+                                                                    scalable,
+                                                                    size,
+                                                                    fixed,
+                                                                    writingSystems,
+                                                                    new FontHandle(*face, defaultLocaleFamilyName));
                             }
-
-                            face->Release();
                         }
-
-                        names->Release();
                     }
                 }
-
-                font1->Release();
-                font->Release();
             }
         }
-
-        matchingFonts->Release();
     }
+}
+
+QSupportedWritingSystems QWindowsDirectWriteFontDatabase::supportedWritingSystems(IDWriteFontFace *face) const
+{
+    QSupportedWritingSystems writingSystems;
+    writingSystems.setSupported(QFontDatabase::Any);
+
+    DirectWriteScope<IDWriteFontFace1> face1;
+    if (SUCCEEDED(face->QueryInterface(__uuidof(IDWriteFontFace1),
+                                       reinterpret_cast<void **>(&face1)))) {
+        const void *tableData = nullptr;
+        UINT32 tableSize;
+        void *tableContext = nullptr;
+        BOOL exists;
+        HRESULT hr = face->TryGetFontTable(qFromBigEndian(QFont::Tag("OS/2").value()),
+                                           &tableData,
+                                           &tableSize,
+                                           &tableContext,
+                                           &exists);
+        if (SUCCEEDED(hr) && exists) {
+            writingSystems = QPlatformFontDatabase::writingSystemsFromOS2Table(reinterpret_cast<const char *>(tableData), tableSize);
+        } else { // Fall back to checking first character of each Unicode range in font (may include too many writing systems)
+            quint32 rangeCount;
+            hr = face1->GetUnicodeRanges(0, nullptr, &rangeCount);
+
+            if (rangeCount > 0) {
+                QVarLengthArray<DWRITE_UNICODE_RANGE, QChar::ScriptCount> ranges(rangeCount);
+
+                hr = face1->GetUnicodeRanges(rangeCount, ranges.data(), &rangeCount);
+                if (SUCCEEDED(hr)) {
+                    for (uint i = 0; i < rangeCount; ++i) {
+                        QChar::Script script = QChar::script(ranges.at(i).first);
+
+                        QFontDatabase::WritingSystem writingSystem = qt_writing_system_for_script(script);
+
+                        if (writingSystem > QFontDatabase::Any && writingSystem < QFontDatabase::WritingSystemsCount)
+                            writingSystems.setSupported(writingSystem);
+                    }
+                } else {
+                    const QString errorString = qt_error_string(int(hr));
+                    qCWarning(lcQpaFonts) << "Failed to get unicode ranges for font:" << errorString;
+                }
+            }
+        }
+    }
+
+    return writingSystems;
+}
+
+bool QWindowsDirectWriteFontDatabase::populateFamilyAliases(const QString &missingFamily)
+{
+    // If the font has not been populated, it is possible this is a legacy font family supported
+    // by GDI. We make an attempt at loading it via GDI and then add this face directly to the
+    // database.
+    if (!missingFamily.isEmpty()
+        && missingFamily.size() < LF_FACESIZE
+        && !m_populatedFonts.contains(missingFamily)
+        && !m_populatedBitmapFonts.contains(missingFamily)) {
+        qCDebug(lcQpaFonts) << "Loading unpopulated" << missingFamily << ". Trying GDI.";
+
+        LOGFONT lf;
+        memset(&lf, 0, sizeof(LOGFONT));
+        memcpy(lf.lfFaceName, missingFamily.utf16(), missingFamily.size() * sizeof(wchar_t));
+
+        HFONT hfont = CreateFontIndirect(&lf);
+        if (hfont) {
+            HDC dummy = GetDC(0);
+            HGDIOBJ oldFont = SelectObject(dummy, hfont);
+
+            DirectWriteScope<IDWriteFontFace> directWriteFontFace;
+            if (SUCCEEDED(data()->directWriteGdiInterop->CreateFontFaceFromHdc(dummy, &directWriteFontFace))) {
+                DirectWriteScope<IDWriteFontCollection> fontCollection;
+                if (SUCCEEDED(data()->directWriteFactory->GetSystemFontCollection(&fontCollection))) {
+                    DirectWriteScope<IDWriteFont> font;
+                    if (SUCCEEDED(fontCollection->GetFontFromFontFace(*directWriteFontFace, &font))) {
+
+                        DirectWriteScope<IDWriteFont1> font1;
+                        if (SUCCEEDED(font->QueryInterface(__uuidof(IDWriteFont1),
+                                                           reinterpret_cast<void **>(&font1)))) {
+                            DirectWriteScope<IDWriteLocalizedStrings> names;
+                            if (SUCCEEDED(font1->GetFaceNames(&names))) {
+                                wchar_t englishLocale[] = L"en-us";
+                                QString englishLocaleStyleName = localeString(*names, englishLocale);
+
+                                QFont::Stretch stretch = fromDirectWriteStretch(font1->GetStretch());
+                                QFont::Style style = fromDirectWriteStyle(font1->GetStyle());
+                                QFont::Weight weight = fromDirectWriteWeight(font1->GetWeight());
+                                bool fixed = font1->IsMonospacedFont();
+
+                                QSupportedWritingSystems writingSystems = supportedWritingSystems(*directWriteFontFace);
+
+                                qCDebug(lcQpaFonts) << "Registering legacy font family" << missingFamily;
+                                QPlatformFontDatabase::registerFont(missingFamily,
+                                                                    englishLocaleStyleName,
+                                                                    QString(),
+                                                                    weight,
+                                                                    style,
+                                                                    stretch,
+                                                                    false,
+                                                                    true,
+                                                                    0xffff,
+                                                                    fixed,
+                                                                    writingSystems,
+                                                                    new FontHandle(*directWriteFontFace, missingFamily));
+
+                                SelectObject(dummy, oldFont);
+                                DeleteObject(hfont);
+
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            SelectObject(dummy, oldFont);
+            DeleteObject(hfont);
+        }
+    }
+
+    // Skip over implementation in QWindowsFontDatabase
+    return QWindowsFontDatabaseBase::populateFamilyAliases(missingFamily);
+}
+
+QFontEngine *QWindowsDirectWriteFontDatabase::fontEngine(const QByteArray &fontData,
+                                                         qreal pixelSize,
+                                                         QFont::HintingPreference hintingPreference)
+{
+    // Skip over implementation in QWindowsFontDatabase
+    return QWindowsFontDatabaseBase::fontEngine(fontData, pixelSize, hintingPreference);
 }
 
 QFontEngine *QWindowsDirectWriteFontDatabase::fontEngine(const QFontDef &fontDef, void *handle)
 {
-    IDWriteFontFace *face = reinterpret_cast<IDWriteFontFace *>(handle);
-    Q_ASSERT(face != nullptr);
+    const FontHandle *fontHandle = static_cast<const FontHandle *>(handle);
+    IDWriteFontFace *face = fontHandle->fontFace;
+    if (face == nullptr) {
+        qCDebug(lcQpaFonts) << "Falling back to GDI";
+        return QWindowsFontDatabase::fontEngine(fontDef, handle);
+    }
+
+    DWRITE_FONT_SIMULATIONS simulations = DWRITE_FONT_SIMULATIONS_NONE;
+    if (fontDef.weight >= QFont::DemiBold || fontDef.style != QFont::StyleNormal) {
+        DirectWriteScope<IDWriteFontFace3> face3;
+        if (SUCCEEDED(face->QueryInterface(__uuidof(IDWriteFontFace3),
+                                           reinterpret_cast<void **>(&face3)))) {
+            if (fontDef.weight >= QFont::DemiBold && face3->GetWeight() < DWRITE_FONT_WEIGHT_DEMI_BOLD)
+                simulations |= DWRITE_FONT_SIMULATIONS_BOLD;
+
+            if (fontDef.style != QFont::StyleNormal && face3->GetStyle() == DWRITE_FONT_STYLE_NORMAL)
+                simulations |= DWRITE_FONT_SIMULATIONS_OBLIQUE;
+        }
+    }
+
+    DirectWriteScope<IDWriteFontFace5> newFace;
+    if (!fontDef.variableAxisValues.isEmpty() || simulations != DWRITE_FONT_SIMULATIONS_NONE) {
+        DirectWriteScope<IDWriteFontFace5> face5;
+        if (SUCCEEDED(face->QueryInterface(__uuidof(IDWriteFontFace5),
+                                           reinterpret_cast<void **>(&face5)))) {
+            DirectWriteScope<IDWriteFontResource> font;
+            if (SUCCEEDED(face5->GetFontResource(&font))) {
+                UINT32 fontAxisCount = font->GetFontAxisCount();
+                QVarLengthArray<DWRITE_FONT_AXIS_VALUE, 8> fontAxisValues(fontAxisCount);
+
+                if (!fontDef.variableAxisValues.isEmpty()) {
+                    if (SUCCEEDED(face5->GetFontAxisValues(fontAxisValues.data(), fontAxisCount))) {
+                        for (UINT32 i = 0; i < fontAxisCount; ++i) {
+                            if (auto maybeTag = QFont::Tag::fromValue(qToBigEndian<UINT32>(fontAxisValues[i].axisTag))) {
+                                if (fontDef.variableAxisValues.contains(*maybeTag))
+                                    fontAxisValues[i].value = fontDef.variableAxisValues.value(*maybeTag);
+                            }
+                        }
+                    }
+                }
+
+                if (SUCCEEDED(font->CreateFontFace(simulations,
+                                                   !fontDef.variableAxisValues.isEmpty() ? fontAxisValues.data() : nullptr,
+                                                   !fontDef.variableAxisValues.isEmpty() ? fontAxisCount : 0,
+                                                   &newFace))) {
+                    face = *newFace;
+                } else {
+                    qCWarning(lcQpaFonts) << "DirectWrite: Can't create font face for variable axis values";
+                }
+            }
+        }
+    }
 
     QWindowsFontEngineDirectWrite *fontEngine = new QWindowsFontEngineDirectWrite(face, fontDef.pixelSize, data());
     fontEngine->initFontInfo(fontDef, defaultVerticalDPI());
@@ -249,111 +433,255 @@ QStringList QWindowsDirectWriteFontDatabase::addApplicationFont(const QByteArray
         loadedData = file.readAll();
     }
 
-    IDWriteFontFace *face = createDirectWriteFace(loadedData);
-    if (face == nullptr) {
+    QList<IDWriteFontFace *> faces = createDirectWriteFaces(loadedData);
+    if (faces.isEmpty()) {
         qCWarning(lcQpaFonts) << "Failed to create DirectWrite face from font data. Font may be unsupported.";
         return QStringList();
     }
 
-    wchar_t defaultLocale[LOCALE_NAME_MAX_LENGTH];
-    bool hasDefaultLocale = GetUserDefaultLocaleName(defaultLocale, LOCALE_NAME_MAX_LENGTH) != 0;
-    wchar_t englishLocale[] = L"en-us";
+    QSet<QString> ret;
+    for (int i = 0; i < faces.size(); ++i) {
+        IDWriteFontFace *face = faces.at(i);
+        wchar_t defaultLocale[LOCALE_NAME_MAX_LENGTH];
+        bool hasDefaultLocale = GetUserDefaultLocaleName(defaultLocale, LOCALE_NAME_MAX_LENGTH) != 0;
+        wchar_t englishLocale[] = L"en-us";
 
-    static const int SMOOTH_SCALABLE = 0xffff;
-    const QString foundryName; // No such concept.
-    const bool scalable = true;
-    const bool antialias = false;
-    const int size = SMOOTH_SCALABLE;
+        static const int SMOOTH_SCALABLE = 0xffff;
+        const bool scalable = true;
+        const bool antialias = false;
+        const int size = SMOOTH_SCALABLE;
 
-    QSupportedWritingSystems writingSystems;
-    writingSystems.setSupported(QFontDatabase::Any);
-    writingSystems.setSupported(QFontDatabase::Latin);
+        QSupportedWritingSystems writingSystems = supportedWritingSystems(face);
+        DirectWriteScope<IDWriteFontFace3> face3;
+        if (SUCCEEDED(face->QueryInterface(__uuidof(IDWriteFontFace3),
+                                           reinterpret_cast<void **>(&face3)))) {
+            QString defaultLocaleFamilyName;
+            QString englishLocaleFamilyName;
 
-    QStringList ret;
-    IDWriteFontFace3 *face3 = nullptr;
-    if (SUCCEEDED(face->QueryInterface(__uuidof(IDWriteFontFace3),
-                                      reinterpret_cast<void **>(&face3)))) {
-        QString defaultLocaleFamilyName;
-        QString englishLocaleFamilyName;
+            IDWriteLocalizedStrings *names = nullptr;
+            if (SUCCEEDED(face3->GetFamilyNames(&names))) {
+                defaultLocaleFamilyName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
+                englishLocaleFamilyName = localeString(names, englishLocale);
 
-        IDWriteLocalizedStrings *names;
-        if (SUCCEEDED(face3->GetFamilyNames(&names))) {
-            defaultLocaleFamilyName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
-            englishLocaleFamilyName = localeString(names, englishLocale);
-
-            names->Release();
-        }
-
-        QString defaultLocaleStyleName;
-        QString englishLocaleStyleName;
-        if (SUCCEEDED(face3->GetFaceNames(&names))) {
-            defaultLocaleStyleName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
-            englishLocaleStyleName = localeString(names, englishLocale);
-
-            names->Release();
-        }
-
-        QFont::Stretch stretch = fromDirectWriteStretch(face3->GetStretch());
-        QFont::Style style = fromDirectWriteStyle(face3->GetStyle());
-        QFont::Weight weight = fromDirectWriteWeight(face3->GetWeight());
-        bool fixed = face3->IsMonospacedFont();
-
-        qCDebug(lcQpaFonts) << "\tFont names:" << englishLocaleFamilyName << ", " << defaultLocaleFamilyName
-                            << ", style names:" << englishLocaleStyleName << ", " << defaultLocaleStyleName
-                            << ", stretch:" << stretch
-                            << ", style:" << style
-                            << ", weight:" << weight
-                            << ", fixed:" << fixed;
-
-        if (!englishLocaleFamilyName.isEmpty()) {
-            if (applicationFont != nullptr) {
-                QFontDatabasePrivate::ApplicationFont::Properties properties;
-                properties.style = style;
-                properties.weight = weight;
-                properties.familyName = englishLocaleFamilyName;
-                properties.styleName = englishLocaleStyleName;
-                applicationFont->properties.append(properties);
+                names->Release();
             }
 
-            ret.append(englishLocaleFamilyName);
-            QPlatformFontDatabase::registerFont(englishLocaleFamilyName, englishLocaleStyleName, QString(), weight, style, stretch, antialias, scalable, size, fixed, writingSystems, face);
-            face->AddRef();
-        }
+            QString defaultLocaleStyleName;
+            QString englishLocaleStyleName;
+            if (SUCCEEDED(face3->GetFaceNames(&names))) {
+                defaultLocaleStyleName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
+                englishLocaleStyleName = localeString(names, englishLocale);
 
-        if (!defaultLocaleFamilyName.isEmpty() && defaultLocaleFamilyName != englishLocaleFamilyName) {
-            if (applicationFont != nullptr) {
-                QFontDatabasePrivate::ApplicationFont::Properties properties;
-                properties.style = style;
-                properties.weight = weight;
-                properties.familyName = englishLocaleFamilyName;
-                properties.styleName = englishLocaleStyleName;
-                applicationFont->properties.append(properties);
+                names->Release();
             }
 
-            ret.append(defaultLocaleFamilyName);
-            QPlatformFontDatabase::registerFont(defaultLocaleFamilyName, defaultLocaleStyleName, QString(), weight, style, stretch, antialias, scalable, size, fixed, writingSystems, face);
-            face->AddRef();
+            BOOL ok;
+            QString defaultLocaleGdiCompatibleFamilyName;
+            QString englishLocaleGdiCompatibleFamilyName;
+            if (SUCCEEDED(face3->GetInformationalStrings(DWRITE_INFORMATIONAL_STRING_WIN32_FAMILY_NAMES, &names, &ok)) && ok) {
+                defaultLocaleGdiCompatibleFamilyName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
+                englishLocaleGdiCompatibleFamilyName = localeString(names, englishLocale);
+
+                names->Release();
+            }
+
+            QString defaultLocaleGdiCompatibleStyleName;
+            QString englishLocaleGdiCompatibleStyleName;
+            if (SUCCEEDED(face3->GetInformationalStrings(DWRITE_INFORMATIONAL_STRING_WIN32_SUBFAMILY_NAMES, &names, &ok)) && ok) {
+                defaultLocaleGdiCompatibleStyleName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
+                englishLocaleGdiCompatibleStyleName = localeString(names, englishLocale);
+
+                names->Release();
+            }
+
+            QString defaultLocaleTypographicFamilyName;
+            QString englishLocaleTypographicFamilyName;
+            if (SUCCEEDED(face3->GetInformationalStrings(DWRITE_INFORMATIONAL_STRING_TYPOGRAPHIC_FAMILY_NAMES, &names, &ok)) && ok) {
+                defaultLocaleTypographicFamilyName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
+                englishLocaleTypographicFamilyName = localeString(names, englishLocale);
+
+                names->Release();
+            }
+
+            QString defaultLocaleTypographicStyleName;
+            QString englishLocaleTypographicStyleName;
+            if (SUCCEEDED(face3->GetInformationalStrings(DWRITE_INFORMATIONAL_STRING_TYPOGRAPHIC_SUBFAMILY_NAMES, &names, &ok)) && ok) {
+                defaultLocaleTypographicStyleName = hasDefaultLocale ? localeString(names, defaultLocale) : QString();
+                englishLocaleTypographicStyleName = localeString(names, englishLocale);
+
+                names->Release();
+            }
+
+            QFont::Stretch stretch = fromDirectWriteStretch(face3->GetStretch());
+            QFont::Style style = fromDirectWriteStyle(face3->GetStyle());
+            QFont::Weight weight = fromDirectWriteWeight(face3->GetWeight());
+            bool fixed = face3->IsMonospacedFont();
+
+            qCDebug(lcQpaFonts) << "\tFont names:" << englishLocaleFamilyName << ", " << defaultLocaleFamilyName
+                                << ", style names:" << englishLocaleStyleName << ", " << defaultLocaleStyleName
+                                << ", stretch:" << stretch
+                                << ", style:" << style
+                                << ", weight:" << weight
+                                << ", fixed:" << fixed;
+
+            if (!englishLocaleFamilyName.isEmpty()) {
+                if (applicationFont != nullptr) {
+                    QFontDatabasePrivate::ApplicationFont::Properties properties;
+                    properties.style = style;
+                    properties.weight = weight;
+                    properties.familyName = englishLocaleFamilyName;
+                    properties.styleName = englishLocaleStyleName;
+                    applicationFont->properties.append(properties);
+                }
+
+                ret.insert(englishLocaleFamilyName);
+                QPlatformFontDatabase::registerFont(englishLocaleFamilyName,
+                                                    englishLocaleStyleName,
+                                                    QString(),
+                                                    weight,
+                                                    style,
+                                                    stretch,
+                                                    antialias,
+                                                    scalable,
+                                                    size,
+                                                    fixed,
+                                                    writingSystems,
+                                                    new FontHandle(face, englishLocaleFamilyName));
+            }
+
+            if (!defaultLocaleFamilyName.isEmpty() && !ret.contains(defaultLocaleFamilyName)) {
+                if (applicationFont != nullptr) {
+                    QFontDatabasePrivate::ApplicationFont::Properties properties;
+                    properties.style = style;
+                    properties.weight = weight;
+                    properties.familyName = englishLocaleFamilyName;
+                    properties.styleName = englishLocaleStyleName;
+                    applicationFont->properties.append(properties);
+                }
+
+                ret.insert(defaultLocaleFamilyName);
+                QPlatformFontDatabase::registerFont(defaultLocaleFamilyName,
+                                                    defaultLocaleStyleName,
+                                                    QString(),
+                                                    weight,
+                                                    style,
+                                                    stretch,
+                                                    antialias,
+                                                    scalable,
+                                                    size,
+                                                    fixed,
+                                                    writingSystems,
+                                                    new FontHandle(face, defaultLocaleFamilyName));
+            }
+
+            if (!englishLocaleGdiCompatibleFamilyName.isEmpty() &&
+                !ret.contains(englishLocaleGdiCompatibleFamilyName)) {
+                if (applicationFont != nullptr) {
+                    QFontDatabasePrivate::ApplicationFont::Properties properties;
+                    properties.style = style;
+                    properties.weight = weight;
+                    properties.familyName = englishLocaleGdiCompatibleFamilyName;
+                    applicationFont->properties.append(properties);
+                }
+
+                ret.insert(englishLocaleGdiCompatibleFamilyName);
+                QPlatformFontDatabase::registerFont(englishLocaleGdiCompatibleFamilyName,
+                                                    englishLocaleGdiCompatibleStyleName,
+                                                    QString(),
+                                                    weight,
+                                                    style,
+                                                    stretch,
+                                                    antialias,
+                                                    scalable,
+                                                    size,
+                                                    fixed,
+                                                    writingSystems,
+                                                    new FontHandle(face, englishLocaleGdiCompatibleFamilyName));
+            }
+
+            if (!defaultLocaleGdiCompatibleFamilyName.isEmpty()
+                && !ret.contains(defaultLocaleGdiCompatibleFamilyName)) {
+                if (applicationFont != nullptr) {
+                    QFontDatabasePrivate::ApplicationFont::Properties properties;
+                    properties.style = style;
+                    properties.weight = weight;
+                    properties.familyName = defaultLocaleGdiCompatibleFamilyName;
+                    applicationFont->properties.append(properties);
+                }
+
+                ret.insert(defaultLocaleGdiCompatibleFamilyName);
+                QPlatformFontDatabase::registerFont(defaultLocaleGdiCompatibleFamilyName,
+                                                    defaultLocaleGdiCompatibleStyleName,
+                                                    QString(),
+                                                    weight,
+                                                    style,
+                                                    stretch,
+                                                    antialias,
+                                                    scalable,
+                                                    size,
+                                                    fixed,
+                                                    writingSystems,
+                                                    new FontHandle(face, defaultLocaleGdiCompatibleFamilyName));
+            }
+
+            if (!englishLocaleTypographicFamilyName.isEmpty()
+                && !ret.contains(englishLocaleTypographicFamilyName)) {
+                if (applicationFont != nullptr) {
+                    QFontDatabasePrivate::ApplicationFont::Properties properties;
+                    properties.style = style;
+                    properties.weight = weight;
+                    properties.familyName = englishLocaleTypographicFamilyName;
+                    applicationFont->properties.append(properties);
+                }
+
+                ret.insert(englishLocaleTypographicFamilyName);
+                QPlatformFontDatabase::registerFont(englishLocaleTypographicFamilyName,
+                                                    englishLocaleTypographicStyleName,
+                                                    QString(),
+                                                    weight,
+                                                    style,
+                                                    stretch,
+                                                    antialias,
+                                                    scalable,
+                                                    size,
+                                                    fixed,
+                                                    writingSystems,
+                                                    new FontHandle(face, englishLocaleTypographicFamilyName));
+            }
+
+            if (!defaultLocaleTypographicFamilyName.isEmpty()
+                && !ret.contains(defaultLocaleTypographicFamilyName)) {
+                if (applicationFont != nullptr) {
+                    QFontDatabasePrivate::ApplicationFont::Properties properties;
+                    properties.style = style;
+                    properties.weight = weight;
+                    properties.familyName = defaultLocaleTypographicFamilyName;
+                    applicationFont->properties.append(properties);
+                }
+
+                ret.insert(defaultLocaleTypographicFamilyName);
+                QPlatformFontDatabase::registerFont(defaultLocaleTypographicFamilyName,
+                                                    defaultLocaleTypographicStyleName,
+                                                    QString(),
+                                                    weight,
+                                                    style,
+                                                    stretch,
+                                                    antialias,
+                                                    scalable,
+                                                    size,
+                                                    fixed,
+                                                    writingSystems,
+                                                    new FontHandle(face, defaultLocaleTypographicFamilyName));
+            }
+
+        } else {
+            qCWarning(lcQpaFonts) << "Unable to query IDWriteFontFace3 interface from font face.";
         }
 
-        face3->Release();
-    } else {
-        qCWarning(lcQpaFonts) << "Unable to query IDWriteFontFace3 interface from font face.";
+        face->Release();
     }
 
-    face->Release();
-
-    return ret;
-}
-
-void QWindowsDirectWriteFontDatabase::releaseHandle(void *handle)
-{
-    IDWriteFontFace *face = reinterpret_cast<IDWriteFontFace *>(handle);
-    face->Release();
-}
-
-bool QWindowsDirectWriteFontDatabase::fontsAlwaysScalable() const
-{
-    return true;
+    return ret.values();
 }
 
 bool QWindowsDirectWriteFontDatabase::isPrivateFontFamily(const QString &family) const
@@ -362,67 +690,120 @@ bool QWindowsDirectWriteFontDatabase::isPrivateFontFamily(const QString &family)
     return false;
 }
 
+static int QT_WIN_CALLBACK populateBitmapFonts(const LOGFONT *logFont,
+                                               const TEXTMETRIC *textmetric,
+                                               DWORD type,
+                                               LPARAM lparam)
+{
+    Q_UNUSED(textmetric);
+
+    // the "@family" fonts are just the same as "family". Ignore them.
+    const ENUMLOGFONTEX *f = reinterpret_cast<const ENUMLOGFONTEX *>(logFont);
+    const wchar_t *faceNameW = f->elfLogFont.lfFaceName;
+    if (faceNameW[0] && faceNameW[0] != L'@' && wcsncmp(faceNameW, L"WST_", 4)) {
+        const QString faceName = QString::fromWCharArray(faceNameW);
+        if (type & RASTER_FONTTYPE || type == 0) {
+            QWindowsDirectWriteFontDatabase *db = reinterpret_cast<QWindowsDirectWriteFontDatabase *>(lparam);
+            if (!db->hasPopulatedFont(faceName)) {
+                db->registerFontFamily(faceName);
+                db->registerBitmapFont(faceName);
+            }
+        }
+    }
+    return 1; // continue
+}
+
 void QWindowsDirectWriteFontDatabase::populateFontDatabase()
 {
     wchar_t defaultLocale[LOCALE_NAME_MAX_LENGTH];
     bool hasDefaultLocale = GetUserDefaultLocaleName(defaultLocale, LOCALE_NAME_MAX_LENGTH) != 0;
     wchar_t englishLocale[] = L"en-us";
 
-    const QString defaultFontName = defaultFont().families().first();
-    const QString systemDefaultFontName = systemDefaultFont().families().first();
+    const QString defaultFontName = defaultFont().families().constFirst();
+    const QString systemDefaultFontName = systemDefaultFont().families().constFirst();
 
-    IDWriteFontCollection *fontCollection;
-    if (SUCCEEDED(data()->directWriteFactory->GetSystemFontCollection(&fontCollection))) {
+    DirectWriteScope<IDWriteFontCollection2> fontCollection;
+    DirectWriteScope<IDWriteFactory6> factory6;
+    if (FAILED(data()->directWriteFactory->QueryInterface(__uuidof(IDWriteFactory6),
+                                                          reinterpret_cast<void **>(&factory6)))) {
+        qCWarning(lcQpaFonts) << "Can't initialize IDWriteFactory6. Use GDI font engine instead.";
+        return;
+    }
+
+    if (SUCCEEDED(factory6->GetSystemFontCollection(false,
+                                                    DWRITE_FONT_FAMILY_MODEL_TYPOGRAPHIC,
+                                                    &fontCollection))) {
         for (uint i = 0; i < fontCollection->GetFontFamilyCount(); ++i) {
-            IDWriteFontFamily *fontFamily;
+            DirectWriteScope<IDWriteFontFamily2> fontFamily;
             if (SUCCEEDED(fontCollection->GetFontFamily(i, &fontFamily))) {
                 QString defaultLocaleName;
                 QString englishLocaleName;
 
-                IDWriteLocalizedStrings *names;
+                DirectWriteScope<IDWriteLocalizedStrings> names;
                 if (SUCCEEDED(fontFamily->GetFamilyNames(&names))) {
                     if (hasDefaultLocale)
-                        defaultLocaleName = localeString(names, defaultLocale);
+                        defaultLocaleName = localeString(*names, defaultLocale);
 
-                    englishLocaleName = localeString(names, englishLocale);
+                    englishLocaleName = localeString(*names, englishLocale);
                 }
 
                 qCDebug(lcQpaFonts) << "Registering font, english name = " << englishLocaleName << ", name in current locale = " << defaultLocaleName;
                 if (!defaultLocaleName.isEmpty()) {
                     registerFontFamily(defaultLocaleName);
-                    m_populatedFonts.insert(defaultLocaleName, fontFamily);
+                    m_populatedFonts.insert(defaultLocaleName, *fontFamily);
                     fontFamily->AddRef();
 
                     if (defaultLocaleName == defaultFontName && defaultFontName != systemDefaultFontName) {
-                        qDebug(lcQpaFonts) << "Adding default font" << systemDefaultFontName << "as alternative to" << defaultLocaleName;
+                        qCDebug(lcQpaFonts) << "Adding default font" << systemDefaultFontName << "as alternative to" << defaultLocaleName;
 
-                        m_populatedFonts.insert(systemDefaultFontName, fontFamily);
+                        m_populatedFonts.insert(systemDefaultFontName, *fontFamily);
                         fontFamily->AddRef();
                     }
                 }
 
                 if (!englishLocaleName.isEmpty() && englishLocaleName != defaultLocaleName) {
                     registerFontFamily(englishLocaleName);
-                    m_populatedFonts.insert(englishLocaleName, fontFamily);
+                    m_populatedFonts.insert(englishLocaleName, *fontFamily);
                     fontFamily->AddRef();
 
                     if (englishLocaleName == defaultFontName && defaultFontName != systemDefaultFontName) {
-                        qDebug(lcQpaFonts) << "Adding default font" << systemDefaultFontName << "as alternative to" << englishLocaleName;
+                        qCDebug(lcQpaFonts) << "Adding default font" << systemDefaultFontName << "as alternative to" << englishLocaleName;
 
-                        m_populatedFonts.insert(systemDefaultFontName, fontFamily);
+                        m_populatedFonts.insert(systemDefaultFontName, *fontFamily);
                         fontFamily->AddRef();
                     }
                 }
-
-                fontFamily->Release();
             }
         }
+    }
+
+    // Since bitmap fonts are not supported by DirectWrite, we need to populate these as well
+    {
+        HDC dummy = GetDC(0);
+        LOGFONT lf;
+        lf.lfCharSet = DEFAULT_CHARSET;
+        lf.lfFaceName[0] = 0;
+        lf.lfPitchAndFamily = 0;
+        EnumFontFamiliesEx(dummy, &lf, populateBitmapFonts, reinterpret_cast<intptr_t>(this), 0);
+        ReleaseDC(0, dummy);
     }
 }
 
 QFont QWindowsDirectWriteFontDatabase::defaultFont() const
 {
     return QFont(QStringLiteral("Segoe UI"));
+}
+
+bool QWindowsDirectWriteFontDatabase::supportsVariableApplicationFonts() const
+{
+    QSharedPointer<QWindowsFontEngineData> fontEngineData = data();
+    DirectWriteScope<IDWriteFactory5> factory5;
+    if (SUCCEEDED(fontEngineData->directWriteFactory->QueryInterface(__uuidof(IDWriteFactory5),
+                                                                     reinterpret_cast<void **>(&factory5)))) {
+        return true;
+    }
+
+    return false;
 }
 
 QT_END_NAMESPACE

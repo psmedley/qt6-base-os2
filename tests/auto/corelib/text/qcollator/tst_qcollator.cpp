@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
@@ -9,6 +9,7 @@
 #include <QScopeGuard>
 
 #include <cstring>
+#include <iostream>
 
 class tst_QCollator : public QObject
 {
@@ -52,7 +53,7 @@ void tst_QCollator::basics()
 
     // posix implementation supports only C and default locale,
     // so update it for Android and INTEGRITY builds
-#if defined(Q_OS_ANDROID) || defined(Q_OS_INTEGRITY)
+#if !QT_CONFIG(icu) && !defined(Q_OS_WIN) && !defined(Q_OS_MACOS)
     c3.setLocale(QLocale());
 #endif
     QCollatorSortKey key1 = c3.sortKey("test");
@@ -87,7 +88,7 @@ void tst_QCollator::moveSemantics()
     // test QCollatorSortKey move assignment
     // posix implementation supports only C and default locale,
     // so update it for Android and INTEGRITY builds
-#if defined(Q_OS_ANDROID) || defined(Q_OS_INTEGRITY)
+#if !QT_CONFIG(icu) && !defined(Q_OS_WIN) && !defined(Q_OS_MACOS)
     c1.setLocale(QLocale());
 #endif
     QCollatorSortKey key1 = c1.sortKey("1");
@@ -263,8 +264,12 @@ void tst_QCollator::compare()
     auto asSign = [](int compared) {
         return compared < 0 ? -1 : compared > 0 ? 1 : 0;
     };
-
-#if defined(Q_OS_ANDROID) || defined(Q_OS_INTEGRITY)
+#if defined(Q_OS_WASM)
+    if (strcmp(QTest::currentDataTag(), "english5") == 0
+        || strcmp(QTest::currentDataTag(), "english8") == 0)
+        QSKIP("Some en-us locale tests have issues on WASM");
+#endif // Q_OS_WASM
+#if !QT_CONFIG(icu) && !defined(Q_OS_WIN) && !defined(Q_OS_MACOS)
     if (collator.locale() != QLocale::c() && collator.locale() != QLocale::system().collation())
         QSKIP("POSIX implementation of collation only supports C and system collation locales");
 #endif
@@ -272,9 +277,9 @@ void tst_QCollator::compare()
     if (numericMode)
         collator.setNumericMode(true);
 
-    int keyCompareResult = result;
-    [[maybe_unused]]int keyCompareCaseInsensitiveResult = caseInsensitiveResult;
-    [[maybe_unused]]int keyComparePunctuationResultResult = punctuationResult;
+    [[maybe_unused]] int keyCompareResult = result;
+    [[maybe_unused]] int keyCompareCaseInsensitiveResult = caseInsensitiveResult;
+    [[maybe_unused]] int keyComparePunctuationResultResult = punctuationResult;
 
     // trying to deal with special behavior of different OS-dependent collators
     if (collator.locale() == QLocale("C")) {

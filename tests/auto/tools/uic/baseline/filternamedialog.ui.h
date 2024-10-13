@@ -53,12 +53,12 @@ public:
 
         line = new QFrame(FilterNameDialogClass);
         line->setObjectName("line");
-        line->setFrameShape(QFrame::HLine);
-        line->setFrameShadow(QFrame::Sunken);
+        line->setFrameShape(QFrame::Shape::HLine);
+        line->setFrameShadow(QFrame::Shadow::Sunken);
 
         gridLayout->addWidget(line, 1, 0, 1, 3);
 
-        spacerItem = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+        spacerItem = new QSpacerItem(40, 20, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
         gridLayout->addItem(spacerItem, 2, 0, 1, 2);
 

@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtCore/private/qglobal_p.h>
+#include <QtCore/qbasicatomic.h>
 #include "qcore_unix_p.h"
-#include "qelapsedtimer.h"
 
 #include <stdlib.h>
 
@@ -14,7 +14,7 @@
 #  include <unistd.h>
 #endif
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
 #include <mach/mach_time.h>
 #endif
 
@@ -37,6 +37,21 @@ struct timespec qt_gettime() Q_DECL_NOTHROW
     return tv_ts;
 }
 #endif
+
+void qt_ignore_sigpipe() noexcept // noexcept: sigaction(2) is not a Posix Cancellation Point
+{
+    // Set to ignore SIGPIPE once only.
+    Q_CONSTINIT static QBasicAtomicInt atom = Q_BASIC_ATOMIC_INITIALIZER(0);
+    if (!atom.loadRelaxed()) {
+        // More than one thread could turn off SIGPIPE at the same time
+        // But that's acceptable because they all would be doing the same
+        // action
+        struct sigaction noaction = {};
+        noaction.sa_handler = SIG_IGN;
+        ::sigaction(SIGPIPE, &noaction, nullptr);
+        atom.storeRelaxed(1);
+    }
+}
 
 QByteArray qt_readlink(const char *path)
 {
@@ -87,23 +102,15 @@ int qt_open64(const char *pathname, int flags, mode_t mode)
 #  define ppoll pollts
 #endif
 
-static inline bool time_update(struct timespec *tv, const struct timespec &start,
-                               const struct timespec &timeout)
-{
-    // clock source is (hopefully) monotonic, so we can recalculate how much timeout is left;
-    // if it isn't monotonic, we'll simply hope that it hasn't jumped, because we have no alternative
-    struct timespec now = qt_gettime();
-    *tv = timeout + start - now;
-    return tv->tv_sec >= 0;
-}
-
-#if QT_CONFIG(poll_poll)
+[[maybe_unused]]
 static inline int timespecToMillisecs(const struct timespec *ts)
 {
-    return (ts == NULL) ? -1 :
-           (ts->tv_sec * 1000) + (ts->tv_nsec / 1000000);
+    using namespace std::chrono;
+    if (!ts)
+        return -1;
+    auto ms = ceil<milliseconds>(timespecToChrono<nanoseconds>(*ts));
+    return int(ms.count());
 }
-#endif
 
 // defined in qpoll.cpp
 int qt_poll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout_ts);
@@ -129,31 +136,27 @@ static inline int qt_ppoll(struct pollfd *fds, nfds_t nfds, const struct timespe
     using select(2) where necessary. In that case, returns -1 and sets errno
     to EINVAL if passed any descriptor greater than or equal to FD_SETSIZE.
 */
-int qt_safe_poll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout_ts)
+int qt_safe_poll(struct pollfd *fds, nfds_t nfds, QDeadlineTimer deadline)
 {
-    if (!timeout_ts) {
+    if (deadline.isForever()) {
         // no timeout -> block forever
         int ret;
-        EINTR_LOOP(ret, qt_ppoll(fds, nfds, nullptr));
+        QT_EINTR_LOOP(ret, qt_ppoll(fds, nfds, nullptr));
         return ret;
     }
 
-    timespec start = qt_gettime();
-    timespec timeout = *timeout_ts;
-
+    using namespace std::chrono;
+    nanoseconds remaining = deadline.remainingTimeAsDuration();
     // loop and recalculate the timeout as needed
-    forever {
-        const int ret = qt_ppoll(fds, nfds, &timeout);
+    do {
+        timespec ts = durationToTimespec(remaining);
+        const int ret = qt_ppoll(fds, nfds, &ts);
         if (ret != -1 || errno != EINTR)
             return ret;
+        remaining = deadline.remainingTimeAsDuration();
+    } while (remaining > 0ns);
 
-        // recalculate the timeout
-        if (!time_update(&timeout, start, *timeout_ts)) {
-            // timeout during update
-            // or clock reset, fake timeout error
-            return 0;
-        }
-    }
+    return 0;
 }
 
 #endif // QT_BOOTSTRAPPED

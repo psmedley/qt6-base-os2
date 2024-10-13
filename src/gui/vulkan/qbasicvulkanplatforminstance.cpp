@@ -173,7 +173,7 @@ void QBasicPlatformVulkanInstance::init(QLibrary *lib)
             m_supportedExtensions.append(ext);
         }
     }
-    qDebug(lcPlatVk) << "Supported Vulkan instance extensions:" << m_supportedExtensions;
+    qCDebug(lcPlatVk) << "Supported Vulkan instance extensions:" << m_supportedExtensions;
 }
 
 QVulkanInfoVector<QVulkanLayer> QBasicPlatformVulkanInstance::supportedLayers() const
@@ -248,19 +248,24 @@ void QBasicPlatformVulkanInstance::initInstance(QVulkanInstance *instance, const
             if (!m_supportedLayers.contains(layerName))
                 m_enabledLayers.removeAt(i--);
         }
-        qDebug(lcPlatVk) << "Enabling Vulkan instance layers:" << m_enabledLayers;
+        qCDebug(lcPlatVk) << "Enabling Vulkan instance layers:" << m_enabledLayers;
         for (int i = 0; i < m_enabledExtensions.size(); ++i) {
             const QByteArray &extName(m_enabledExtensions[i]);
             if (!m_supportedExtensions.contains(extName))
                 m_enabledExtensions.removeAt(i--);
         }
-        qDebug(lcPlatVk) << "Enabling Vulkan instance extensions:" << m_enabledExtensions;
+        qCDebug(lcPlatVk) << "Enabling Vulkan instance extensions:" << m_enabledExtensions;
 
         VkInstanceCreateInfo instInfo = {};
         instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         instInfo.pApplicationInfo = &appInfo;
-        if (!flags.testFlag(QVulkanInstance::NoPortabilityDrivers))
-            instInfo.flags |= 0x00000001; // VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
+        if (!flags.testFlag(QVulkanInstance::NoPortabilityDrivers)) {
+            // With old Vulkan SDKs setting a non-zero flags gives a validation error.
+            // Whereas from 1.3.216 on the portability bit is required for MoltenVK to function.
+            // Hence the version check.
+            if (m_supportedApiVersion >= QVersionNumber(1, 3, 216))
+                instInfo.flags |= 0x00000001; // VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
+        }
 
         QList<const char *> layerNameVec;
         for (const QByteArray &ba : std::as_const(m_enabledLayers))

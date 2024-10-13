@@ -7,6 +7,7 @@
 
 #include <QtCore/qarraydata.h>
 #include <QtCore/qcontainertools_impl.h>
+#include <QtCore/qnamespace.h>
 
 #include <memory>
 #include <new>
@@ -34,6 +35,8 @@ protected:
 
 public:
     typedef typename QArrayDataPointer<T>::parameter_type parameter_type;
+
+    using QArrayDataPointer<T>::QArrayDataPointer;
 
     void appendInitialize(qsizetype newSize) noexcept
     {
@@ -213,6 +216,40 @@ public:
         --this->size;
     }
 
+    template <typename Predicate>
+    qsizetype eraseIf(Predicate pred)
+    {
+        qsizetype result = 0;
+        if (this->size == 0)
+            return result;
+
+        if (!this->needsDetach()) {
+            auto end = this->end();
+            auto it = std::remove_if(this->begin(), end, pred);
+            if (it != end) {
+                result = std::distance(it, end);
+                erase(it, result);
+            }
+        } else {
+            const auto begin = this->begin();
+            const auto end = this->end();
+            auto it = std::find_if(begin, end, pred);
+            if (it == end)
+                return result;
+
+            QPodArrayOps<T> other(this->size);
+            Q_CHECK_PTR(other.data());
+            auto dest = other.begin();
+            // std::uninitialized_copy will fallback to ::memcpy/memmove()
+            dest = std::uninitialized_copy(begin, it, dest);
+            dest = q_uninitialized_remove_copy_if(std::next(it), end, dest, pred);
+            other.size = std::distance(other.data(), dest);
+            result = this->size - other.size;
+            this->swap(other);
+        }
+        return result;
+    }
+
     struct Span { T *begin; T *end; };
 
     void copyRanges(std::initializer_list<Span> ranges)
@@ -231,27 +268,6 @@ public:
 
         while (b != e)
             ::memcpy(static_cast<void *>(b++), static_cast<const void *>(&t), sizeof(T));
-    }
-
-    bool compare(const T *begin1, const T *begin2, size_t n) const
-    {
-        // only use memcmp for fundamental types or pointers.
-        // Other types could have padding in the data structure or custom comparison
-        // operators that would break the comparison using memcmp
-        if constexpr (QArrayDataPointer<T>::pass_parameter_by_value) {
-            return ::memcmp(begin1, begin2, n * sizeof(T)) == 0;
-        } else {
-            const T *end1 = begin1 + n;
-            while (begin1 != end1) {
-                if (*begin1 == *begin2) {
-                    ++begin1;
-                    ++begin2;
-                } else {
-                    return false;
-                }
-            }
-            return true;
-        }
     }
 
     void reallocate(qsizetype alloc, QArrayData::AllocationOption option)
@@ -624,20 +640,6 @@ public:
         while (b != e)
             *b++ = t;
     }
-
-    bool compare(const T *begin1, const T *begin2, size_t n) const
-    {
-        const T *end1 = begin1 + n;
-        while (begin1 != end1) {
-            if (*begin1 == *begin2) {
-                ++begin1;
-                ++begin2;
-            } else {
-                return false;
-            }
-        }
-        return true;
-    }
 };
 
 template <class T>
@@ -875,7 +877,6 @@ public:
     // using Base::truncate;
     // using Base::destroyAll;
     // using Base::assign;
-    // using Base::compare;
 
     template<typename It>
     void appendIteratorRange(It b, It e, QtPrivate::IfIsForwardIterator<It> = true)
@@ -923,6 +924,23 @@ public:
         Q_ASSERT(this->freeSpaceAtEnd() >= n);
         // b might be updated so use [b, n)
         this->copyAppend(b, b + n);
+    }
+
+    void appendUninitialized(qsizetype newSize)
+    {
+        Q_ASSERT(this->isMutable());
+        Q_ASSERT(!this->isShared());
+        Q_ASSERT(newSize > this->size);
+        Q_ASSERT(newSize - this->size <= this->freeSpaceAtEnd());
+
+
+        T *const b = this->begin() + this->size;
+        T *const e = this->begin() + newSize;
+        if constexpr (std::is_constructible_v<T, Qt::Initialization>)
+            std::uninitialized_fill(b, e, Qt::Uninitialized);
+        else
+            std::uninitialized_default_construct(b, e);
+        this->size = newSize;
     }
 };
 

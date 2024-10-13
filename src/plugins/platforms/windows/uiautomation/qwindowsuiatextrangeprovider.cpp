@@ -13,6 +13,7 @@
 #include <QtCore/qloggingcategory.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qvarlengtharray.h>
+#include <QtCore/private/qcomvariant_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -45,7 +46,7 @@ HRESULT QWindowsUiaTextRangeProvider::Clone(ITextRangeProvider **pRetVal)
     if (!pRetVal)
         return E_INVALIDARG;
 
-    *pRetVal = new QWindowsUiaTextRangeProvider(id(), m_startOffset, m_endOffset);
+    *pRetVal = makeComObject<QWindowsUiaTextRangeProvider>(id(), m_startOffset, m_endOffset).Detach();
     return S_OK;
 }
 
@@ -110,7 +111,7 @@ HRESULT QWindowsUiaTextRangeProvider::ExpandToEnclosingUnit(TextUnit unit)
             const int start = m_startOffset >= 0 && m_startOffset < len
                               ? m_startOffset : len - 1;
             for (int t = start; t >= 0; --t) {
-                if (!isTextUnitSeparator(unit, text[t]) && ((t == 0) || isTextUnitSeparator(unit, text[t - 1]))) {
+                if (!text.isEmpty() && !isTextUnitSeparator(unit, text[t]) && ((t == 0) || isTextUnitSeparator(unit, text[t - 1]))) {
                     m_startOffset = t;
                     break;
                 }
@@ -157,16 +158,25 @@ HRESULT STDMETHODCALLTYPE QWindowsUiaTextRangeProvider::GetAttributeValue(TEXTAT
 
     switch (attributeId) {
     case UIA_IsReadOnlyAttributeId:
-        setVariantBool(accessible->state().readOnly, pRetVal);
+        *pRetVal = QComVariant{ accessible->state().readOnly ? true : false }.release();
         break;
     case UIA_CaretPositionAttributeId:
         if (textInterface->cursorPosition() == 0)
-            setVariantI4(CaretPosition_BeginningOfLine, pRetVal);
+            *pRetVal = QComVariant{ static_cast<long>(CaretPosition_BeginningOfLine) }.release();
         else if (textInterface->cursorPosition() == textInterface->characterCount())
-            setVariantI4(CaretPosition_EndOfLine, pRetVal);
+            *pRetVal = QComVariant{ static_cast<long>(CaretPosition_EndOfLine) }.release();
         else
-            setVariantI4(CaretPosition_Unknown, pRetVal);
+            *pRetVal = QComVariant{ static_cast<long>(CaretPosition_Unknown) }.release();
         break;
+    case UIA_StrikethroughStyleAttributeId:
+    {
+        const QString value = valueForIA2Attribute(textInterface, QStringLiteral("text-line-through-type"));
+        if (value.isEmpty())
+            break;
+        const TextDecorationLineStyle uiaLineStyle = uiaLineStyleForIA2LineStyle(value);
+        *pRetVal = QComVariant{ static_cast<long>(uiaLineStyle) }.release();
+        break;
+    }
     default:
         break;
     }
@@ -256,7 +266,7 @@ HRESULT QWindowsUiaTextRangeProvider::GetEnclosingElement(IRawElementProviderSim
     if (!accessible)
         return UIA_E_ELEMENTNOTAVAILABLE;
 
-    *pRetVal = QWindowsUiaMainProvider::providerForAccessible(accessible);
+    *pRetVal = QWindowsUiaMainProvider::providerForAccessible(accessible).Detach();
     return S_OK;
 }
 
@@ -284,7 +294,7 @@ HRESULT QWindowsUiaTextRangeProvider::GetText(int maxLength, BSTR *pRetVal)
 
     if ((maxLength > -1) && (rangeText.size() > maxLength))
         rangeText.truncate(maxLength);
-    *pRetVal = bStrFromQString(rangeText);
+    *pRetVal = QBStr(rangeText).release();
     return S_OK;
 }
 
@@ -307,14 +317,14 @@ HRESULT QWindowsUiaTextRangeProvider::Move(TextUnit unit, int count, int *pRetVa
 
     int len = textInterface->characterCount();
 
-    if (len < 1)
+    if (len < 1 || count == 0)  // MSDN: "Zero has no effect."
         return S_OK;
 
     if (unit == TextUnit_Character) {
         // Moves the start point, ensuring it lies within the bounds.
-        int start = qBound(0, m_startOffset + count, len - 1);
+        int start = qBound(0, m_startOffset + count, len);
         // If range was initially empty, leaves it as is; otherwise, normalizes it to one char.
-        m_endOffset = (m_endOffset > m_startOffset) ? start + 1 : start;
+        m_endOffset = (m_endOffset > m_startOffset) ? qMin(start + 1, len) : start;
         *pRetVal = start - m_startOffset; // Returns the actually moved distance.
         m_startOffset = start;
     } else {
@@ -385,7 +395,7 @@ HRESULT QWindowsUiaTextRangeProvider::MoveEndpointByUnit(TextPatternRangeEndpoin
 
     if (unit == TextUnit_Character) {
         if (endpoint == TextPatternRangeEndpoint_Start) {
-            int boundedValue = qBound(0, m_startOffset + count, len - 1);
+            int boundedValue = qBound(0, m_startOffset + count, len);
             *pRetVal = boundedValue - m_startOffset;
             m_startOffset = boundedValue;
             m_endOffset = qBound(m_startOffset, m_endOffset, len);
@@ -402,7 +412,7 @@ HRESULT QWindowsUiaTextRangeProvider::MoveEndpointByUnit(TextPatternRangeEndpoin
         if (endpoint == TextPatternRangeEndpoint_Start) {
             if (count > 0) {
                 for (int t = m_startOffset; (t < len - 1) && (moved < count); ++t) {
-                    if (isTextUnitSeparator(unit, text[t]) && !isTextUnitSeparator(unit, text[t + 1])) {
+                    if (!text.isEmpty() && isTextUnitSeparator(unit, text[t]) && !isTextUnitSeparator(unit, text[t + 1])) {
                         m_startOffset = t + 1;
                         ++moved;
                     }
@@ -412,7 +422,7 @@ HRESULT QWindowsUiaTextRangeProvider::MoveEndpointByUnit(TextPatternRangeEndpoin
                 const int start = m_startOffset >= 0 && m_startOffset <= len
                                   ? m_startOffset : len;
                 for (int t = start - 1; (t >= 0) && (moved > count); --t) {
-                    if (!isTextUnitSeparator(unit, text[t]) && ((t == 0) || isTextUnitSeparator(unit, text[t - 1]))) {
+                    if (!text.isEmpty() &&!isTextUnitSeparator(unit, text[t]) && ((t == 0) || isTextUnitSeparator(unit, text[t - 1]))) {
                         m_startOffset = t;
                         --moved;
                     }
@@ -515,6 +525,42 @@ HRESULT QWindowsUiaTextRangeProvider::unselect()
     for (int i = selCount - 1; i >= 0; --i)
         textInterface->removeSelection(i);
     return S_OK;
+}
+
+// helper method to retrieve the value of the given IAccessible2 text attribute,
+// or an empty string if not set
+QString QWindowsUiaTextRangeProvider::valueForIA2Attribute(QAccessibleTextInterface *textInterface,
+                                                           const QString &key)
+{
+    Q_ASSERT(textInterface);
+
+    int startOffset;
+    int endOffset;
+    const QString attributes = textInterface->attributes(m_startOffset, &startOffset, &endOffset);
+    // don't report if attributes don't apply for the whole range
+    if (startOffset > m_startOffset || endOffset < m_endOffset)
+        return {};
+
+    for (auto attr : QStringTokenizer{attributes, u';'})
+    {
+        const QList<QStringView> items = attr.split(u':', Qt::SkipEmptyParts, Qt::CaseSensitive);
+        if (items.count() == 2 && items[0] == key)
+            return items[1].toString();
+    }
+
+    return {};
+}
+
+TextDecorationLineStyle QWindowsUiaTextRangeProvider::uiaLineStyleForIA2LineStyle(const QString &ia2LineStyle)
+{
+    if (ia2LineStyle == QStringLiteral("none"))
+        return TextDecorationLineStyle_None;
+    if (ia2LineStyle == QStringLiteral("single"))
+        return TextDecorationLineStyle_Single;
+    if (ia2LineStyle == QStringLiteral("double"))
+        return TextDecorationLineStyle_Double;
+
+    return TextDecorationLineStyle_Other;
 }
 
 QT_END_NAMESPACE

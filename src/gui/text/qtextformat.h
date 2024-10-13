@@ -188,6 +188,7 @@ public:
         ListIndent = 0x3001,
         ListNumberPrefix = 0x3002,
         ListNumberSuffix = 0x3003,
+        ListStart = 0x3004,
 
         // table and frame properties
         FrameBorder = 0x4000,
@@ -240,6 +241,7 @@ public:
         ImageWidth = 0x5010,
         ImageHeight = 0x5011,
         ImageQuality = 0x5014,
+        ImageMaxWidth = 0x5015,
 
         // internal
         /*
@@ -753,6 +755,9 @@ public:
     inline QString numberSuffix() const
     { return stringProperty(ListNumberSuffix); }
 
+    inline void setStart(int indent);
+    inline int start() const { return intProperty(ListStart); }
+
 protected:
     explicit QTextListFormat(const QTextFormat &fmt);
     friend class QTextFormat;
@@ -772,6 +777,11 @@ inline void QTextListFormat::setNumberPrefix(const QString &np)
 inline void QTextListFormat::setNumberSuffix(const QString &ns)
 { setProperty(ListNumberSuffix, ns); }
 
+inline void QTextListFormat::setStart(int astart)
+{
+    setProperty(ListStart, astart);
+}
+
 class Q_GUI_EXPORT QTextImageFormat : public QTextCharFormat
 {
 public:
@@ -786,6 +796,10 @@ public:
     inline void setWidth(qreal width);
     inline qreal width() const
     { return doubleProperty(ImageWidth); }
+
+    inline void setMaximumWidth(QTextLength maxWidth);
+    inline QTextLength maximumWidth() const
+    { return lengthProperty(ImageMaxWidth); }
 
     inline void setHeight(qreal height);
     inline qreal height() const
@@ -813,6 +827,9 @@ inline void QTextImageFormat::setName(const QString &aname)
 
 inline void QTextImageFormat::setWidth(qreal awidth)
 { setProperty(ImageWidth, awidth); }
+
+inline void QTextImageFormat::setMaximumWidth(QTextLength maxWidth)
+{ setProperty(ImageMaxWidth, maxWidth); }
 
 inline void QTextImageFormat::setHeight(qreal aheight)
 { setProperty(ImageHeight, aheight); }

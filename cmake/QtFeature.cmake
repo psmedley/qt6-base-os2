@@ -1,7 +1,6 @@
 # Copyright (C) 2022 The Qt Company Ltd.
 # SPDX-License-Identifier: BSD-3-Clause
 
-include(QtFeatureCommon)
 include(CheckCXXCompilerFlag)
 
 function(qt_feature_module_begin)
@@ -81,45 +80,25 @@ function(qt_evaluate_to_boolean expressionVar)
     endif()
 endfunction()
 
-function(qt_evaluate_config_expression resultVar)
+function(qt_internal_evaluate_config_expression resultVar outIdx startIdx)
     set(result "")
-    set(nestingLevel 0)
-    set(skipNext OFF)
     set(expression "${ARGN}")
     list(LENGTH expression length)
 
+    math(EXPR memberIdx "${startIdx} - 1")
     math(EXPR length "${length}-1")
-    foreach(memberIdx RANGE ${length})
-        if(${skipNext})
-            set(skipNext OFF)
-            continue()
-        endif()
-
+    while(memberIdx LESS ${length})
+        math(EXPR memberIdx "${memberIdx} + 1")
         list(GET expression ${memberIdx} member)
 
         if("${member}" STREQUAL "(")
-            if(${nestingLevel} GREATER 0)
-                list(APPEND result ${member})
-            endif()
-            math(EXPR nestingLevel "${nestingLevel} + 1")
-            continue()
+            math(EXPR memberIdx "${memberIdx} + 1")
+            qt_internal_evaluate_config_expression(sub_result memberIdx ${memberIdx} ${expression})
+            list(APPEND result ${sub_result})
         elseif("${member}" STREQUAL ")")
-            math(EXPR nestingLevel "${nestingLevel} - 1")
-            if(nestingLevel LESS 0)
-                break()
-            endif()
-            if(${nestingLevel} EQUAL 0)
-                qt_evaluate_config_expression(result ${result})
-            else()
-                list(APPEND result ${member})
-            endif()
-            continue()
-        elseif(${nestingLevel} GREATER 0)
-            list(APPEND result ${member})
-            continue()
+            break()
         elseif("${member}" STREQUAL "NOT")
             list(APPEND result ${member})
-            continue()
         elseif("${member}" STREQUAL "AND")
             qt_evaluate_to_boolean(result)
             if(NOT ${result})
@@ -144,7 +123,7 @@ function(qt_evaluate_config_expression resultVar)
             set(lhs "${${lhs}}")
 
             math(EXPR rhsIndex "${memberIdx}+1")
-            set(skipNext ON)
+            set(memberIdx ${rhsIndex})
 
             list(GET expression ${rhsIndex} rhs)
             # We can't pass through an empty string with double quotes through various
@@ -164,7 +143,7 @@ function(qt_evaluate_config_expression resultVar)
 
             list(APPEND result ${member})
         endif()
-    endforeach()
+    endwhile()
     # The 'TARGET Gui' case is handled by qt_evaluate_to_boolean, by passing those tokens verbatim
     # to if().
 
@@ -174,7 +153,40 @@ function(qt_evaluate_config_expression resultVar)
         qt_evaluate_to_boolean(result)
     endif()
 
+    # When in recursion, we must skip to the next closing parenthesis on nesting level 0. The outIdx
+    # must point to the matching closing parenthesis, and that's not the case if we're early exiting
+    # in AND/OR.
+    if(startIdx GREATER 0)
+        set(nestingLevel 1)
+        while(TRUE)
+            list(GET expression ${memberIdx} member)
+            if("${member}" STREQUAL ")")
+                math(EXPR nestingLevel "${nestingLevel} - 1")
+                if(nestingLevel EQUAL 0)
+                    break()
+                endif()
+            elseif("${member}" STREQUAL "(")
+                math(EXPR nestingLevel "${nestingLevel} + 1")
+            endif()
+            math(EXPR memberIdx "${memberIdx} + 1")
+        endwhile()
+    endif()
+
+    set(${outIdx} ${memberIdx} PARENT_SCOPE)
     set(${resultVar} ${result} PARENT_SCOPE)
+endfunction()
+
+function(qt_evaluate_config_expression resultVar)
+    qt_internal_evaluate_config_expression(result unused 0 ${ARGN})
+    set("${resultVar}" "${result}" PARENT_SCOPE)
+endfunction()
+
+function(_qt_internal_get_feature_condition_keywords out_var)
+    set(keywords "EQUAL" "LESS" "LESS_EQUAL" "GREATER" "GREATER_EQUAL" "STREQUAL" "STRLESS"
+        "STRLESS_EQUAL" "STRGREATER" "STRGREATER_EQUAL" "VERSION_EQUAL" "VERSION_LESS"
+        "VERSION_LESS_EQUAL" "VERSION_GREATER" "VERSION_GREATER_EQUAL" "MATCHES"
+        "EXISTS" "COMMAND" "DEFINED" "NOT" "AND" "OR" "TARGET" "EXISTS" "IN_LIST" "(" ")")
+    set(${out_var} "${keywords}" PARENT_SCOPE)
 endfunction()
 
 function(_qt_internal_dump_expression_values expression_dump expression)
@@ -182,10 +194,7 @@ function(_qt_internal_dump_expression_values expression_dump expression)
     set(skipNext FALSE)
     set(isTargetExpression FALSE)
 
-    set(keywords "EQUAL" "LESS" "LESS_EQUAL" "GREATER" "GREATER_EQUAL" "STREQUAL" "STRLESS"
-        "STRLESS_EQUAL" "STRGREATER" "STRGREATER_EQUAL" "VERSION_EQUAL" "VERSION_LESS"
-        "VERSION_LESS_EQUAL" "VERSION_GREATER" "VERSION_GREATER_EQUAL" "MATCHES"
-        "EXISTS" "COMMAND" "DEFINED" "NOT" "AND" "OR" "TARGET" "EXISTS" "IN_LIST" "(" ")")
+    _qt_internal_get_feature_condition_keywords(keywords)
 
     list(LENGTH expression length)
     math(EXPR length "${length}-1")
@@ -239,19 +248,44 @@ endfunction()
 # ${computed} is also stored when reconfiguring and the condition does not align with the user
 # provided value.
 #
-function(qt_feature_check_and_save_user_provided_value resultVar feature condition computed label)
+function(qt_feature_check_and_save_user_provided_value
+        resultVar feature condition condition_expression computed label)
     if (DEFINED "FEATURE_${feature}")
         # Revisit new user provided value
         set(user_value "${FEATURE_${feature}}")
-        string(TOUPPER "${user_value}" result)
+        string(TOUPPER "${user_value}" user_value_upper)
+        set(result "${user_value_upper}")
 
-        # If the build is marked as dirty and the user_value doesn't meet the new condition,
-        # reset it to the computed one.
+        # If ${feature} depends on another dirty feature, reset the ${feature} value to
+        # ${computed}.
         get_property(dirty_build GLOBAL PROPERTY _qt_dirty_build)
-        if(NOT condition AND result AND dirty_build)
-            set(result "${computed}")
-            message(WARNING "Reset FEATURE_${feature} value to ${result}, because it doesn't \
-meet its condition after reconfiguration.")
+        if(dirty_build)
+            _qt_internal_feature_compute_feature_dependencies(deps "${feature}")
+            if(deps)
+                get_property(dirty_features GLOBAL PROPERTY _qt_dirty_features)
+                foreach(dirty_feature ${dirty_features})
+                    if(dirty_feature IN_LIST deps AND NOT "${result}" STREQUAL "${computed}")
+                        set(result "${computed}")
+                        message(WARNING
+                            "Auto-resetting 'FEATURE_${feature}' from '${user_value_upper}' to "
+                            "'${computed}', "
+                            "because the dependent feature '${dirty_feature}' was marked dirty.")
+
+                        # Append ${feature} as a new dirty feature.
+                        set_property(GLOBAL APPEND PROPERTY _qt_dirty_features "${feature}")
+                        break()
+                    endif()
+                endforeach()
+            endif()
+
+            # If the build is marked as dirty and the feature doesn't meet its condition,
+            # reset its value to the computed one, which is likely OFF.
+            if(NOT condition AND result)
+                set(result "${computed}")
+                message(WARNING "Resetting 'FEATURE_${feature}' from '${user_value_upper}' to "
+                    "'${computed}' because it doesn't meet its condition after reconfiguration. "
+                    "Condition expression is: '${condition_expression}'")
+            endif()
         endif()
 
         set(bool_values OFF NO FALSE N ON YES TRUE Y)
@@ -299,13 +333,21 @@ condition:\n    ${conditionString}\nCondition values dump:\n    ${conditionDump}
     set(QT_KNOWN_FEATURES "${QT_KNOWN_FEATURES}" CACHE INTERNAL "" FORCE)
 endmacro()
 
+macro(_qt_internal_parse_feature_definition feature)
+    cmake_parse_arguments(arg
+        "PRIVATE;PUBLIC"
+        "LABEL;PURPOSE;SECTION;"
+        "AUTODETECT;CONDITION;ENABLE;DISABLE;EMIT_IF"
+        ${_QT_FEATURE_DEFINITION_${feature}})
+endmacro()
+
 
 # The build system stores 2 CMake cache variables for each feature, to allow detecting value changes
 # during subsequent reconfigurations.
 #
 #
 # `FEATURE_foo` stores the user provided feature value for the current configuration run.
-# It can be set directly by the user, or derived from INPUT_foo (also set by the user).
+# It can be set directly by the user.
 #
 # If a value is not provided on initial configuration, the value will be auto-computed based on the
 # various conditions of the feature.
@@ -334,9 +376,7 @@ function(qt_evaluate_feature feature)
         message(FATAL_ERROR "Attempting to evaluate feature ${feature} but its definition is missing. Either the feature does not exist or a dependency to the module that defines it is missing")
     endif()
 
-    cmake_parse_arguments(arg
-        "PRIVATE;PUBLIC"
-        "LABEL;PURPOSE;SECTION;" "AUTODETECT;CONDITION;ENABLE;DISABLE;EMIT_IF" ${_QT_FEATURE_DEFINITION_${feature}})
+    _qt_internal_parse_feature_definition("${feature}")
 
     if("${arg_ENABLE}" STREQUAL "")
         set(arg_ENABLE OFF)
@@ -361,7 +401,9 @@ function(qt_evaluate_feature feature)
     qt_evaluate_config_expression(auto_detect ${arg_AUTODETECT})
     if(${disable_result})
         set(computed OFF)
-    elseif((${enable_result}) OR (${auto_detect}))
+    elseif(${enable_result})
+        set(computed ON)
+    elseif(${auto_detect})
         set(computed ${condition})
     else()
         # feature not auto-detected and not explicitly enabled
@@ -372,17 +414,6 @@ function(qt_evaluate_feature feature)
         set(emit_if ON)
     else()
         qt_evaluate_config_expression(emit_if ${arg_EMIT_IF})
-    endif()
-
-    # If FEATURE_ is not defined trying to use INPUT_ variable to enable/disable feature.
-    if ((NOT DEFINED "FEATURE_${feature}") AND (DEFINED "INPUT_${feature}")
-        AND (NOT "${INPUT_${feature}}" STREQUAL "undefined")
-        AND (NOT "${INPUT_${feature}}" STREQUAL ""))
-        if(INPUT_${feature})
-            set(FEATURE_${feature} ON)
-        else()
-            set(FEATURE_${feature} OFF)
-        endif()
     endif()
 
     # Warn about a feature which is not emitted, but the user explicitly provided a value for it.
@@ -401,7 +432,8 @@ function(qt_evaluate_feature feature)
     # Only save the user provided value if the feature was emitted.
     if(emit_if)
         qt_feature_check_and_save_user_provided_value(
-            saved_user_value "${feature}" "${condition}" "${computed}" "${arg_LABEL}")
+            saved_user_value
+            "${feature}" "${condition}" "${arg_CONDITION}" "${computed}" "${arg_LABEL}")
     else()
         # Make sure the feature internal value is OFF if not emitted.
         set(saved_user_value OFF)
@@ -412,6 +444,60 @@ function(qt_evaluate_feature feature)
 
     # Store each feature's label for summary info.
     set(QT_FEATURE_LABEL_${feature} "${arg_LABEL}" CACHE INTERNAL "")
+endfunction()
+
+# Collect feature names that ${feature} depends on, by inspecting the given expression.
+function(_qt_internal_feature_extract_feature_dependencies_from_expression out_var expression)
+    list(LENGTH expression length)
+    math(EXPR length "${length}-1")
+
+    if(length LESS 0)
+        set(${out_var} "" PARENT_SCOPE)
+        return()
+    endif()
+
+    set(deps "")
+
+    foreach(memberIdx RANGE ${length})
+        list(GET expression ${memberIdx} member)
+        if(member MATCHES "^QT_FEATURE_(.+)")
+            list(APPEND deps "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    set(${out_var} "${deps}" PARENT_SCOPE)
+endfunction()
+
+# Collect feature names that ${feature} depends on, based on feature names that appear
+# in the ${feature}'s condition expressions.
+function(_qt_internal_feature_compute_feature_dependencies out_var feature)
+    # Only compute the deps once per feature.
+    get_property(deps_computed GLOBAL PROPERTY _qt_feature_deps_computed_${feature})
+    if(deps_computed)
+        get_property(deps GLOBAL PROPERTY _qt_feature_deps_${feature})
+        set(${out_var} "${deps}" PARENT_SCOPE)
+        return()
+    endif()
+
+    _qt_internal_parse_feature_definition("${feature}")
+
+    set(options_to_check AUTODETECT CONDITION ENABLE DISABLE EMIT_IF)
+    set(deps "")
+
+    # Go through each option that takes condition expressions and collect the feature names.
+    foreach(option ${options_to_check})
+        set(option_value "${arg_${option}}")
+        if(option_value)
+            _qt_internal_feature_extract_feature_dependencies_from_expression(
+                option_deps "${option_value}")
+            if(option_deps)
+                list(APPEND deps ${option_deps})
+            endif()
+        endif()
+    endforeach()
+
+    set_property(GLOBAL PROPERTY _qt_feature_deps_computed_${feature} TRUE)
+    set_property(GLOBAL PROPERTY _qt_feature_deps_${feature} "${deps}")
+    set(${out_var} "${deps}" PARENT_SCOPE)
 endfunction()
 
 function(qt_feature_config feature config_var_name)
@@ -786,6 +872,40 @@ function(qt_feature_copy_global_config_features_to_core target)
     endif()
 endfunction()
 
+function(qt_internal_detect_dirty_features)
+    # We need to clean up QT_FEATURE_*, but only once per configuration cycle
+    get_property(qt_feature_clean GLOBAL PROPERTY _qt_feature_clean)
+    if(NOT qt_feature_clean AND NOT QT_NO_FEATURE_AUTO_RESET)
+        message(STATUS "Checking for feature set changes")
+        set_property(GLOBAL PROPERTY _qt_feature_clean TRUE)
+        foreach(feature ${QT_KNOWN_FEATURES})
+            if(DEFINED "FEATURE_${feature}" AND
+                NOT "${QT_FEATURE_${feature}}" STREQUAL "${FEATURE_${feature}}")
+                message("    '${feature}' was changed from ${QT_FEATURE_${feature}} "
+                    "to ${FEATURE_${feature}}")
+                set(dirty_build TRUE)
+                set_property(GLOBAL APPEND PROPERTY _qt_dirty_features "${feature}")
+            endif()
+            unset("QT_FEATURE_${feature}" CACHE)
+        endforeach()
+
+        set(QT_KNOWN_FEATURES "" CACHE INTERNAL "" FORCE)
+
+        if(dirty_build)
+            set_property(GLOBAL PROPERTY _qt_dirty_build TRUE)
+            message(WARNING
+                "Due to detected feature set changes, dependent features "
+                "will be re-computed automatically. This might cause a lot of files to be rebuilt. "
+                "To disable this behavior, configure with -DQT_NO_FEATURE_AUTO_RESET=ON")
+        endif()
+    endif()
+endfunction()
+
+# Builds either a string of source code or a whole project to determine whether the build is
+# successful.
+#
+# Sets a TEST_${name}_OUTPUT variable with the build output, to the scope of the calling function.
+# Sets a TEST_${name} cache variable to either TRUE or FALSE if the build is successful or not.
 function(qt_config_compile_test name)
     if(DEFINED "TEST_${name}")
         return()
@@ -908,8 +1028,11 @@ function(qt_config_compile_test name)
             get_filename_component(arg_PROJECT_PATH "${arg_PROJECT_PATH}" REALPATH)
         endif()
 
-        try_compile(HAVE_${name} "${CMAKE_BINARY_DIR}/config.tests/${name}" "${arg_PROJECT_PATH}"
-                    "${name}" CMAKE_FLAGS ${flags} ${arg_CMAKE_FLAGS})
+        try_compile(
+            HAVE_${name} "${CMAKE_BINARY_DIR}/config.tests/${name}" "${arg_PROJECT_PATH}" "${name}"
+            CMAKE_FLAGS ${flags} ${arg_CMAKE_FLAGS}
+            OUTPUT_VARIABLE try_compile_output
+        )
 
         if(${HAVE_${name}})
             set(status_label "Success")
@@ -924,6 +1047,7 @@ function(qt_config_compile_test name)
                 # fail instead of cmake abort later via CMAKE_REQUIRED_LIBRARIES.
                 string(FIND "${library}" "::" cmake_target_namespace_separator)
                 if(NOT cmake_target_namespace_separator EQUAL -1)
+                    message(STATUS "Performing Test ${arg_LABEL} - Failed because ${library} not found")
                     set(HAVE_${name} FALSE)
                     break()
                 endif()
@@ -953,7 +1077,7 @@ function(qt_config_compile_test name)
             set(CMAKE_REQUIRED_FLAGS ${arg_COMPILE_OPTIONS})
 
             # Pass -stdlib=libc++ on if necessary
-            if (INPUT_stdlib_libcpp OR QT_FEATURE_stdlib_libcpp)
+            if (QT_FEATURE_stdlib_libcpp)
                 list(APPEND CMAKE_REQUIRED_FLAGS "-stdlib=libc++")
             endif()
 
@@ -974,7 +1098,19 @@ function(qt_config_compile_test name)
 
             set(_save_CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
             set(CMAKE_REQUIRED_LIBRARIES "${arg_LIBRARIES}")
-            check_cxx_source_compiles("${arg_UNPARSED_ARGUMENTS} ${arg_CODE}" HAVE_${name})
+
+            # OUTPUT_VARIABLE is an internal undocumented variable of check_cxx_source_compiles
+            # since 3.23. Allow an opt out in case this breaks in the future.
+            set(try_compile_output "")
+            set(output_var "")
+            if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.23"
+                    AND NOT QT_INTERNAL_NO_TRY_COMPILE_OUTPUT_VARIABLE)
+                set(output_var OUTPUT_VARIABLE try_compile_output)
+            endif()
+
+            check_cxx_source_compiles(
+                "${arg_UNPARSED_ARGUMENTS} ${arg_CODE}" HAVE_${name} ${output_var}
+            )
             set(CMAKE_REQUIRED_LIBRARIES "${_save_CMAKE_REQUIRED_LIBRARIES}")
 
             set(CMAKE_C_STANDARD "${_save_CMAKE_C_STANDARD}")
@@ -986,6 +1122,7 @@ function(qt_config_compile_test name)
         endif()
     endif()
 
+    set(TEST_${name}_OUTPUT "${try_compile_output}" PARENT_SCOPE)
     set(TEST_${name} "${HAVE_${name}}" CACHE INTERNAL "${arg_LABEL}")
 endfunction()
 
@@ -1023,7 +1160,7 @@ function(qt_get_platform_try_compile_vars out_var)
     list(APPEND flags "CMAKE_CXX_STANDARD_REQUIRED")
 
     # Pass -stdlib=libc++ on if necessary
-    if (INPUT_stdlib_libcpp OR QT_FEATURE_stdlib_libcpp)
+    if (QT_FEATURE_stdlib_libcpp)
         if(CMAKE_CXX_FLAGS)
             string(APPEND CMAKE_CXX_FLAGS " -stdlib=libc++")
         else()
@@ -1057,8 +1194,8 @@ function(qt_get_platform_try_compile_vars out_var)
     if(UIKIT)
         # Specify the sysroot, but only if not doing a simulator_and_device build.
         # So keep the sysroot empty for simulator_and_device builds.
-        if(QT_UIKIT_SDK)
-            list(APPEND flags_cmd_line "-DCMAKE_OSX_SYSROOT:STRING=${QT_UIKIT_SDK}")
+        if(QT_APPLE_SDK)
+            list(APPEND flags_cmd_line "-DCMAKE_OSX_SYSROOT:STRING=${QT_APPLE_SDK}")
         endif()
     endif()
     if(QT_NO_USE_FIND_PACKAGE_SYSTEM_ENVIRONMENT_PATH)
@@ -1224,7 +1361,16 @@ function(qt_config_linker_supports_flag_test name)
     endif()
 
     cmake_parse_arguments(arg "" "LABEL;FLAG" "" ${ARGN})
-    set(flags "-Wl,${arg_FLAG}")
+    if(GCC OR CLANG)
+        set(flags "-Wl,--fatal-warnings,${arg_FLAG}")
+    elseif(MSVC)
+        set(flags "${arg_FLAG}")
+    else()
+        # We don't know how to pass linker options in a way that
+        # it reliably fails, so assume the detection failed.
+        set(TEST_${name} "0" CACHE INTERNAL "${label}")
+        return()
+    endif()
 
     # Pass the linker that the main project uses to the compile test.
     qt_internal_get_active_linker_flags(linker_flags)

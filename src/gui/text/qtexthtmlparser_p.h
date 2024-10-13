@@ -150,6 +150,7 @@ struct QTextHtmlParserNode {
     uint displayMode : 3; // QTextHtmlElement::DisplayMode
     uint hasHref : 1;
     QTextListFormat::Style listStyle;
+    int listStart = 1;
     QString textListNumberPrefix;
     QString textListNumberSuffix;
     QString imageName;
@@ -275,7 +276,7 @@ public:
 
     void parse(const QString &text, const QTextDocument *resourceProvider);
 
-    static int lookupElement(const QString &element);
+    static int lookupElement(QStringView element);
 
     Q_GUI_EXPORT static QString parseEntity(QStringView entity);
 

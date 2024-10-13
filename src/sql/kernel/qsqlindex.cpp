@@ -4,7 +4,6 @@
 #include "qsqlindex.h"
 
 #include "qsqlfield.h"
-#include "qstringlist.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -42,6 +41,25 @@ QSqlIndex::QSqlIndex(const QSqlIndex& other)
 {
 }
 
+/*! \fn QSqlIndex::QSqlIndex(QSqlIndex &&other)
+    Move-constructs a new QSqlIndex from \a other.
+
+    \note The moved-from object \a other is placed in a
+    partially-formed state, in which the only valid operations are
+    destruction and assignment of a new value.
+
+    \since 6.6
+*/
+/*! \fn QSqlIndex& QSqlIndex::operator=(QSqlIndex &&other)
+    Move-assigns \a other to this QSqlIndex instance.
+
+    \note The moved-from object \a other is placed in a
+    partially-formed state, in which the only valid operations are
+    destruction and assignment of a new value.
+
+    \since 6.6
+*/
+
 /*!
     Sets the index equal to \a other.
 */
@@ -55,6 +73,7 @@ QSqlIndex& QSqlIndex::operator=(const QSqlIndex& other)
     return *this;
 }
 
+
 /*!
     Destroys the object and frees any allocated resources.
 */
@@ -65,19 +84,21 @@ QSqlIndex::~QSqlIndex()
 }
 
 /*!
-    Sets the name of the index to \a name.
+    \property QSqlIndex::name
+    \since 6.8
+    This property holds the name of the index.
 */
-
+/*!
+    \fn QString QSqlIndex::name() const
+    Returns the \l name.
+*/
+/*!
+    Sets \l name to \a name.
+*/
 void QSqlIndex::setName(const QString& name)
 {
     nm = name;
 }
-
-/*!
-    \fn QString QSqlIndex::name() const
-
-    Returns the name of the index.
-*/
 
 /*!
     Appends the field \a field to the list of indexed fields. The
@@ -128,34 +149,18 @@ void QSqlIndex::setDescending(int i, bool desc)
         sorts[i] = desc;
 }
 
-/*! \internal
-
-  Creates a string representing the field number \a i using prefix \a
-  prefix. If \a verbose is true, ASC or DESC is included in the field
-  description if the field is sorted in ASCending or DESCending order.
+/*!
+    \property QSqlIndex::cursorName
+    \since 6.8
+    This property holds the name of the cursor which the index
+    is associated with.
 */
-
-QString QSqlIndex::createField(int i, const QString& prefix, bool verbose) const
-{
-    QString f;
-    if (!prefix.isEmpty())
-        f += prefix + u'.';
-    f += field(i).name();
-    if (verbose)
-        f += u' ' + QString((isDescending(i) ? "DESC"_L1 : "ASC"_L1));
-    return f;
-}
-
 /*!
     \fn QString QSqlIndex::cursorName() const
-
-    Returns the name of the cursor which the index is associated with.
+    Returns the \l cursorName.
 */
-
-
 /*!
-    Sets the name of the cursor that the index is associated with to
-    \a cursorName.
+    Sets \l cursorName to \a cursorName.
 */
 void QSqlIndex::setCursorName(const QString& cursorName)
 {
@@ -163,3 +168,5 @@ void QSqlIndex::setCursorName(const QString& cursorName)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qsqlindex.cpp"

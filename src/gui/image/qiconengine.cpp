@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qiconengine.h"
+#include "qiconengine_p.h"
 #include "qpainter.h"
 
 QT_BEGIN_NAMESPACE
@@ -41,6 +42,9 @@ QT_BEGIN_NAMESPACE
 /*!  Returns the actual size of the icon the engine provides for the
   requested \a size, \a mode and \a state. The default implementation
   returns the given \a size.
+
+  The returned size is in device-independent pixels (This
+  is relevant for high-dpi pixmaps).
  */
 QSize QIconEngine::actualSize(const QSize &size, QIcon::Mode /*mode*/, QIcon::State /*state*/)
 {
@@ -113,7 +117,6 @@ void QIconEngine::addFile(const QString &/*fileName*/, const QSize &/*size*/, QI
 
 /*!
     \enum QIconEngine::IconEngineHook
-    \since 4.5
 
     These enum values are used for virtual_hook() to allow additional
     queries to icon engine without breaking binary compatibility.
@@ -223,8 +226,6 @@ bool QIconEngine::write(QDataStream &) const
 }
 
 /*!
-    \since 4.5
-
     Additional method to allow extending QIconEngine without
     adding new virtual methods (and without breaking binary compatibility).
     The actual action and format of \a data depends on \a id argument
@@ -236,10 +237,10 @@ void QIconEngine::virtual_hook(int id, void *data)
 {
     switch (id) {
     case QIconEngine::ScaledPixmapHook: {
-        // We don't have any notion of scale besides "@nx", so just call pixmap() here.
         QIconEngine::ScaledPixmapArgument &arg =
             *reinterpret_cast<QIconEngine::ScaledPixmapArgument*>(data);
-        arg.pixmap = pixmap(arg.size, arg.mode, arg.state);
+        // try to get a pixmap with the correct size, the dpr is adjusted later on
+        arg.pixmap = pixmap(arg.size * arg.scale, arg.mode, arg.state);
         break;
     }
     default:
@@ -248,8 +249,6 @@ void QIconEngine::virtual_hook(int id, void *data)
 }
 
 /*!
-    \since 4.5
-
     Returns sizes of all images that are contained in the engine for the
     specific \a mode and \a state.
  */
@@ -259,8 +258,6 @@ QList<QSize> QIconEngine::availableSizes(QIcon::Mode /*mode*/, QIcon::State /*st
 }
 
 /*!
-    \since 4.7
-
     Returns the name used to create the engine, if available.
  */
 QString QIconEngine::iconName()
@@ -288,7 +285,7 @@ bool QIconEngine::isNull()
     Returns a pixmap for the given \a size, \a mode, \a state and \a scale.
 
     The \a scale argument is typically equal to the \l {High DPI}
-    {device pixel ratio} of the display.
+    {device pixel ratio} of the display. The size is given in device-independent pixels.
 
     \include qiconengine-virtualhookhelper.qdocinc
 
@@ -306,5 +303,79 @@ QPixmap QIconEngine::scaledPixmap(const QSize &size, QIcon::Mode mode, QIcon::St
     const_cast<QIconEngine *>(this)->virtual_hook(QIconEngine::ScaledPixmapHook, reinterpret_cast<void*>(&arg));
     return arg.pixmap;
 }
+
+
+// ------- QProxyIconEngine -----
+
+void QProxyIconEngine::paint(QPainter *painter, const QRect &rect, QIcon::Mode mode, QIcon::State state)
+{
+    proxiedEngine()->paint(painter, rect, mode, state);
+}
+
+QSize QProxyIconEngine::actualSize(const QSize &size, QIcon::Mode mode, QIcon::State state)
+{
+    return proxiedEngine()->actualSize(size, mode, state);
+}
+
+QPixmap QProxyIconEngine::pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state)
+{
+    return proxiedEngine()->pixmap(size, mode, state);
+}
+
+void QProxyIconEngine::addPixmap(const QPixmap &pixmap, QIcon::Mode mode, QIcon::State state)
+{
+    proxiedEngine()->addPixmap(pixmap, mode, state);
+}
+
+void QProxyIconEngine::addFile(const QString &fileName, const QSize &size, QIcon::Mode mode, QIcon::State state)
+{
+    proxiedEngine()->addFile(fileName, size, mode, state);
+}
+
+QString QProxyIconEngine::key() const
+{
+    return proxiedEngine()->key();
+}
+
+QIconEngine *QProxyIconEngine::clone() const
+{
+    return proxiedEngine()->clone();
+}
+
+bool QProxyIconEngine::read(QDataStream &in)
+{
+    return proxiedEngine()->read(in);
+}
+
+bool QProxyIconEngine::write(QDataStream &out) const
+{
+    return proxiedEngine()->write(out);
+}
+
+QList<QSize> QProxyIconEngine::availableSizes(QIcon::Mode mode, QIcon::State state)
+{
+    return proxiedEngine()->availableSizes(mode, state);
+}
+
+QString QProxyIconEngine::iconName()
+{
+    return proxiedEngine()->iconName();
+}
+
+bool QProxyIconEngine::isNull()
+{
+    return proxiedEngine()->isNull();
+}
+
+QPixmap QProxyIconEngine::scaledPixmap(const QSize &size, QIcon::Mode mode, QIcon::State state, qreal scale)
+{
+    return proxiedEngine()->scaledPixmap(size, mode, state, scale);
+}
+
+void QProxyIconEngine::virtual_hook(int id, void *data)
+{
+    proxiedEngine()->virtual_hook(id, data);
+}
+
 
 QT_END_NAMESPACE

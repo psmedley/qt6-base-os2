@@ -26,6 +26,9 @@ qt_find_package(WrapSystemDoubleConversion
                 PROVIDED_TARGETS WrapSystemDoubleConversion::WrapSystemDoubleConversion
                 MODULE_NAME core QMAKE_LIB doubleconversion)
 qt_find_package(GLIB2 PROVIDED_TARGETS GLIB2::GLIB2 MODULE_NAME core QMAKE_LIB glib)
+qt_find_package_extend_sbom(TARGETS GLIB2::GLIB2
+    LICENSE_EXPRESSION "LGPL-2.1-or-later"
+)
 qt_find_package(ICU 50.1 COMPONENTS i18n uc data PROVIDED_TARGETS ICU::i18n ICU::uc ICU::data
     MODULE_NAME core QMAKE_LIB icu)
 
@@ -35,6 +38,9 @@ endif()
 qt_find_package(Libsystemd PROVIDED_TARGETS PkgConfig::Libsystemd MODULE_NAME core QMAKE_LIB journald)
 qt_find_package(WrapAtomic PROVIDED_TARGETS WrapAtomic::WrapAtomic MODULE_NAME core QMAKE_LIB libatomic)
 qt_find_package(Libb2 PROVIDED_TARGETS Libb2::Libb2 MODULE_NAME core QMAKE_LIB libb2)
+qt_find_package_extend_sbom(TARGETS Libb2::Libb2
+    LICENSE_EXPRESSION "CC0-1.0"
+)
 qt_find_package(WrapRt PROVIDED_TARGETS WrapRt::WrapRt MODULE_NAME core QMAKE_LIB librt)
 qt_find_package(WrapSystemPCRE2 10.20 PROVIDED_TARGETS WrapSystemPCRE2::WrapSystemPCRE2 MODULE_NAME core QMAKE_LIB pcre2)
 set_package_properties(WrapPCRE2 PROPERTIES TYPE REQUIRED)
@@ -98,6 +104,18 @@ clock_gettime(CLOCK_MONOTONIC, &ts);
 }
 ")
 
+# close_range
+qt_config_compile_test(close_range
+    LABEL "close_range()"
+    CODE
+"#include <unistd.h>
+
+int main()
+{
+    return close_range(3, 1024, 0) != 0;
+}
+")
+
 # cloexec
 qt_config_compile_test(cloexec
     LABEL "O_CLOEXEC"
@@ -120,44 +138,6 @@ int pipes[2];
 #else
 (void) accept4(0, 0, 0, SOCK_CLOEXEC | SOCK_NONBLOCK);
 #endif
-    /* END TEST: */
-    return 0;
-}
-")
-
-# special case begin
-# cxx11_future
-if (UNIX AND NOT ANDROID AND NOT QNX AND NOT INTEGRITY)
-    set(cxx11_future_TEST_LIBRARIES pthread)
-endif()
-qt_config_compile_test(cxx11_future
-    LABEL "C++11 <future>"
-    LIBRARIES
-     "${cxx11_future_TEST_LIBRARIES}"
-    CODE
-"#include <future>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-std::future<int> f = std::async([]() { return 42; });
-(void)f.get();
-    /* END TEST: */
-    return 0;
-}
-")
-# special case end
-
-# cxx11_random
-qt_config_compile_test(cxx11_random
-    LABEL "C++11 <random>"
-    CODE
-"#include <random>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-std::mt19937 mt(0);
     /* END TEST: */
     return 0;
 }
@@ -197,24 +177,6 @@ int main(void)
     return 0;
 }"
 )
-
-# eventfd
-qt_config_compile_test(eventfd
-    LABEL "eventfd"
-    CODE
-"#include <sys/eventfd.h>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-eventfd_t value;
-int fd = eventfd(0, EFD_CLOEXEC);
-eventfd_read(fd, &value);
-eventfd_write(fd, value);
-    /* END TEST: */
-    return 0;
-}
-")
 
 # futimens
 qt_config_compile_test(futimens
@@ -265,21 +227,6 @@ char buf[32];
 }
 ")
 
-# glibc
-qt_config_compile_test(glibc
-    LABEL "GNU libc"
-    CODE
-"#include <stdlib.h>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-return __GLIBC__;
-    /* END TEST: */
-    return 0;
-}
-")
-
 # inotify
 qt_config_compile_test(inotify
     LABEL "inotify"
@@ -297,49 +244,71 @@ inotify_rm_watch(0, 1);
 }
 ")
 
-# ipc_sysv
-qt_config_compile_test(ipc_sysv
-    LABEL "SysV IPC"
+qt_config_compile_test(sysv_shm
+    LABEL "System V/XSI shared memory"
     CODE
 "#include <sys/types.h>
 #include <sys/ipc.h>
-#include <sys/sem.h>
 #include <sys/shm.h>
 #include <fcntl.h>
 
 int main(void)
 {
-    /* BEGIN TEST: */
-key_t unix_key = ftok(\"test\", 'Q');
-semctl(semget(unix_key, 1, 0666 | IPC_CREAT | IPC_EXCL), 0, IPC_RMID, 0);
-shmget(unix_key, 0, 0666 | IPC_CREAT | IPC_EXCL);
-shmctl(0, 0, (struct shmid_ds *)(0));
-    /* END TEST: */
+    key_t unix_key = ftok(\"test\", 'Q');
+    shmget(unix_key, 0, 0666 | IPC_CREAT | IPC_EXCL);
+    shmctl(0, 0, (struct shmid_ds *)(0));
     return 0;
 }
 ")
 
-# ipc_posix
+qt_config_compile_test(sysv_sem
+    LABEL "System V/XSI semaphores"
+    CODE
+"#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <fcntl.h>
+
+int main(void)
+{
+    key_t unix_key = ftok(\"test\", 'Q');
+    semctl(semget(unix_key, 1, 0666 | IPC_CREAT | IPC_EXCL), 0, IPC_RMID, 0);
+    return 0;
+}
+")
+
 if (LINUX)
-    set(ipc_posix_TEST_LIBRARIES pthread rt)
+    set(ipc_posix_TEST_LIBRARIES pthread WrapRt::WrapRt)
 endif()
-qt_config_compile_test(ipc_posix
-    LABEL "POSIX IPC"
+qt_config_compile_test(posix_shm
+    LABEL "POSIX shared memory"
     LIBRARIES
      "${ipc_posix_TEST_LIBRARIES}"
     CODE
 "#include <sys/types.h>
 #include <sys/mman.h>
+#include <fcntl.h>
+
+int main(void)
+{
+    shm_open(\"test\", O_RDWR | O_CREAT | O_EXCL, 0666);
+    shm_unlink(\"test\");
+    return 0;
+}
+")
+
+qt_config_compile_test(posix_sem
+    LABEL "POSIX semaphores"
+    LIBRARIES
+     "${ipc_posix_TEST_LIBRARIES}"
+    CODE
+"#include <sys/types.h>
 #include <semaphore.h>
 #include <fcntl.h>
 
 int main(void)
 {
-    /* BEGIN TEST: */
-sem_close(sem_open(\"test\", O_CREAT | O_EXCL, 0666, 0));
-shm_open(\"test\", O_RDWR | O_CREAT | O_EXCL, 0666);
-shm_unlink(\"test\");
-    /* END TEST: */
+    sem_close(sem_open(\"test\", O_CREAT | O_EXCL, 0666, 0));
     return 0;
 }
 ")
@@ -360,6 +329,37 @@ linkat(AT_FDCWD, \"foo\", AT_FDCWD, \"bar\", AT_SYMLINK_FOLLOW);
     return 0;
 }
 ")
+
+# memmem
+qt_config_compile_test(memmem
+    LABEL "memmem()"
+    CODE
+#define _APPLE_SAUCE 1  /* Apple doesn't require anything */
+"#define _BSD_SOURCE 1   /* For FreeBSD */
+#define _GNU_SOURCE 1   /* For glibc, Bionic */
+#include <string.h>
+
+int main(void)
+{
+    const void *r = memmem(\"abc\", 3, \"bc\", 2);
+    (void)r;
+    return 0;
+}")
+
+# memrchr
+qt_config_compile_test(memrchr
+    LABEL "memrchr()"
+    CODE
+"#define _BSD_SOURCE 1   /* For FreeBSD */
+#define _GNU_SOURCE 1   /* For glibc, Bionic */
+#include <string.h>
+
+int main(void)
+{
+    const void *r = memrchr(\"abc\", 'a', 3);
+    (void)r;
+    return 0;
+}")
 
 # ppoll
 qt_config_compile_test(ppoll
@@ -433,44 +433,6 @@ renameat2(AT_FDCWD, argv[1], AT_FDCWD, argv[2], RENAME_NOREPLACE | RENAME_WHITEO
 }
 ")
 
-# statx
-qt_config_compile_test(statx
-    LABEL "statx() in libc"
-    CODE
-"#define _ATFILE_SOURCE 1
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-struct statx statxbuf;
-unsigned int mask = STATX_BASIC_STATS;
-return statx(AT_FDCWD, \"\", AT_STATX_SYNC_AS_STAT, mask, &statxbuf);
-    /* END TEST: */
-    return 0;
-}
-")
-
-# syslog
-qt_config_compile_test(syslog
-    LABEL "syslog"
-    CODE
-"#include <syslog.h>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-openlog(\"qt\", 0, LOG_USER);
-syslog(LOG_INFO, \"configure\");
-closelog();
-    /* END TEST: */
-    return 0;
-}
-")
-
 # cpp_winrt
 qt_config_compile_test(cpp_winrt
     LABEL "cpp/winrt"
@@ -486,39 +448,52 @@ int main(void)
 }
 ")
 
-# xlocalescanprint
-qt_config_compile_test(xlocalescanprint
-    LABEL "xlocale.h (or equivalents)"
+# <stacktrace>
+qt_config_compile_test(cxx23_stacktrace
+    LABEL "C++23 <stacktrace> support"
     CODE
-"#define QT_BEGIN_NAMESPACE
-#define QT_END_NAMESPACE
-
-#ifdef _MSVC_VER
-#define Q_CC_MSVC _MSVC_VER
+"#include <stacktrace>
+#if !defined(__cpp_lib_stacktrace)
+#error
 #endif
-
-#define QT_NO_DOUBLECONVERSION
-
-#include QDSP_P_H
 
 int main(void)
 {
     /* BEGIN TEST: */
-#ifdef _MSVC_VER
-_locale_t invalidLocale = NULL;
-#else
-locale_t invalidLocale = NULL;
-#endif
-double a = 3.4;
-qDoubleSnprintf(argv[0], 1, invalidLocale, \"invalid format\", a);
-qDoubleSscanf(argv[0], invalidLocale, \"invalid format\", &a, &argc);
+const auto backtrace = std::stacktrace::current();
     /* END TEST: */
-    return 0;
 }
-"# FIXME: qmake: DEFINES += QDSP_P_H=$$shell_quote(\"@PWD@/text/qdoublescanprint_p.h\")
+"
+    CXX_STANDARD 23
 )
 
+# <future>
+qt_config_compile_test(cxx_std_async_noncopyable
+    LABEL "std::async() NonCopyable"
+    CODE
+"// Calling std::async with lambda which takes non-copyable argument causes compilation error on
+// some platforms (VxWorks 24.03 and older with C++17-compatibility for example)
+#include <future>
 
+class NonCopyable {
+public:
+    NonCopyable(const NonCopyable&) = delete;
+    NonCopyable(NonCopyable&&) = default;
+
+    NonCopyable(int value)
+        :value (value)
+    {}
+
+    int value;
+};
+
+int main(int argc, char** argv) {
+    return std::async(
+        std::launch::deferred,
+        [](NonCopyable value) { return value.value; },
+        NonCopyable(argc - 1)).get();
+}
+")
 
 #### Features
 
@@ -531,7 +506,12 @@ qt_feature("clock-monotonic" PUBLIC
     CONDITION QT_FEATURE_clock_gettime AND TEST_clock_monotonic
 )
 qt_feature_definition("clock-monotonic" "QT_NO_CLOCK_MONOTONIC" NEGATE VALUE "1")
-qt_feature("doubleconversion" PUBLIC PRIVATE
+qt_feature("close_range" PRIVATE
+    LABEL "close_range()"
+    CONDITION QT_FEATURE_process AND TEST_close_range
+    AUTODETECT UNIX
+)
+qt_feature("doubleconversion" PRIVATE
     LABEL "DoubleConversion"
 )
 qt_feature_definition("doubleconversion" "QT_NO_DOUBLECONVERSION" NEGATE VALUE "1")
@@ -543,7 +523,7 @@ qt_feature("system-doubleconversion" PRIVATE
 )
 qt_feature("cxx11_future" PUBLIC
     LABEL "C++11 <future>"
-    CONDITION TEST_cxx11_future
+    CONDITION TEST_cxx_std_async_noncopyable
 )
 qt_feature("cxx17_filesystem" PUBLIC
     LABEL "C++17 <filesystem>"
@@ -553,11 +533,6 @@ qt_feature("dladdr" PRIVATE
     LABEL "dladdr"
     CONDITION QT_FEATURE_dlopen AND TEST_dladdr
 )
-qt_feature("eventfd" PUBLIC
-    LABEL "eventfd"
-    CONDITION NOT WASM AND TEST_eventfd
-)
-qt_feature_definition("eventfd" "QT_NO_EVENTFD" NEGATE VALUE "1")
 qt_feature("futimens" PRIVATE
     LABEL "futimens()"
     CONDITION NOT WIN32 AND TEST_futimens
@@ -576,11 +551,6 @@ qt_feature("glib" PUBLIC PRIVATE
     CONDITION GLIB2_FOUND
 )
 qt_feature_definition("glib" "QT_NO_GLIB" NEGATE VALUE "1")
-qt_feature("glibc" PRIVATE
-    LABEL "GNU libc"
-    AUTODETECT ( LINUX OR HURD )
-    CONDITION TEST_glibc
-)
 qt_feature("icu" PRIVATE
     LABEL "ICU"
     AUTODETECT NOT WIN32
@@ -592,9 +562,11 @@ qt_feature("inotify" PUBLIC PRIVATE
 )
 qt_feature_definition("inotify" "QT_NO_INOTIFY" NEGATE VALUE "1")
 qt_feature("ipc_posix"
-    LABEL "Using POSIX IPC"
-    AUTODETECT NOT WIN32 AND ( ( APPLE AND QT_FEATURE_appstore_compliant ) OR NOT TEST_ipc_sysv )
-    CONDITION TEST_ipc_posix
+    LABEL "Defaulting legacy IPC to POSIX"
+    CONDITION TEST_posix_shm AND TEST_posix_sem AND (
+        FEATURE_ipc_posix OR (APPLE AND QT_FEATURE_appstore_compliant)
+        OR NOT TEST_sysv_shm OR NOT TEST_sysv_sem
+    )
 )
 qt_feature_definition("ipc_posix" "QT_POSIX_IPC")
 qt_feature("journald" PRIVATE
@@ -618,6 +590,14 @@ qt_feature("linkat" PRIVATE
 qt_feature("std-atomic64" PUBLIC
     LABEL "64 bit atomic operations"
     CONDITION WrapAtomic_FOUND
+)
+qt_feature("memmem" PRIVATE
+    LABEL "C library function memmem()"
+    CONDITION TEST_memmem
+)
+qt_feature("memrchr" PRIVATE
+    LABEL "C library function memrchr()"
+    CONDITION TEST_memrchr
 )
 qt_feature("mimetype" PUBLIC
     SECTION "Utilities"
@@ -662,6 +642,14 @@ qt_feature("poll_select" PRIVATE
     EMIT_IF NOT WIN32
 )
 qt_feature_definition("poll_select" "QT_NO_NATIVE_POLL")
+qt_feature("posix_sem" PRIVATE
+    LABEL "POSIX semaphores"
+    CONDITION TEST_posix_sem AND QT_FEATURE_systemsemaphore
+)
+qt_feature("posix_shm" PRIVATE
+    LABEL "POSIX shared memory"
+    CONDITION TEST_posix_shm AND UNIX
+)
 qt_feature("qqnx_pps" PRIVATE
     LABEL "PPS"
     CONDITION PPS_FOUND
@@ -675,14 +663,17 @@ qt_feature("slog2" PRIVATE
     LABEL "slog2"
     CONDITION Slog2_FOUND
 )
-qt_feature("statx" PRIVATE
-    LABEL "statx() in libc"
-    CONDITION ( LINUX OR HURD ) AND TEST_statx
-)
 qt_feature("syslog" PRIVATE
     LABEL "syslog"
     AUTODETECT OFF
-    CONDITION TEST_syslog
+)
+qt_feature("sysv_sem" PRIVATE
+    LABEL "System V / XSI semaphores"
+    CONDITION TEST_sysv_sem AND QT_FEATURE_systemsemaphore
+)
+qt_feature("sysv_shm" PRIVATE
+    LABEL "System V / XSI shared memory"
+    CONDITION TEST_sysv_shm
 )
 qt_feature("threadsafe-cloexec"
     LABEL "Threadsafe pipe creation"
@@ -701,11 +692,15 @@ qt_feature("backtrace" PRIVATE
     LABEL "backtrace"
     CONDITION UNIX AND QT_FEATURE_regularexpression AND WrapBacktrace_FOUND
 )
+qt_feature("cxx23_stacktrace" PRIVATE
+    LABEL "C++23 <stacktrace>"
+    CONDITION TEST_cxx23_stacktrace AND QT_FEATURE_cxx2b
+)
 qt_feature("sharedmemory" PUBLIC
     SECTION "Kernel"
     LABEL "QSharedMemory"
     PURPOSE "Provides access to a shared memory segment."
-    CONDITION ( ANDROID OR OS2 OR WIN32 OR ( NOT VXWORKS AND ( TEST_ipc_sysv OR TEST_ipc_posix ) ) )
+    CONDITION WIN32 OR OS2 OR TEST_sysv_shm OR TEST_posix_shm
 )
 qt_feature_definition("sharedmemory" "QT_NO_SHAREDMEMORY" NEGATE VALUE "1")
 qt_feature("shortcut" PUBLIC
@@ -718,7 +713,7 @@ qt_feature("systemsemaphore" PUBLIC
     SECTION "Kernel"
     LABEL "QSystemSemaphore"
     PURPOSE "Provides a general counting system semaphore."
-    CONDITION ( NOT INTEGRITY AND NOT VXWORKS AND NOT rtems ) AND ( ANDROID OR WIN32 OR OS2 OR TEST_ipc_sysv OR TEST_ipc_posix )
+    CONDITION WIN32 OR OS2 OR TEST_sysv_sem OR TEST_posix_sem
 )
 qt_feature_definition("systemsemaphore" "QT_NO_SYSTEMSEMAPHORE" NEGATE VALUE "1")
 qt_feature("xmlstream" PUBLIC
@@ -729,23 +724,21 @@ qt_feature("xmlstream" PUBLIC
 qt_feature("cpp-winrt" PRIVATE PUBLIC
     LABEL "cpp/winrt base"
     PURPOSE "basic cpp/winrt language projection support"
+    AUTODETECT WIN32
     CONDITION WIN32 AND TEST_cpp_winrt
 )
-qt_feature_definition("xmlstream" "QT_NO_XMLSTREAM" NEGATE VALUE "1")
 qt_feature("xmlstreamreader" PUBLIC
     SECTION "Kernel"
     LABEL "QXmlStreamReader"
     PURPOSE "Provides a well-formed XML parser with a simple streaming API."
     CONDITION QT_FEATURE_xmlstream
 )
-qt_feature_definition("xmlstreamreader" "QT_NO_XMLSTREAMREADER" NEGATE VALUE "1")
 qt_feature("xmlstreamwriter" PUBLIC
     SECTION "Kernel"
     LABEL "QXmlStreamWriter"
     PURPOSE "Provides a XML writer with a simple streaming API."
     CONDITION QT_FEATURE_xmlstream
 )
-qt_feature_definition("xmlstreamwriter" "QT_NO_XMLSTREAMWRITER" NEGATE VALUE "1")
 qt_feature("textdate" PUBLIC
     SECTION "Data structures"
     LABEL "Text Date"
@@ -788,7 +781,7 @@ qt_feature("library" PUBLIC
     SECTION "File I/O"
     LABEL "QLibrary"
     PURPOSE "Provides a wrapper for dynamically loaded libraries."
-    CONDITION WIN32 OR HPUX OR ( NOT NACL AND QT_FEATURE_dlopen )
+    CONDITION WIN32 OR HPUX OR QT_FEATURE_dlopen
 )
 qt_feature_definition("library" "QT_NO_LIBRARY" NEGATE VALUE "1")
 qt_feature("settings" PUBLIC
@@ -906,7 +899,14 @@ qt_feature("timezone" PUBLIC
     SECTION "Utilities"
     LABEL "QTimeZone"
     PURPOSE "Provides support for time-zone handling."
-    CONDITION NOT WASM
+    CONDITION NOT WASM AND NOT VXWORKS
+)
+qt_feature("timezone_locale" PRIVATE
+    SECTION "Utilities"
+    LABEL "QTimeZone"
+    PURPOSE "Provides support for localized time-zone display names."
+    CONDITION
+        QT_FEATURE_timezone AND ( ( UNIX AND NOT APPLE AND NOT ANDROID ) OR QT_FEATURE_icu )
 )
 qt_feature("datetimeparser" PRIVATE
     SECTION "Utilities"
@@ -963,22 +963,32 @@ qt_feature("permissions" PUBLIC
     SECTION "Utilities"
     LABEL "Application permissions"
     PURPOSE "Provides support for requesting user permission to access restricted data or APIs"
-    CONDITION APPLE OR ANDROID OR WASM
 )
+qt_feature("openssl-hash" PRIVATE
+    LABEL "OpenSSL based cryptographic hash"
+    AUTODETECT OFF
+    CONDITION QT_FEATURE_openssl_linked AND QT_FEATURE_opensslv30
+    PURPOSE "Uses OpenSSL based implementation of cryptographic hash algorithms."
+)
+
 qt_configure_add_summary_section(NAME "Qt Core")
 qt_configure_add_summary_entry(ARGS "backtrace")
+qt_configure_add_summary_entry(ARGS "cxx23_stacktrace")
 qt_configure_add_summary_entry(ARGS "doubleconversion")
 qt_configure_add_summary_entry(ARGS "system-doubleconversion")
+qt_configure_add_summary_entry(ARGS "forkfd_pidfd" CONDITION LINUX)
 qt_configure_add_summary_entry(ARGS "glib")
 qt_configure_add_summary_entry(ARGS "icu")
 qt_configure_add_summary_entry(ARGS "system-libb2")
 qt_configure_add_summary_entry(ARGS "mimetype-database")
-qt_configure_add_summary_entry(ARGS "cpp-winrt")
+qt_configure_add_summary_entry(ARGS "permissions")
+qt_configure_add_summary_entry(ARGS "ipc_posix" CONDITION UNIX)
 qt_configure_add_summary_entry(
     TYPE "firstAvailableFeature"
     ARGS "etw lttng ctf"
     MESSAGE "Tracing backend"
 )
+qt_configure_add_summary_entry(ARGS "openssl-hash")
 qt_configure_add_summary_section(NAME "Logging backends")
 qt_configure_add_summary_entry(ARGS "journald")
 qt_configure_add_summary_entry(ARGS "syslog")
@@ -990,26 +1000,11 @@ qt_configure_add_summary_entry(
 )
 qt_configure_add_summary_entry(ARGS "pcre2")
 qt_configure_add_summary_entry(ARGS "system-pcre2")
-qt_configure_add_summary_entry(
-    ARGS "forkfd_pidfd"
-    CONDITION LINUX
-)
-qt_configure_add_summary_entry(ARGS "permissions")
 qt_configure_end_summary_section() # end of "Qt Core" section
 qt_configure_add_report_entry(
     TYPE NOTE
     MESSAGE "journald, syslog or slog2 integration is enabled.  If your users intend to develop applications against this build, ensure that the IDEs they use either set QT_FORCE_STDERR_LOGGING to 1 or are able to read the logged output from journald, syslog or slog2."
     CONDITION QT_FEATURE_journald OR QT_FEATURE_syslog OR ( QNX AND QT_FEATURE_slog2 )
-)
-qt_configure_add_report_entry(
-    TYPE ERROR
-    MESSAGE "C++11 <random> is required and is missing or failed to compile."
-    CONDITION NOT TEST_cxx11_random
-)
-qt_configure_add_report_entry(
-    TYPE ERROR
-    MESSAGE "Your C library does not provide sscanf_l or snprintf_l.  You need to use libdouble-conversion for double/string conversion."
-    CONDITION INPUT_doubleconversion STREQUAL 'no' AND NOT TEST_xlocalescanprint
 )
 qt_configure_add_report_entry(
     TYPE ERROR

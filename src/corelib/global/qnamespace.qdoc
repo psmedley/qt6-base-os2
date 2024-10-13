@@ -84,9 +84,22 @@
     QCoreApplication::testAttribute().
 
 
+    \value [since 6.7] AA_QtQuickUseDefaultSizePolicy Qt Quick Layouts use the built-in size
+           policy of \l Item. For example, when this is set, \l Button fills the available
+           width, but has a fixed height. When this is not set, it will use the default
+           sizing behavior of the layout it's in, which is to use its implicit size as the
+           preferred size. This is explained in detail in \l {Specifying preferred size} and
+           \l {Size constraints}. When this is set, the default size policy of the item
+           with the layout can be overridden by explicitly setting
+           \l{Layout::fillWidth}{Layout.fillWidth} or
+           \l{Layout::fillHeight}{Layout.fillHeight}.
+
     \value AA_DontShowIconsInMenus Actions with the Icon property won't be
            shown in any menus unless specifically set by the
-           QAction::iconVisibleInMenu property.
+           QAction::iconVisibleInMenu property. The default value of this
+           attribute depends on the platform. To override the default
+           behavior, set the attribute after QGuiApplication has been
+           instantiated.
            Menus that are currently open or menus already created in the native
            \macos menubar \e{may not} pick up a change in this attribute. Changes
            in the QAction::iconVisibleInMenu property will always be picked up.
@@ -94,9 +107,11 @@
     \value AA_DontShowShortcutsInContextMenus Actions with the Shortcut property
            won't be shown in any shortcut menus unless specifically set by the
            QAction::shortcutVisibleInContextMenu property. This value was added
-           in Qt 5.10, and defaults to the preference reported by the implementation
-           of QPlatformIntegration::styleHint. To override the platform integration,
-           set this attribute after QCoreApplication has been instantiated.
+           in Qt 5.10, and is by default based on the value reported by
+           QStyleHints::showShortcutsInContextMenus(). To override the default
+           behavior, set the style hint before QCoreApplication has been
+           instantiated, or set this attribute after QCoreApplication has
+           been instantiated.
 
     \value AA_NativeWindows Ensures that widgets have native windows.
 
@@ -118,15 +133,15 @@
            set to true won't be used as a native menubar (e.g, the menubar at
            the top of the main screen on \macos).
 
-    \value AA_MacDontSwapCtrlAndMeta Keyboard shortcuts on \macos are typically
+    \value AA_MacDontSwapCtrlAndMeta Keyboard shortcuts on Apple platforms are typically
            based on the Command (or Cmd) keyboard modifier, represented by
            the ⌘ symbol. For example, the 'Copy' action is Command+C (⌘+C).
            To ease cross platform development Qt will by default remap Command
            to the Qt::ControlModifier, to align with other platforms. This
            allows creating keyboard shortcuts such as "Ctrl+J", which on
            \macos will then map to Command+J, as expected by \macos users. The
-           actual Control (or Ctrl) modifier on \macos, represented by ⌃, is
-           mapped to Qt::MetaModifier.
+           actual Control (or Ctrl) modifier on Apple platforms, represented by ⌃,
+           is mapped to Qt::MetaModifier.
 
            When this attribute is true Qt will not do the remapping, and pressing
            the Command modifier will result in Qt::MetaModifier, while pressing
@@ -189,9 +204,9 @@
 
     \value AA_UseStyleSheetPropagationInWidgetStyles By default, Qt Style Sheets
            disable regular QWidget palette and font propagation. When this flag
-           is enabled, font and palette changes propagate as though the user had
-           manually called the corresponding QWidget methods. See
-           \l{The Style Sheet Syntax#Inheritance}{The Style Sheet Syntax - Inheritance}
+           is enabled, font and palette changes done from a style sheet will propagate
+           a single time, when the style sheet is set.
+           See \l{The Style Sheet Syntax#Inheritance}{The Style Sheet Syntax - Inheritance}
            for more details.
            This value was added in Qt 5.7.
 
@@ -257,6 +272,12 @@
            text input widget gains focus on a system without a physical keyboard.
            Currently supported on the Windows platform only.
            This value was added in 5.15
+
+    \value AA_DontUseNativeMenuWindows Menu popup windows (e.g. context menus,
+           combo box menus, and non-native menubar menus) created while this
+           attribute is set to true will not be represented as native top
+           level windows, unless required by the implementation.
+           This value was added in Qt 6.8.
 
     \omitvalue AA_AttributeCount
     \omitvalue AA_EnableHighDpiScaling
@@ -615,7 +636,7 @@
            connection types, using a bitwise OR. When Qt::UniqueConnection is
            set, QObject::connect() will fail if the connection already exists
            (i.e. if the same signal is already connected to the same slot
-           for the same pair of objects). This flag was introduced in Qt 4.6.
+           for the same pair of objects).
 
     \value SingleShotConnection
            This is a flag that can be combined with any one of the above
@@ -978,8 +999,7 @@
 
     \value WA_Hover Forces Qt to generate paint events when the mouse
     enters or leaves the widget. This feature is typically used when
-    implementing custom styles; see the \l{widgets/styles}{Styles}
-    example for details.
+    implementing custom styles.
 
     \value WA_InputMethodEnabled Enables input methods for Asian languages.
     Must be set when creating custom text editing widgets.
@@ -1440,6 +1460,7 @@
     \value Key_Help
     \value Key_Direction_L
     \value Key_Direction_R
+
     \value Key_Space
     \value Key_Any
     \value Key_Exclam
@@ -1531,7 +1552,8 @@
     \value Key_twosuperior
     \value Key_threesuperior
     \value Key_acute
-    \value Key_mu
+    \value [since 6.7] Key_micro
+    \value Key_mu Deprecated alias for Key_micro
     \value Key_paragraph
     \value Key_periodcentered
     \value Key_cedilla
@@ -1576,6 +1598,7 @@
     \value Key_ssharp
     \value Key_division
     \value Key_ydiaeresis
+
     \value Key_Multi_key
     \value Key_Codeinput
     \value Key_SingleCandidate
@@ -2056,6 +2079,18 @@
     \value DefaultContextMenu  the widget's QWidget::contextMenuEvent() handler is called.
     \value ActionsContextMenu  the widget displays its QWidget::actions() as context menu.
     \value CustomContextMenu  the widget emits the QWidget::customContextMenuRequested() signal.
+*/
+
+/*!
+    \enum Qt::ContextMenuTrigger
+    \since 6.8
+
+    This enum type defines the mouse event used to trigger a context menu event.
+
+    \value Press context menu on mouse press event, default on UNIX systems.
+    \value Release context menu on mouse release event, default on Windows.
+
+    \sa QStyleHints::contextMenuTrigger
 */
 
 /*!
@@ -2768,8 +2803,7 @@
     \value CheckStateRole       This role is used to obtain the checked state of
                                 an item. (Qt::CheckState)
     \value InitialSortOrderRole This role is used to obtain the initial sort order
-                                of a header view section. (Qt::SortOrder). This
-                                role was introduced in Qt 4.8.
+                                of a header view section. (Qt::SortOrder).
 
     Accessibility roles (with associated types):
 
@@ -3214,6 +3248,26 @@
 */
 
 /*!
+    \enum Qt::TimerId
+    \since 6.8
+    \relates QObject
+    \relates QTimer
+    \relates QChronoTimer
+
+    This is used to represent timer IDs (for example, QTimer and QChronoTimer).
+    The underlying type is \c int. You can use \l qToUnderlying() to convert
+    Qt::TimerId to \c int.
+
+    \value Invalid Represents a no-op timer ID; its usage depends on the
+    context, for example, this is the value returned by QObject::startTimer()
+    to indicate it failed to start a timer; whereas QChronoTimer::id() returns
+    this value when the timer is inactive, that is, \c timer.isActive()
+    returns \c false.
+
+    \sa QTimer::id(), QChronoTimer::id(), QObject::startTimer()
+*/
+
+/*!
     \enum Qt::ScrollPhase
     \since 5.2
 
@@ -3360,6 +3414,8 @@
   \since 6.0
   \brief The QKeyCombination class stores a combination of a key with optional modifiers.
 
+  \compares equality
+
   The QKeyCombination class can be used to represent a combination of a key
   with zero or more keyboard modifiers.
 
@@ -3442,24 +3498,24 @@
 #endif
 
 /*!
-  \fn bool QKeyCombination::operator==(QKeyCombination lhs, QKeyCombination rhs) noexcept
+  \fn bool QKeyCombination::operator==(const QKeyCombination &lhs, const QKeyCombination &rhs)
 
   Returns \c true if \a lhs and \a rhs have the same combination
   of key and modifiers, and \c false otherwise.
 */
 
 /*!
-  \fn bool QKeyCombination::operator!=(QKeyCombination lhs, QKeyCombination rhs) noexcept
+  \fn bool QKeyCombination::operator!=(const QKeyCombination &lhs, const QKeyCombination &rhs)
 
   Returns \c true if \a lhs and \a rhs have different combinations
   of key and modifiers, otherwise \c false.
 */
 
 /*!
-  \fn QKeyCombination operator|(Qt::Modifier modifier, Qt::Key key) noexcept
-  \fn QKeyCombination operator|(Qt::KeyboardModifier modifier, Qt::Key key) noexcept
-  \fn QKeyCombination operator|(Qt::Key key, Qt::Modifier modifier) noexcept
-  \fn QKeyCombination operator|(Qt::Key key, Qt::KeyboardModifier modifier) noexcept
+  \fn QKeyCombination Qt::operator|(Qt::Modifier modifier, Qt::Key key) noexcept
+  \fn QKeyCombination Qt::operator|(Qt::KeyboardModifier modifier, Qt::Key key) noexcept
+  \fn QKeyCombination Qt::operator|(Qt::Key key, Qt::Modifier modifier) noexcept
+  \fn QKeyCombination Qt::operator|(Qt::Key key, Qt::KeyboardModifier modifier) noexcept
 
   \relates QKeyCombination
 
@@ -3468,10 +3524,10 @@
 */
 
 /*!
-  \fn QKeyCombination operator|(Qt::Modifiers modifiers, Qt::Key key) noexcept
-  \fn QKeyCombination operator|(Qt::KeyboardModifiers modifiers, Qt::Key key) noexcept
-  \fn QKeyCombination operator|(Qt::Key key, Qt::Modifiers modifiers) noexcept
-  \fn QKeyCombination operator|(Qt::Key key, Qt::KeyboardModifiers modifiers) noexcept
+  \fn QKeyCombination Qt::operator|(Qt::Modifiers modifiers, Qt::Key key) noexcept
+  \fn QKeyCombination Qt::operator|(Qt::KeyboardModifiers modifiers, Qt::Key key) noexcept
+  \fn QKeyCombination Qt::operator|(Qt::Key key, Qt::Modifiers modifiers) noexcept
+  \fn QKeyCombination Qt::operator|(Qt::Key key, Qt::KeyboardModifiers modifiers) noexcept
 
   \relates QKeyCombination
 
@@ -3480,10 +3536,10 @@
 */
 
 /*!
-  \fn QKeyCombination operator+(Qt::Modifier modifier, Qt::Key key) noexcept
-  \fn QKeyCombination operator+(Qt::KeyboardModifier modifier, Qt::Key key) noexcept
-  \fn QKeyCombination operator+(Qt::Key key, Qt::Modifier modifier) noexcept
-  \fn QKeyCombination operator+(Qt::Key key, Qt::KeyboardModifier modifier) noexcept
+  \fn QKeyCombination Qt::operator+(Qt::Modifier modifier, Qt::Key key) noexcept
+  \fn QKeyCombination Qt::operator+(Qt::KeyboardModifier modifier, Qt::Key key) noexcept
+  \fn QKeyCombination Qt::operator+(Qt::Key key, Qt::Modifier modifier) noexcept
+  \fn QKeyCombination Qt::operator+(Qt::Key key, Qt::KeyboardModifier modifier) noexcept
 
   \relates QKeyCombination
   \deprecated
@@ -3495,10 +3551,10 @@
 */
 
 /*!
-  \fn QKeyCombination operator+(Qt::Modifiers modifiers, Qt::Key key) noexcept
-  \fn QKeyCombination operator+(Qt::KeyboardModifiers modifiers, Qt::Key key) noexcept
-  \fn QKeyCombination operator+(Qt::Key key, Qt::Modifiers modifiers) noexcept
-  \fn QKeyCombination operator+(Qt::Key key, Qt::KeyboardModifiers modifiers) noexcept
+  \fn QKeyCombination Qt::operator+(Qt::Modifiers modifiers, Qt::Key key) noexcept
+  \fn QKeyCombination Qt::operator+(Qt::KeyboardModifiers modifiers, Qt::Key key) noexcept
+  \fn QKeyCombination Qt::operator+(Qt::Key key, Qt::Modifiers modifiers) noexcept
+  \fn QKeyCombination Qt::operator+(Qt::Key key, Qt::KeyboardModifiers modifiers) noexcept
 
   \relates QKeyCombination
   \deprecated

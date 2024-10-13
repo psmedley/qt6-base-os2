@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef SINGLE_FUNCTION_KEYWORD_H
 #define SINGLE_FUNCTION_KEYWORD_H
@@ -22,10 +22,7 @@ class SingleFunctionKeywordBeforeInline : public QObject
 public:
     inline SingleFunctionKeywordBeforeInline() {}
 
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_CLANG("-Wundefined-inline")
     Q_SIGNAL inline void mySignal();
-QT_WARNING_POP
 
     Q_SLOT inline void mySlot() { emit mySignal(); }
 };
@@ -36,10 +33,7 @@ class SingleFunctionKeywordAfterInline : public QObject
 public:
     inline SingleFunctionKeywordAfterInline() {}
 
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_CLANG("-Wundefined-inline")
     inline Q_SIGNAL void mySignal();
-QT_WARNING_POP
 
     inline Q_SLOT void mySlot() { emit mySignal(); }
 };

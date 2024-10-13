@@ -72,11 +72,6 @@ bool QWindowsApplication::setWinTabEnabled(bool enabled)
     return enabled ? ctx->initTablet() : ctx->disposeTablet();
 }
 
-bool QWindowsApplication::isDarkMode() const
-{
-    return QWindowsContext::isDarkMode();
-}
-
 QWindowsApplication::DarkModeHandling QWindowsApplication::darkModeHandling() const
 {
     return m_darkModeHandling;
@@ -143,7 +138,7 @@ QVariant QWindowsApplication::gpuList() const
     return result;
 }
 
-void QWindowsApplication::lightSystemPalette(QPalette &result) const
+void QWindowsApplication::populateLightSystemPalette(QPalette &result) const
 {
     result = QWindowsTheme::systemPalette(Qt::ColorScheme::Light);
 }

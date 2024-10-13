@@ -18,20 +18,25 @@
 #include "qlocale_p.h"
 #include "qstring.h"
 
+#if !defined(QT_SUPPORTS_INT128) && (defined(Q_CC_MSVC) && (_MSC_VER >= 1930) && __has_include(<__msvc_int128.hpp>))
+#include <__msvc_int128.hpp>
+#define QT_USE_MSVC_INT128
+#endif
+
 QT_BEGIN_NAMESPACE
+
+#if defined(QT_SUPPORTS_INT128)
+using qinternalint128 = qint128;
+using qinternaluint128 = quint128;
+#elif defined(QT_USE_MSVC_INT128)
+using qinternalint128 = std::_Signed128;
+using qinternaluint128 = std::_Unsigned128;
+#endif
 
 enum StrayCharacterMode {
     TrailingJunkProhibited,
     TrailingJunkAllowed,
     WhitespacesAllowed
-};
-
-template <typename T> struct QSimpleParsedNumber
-{
-    T result;
-    // When used < 0, -used is how much was used, but it was an error.
-    qsizetype used;
-    bool ok() const { return used > 0; }
 };
 
 // API note: this function can't process a number with more than 2.1 billion digits
@@ -44,11 +49,19 @@ void qt_doubleToAscii(double d, QLocaleData::DoubleForm form, int precision,
 
 [[nodiscard]] QString qulltoBasicLatin(qulonglong l, int base, bool negative);
 [[nodiscard]] QString qulltoa(qulonglong l, int base, const QStringView zero);
+[[nodiscard]] char *qulltoa2(char *p, qulonglong n, int base);
 [[nodiscard]] Q_CORE_EXPORT QString qdtoa(qreal d, int *decpt, int *sign);
 [[nodiscard]] QString qdtoBasicLatin(double d, QLocaleData::DoubleForm form,
                                      int precision, bool uppercase);
 [[nodiscard]] QByteArray qdtoAscii(double d, QLocaleData::DoubleForm form,
                                    int precision, bool uppercase);
+
+#if defined(QT_SUPPORTS_INT128) || defined(QT_USE_MSVC_INT128)
+[[nodiscard]] Q_CORE_EXPORT QString quint128toBasicLatin(qinternaluint128 number,
+                                                         int base = 10);
+[[nodiscard]] Q_CORE_EXPORT QString qint128toBasicLatin(qinternalint128 number,
+                                                        int base = 10);
+#endif
 
 [[nodiscard]] constexpr inline bool isZero(double d)
 {
@@ -68,7 +81,7 @@ void qt_doubleToAscii(double d, QLocaleData::DoubleForm form, int precision,
 template <typename UcsInt>
 [[nodiscard]] inline UcsInt unicodeForDigit(uint digit, UcsInt zero)
 {
-    // Must match QLocaleData::numericToCLocale()'s digit-digestion.
+    // Must match qlocale.cpp's NumberTokenizer's digit-digestion.
     Q_ASSERT(digit < 10);
     if (!digit)
         return zero;
@@ -90,7 +103,8 @@ template <typename UcsInt>
     return qstrntod(s00, len, se, ok);
 }
 
-[[nodiscard]] QSimpleParsedNumber<qlonglong> qstrntoll(const char *nptr, qsizetype size, int base);
+[[nodiscard]] Q_AUTOTEST_EXPORT
+QSimpleParsedNumber<qlonglong> qstrntoll(const char *nptr, qsizetype size, int base);
 [[nodiscard]] QSimpleParsedNumber<qulonglong> qstrntoull(const char *nptr, qsizetype size, int base);
 
 QT_END_NAMESPACE

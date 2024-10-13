@@ -6,6 +6,8 @@
 #include "qdeadlinetimer.h"
 #include "qcoreapplication.h"
 
+#include <QtCore/qpointer.h>
+
 #include <algorithm>
 #include <memory>
 
@@ -87,7 +89,7 @@ void QThreadPoolThread::run()
             if (manager->queue.isEmpty())
                 break;
 
-            QueuePage *page = manager->queue.first();
+            QueuePage *page = manager->queue.constFirst();
             r = page->pop();
 
             if (page->isFinished()) {
@@ -210,7 +212,7 @@ void QThreadPoolPrivate::tryToStartMoreThreads()
 {
     // try to push tasks on the queue to any available threads
     while (!queue.isEmpty()) {
-        QueuePage *page = queue.first();
+        QueuePage *page = queue.constFirst();
         if (!tryStart(page->first()))
             break;
 
@@ -256,7 +258,7 @@ void QThreadPoolPrivate::startThread(QRunnable *runnable)
 /*!
     \internal
 
-    Helper function only to be called from waitForDone(int)
+    Helper function only to be called from waitForDone()
 
     Deletes all current threads.
 */
@@ -283,22 +285,17 @@ void QThreadPoolPrivate::reset()
 /*!
     \internal
 
-    Helper function only to be called from waitForDone(int)
+    Helper function only to be called from the public waitForDone()
 */
 bool QThreadPoolPrivate::waitForDone(const QDeadlineTimer &timer)
 {
+    QMutexLocker locker(&mutex);
     while (!(queue.isEmpty() && activeThreads == 0) && !timer.hasExpired())
         noActiveThreads.wait(&mutex, timer);
 
-    return queue.isEmpty() && activeThreads == 0;
-}
-
-bool QThreadPoolPrivate::waitForDone(int msecs)
-{
-    QMutexLocker locker(&mutex);
-    QDeadlineTimer timer(msecs);
-    if (!waitForDone(timer))
+    if (!queue.isEmpty() || activeThreads)
         return false;
+
     reset();
     // New jobs might have started during reset, but return anyway
     // as the active thread and task count did reach 0 once, and
@@ -484,8 +481,13 @@ QThreadPool *QThreadPoolPrivate::qtGuiInstance()
     Q_CONSTINIT static QBasicMutex theMutex;
 
     const QMutexLocker locker(&theMutex);
-    if (guiInstance.isNull() && !QCoreApplication::closingDown())
+    if (guiInstance.isNull() && !QCoreApplication::closingDown()) {
         guiInstance = new QThreadPool();
+        // Limit max thread to avoid too many parallel threads.
+        // We are not optimized for much more than 4 or 8 threads.
+        if (guiInstance && guiInstance->maxThreadCount() > 4)
+            guiInstance->setMaxThreadCount(qBound(4, guiInstance->maxThreadCount() / 2, 8));
+    }
     return guiInstance;
 }
 
@@ -517,20 +519,21 @@ void QThreadPool::start(QRunnable *runnable, int priority)
 }
 
 /*!
+    \fn template<typename Callable, QRunnable::if_callable<Callable>> void QThreadPool::start(Callable &&callableToRun, int priority)
     \overload
     \since 5.15
 
-    Reserves a thread and uses it to run \a functionToRun, unless this thread will
+    Reserves a thread and uses it to run \a callableToRun, unless this thread will
     make the current thread count exceed maxThreadCount().  In that case,
-    \a functionToRun is added to a run queue instead. The \a priority argument can
+    \a callableToRun is added to a run queue instead. The \a priority argument can
     be used to control the run queue's order of execution.
+
+    \note This function participates in overload resolution only if \c Callable
+    is a function or function object which can be called with zero arguments.
+
+    \note In Qt version prior to 6.6, this function took std::function<void()>,
+    and therefore couldn't handle move-only callables.
 */
-void QThreadPool::start(std::function<void()> functionToRun, int priority)
-{
-    if (!functionToRun)
-        return;
-    start(QRunnable::create(std::move(functionToRun)), priority);
-}
 
 /*!
     Attempts to reserve a thread to run \a runnable.
@@ -562,30 +565,21 @@ bool QThreadPool::tryStart(QRunnable *runnable)
 }
 
 /*!
+    \fn template<typename Callable, QRunnable::if_callable<Callable>> bool QThreadPool::tryStart(Callable &&callableToRun)
     \overload
     \since 5.15
-    Attempts to reserve a thread to run \a functionToRun.
+    Attempts to reserve a thread to run \a callableToRun.
 
     If no threads are available at the time of calling, then this function
-    does nothing and returns \c false.  Otherwise, \a functionToRun is run immediately
+    does nothing and returns \c false.  Otherwise, \a callableToRun is run immediately
     using one available thread and this function returns \c true.
+
+    \note This function participates in overload resolution only if \c Callable
+    is a function or function object which can be called with zero arguments.
+
+    \note In Qt version prior to 6.6, this function took std::function<void()>,
+    and therefore couldn't handle move-only callables.
 */
-bool QThreadPool::tryStart(std::function<void()> functionToRun)
-{
-    if (!functionToRun)
-        return false;
-
-    Q_D(QThreadPool);
-    QMutexLocker locker(&d->mutex);
-    if (!d->allThreads.isEmpty() && d->areAllThreadsActive())
-        return false;
-
-    QRunnable *runnable = QRunnable::create(std::move(functionToRun));
-    if (d->tryStart(runnable))
-        return true;
-    delete runnable;
-    return false;
-}
 
 /*! \property QThreadPool::expiryTimeout
     \brief the thread expiry timeout value in milliseconds.
@@ -604,18 +598,17 @@ bool QThreadPool::tryStart(std::function<void()> functionToRun)
 
 int QThreadPool::expiryTimeout() const
 {
+    using namespace std::chrono;
     Q_D(const QThreadPool);
     QMutexLocker locker(&d->mutex);
-    return d->expiryTimeout;
+    return duration_cast<milliseconds>(d->expiryTimeout).count();
 }
 
 void QThreadPool::setExpiryTimeout(int expiryTimeout)
 {
     Q_D(QThreadPool);
     QMutexLocker locker(&d->mutex);
-    if (d->expiryTimeout == expiryTimeout)
-        return;
-    d->expiryTimeout = expiryTimeout;
+    d->expiryTimeout = std::chrono::milliseconds(expiryTimeout);
 }
 
 /*! \property QThreadPool::maxThreadCount
@@ -799,30 +792,39 @@ void QThreadPool::startOnReservedThread(QRunnable *runnable)
 }
 
 /*!
+    \fn template<typename Callable, QRunnable::if_callable<Callable>> void QThreadPool::startOnReservedThread(Callable &&callableToRun)
     \overload
     \since 6.3
 
     Releases a thread previously reserved with reserveThread() and uses it
-    to run \a functionToRun.
-*/
-void QThreadPool::startOnReservedThread(std::function<void()> functionToRun)
-{
-    if (!functionToRun)
-        return releaseThread();
+    to run \a callableToRun.
 
-    startOnReservedThread(QRunnable::create(std::move(functionToRun)));
-}
+    \note This function participates in overload resolution only if \c Callable
+    is a function or function object which can be called with zero arguments.
+
+    \note In Qt version prior to 6.6, this function took std::function<void()>,
+    and therefore couldn't handle move-only callables.
+*/
 
 /*!
+    \fn bool QThreadPool::waitForDone(int msecs)
     Waits up to \a msecs milliseconds for all threads to exit and removes all
     threads from the thread pool. Returns \c true if all threads were removed;
-    otherwise it returns \c false. If \a msecs is -1 (the default), the timeout
-    is ignored (waits for the last thread to exit).
+    otherwise it returns \c false. If \a msecs is -1, this function waits for
+    the last thread to exit.
 */
-bool QThreadPool::waitForDone(int msecs)
+
+/*!
+    \since 6.8
+
+    Waits until \a deadline expires for all threads to exit and removes all
+    threads from the thread pool. Returns \c true if all threads were removed;
+    otherwise it returns \c false.
+*/
+bool QThreadPool::waitForDone(QDeadlineTimer deadline)
 {
     Q_D(QThreadPool);
-    return d->waitForDone(msecs);
+    return d->waitForDone(deadline);
 }
 
 /*!

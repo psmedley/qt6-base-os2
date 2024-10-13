@@ -2,6 +2,9 @@
 # due to required Qt modules being missing.
 !isEmpty(QMAKE_FAILED_REQUIREMENTS): return()
 
+# hardcoded defaults
+QT_CONFIG *= c99 c11 c++11 c++14 c++1z c++17
+
 qtConfig(thread): CONFIG *= thread
 
 #handle defines
@@ -63,6 +66,18 @@ unix {
     else:contains(QT_CONFIG, reduce_relocations):!contains(TEMPLATE, .*lib): {
         QMAKE_CFLAGS += $$QMAKE_CFLAGS_PIC
         QMAKE_CXXFLAGS += $$QMAKE_CFLAGS_PIC
+    }
+}
+
+# Load the entrypoint module if requested
+entrypoint {
+    win32 {
+        !console:contains(TEMPLATE, ".*app"): \
+            QT_PRIVATE += entrypoint_private
+    } else:uikit {
+        qt_depends = $$resolve_depends(QT, "QT.")
+        !watchos:equals(TEMPLATE, app):contains(qt_depends, gui(-private)?): \
+            QT_PRIVATE += entrypoint_private
     }
 }
 

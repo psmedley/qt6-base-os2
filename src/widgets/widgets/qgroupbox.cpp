@@ -22,6 +22,7 @@
 #include <qpa/qplatformtheme.h>
 
 #include "qdebug.h"
+#include <QtCore/qpointer.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -132,9 +133,9 @@ void QGroupBoxPrivate::click()
     widgets). The following example shows how we can set up a
     QGroupBox with a layout:
 
-    \snippet widgets/groupbox/window.cpp 2
+    \snippet code/src_gui_widgets_qgroupbox.cpp Set up QGroupBox with layout
 
-    \sa QButtonGroup, {Group Box Example}
+    \sa QButtonGroup
 */
 
 
@@ -463,9 +464,9 @@ QSize QGroupBox::minimumSizeHint() const
     int baseWidth = metrics.horizontalAdvance(d->title) + metrics.horizontalAdvance(u' ');
     int baseHeight = metrics.height();
     if (d->checkable) {
-        baseWidth += style()->pixelMetric(QStyle::PM_IndicatorWidth, &option);
-        baseWidth += style()->pixelMetric(QStyle::PM_CheckBoxLabelSpacing, &option);
-        baseHeight = qMax(baseHeight, style()->pixelMetric(QStyle::PM_IndicatorHeight, &option));
+        baseWidth += style()->pixelMetric(QStyle::PM_IndicatorWidth, &option, this);
+        baseWidth += style()->pixelMetric(QStyle::PM_CheckBoxLabelSpacing, &option, this);
+        baseHeight = qMax(baseHeight, style()->pixelMetric(QStyle::PM_IndicatorHeight, &option, this));
     }
 
     QSize size = style()->sizeFromContents(QStyle::CT_GroupBox, &option, QSize(baseWidth, baseHeight), this);

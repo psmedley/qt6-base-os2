@@ -5,6 +5,10 @@
 # ${module_headers} with a custom set of defines. This makes sure our public headers
 # are self-contained, and also compile with more strict compiler options.
 function(qt_internal_add_headersclean_target module_target module_headers)
+    if(INPUT_headersclean AND WASM)
+        message(FATAL_ERROR "The headersclean targets are not supported on WASM platform.")
+    endif()
+
     get_target_property(no_headersclean_check ${module_target} _qt_no_headersclean_check)
     if(no_headersclean_check)
         return()
@@ -23,6 +27,7 @@ function(qt_internal_add_headersclean_target module_target module_headers)
                  -DQT_NO_CAST_FROM_ASCII
                  -DQT_NO_URL_CAST_FROM_STRING
                  -DQT_NO_CAST_FROM_BYTEARRAY
+                 -DQT_NO_CONTEXTLESS_CONNECT
                  -DQT_NO_KEYWORDS
                  -DQT_TYPESAFE_FLAGS
                  -DQT_USE_QSTRINGBUILDER
@@ -100,18 +105,19 @@ function(qt_internal_add_headersclean_target module_target module_headers)
 
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU"
             OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang|IntelLLVM")
-        # Turn on some extra warnings not found in -Wall -Wextra.
 
-        set(hcleanFLAGS -Wall -Wextra -Werror -Woverloaded-virtual -Wshadow -Wundef -Wfloat-equal
-            -Wnon-virtual-dtor -Wpointer-arith -Wformat-security -Wno-long-long -Wno-variadic-macros
-            -pedantic-errors)
+        # Compile header in strict C++20 mode. Enable further warnings.
+        set(hcleanFLAGS -std=c++2a
+            -Wall -Wextra -Werror -pedantic-errors
+            -Woverloaded-virtual -Wshadow -Wundef -Wfloat-equal
+            -Wnon-virtual-dtor -Wpointer-arith -Wformat-security
+            -Wchar-subscripts -Wold-style-cast
+            -Wredundant-decls # QTBUG-115583
+            -fno-operator-names)
 
         if(QT_FEATURE_reduce_relocations AND UNIX)
             list(APPEND hcleanFLAGS -fPIC)
         endif()
-
-        # options accepted by GCC and Clang
-        list(APPEND hcleanFLAGS -Wchar-subscripts -Wold-style-cast)
 
         if (NOT ((TEST_architecture_arch STREQUAL arm)
                 OR (TEST_architecture_arch STREQUAL mips)))
@@ -119,21 +125,14 @@ function(qt_internal_add_headersclean_target module_target module_headers)
         endif()
 
         if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-            list(APPEND hcleanFLAGS -Wzero-as-null-pointer-constant)
-            if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 4.5)
-                list(APPEND hcleanFLAGS -Wdouble-promotion)
-            endif()
-            if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 4.9)
-                list(APPEND hcleanFLAGS -Wfloat-conversion)
-            endif()
+            list(APPEND hcleanFLAGS -Wzero-as-null-pointer-constant
+                -Wdouble-promotion -Wfloat-conversion)
         endif()
 
         if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang|IntelLLVM")
-            list(APPEND hcleanFLAGS -Wshorten-64-to-32)
+            list(APPEND hcleanFLAGS -Wshorten-64-to-32
+                -Wweak-vtables)
         endif()
-
-        # Use strict mode C++20, with no GNU extensions (see -pedantic-errors above).
-        list(APPEND hcleanFLAGS -std=c++2a)
 
         separate_arguments(cxx_flags NATIVE_COMMAND ${CMAKE_CXX_FLAGS})
 
@@ -150,10 +149,7 @@ function(qt_internal_add_headersclean_target module_target module_headers)
             # If additional package prefixes are provided, we consider they can contain frameworks
             # as well.
             foreach(prefix IN LISTS _qt_additional_packages_prefix_paths)
-                if(prefix MATCHES "/lib/cmake$") # Cut CMake files path
-                    string(APPEND prefix "/../..")
-                endif()
-                get_filename_component(prefix "${prefix}" ABSOLUTE)
+                __qt_internal_reverse_prefix_path_from_cmake_dir(path "${path}")
 
                 set(libdir "${prefix}/${INSTALL_LIBDIR}")
                 if(EXISTS "${libdir}")
@@ -181,9 +177,10 @@ function(qt_internal_add_headersclean_target module_target module_headers)
         )
         set(input_header_path_type ABSOLUTE)
     elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-        # -Za would enable strict standards behavior, but we can't add it because
-        # <windows.h> and <GL.h> violate the standards.
-        set(hcleanFLAGS -std:c++latest -Zc:__cplusplus -WX -W3)
+        # Note we can't enable -Za, as it does not support certain key Microsoft SDK header files
+        # we use. Microsoft suggests to use /permissive- instead, which is implicity set by
+        # -std:c++latest.
+        set(hcleanFLAGS -std:c++latest -Zc:__cplusplus -WX -W4 -EHsc)
 
         # Because we now add `-DNOMINMAX` to `PlatformCommonInternal`.
         set(hcleanUDEFS -UNOMINMAX)

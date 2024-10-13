@@ -42,6 +42,7 @@ typedef QPair<qreal, qreal> QDpi;
 
 class Q_GUI_EXPORT QPlatformScreen
 {
+    Q_GADGET
     Q_DECLARE_PRIVATE(QPlatformScreen)
 
 public:
@@ -132,7 +133,7 @@ protected:
     QScopedPointer<QPlatformScreenPrivate> d_ptr;
 
 private:
-    friend class QScreenPrivate;
+    friend class QScreen;
 };
 
 // Qt doesn't currently support running with no platform screen

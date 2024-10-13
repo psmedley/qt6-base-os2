@@ -349,8 +349,10 @@ int QTextDocumentPrivate::insert_block(int pos, uint strPos, int format, int blo
     QTextBlockGroup *group = qobject_cast<QTextBlockGroup *>(objectForFormat(blockFormat));
     if (group) {
         group->blockInserted(QTextBlock(this, b));
-        docChangeOldLength--;
-        docChangeLength--;
+        if (command != QTextUndoCommand::BlockDeleted) {
+            docChangeOldLength--;
+            docChangeLength--;
+        }
     }
 
     QTextFrame *frame = qobject_cast<QTextFrame *>(objectForFormat(formats.format(format)));
@@ -443,7 +445,7 @@ void QTextDocumentPrivate::insert(int pos, int strPos, int strLength, int format
     finishEdit();
 }
 
-void QTextDocumentPrivate::insert(int pos, const QString &str, int format)
+void QTextDocumentPrivate::insert(int pos, QStringView str, int format)
 {
     if (str.size() == 0)
         return;

@@ -7,13 +7,13 @@
 
 #include <QtCore/QJniEnvironment>
 #include <QtCore/QSet>
+#include <QtCore/qjnitypes.h>
 
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_JNI_CLASS(TimeZone, "java/util/TimeZone");
 Q_DECLARE_JNI_CLASS(Locale, "java/util/Locale");
 Q_DECLARE_JNI_CLASS(Date, "java/util/Date");
-Q_DECLARE_JNI_TYPE(StringArray, "[Ljava/lang/String;")
 
 /*
     Private
@@ -31,7 +31,7 @@ QAndroidTimeZonePrivate::QAndroidTimeZonePrivate()
 {
     // Keep in sync with systemTimeZoneId():
     androidTimeZone = QJniObject::callStaticMethod<QtJniTypes::TimeZone>(
-                          QtJniTypes::className<QtJniTypes::TimeZone>(), "getDefault");
+                          QtJniTypes::Traits<QtJniTypes::TimeZone>::className(), "getDefault");
     const QJniObject id = androidTimeZone.callMethod<jstring>("getID");
     m_id = id.toString().toUtf8();
 }
@@ -59,7 +59,7 @@ static QString getDisplayName(QJniObject zone, jint style, jboolean dst,
 {
     QJniObject jbcpTag = QJniObject::fromString(locale.bcp47Name());
     QJniObject jlocale = QJniObject::callStaticMethod<QtJniTypes::Locale>(
-                QtJniTypes::className<QtJniTypes::Locale>(), "forLanguageTag",
+                QtJniTypes::Traits<QtJniTypes::Locale>::className(), "forLanguageTag",
                 jbcpTag.object<jstring>());
 
     return zone.callMethod<jstring>("getDisplayName", dst, style,
@@ -70,7 +70,7 @@ void QAndroidTimeZonePrivate::init(const QByteArray &ianaId)
 {
     const QString iana = QString::fromUtf8(ianaId);
     androidTimeZone = QJniObject::callStaticMethod<QtJniTypes::TimeZone>(
-        QtJniTypes::className<QtJniTypes::TimeZone>(), "getTimeZone",
+        QtJniTypes::Traits<QtJniTypes::TimeZone>::className(), "getTimeZone",
         QJniObject::fromString(iana).object<jstring>());
 
     // The ID or display name of the zone we've got, if it looks like what we asked for:
@@ -181,16 +181,11 @@ bool QAndroidTimeZonePrivate::isDaylightTime(qint64 atMSecsSinceEpoch) const
 QTimeZonePrivate::Data QAndroidTimeZonePrivate::data(qint64 forMSecsSinceEpoch) const
 {
     if (androidTimeZone.isValid()) {
-        Data data;
-        data.atMSecsSinceEpoch = forMSecsSinceEpoch;
-        data.standardTimeOffset = standardTimeOffset(forMSecsSinceEpoch);
-        data.offsetFromUtc = offsetFromUtc(forMSecsSinceEpoch);
-        data.daylightTimeOffset = data.offsetFromUtc - data.standardTimeOffset;
-        data.abbreviation = abbreviation(forMSecsSinceEpoch);
-        return data;
-    } else {
-        return invalidData();
+        return Data(abbreviation(forMSecsSinceEpoch), forMSecsSinceEpoch,
+                    offsetFromUtc(forMSecsSinceEpoch),
+                    standardTimeOffset(forMSecsSinceEpoch));
     }
+    return {};
 }
 
 // java.util.TimeZone does not directly provide transitions,
@@ -200,30 +195,27 @@ QByteArray QAndroidTimeZonePrivate::systemTimeZoneId() const
 {
     // Keep in sync with default constructor:
     QJniObject androidSystemTimeZone = QJniObject::callStaticMethod<QtJniTypes::TimeZone>(
-                              QtJniTypes::className<QtJniTypes::TimeZone>(), "getDefault");
+                              QtJniTypes::Traits<QtJniTypes::TimeZone>::className(), "getDefault");
     const QJniObject id = androidSystemTimeZone.callMethod<jstring>("getID");
     return id.toString().toUtf8();
 }
 
+bool QAndroidTimeZonePrivate::isTimeZoneIdAvailable(const QByteArray &ianaId) const
+{
+    QAndroidTimeZonePrivate probe(ianaId);
+    return probe.isValid();
+}
+
 QList<QByteArray> QAndroidTimeZonePrivate::availableTimeZoneIds() const
 {
+    using namespace QtJniTypes;
+
+    const QJniArray androidAvailableIdList = TimeZone::callStaticMethod<String[]>("getAvailableIDs");
+
     QList<QByteArray> availableTimeZoneIdList;
-    QJniObject androidAvailableIdList = QJniObject::callStaticMethod<QtJniTypes::StringArray>(
-                             QtJniTypes::className<QtJniTypes::TimeZone>(), "getAvailableIDs");
-
-    QJniEnvironment jniEnv;
-    int androidTZcount = jniEnv->GetArrayLength(androidAvailableIdList.object<jarray>());
-
-    // need separate jobject and QJniObject here so that we can delete (DeleteLocalRef) the reference to the jobject
-    // (or else the JNI reference table fills after 512 entries from GetObjectArrayElement)
-    jobject androidTZobject;
-    QJniObject androidTZ;
-    for (int i = 0; i < androidTZcount; i++) {
-        androidTZobject = jniEnv->GetObjectArrayElement(androidAvailableIdList.object<jobjectArray>(), i);
-        androidTZ = androidTZobject;
-        availableTimeZoneIdList.append(androidTZ.toString().toUtf8());
-        jniEnv->DeleteLocalRef(androidTZobject);
-    }
+    availableTimeZoneIdList.reserve(androidAvailableIdList.size());
+    for (const auto &id : androidAvailableIdList)
+        availableTimeZoneIdList.append(id.toString().toUtf8());
 
     return availableTimeZoneIdList;
 }

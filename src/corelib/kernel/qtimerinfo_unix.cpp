@@ -10,12 +10,11 @@
 #include "private/qobject_p.h"
 #include "private/qabstracteventdispatcher_p.h"
 
-#ifdef QTIMERINFO_DEBUG
-#  include <QDebug>
-#  include <QThread>
-#endif
-
 #include <sys/times.h>
+
+using namespace std::chrono;
+// Implied by "using namespace std::chrono", but be explicit about it, for grep-ability
+using namespace std::chrono_literals;
 
 QT_BEGIN_NAMESPACE
 
@@ -26,179 +25,75 @@ Q_CORE_EXPORT bool qt_disable_lowpriority_timers=false;
  * timerBitVec array is used for keeping track of timer identifiers.
  */
 
-QTimerInfoList::QTimerInfoList()
+QTimerInfoList::QTimerInfoList() = default;
+
+steady_clock::time_point QTimerInfoList::updateCurrentTime() const
 {
-#if (_POSIX_MONOTONIC_CLOCK-0 <= 0) && !defined(Q_OS_MAC)
-    if (!QElapsedTimer::isMonotonic()) {
-        // not using monotonic timers, initialize the timeChanged() machinery
-        previousTime = qt_gettime();
-
-        tms unused;
-        previousTicks = times(&unused);
-
-        ticksPerSecond = sysconf(_SC_CLK_TCK);
-        msPerTick = 1000/ticksPerSecond;
-    } else {
-        // detected monotonic timers
-        previousTime.tv_sec = previousTime.tv_nsec = 0;
-        previousTicks = 0;
-        ticksPerSecond = 0;
-        msPerTick = 0;
-    }
-#endif
-
-    firstTimerInfo = nullptr;
-
-#ifdef Q_OS_OS2
-    zeroTimers = 0;
-#endif
+    currentTime = steady_clock::now();
+    return currentTime;
 }
 
-timespec QTimerInfoList::updateCurrentTime()
-{
-    return (currentTime = qt_gettime());
-}
+/*! \internal
+    Updates the currentTime member to the current time, and returns \c true if
+    the first timer's timeout is in the future (after currentTime).
 
-#if ((_POSIX_MONOTONIC_CLOCK-0 <= 0) && !defined(Q_OS_MAC) && !defined(Q_OS_INTEGRITY)) || defined(QT_BOOTSTRAPPED)
-
-timespec qAbsTimespec(const timespec &t)
-{
-    timespec tmp = t;
-    if (tmp.tv_sec < 0) {
-        tmp.tv_sec = -tmp.tv_sec - 1;
-        tmp.tv_nsec -= 1000000000;
-    }
-    if (tmp.tv_sec == 0 && tmp.tv_nsec < 0) {
-        tmp.tv_nsec = -tmp.tv_nsec;
-    }
-    return normalizedTimespec(tmp);
-}
-
-/*
-  Returns \c true if the real time clock has changed by more than 10%
-  relative to the processor time since the last time this function was
-  called. This presumably means that the system time has been changed.
-
-  If /a delta is nonzero, delta is set to our best guess at how much the system clock was changed.
+    The list is sorted by timeout, thus it's enough to check the first timer only.
 */
-bool QTimerInfoList::timeChanged(timespec *delta)
+bool QTimerInfoList::hasPendingTimers()
 {
-    struct tms unused;
-    clock_t currentTicks = times(&unused);
-
-    clock_t elapsedTicks = currentTicks - previousTicks;
-    timespec elapsedTime = currentTime - previousTime;
-
-    timespec elapsedTimeTicks;
-    elapsedTimeTicks.tv_sec = elapsedTicks / ticksPerSecond;
-    elapsedTimeTicks.tv_nsec = (((elapsedTicks * 1000) / ticksPerSecond) % 1000) * 1000 * 1000;
-
-    timespec dummy;
-    if (!delta)
-        delta = &dummy;
-    *delta = elapsedTime - elapsedTimeTicks;
-
-    previousTicks = currentTicks;
-    previousTime = currentTime;
-
-    // If tick drift is more than 10% off compared to realtime, we assume that the clock has
-    // been set. Of course, we have to allow for the tick granularity as well.
-    timespec tickGranularity;
-    tickGranularity.tv_sec = 0;
-    tickGranularity.tv_nsec = msPerTick * 1000 * 1000;
-    return elapsedTimeTicks < ((qAbsTimespec(*delta) - tickGranularity) * 10);
+    if (timers.isEmpty())
+        return false;
+    return updateCurrentTime() < timers.at(0)->timeout;
 }
 
-/*
-  repair broken timer
-*/
-void QTimerInfoList::timerRepair(const timespec &diff)
-{
-    // repair all timers
-    for (int i = 0; i < size(); ++i) {
-        QTimerInfo *t = at(i);
-        t->timeout = t->timeout + diff;
-    }
-}
-
-void QTimerInfoList::repairTimersIfNeeded()
-{
-    if (QElapsedTimer::isMonotonic())
-        return;
-    timespec delta;
-    if (timeChanged(&delta))
-        timerRepair(delta);
-}
-
-#else // !(_POSIX_MONOTONIC_CLOCK-0 <= 0) && !defined(QT_BOOTSTRAPPED)
-
-void QTimerInfoList::repairTimersIfNeeded()
-{
-}
-
-#endif
+static bool byTimeout(const QTimerInfo *a, const QTimerInfo *b)
+{ return a->timeout < b->timeout; };
 
 /*
   insert timer info into list
 */
 void QTimerInfoList::timerInsert(QTimerInfo *ti)
 {
-    int index = size();
-    while (index--) {
-        const QTimerInfo * const t = at(index);
-        if (!(ti->timeout < t->timeout))
-            break;
-    }
-    insert(index+1, ti);
+    timers.insert(std::upper_bound(timers.cbegin(), timers.cend(), ti, byTimeout),
+                  ti);
 }
 
-inline timespec &operator+=(timespec &t1, int ms)
-{
-    t1.tv_sec += ms / 1000;
-    t1.tv_nsec += ms % 1000 * 1000 * 1000;
-    return normalizedTimespec(t1);
-}
-
-inline timespec operator+(const timespec &t1, int ms)
-{
-    timespec t2 = t1;
-    return t2 += ms;
-}
-
-static constexpr timespec roundToMillisecond(timespec val)
+static constexpr milliseconds roundToMillisecond(nanoseconds val)
 {
     // always round up
     // worst case scenario is that the first trigger of a 1-ms timer is 0.999 ms late
-
-    int ns = val.tv_nsec % (1000 * 1000);
-    if (ns)
-        val.tv_nsec += 1000 * 1000 - ns;
-    return normalizedTimespec(val);
+    return ceil<milliseconds>(val);
 }
-static_assert(roundToMillisecond({0, 0}) == timespec{0, 0});
-static_assert(roundToMillisecond({0, 1}) == timespec{0, 1'000'000});
-static_assert(roundToMillisecond({0, 999'999}) == timespec{0, 1'000'000});
-static_assert(roundToMillisecond({0, 1'000'000}) == timespec{0, 1'000'000});
-static_assert(roundToMillisecond({0, 999'999'999}) == timespec{1, 0});
-static_assert(roundToMillisecond({1, 0}) == timespec{1, 0});
 
-#ifdef QTIMERINFO_DEBUG
-QDebug operator<<(QDebug s, timespec tv)
+static_assert(roundToMillisecond(0ns) == 0ms);
+static_assert(roundToMillisecond(1ns) == 1ms);
+static_assert(roundToMillisecond(999'999ns) == 1ms);
+static_assert(roundToMillisecond(1'000'000ns) == 1ms);
+static_assert(roundToMillisecond(999'000'000ns) == 999ms);
+static_assert(roundToMillisecond(999'000'001ns) == 1000ms);
+static_assert(roundToMillisecond(999'999'999ns) == 1000ms);
+static_assert(roundToMillisecond(1s) == 1s);
+
+static constexpr seconds roundToSecs(nanoseconds interval)
 {
-    QDebugStateSaver saver(s);
-    s.nospace() << tv.tv_sec << "." << qSetFieldWidth(6) << qSetPadChar(QChar(48)) << tv.tv_nsec << Qt::reset;
-    return s;
-}
-QDebug operator<<(QDebug s, Qt::TimerType t)
-{
-    QDebugStateSaver saver(s);
-    s << (t == Qt::PreciseTimer ? "P" :
-          t == Qt::CoarseTimer ? "C" : "VC");
-    return s;
-}
-#endif
+    // The very coarse timer is based on full second precision, so we want to
+    // round the interval to the closest second, rounding 500ms up to 1s.
+    //
+    // std::chrono::round() wouldn't work with all multiples of 500 because for the
+    // middle point it would round to even:
+    // value  round()  wanted
+    // 500      0        1
+    // 1500     2        2
+    // 2500     2        3
 
-static void calculateCoarseTimerTimeout(QTimerInfo *t, timespec currentTime)
+    auto secs = duration_cast<seconds>(interval);
+    const nanoseconds frac = interval - secs;
+    if (frac >= 500ms)
+        ++secs;
+    return secs;
+}
+
+static void calculateCoarseTimerTimeout(QTimerInfo *t, steady_clock::time_point now)
 {
     // The coarse timer works like this:
     //  - interval under 40 ms: round to even
@@ -216,216 +111,186 @@ static void calculateCoarseTimerTimeout(QTimerInfo *t, timespec currentTime)
     //
     // The objective is to make most timers wake up at the same time, thereby reducing CPU wakeups.
 
-    uint interval = uint(t->interval);
-    Q_ASSERT(interval >= 20);
+    Q_ASSERT(t->interval >= 20ms);
+
+    const auto timeoutInSecs = time_point_cast<seconds>(t->timeout);
+
+    auto recalculate = [&](const milliseconds frac) {
+        t->timeout = timeoutInSecs + frac;
+        if (t->timeout < now)
+            t->timeout += t->interval;
+    };
+
     // Calculate how much we can round and still keep within 5% error
-    uint absMaxRounding = interval / 20;
+    milliseconds interval = roundToMillisecond(t->interval);
+    const milliseconds absMaxRounding = interval / 20;
 
-    using namespace std::chrono;
-    uint msec = duration_cast<milliseconds>(nanoseconds{t->timeout.tv_nsec}).count();
+    auto fracMsec = duration_cast<milliseconds>(t->timeout - timeoutInSecs);
 
-    if (interval < 100 && interval != 25 && interval != 50 && interval != 75) {
+    if (interval < 100ms && interval != 25ms && interval != 50ms && interval != 75ms) {
+        auto fracCount = fracMsec.count();
         // special mode for timers of less than 100 ms
-        if (interval < 50) {
+        if (interval < 50ms) {
             // round to even
             // round towards multiples of 50 ms
-            bool roundUp = (msec % 50) >= 25;
-            msec >>= 1;
-            msec |= uint(roundUp);
-            msec <<= 1;
+            bool roundUp = (fracCount % 50) >= 25;
+            fracCount >>= 1;
+            fracCount |= roundUp;
+            fracCount <<= 1;
         } else {
             // round to multiple of 4
             // round towards multiples of 100 ms
-            bool roundUp = (msec % 100) >= 50;
-            msec >>= 2;
-            msec |= uint(roundUp);
-            msec <<= 2;
+            bool roundUp = (fracCount % 100) >= 50;
+            fracCount >>= 2;
+            fracCount |= roundUp;
+            fracCount <<= 2;
         }
-    } else {
-        uint min = qMax<int>(0, msec - absMaxRounding);
-        uint max = qMin(1000u, msec + absMaxRounding);
+        fracMsec = milliseconds{fracCount};
+        recalculate(fracMsec);
+        return;
+    }
 
-        // find the boundary that we want, according to the rules above
-        // extra rules:
-        // 1) whatever the interval, we'll take any round-to-the-second timeout
-        if (min == 0) {
-            msec = 0;
-            goto recalculate;
-        } else if (max == 1000) {
-            msec = 1000;
-            goto recalculate;
-        }
+    milliseconds min = std::max(0ms, fracMsec - absMaxRounding);
+    milliseconds max = std::min(1000ms, fracMsec + absMaxRounding);
 
-        uint wantedBoundaryMultiple;
+    // find the boundary that we want, according to the rules above
+    // extra rules:
+    // 1) whatever the interval, we'll take any round-to-the-second timeout
+    if (min == 0ms) {
+        fracMsec = 0ms;
+        recalculate(fracMsec);
+        return;
+    } else if (max == 1000ms) {
+        fracMsec = 1000ms;
+        recalculate(fracMsec);
+        return;
+    }
 
-        // 2) if the interval is a multiple of 500 ms and > 5000 ms, we'll always round
-        //    towards a round-to-the-second
-        // 3) if the interval is a multiple of 500 ms, we'll round towards the nearest
-        //    multiple of 500 ms
-        if ((interval % 500) == 0) {
-            if (interval >= 5000) {
-                msec = msec >= 500 ? max : min;
-                goto recalculate;
-            } else {
-                wantedBoundaryMultiple = 500;
-            }
-        } else if ((interval % 50) == 0) {
-            // 4) same for multiples of 250, 200, 100, 50
-            uint mult50 = interval / 50;
-            if ((mult50 % 4) == 0) {
-                // multiple of 200
-                wantedBoundaryMultiple = 200;
-            } else if ((mult50 % 2) == 0) {
-                // multiple of 100
-                wantedBoundaryMultiple = 100;
-            } else if ((mult50 % 5) == 0) {
-                // multiple of 250
-                wantedBoundaryMultiple = 250;
-            } else {
-                // multiple of 50
-                wantedBoundaryMultiple = 50;
-            }
+    milliseconds wantedBoundaryMultiple{25};
+
+    // 2) if the interval is a multiple of 500 ms and > 5000 ms, we'll always round
+    //    towards a round-to-the-second
+    // 3) if the interval is a multiple of 500 ms, we'll round towards the nearest
+    //    multiple of 500 ms
+    if ((interval % 500) == 0ms) {
+        if (interval >= 5s) {
+            fracMsec = fracMsec >= 500ms ? max : min;
+            recalculate(fracMsec);
+            return;
         } else {
-            wantedBoundaryMultiple = 25;
+            wantedBoundaryMultiple = 500ms;
         }
-
-        uint base = msec / wantedBoundaryMultiple * wantedBoundaryMultiple;
-        uint middlepoint = base + wantedBoundaryMultiple / 2;
-        if (msec < middlepoint)
-            msec = qMax(base, min);
-        else
-            msec = qMin(base + wantedBoundaryMultiple, max);
+    } else if ((interval % 50) == 0ms) {
+        // 4) same for multiples of 250, 200, 100, 50
+        milliseconds mult50 = interval / 50;
+        if ((mult50 % 4) == 0ms) {
+            // multiple of 200
+            wantedBoundaryMultiple = 200ms;
+        } else if ((mult50 % 2) == 0ms) {
+            // multiple of 100
+            wantedBoundaryMultiple = 100ms;
+        } else if ((mult50 % 5) == 0ms) {
+            // multiple of 250
+            wantedBoundaryMultiple = 250ms;
+        } else {
+            // multiple of 50
+            wantedBoundaryMultiple = 50ms;
+        }
     }
 
-recalculate:
-    if (msec == 1000u) {
-        ++t->timeout.tv_sec;
-        t->timeout.tv_nsec = 0;
-    } else {
-        t->timeout.tv_nsec = nanoseconds{milliseconds{msec}}.count();
-    }
+    milliseconds base = (fracMsec / wantedBoundaryMultiple) * wantedBoundaryMultiple;
+    milliseconds middlepoint = base + wantedBoundaryMultiple / 2;
+    if (fracMsec < middlepoint)
+        fracMsec = qMax(base, min);
+    else
+        fracMsec = qMin(base + wantedBoundaryMultiple, max);
 
-    if (t->timeout < currentTime)
-        t->timeout += interval;
+    recalculate(fracMsec);
 }
 
-static void calculateNextTimeout(QTimerInfo *t, timespec currentTime)
+static void calculateNextTimeout(QTimerInfo *t, steady_clock::time_point now)
 {
     switch (t->timerType) {
     case Qt::PreciseTimer:
     case Qt::CoarseTimer:
         t->timeout += t->interval;
-        if (t->timeout < currentTime) {
-            t->timeout = currentTime;
+        if (t->timeout < now) {
+            t->timeout = now;
             t->timeout += t->interval;
         }
-#ifdef QTIMERINFO_DEBUG
-        t->expected += t->interval;
-        if (t->expected < currentTime) {
-            t->expected = currentTime;
-            t->expected += t->interval;
-        }
-#endif
         if (t->timerType == Qt::CoarseTimer)
-            calculateCoarseTimerTimeout(t, currentTime);
+            calculateCoarseTimerTimeout(t, now);
         return;
 
     case Qt::VeryCoarseTimer:
-        // we don't need to take care of the microsecond component of t->interval
-        t->timeout.tv_sec += t->interval;
-        if (t->timeout.tv_sec <= currentTime.tv_sec)
-            t->timeout.tv_sec = currentTime.tv_sec + t->interval;
-#ifdef QTIMERINFO_DEBUG
-        t->expected.tv_sec += t->interval;
-        if (t->expected.tv_sec <= currentTime.tv_sec)
-            t->expected.tv_sec = currentTime.tv_sec + t->interval;
-#endif
-        return;
+        // t->interval already rounded to full seconds in registerTimer()
+        t->timeout += t->interval;
+        if (t->timeout <= now)
+            t->timeout = time_point_cast<seconds>(now + t->interval);
+        break;
     }
-
-#ifdef QTIMERINFO_DEBUG
-    if (t->timerType != Qt::PreciseTimer)
-    qDebug() << "timer" << t->timerType << Qt::hex << t->id << Qt::dec << "interval" << t->interval
-            << "originally expected at" << t->expected << "will fire at" << t->timeout
-            << "or" << (t->timeout - t->expected) << "s late";
-#endif
 }
 
 /*
-  Returns the time to wait for the next timer, or null if no timers
-  are waiting.
-*/
-bool QTimerInfoList::timerWait(timespec &tm)
+    Returns the time to wait for the first timer that has not been activated yet,
+    otherwise returns std::nullopt.
+ */
+std::optional<QTimerInfoList::Duration> QTimerInfoList::timerWait()
 {
-    timespec currentTime = updateCurrentTime();
-    repairTimersIfNeeded();
+    steady_clock::time_point now = updateCurrentTime();
 
+    auto isWaiting = [](QTimerInfo *tinfo) { return !tinfo->activateRef; };
     // Find first waiting timer not already active
-    QTimerInfo *t = nullptr;
-    for (QTimerInfoList::const_iterator it = constBegin(); it != constEnd(); ++it) {
-        if (!(*it)->activateRef) {
-            t = *it;
-            break;
-        }
-    }
+    auto it = std::find_if(timers.cbegin(), timers.cend(), isWaiting);
+    if (it == timers.cend())
+        return std::nullopt;
 
-    if (!t)
-      return false;
-
-    if (currentTime < t->timeout) {
-        // time to wait
-        tm = roundToMillisecond(t->timeout - currentTime);
-    } else {
-        // no time to wait
-        tm.tv_sec  = 0;
-        tm.tv_nsec = 0;
-    }
-
-    return true;
+    Duration timeToWait = (*it)->timeout - now;
+    if (timeToWait > 0ns)
+        return roundToMillisecond(timeToWait);
+    return 0ms;
 }
 
 /*
   Returns the timer's remaining time in milliseconds with the given timerId.
-  If the timer id is not found in the list, the returned value will be -1.
+  If the timer id is not found in the list, the returned value will be \c{Duration::min()}.
   If the timer is overdue, the returned value will be 0.
 */
-qint64 QTimerInfoList::timerRemainingTime(int timerId)
+QTimerInfoList::Duration QTimerInfoList::remainingDuration(Qt::TimerId timerId) const
 {
-    timespec currentTime = updateCurrentTime();
-    repairTimersIfNeeded();
-    timespec tm = {0, 0};
+    const steady_clock::time_point now = updateCurrentTime();
 
-    for (const auto *t : std::as_const(*this)) {
-        if (t->id == timerId) {
-            if (currentTime < t->timeout) {
-                // time to wait
-                tm = roundToMillisecond(t->timeout - currentTime);
-                using namespace std::chrono;
-                const auto dur = duration_cast<milliseconds>(seconds{tm.tv_sec} + nanoseconds{tm.tv_nsec});
-                return dur.count();
-            } else {
-                return 0;
-            }
-        }
+    auto it = findTimerById(timerId);
+    if (it == timers.cend()) {
+#ifndef QT_NO_DEBUG
+        qWarning("QTimerInfoList::timerRemainingTime: timer id %i not found", int(timerId));
+#endif
+        return Duration::min();
     }
 
-#ifndef QT_NO_DEBUG
-    qWarning("QTimerInfoList::timerRemainingTime: timer id %i not found", timerId);
-#endif
-
-    return -1;
+    const QTimerInfo *t = *it;
+    if (now < t->timeout) // time to wait
+        return t->timeout - now;
+    return 0ms;
 }
 
-void QTimerInfoList::registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object)
+void QTimerInfoList::registerTimer(Qt::TimerId timerId, QTimerInfoList::Duration interval,
+                                   Qt::TimerType timerType, QObject *object)
 {
-    QTimerInfo *t = new QTimerInfo;
-    t->id = timerId;
-    t->interval = interval;
-    t->timerType = timerType;
-    t->obj = object;
-    t->activateRef = nullptr;
+    // correct the timer type first
+    if (timerType == Qt::CoarseTimer) {
+        // this timer has up to 5% coarseness
+        // so our boundaries are 20 ms and 20 s
+        // below 20 ms, 5% inaccuracy is below 1 ms, so we convert to high precision
+        // above 20 s, 5% inaccuracy is above 1 s, so we convert to VeryCoarseTimer
+        if (interval >= 20s)
+            timerType = Qt::VeryCoarseTimer;
+        else if (interval <= 20ms)
+            timerType = Qt::PreciseTimer;
+    }
 
-    timespec expected = updateCurrentTime() + interval;
+    QTimerInfo *t = new QTimerInfo(timerId, interval, timerType, object);
+    QTimerInfo::TimePoint expected = updateCurrentTime() + interval;
 
     switch (timerType) {
     case Qt::PreciseTimer:
@@ -435,36 +300,18 @@ void QTimerInfoList::registerTimer(int timerId, qint64 interval, Qt::TimerType t
         break;
 
     case Qt::CoarseTimer:
-        // this timer has up to 5% coarseness
-        // so our boundaries are 20 ms and 20 s
-        // below 20 ms, 5% inaccuracy is below 1 ms, so we convert to high precision
-        // above 20 s, 5% inaccuracy is above 1 s, so we convert to VeryCoarseTimer
-        if (interval >= 20000) {
-            t->timerType = Qt::VeryCoarseTimer;
-        } else {
-            t->timeout = expected;
-            if (interval <= 20) {
-                t->timerType = Qt::PreciseTimer;
-                // no adjustment is necessary
-            } else if (interval <= 20000) {
-                calculateCoarseTimerTimeout(t, currentTime);
-            }
-            break;
-        }
-        Q_FALLTHROUGH();
-    case Qt::VeryCoarseTimer:
-        // the very coarse timer is based on full second precision,
-        // so we keep the interval in seconds (round to closest second)
-        t->interval /= 500;
-        t->interval += 1;
-        t->interval >>= 1;
-        t->timeout.tv_sec = currentTime.tv_sec + t->interval;
-        t->timeout.tv_nsec = 0;
+        t->timeout = expected;
+        t->interval = roundToMillisecond(interval);
+        calculateCoarseTimerTimeout(t, currentTime);
+        break;
 
-        // if we're past the half-second mark, increase the timeout again
-        using namespace std::chrono;
-        if (currentTime.tv_nsec > nanoseconds{500ms}.count())
-            ++t->timeout.tv_sec;
+    case Qt::VeryCoarseTimer:
+        t->interval = roundToSecs(t->interval);
+        const auto currentTimeInSecs = floor<seconds>(currentTime);
+        t->timeout = currentTimeInSecs + t->interval;
+        // If we're past the half-second mark, increase the timeout again
+        if (currentTime - currentTimeInSecs > 500ms)
+            t->timeout += 1s;
     }
 
 #ifdef Q_OS_OS2
@@ -475,82 +322,66 @@ void QTimerInfoList::registerTimer(int timerId, qint64 interval, Qt::TimerType t
 #endif
 
     timerInsert(t);
-
-#ifdef QTIMERINFO_DEBUG
-    t->expected = expected;
-    t->cumulativeError = 0;
-    t->count = 0;
-    if (t->timerType != Qt::PreciseTimer)
-    qDebug() << "timer" << t->timerType << Qt::hex <<t->id << Qt::dec << "interval" << t->interval << "expected at"
-            << t->expected << "will fire first at" << t->timeout;
-#endif
 }
 
-bool QTimerInfoList::unregisterTimer(int timerId)
+bool QTimerInfoList::unregisterTimer(Qt::TimerId timerId)
 {
+    auto it = findTimerById(timerId);
+    if (it == timers.cend())
+        return false; // id not found
+
     // set timer inactive
-    for (int i = 0; i < size(); ++i) {
-        QTimerInfo *t = at(i);
-        if (t->id == timerId) {
-            // found it
-            removeAt(i);
-            if (t == firstTimerInfo)
-                firstTimerInfo = nullptr;
-            if (t->activateRef)
-                *(t->activateRef) = nullptr;
+    QTimerInfo *t = *it;
+    if (t == firstTimerInfo)
+        firstTimerInfo = nullptr;
+    if (t->activateRef)
+        *(t->activateRef) = nullptr;
 #ifdef Q_OS_OS2
-            if (t->interval == 0) {
-                Q_ASSERT(zeroTimers);
-                --zeroTimers;
-            }
-#endif
-            delete t;
-            return true;
-        }
+    if (t->interval == 0) {
+        Q_ASSERT(zeroTimers);
+        --zeroTimers;
     }
-    // id not found
-    return false;
+#endif
+    delete t;
+    timers.erase(it);
+    return true;
 }
 
 bool QTimerInfoList::unregisterTimers(QObject *object)
 {
-    if (isEmpty())
+    if (timers.isEmpty())
         return false;
-    for (int i = 0; i < size(); ++i) {
-        QTimerInfo *t = at(i);
-        if (t->obj == object) {
-            // object found
-            removeAt(i);
-            if (t == firstTimerInfo)
-                firstTimerInfo = nullptr;
-            if (t->activateRef)
-                *(t->activateRef) = nullptr;
+
+    auto associatedWith = [this](QObject *o) {
+        return [this, o](auto &t) {
+            if (t->obj == o) {
+                if (t == firstTimerInfo)
+                    firstTimerInfo = nullptr;
+                if (t->activateRef)
+                    *(t->activateRef) = nullptr;
 #ifdef Q_OS_OS2
             if (t->interval == 0) {
                 Q_ASSERT(zeroTimers);
                 --zeroTimers;
             }
 #endif
-            delete t;
-            // move back one so that we don't skip the new current item
-            --i;
-        }
-    }
-    return true;
+                delete t;
+                return true;
+            }
+            return false;
+        };
+    };
+
+    qsizetype count = timers.removeIf(associatedWith(object));
+    return count > 0;
 }
 
-QList<QAbstractEventDispatcher::TimerInfo> QTimerInfoList::registeredTimers(QObject *object) const
+auto QTimerInfoList::registeredTimers(QObject *object) const -> QList<TimerInfo>
 {
-    QList<QAbstractEventDispatcher::TimerInfo> list;
-    for (int i = 0; i < size(); ++i) {
-        const QTimerInfo * const t = at(i);
-        if (t->obj == object) {
-            list << QAbstractEventDispatcher::TimerInfo(t->id,
-                                                        (t->timerType == Qt::VeryCoarseTimer
-                                                         ? t->interval * 1000
-                                                         : t->interval),
-                                                        t->timerType);
-        }
+    QList<TimerInfo> list;
+    for (const auto &t : timers) {
+        if (t->obj == object)
+            list.emplaceBack(TimerInfo{t->interval, t->id, t->timerType});
     }
     return list;
 }
@@ -560,31 +391,27 @@ QList<QAbstractEventDispatcher::TimerInfo> QTimerInfoList::registeredTimers(QObj
 */
 int QTimerInfoList::activateTimers()
 {
-    if (qt_disable_lowpriority_timers || isEmpty())
+    if (qt_disable_lowpriority_timers || timers.isEmpty())
         return 0; // nothing to do
 
-    int n_act = 0, maxCount = 0;
     firstTimerInfo = nullptr;
 
-    timespec currentTime = updateCurrentTime();
-    // qDebug() << "Thread" << QThread::currentThreadId() << "woken up at" << currentTime;
-    repairTimersIfNeeded();
-
-
+    const steady_clock::time_point now = updateCurrentTime();
+    // qDebug() << "Thread" << QThread::currentThreadId() << "woken up at" << now;
     // Find out how many timer have expired
-    for (QTimerInfoList::const_iterator it = constBegin(); it != constEnd(); ++it) {
-        if (currentTime < (*it)->timeout)
-            break;
-        maxCount++;
-    }
+    auto stillActive = [&now](const QTimerInfo *t) { return now < t->timeout; };
+    // Find first one still active (list is sorted by timeout)
+    auto it = std::find_if(timers.cbegin(), timers.cend(), stillActive);
+    auto maxCount = it - timers.cbegin();
 
+    int n_act = 0;
     //fire the timers.
     while (maxCount--) {
-        if (isEmpty())
+        if (timers.isEmpty())
             break;
 
-        QTimerInfo *currentTimerInfo = constFirst();
-        if (currentTime < currentTimerInfo->timeout)
+        QTimerInfo *currentTimerInfo = timers.constFirst();
+        if (now < currentTimerInfo->timeout)
             break; // no timer has expired
 
         if (!firstTimerInfo) {
@@ -597,42 +424,24 @@ int QTimerInfoList::activateTimers()
             firstTimerInfo = currentTimerInfo;
         }
 
-        // remove from list
-        removeFirst();
-
-#ifdef QTIMERINFO_DEBUG
-        float diff;
-        if (currentTime < currentTimerInfo->expected) {
-            // early
-            timespec early = currentTimerInfo->expected - currentTime;
-            diff = -(early.tv_sec + early.tv_nsec / 1000000000.0);
-        } else {
-            timespec late = currentTime - currentTimerInfo->expected;
-            diff = late.tv_sec + late.tv_nsec / 1000000000.0;
-        }
-        currentTimerInfo->cumulativeError += diff;
-        ++currentTimerInfo->count;
-        if (currentTimerInfo->timerType != Qt::PreciseTimer)
-        qDebug() << "timer" << currentTimerInfo->timerType << Qt::hex << currentTimerInfo->id << Qt::dec << "interval"
-                << currentTimerInfo->interval << "firing at" << currentTime
-                << "(orig" << currentTimerInfo->expected << "scheduled at" << currentTimerInfo->timeout
-                << ") off by" << diff << "activation" << currentTimerInfo->count
-                << "avg error" << (currentTimerInfo->cumulativeError / currentTimerInfo->count);
-#endif
-
         // determine next timeout time
-        calculateNextTimeout(currentTimerInfo, currentTime);
+        calculateNextTimeout(currentTimerInfo, now);
+        if (timers.size() > 1) {
+            // Find where "currentTimerInfo" should be in the list so as
+            // to keep the list ordered by timeout
+            auto afterCurrentIt = timers.begin() + 1;
+            auto iter = std::upper_bound(afterCurrentIt, timers.end(), currentTimerInfo, byTimeout);
+            currentTimerInfo = *std::rotate(timers.begin(), afterCurrentIt, iter);
+        }
 
-        // reinsert timer
-        timerInsert(currentTimerInfo);
-        if (currentTimerInfo->interval > 0)
+        if (currentTimerInfo->interval > 0ms)
             n_act++;
 
         // Send event, but don't allow it to recurse:
         if (!currentTimerInfo->activateRef) {
             currentTimerInfo->activateRef = &currentTimerInfo;
 
-            QTimerEvent e(currentTimerInfo->id);
+            QTimerEvent e(qToUnderlying(currentTimerInfo->id));
             QCoreApplication::sendEvent(currentTimerInfo->obj, &e);
 
             // Storing currentTimerInfo's address in its activateRef allows the

@@ -5,6 +5,12 @@
 ## tst_qfileselectors Test:
 #####################################################################
 
+if(NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
+    cmake_minimum_required(VERSION 3.16)
+    project(tst_qfileselectors LANGUAGES CXX)
+    find_package(Qt6BuildInternals REQUIRED COMPONENTS STANDALONE_TEST)
+endif()
+
 # Resources:
 set(qfileselector_resource_files
     "extras/+custom1/test"
@@ -26,10 +32,14 @@ set(qfileselector_resource_files
     "platforms/+ios/test2"
     "platforms/+linux/test"
     "platforms/+linux/test2"
+    "platforms/+wasm/test"
+    "platforms/+wasm/test2"
     "platforms/+macos/test"
     "platforms/+macos/test2"
     "platforms/+qnx/test"
     "platforms/+qnx/test2"
+    "platforms/+unix/+emscripten/+wasm/test"
+    "platforms/+unix/+emscripten/test"
     "platforms/+unix/+android/test"
     "platforms/+unix/+darwin/+ios/test"
     "platforms/+unix/+darwin/+macos/test"
@@ -37,8 +47,11 @@ set(qfileselector_resource_files
     "platforms/+unix/+haiku/test"
     "platforms/+unix/+linux/test"
     "platforms/+unix/+qnx/test"
+    "platforms/+unix/+vxworks/test"
     "platforms/+unix/test"
     "platforms/+unix/test3"
+    "platforms/+vxworks/test"
+    "platforms/+vxworks/test2"
     "platforms/+wince/test"
     "platforms/+wince/test2"
     "platforms/+windows/+wince/test"

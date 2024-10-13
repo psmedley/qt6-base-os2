@@ -18,7 +18,6 @@
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "QtWidgets/qlayout.h"
 #include "QtCore/qlist.h"
-#include "QtCore/qpair.h"
 #include "QtCore/qrect.h"
 
 QT_REQUIRE_CONFIG(dockwidget);
@@ -75,6 +74,7 @@ struct Q_AUTOTEST_EXPORT QDockAreaLayoutItem
     uint flags;
 #ifndef QT_NO_DEBUG_STREAM
     friend Q_AUTOTEST_EXPORT QDebug operator<<(QDebug dbg, const QDockAreaLayoutItem &item);
+    friend Q_AUTOTEST_EXPORT QDebug operator<<(QDebug dbg, const QDockAreaLayoutItem *item);
 #endif
 };
 
@@ -108,6 +108,7 @@ public:
     QList<int> gapIndex(const QPoint &pos, bool nestingEnabled,
                             TabMode tabMode) const;
     void remove(const QList<int> &path);
+    void remove(QWidget *widget);
     void unnest(int index);
     void split(int index, Qt::Orientation orientation, QLayoutItem *dockWidgetItem);
 #if QT_CONFIG(tabbar)
@@ -155,6 +156,7 @@ public:
 
     QLayoutItem *itemAt(int *x, int index) const;
     QLayoutItem *takeAt(int *x, int index);
+    void add(QWidget *widget);
     void deleteAllLayoutItems();
 
     QMainWindowLayout *mainWindowLayout() const;

@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef BACKSLASH_NEWLINES_H
 #define BACKSLASH_NEWLINES_H
@@ -30,6 +30,7 @@ public slots:
 
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_CLANG("-Wcomment")
+QT_WARNING_DISABLE_GCC("-Wcomment")
 
 // ends with \\\r should not make moc crash (QTBUG-53441) (no new lines on purpose!!) \
 

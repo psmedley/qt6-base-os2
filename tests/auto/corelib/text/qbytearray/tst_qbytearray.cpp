@@ -1,6 +1,10 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
+
+#ifdef QT_NO_QSNPRINTF
+# undef QT_NO_QSNPRINTF // test of the function
+#endif
 
 #include <QTest>
 
@@ -11,6 +15,9 @@
 #include <private/qtools_p.h>
 
 #include "../shared/test_number_shared.h"
+
+#include <QtCore/q20iterator.h>
+#include <sstream>
 
 using namespace Qt::StringLiterals;
 
@@ -51,6 +58,10 @@ private slots:
     void appendFromRawData();
     void appendExtended_data();
     void appendExtended();
+    void appendEmptyNull();
+    void assign();
+    void assignShared();
+    void assignUsesPrependBuffer();
     void insert();
     void insertExtended_data();
     void insertExtended();
@@ -73,7 +84,6 @@ private slots:
     void blockSizeCalculations();
 
     void resizeAfterFromRawData();
-    void appendAfterFromRawData();
     void toFromHex_data();
     void toFromHex();
     void toFromPercentEncoding();
@@ -109,6 +119,11 @@ private slots:
     void isUpper();
     void isLower();
 
+    void indexOf_data();
+    void indexOf();
+    void lastIndexOf_data();
+    void lastIndexOf();
+
     void macTypes();
 
     void stdString();
@@ -117,6 +132,8 @@ private slots:
     void fill();
     void dataPointers();
     void truncate();
+    void trimmed_data();
+    void trimmed();
     void simplified();
     void simplified_data();
     void left();
@@ -124,6 +141,7 @@ private slots:
     void mid();
     void length();
     void length_data();
+    void slice() const;
 };
 
 static const QByteArray::DataPointer staticStandard = {
@@ -136,6 +154,15 @@ static const QByteArray::DataPointer staticNotNullTerminated = {
     const_cast<char *>("dataBAD"),
     4
 };
+
+template <typename String> String detached(String s)
+{
+    if (!s.isNull()) { // detaching loses nullness, but we need to preserve it
+        auto d = s.data();
+        Q_UNUSED(d);
+    }
+    return s;
+}
 
 template <class T> const T &verifyZeroTermination(const T &t) { return t; }
 
@@ -698,7 +725,11 @@ void tst_QByteArray::qvsnprintf()
 
 #ifndef Q_OS_WIN
     memset(buf, 42, sizeof(buf));
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_GCC("-Wformat-zero-length")
+    QT_WARNING_DISABLE_CLANG("-Wformat-zero-length")
     QCOMPARE(::qsnprintf(buf, 10, ""), 0);
+    QT_WARNING_POP
 #endif
 }
 
@@ -945,6 +976,216 @@ void tst_QByteArray::appendExtended()
     QCOMPARE(array.size(), 11);
 }
 
+void tst_QByteArray::appendEmptyNull()
+{
+    QByteArray a;
+    QVERIFY(a.isEmpty());
+    QVERIFY(a.isNull());
+
+    QByteArray b("");
+    QVERIFY(b.isEmpty());
+    QVERIFY(!b.isNull());
+
+    // Concatenating a null and an empty-but-not-null byte arrays results in
+    // an empty but not null byte array
+    QByteArray r = a + b;
+    QVERIFY(r.isEmpty());
+    QVERIFY(!r.isNull());
+}
+
+void tst_QByteArray::assign()
+{
+    // QByteArray &assign(QByteArrayView)
+    {
+        QByteArray ba;
+        QByteArray test("data");
+        QCOMPARE(ba.assign(test), test);
+        QCOMPARE(ba.size(), test.size());
+        test = "data\0data";
+        QCOMPARE(ba.assign(test), test);
+        QCOMPARE(ba.size(), test.size());
+        test = "data\0data"_ba;
+        QCOMPARE(ba.assign(test), test);
+        QCOMPARE(ba.size(), test.size());
+    }
+    // QByteArray &assign(qsizetype, char);
+    {
+        QByteArray ba;
+        QByteArray test("ddd");
+        QCOMPARE(ba.assign(3, 'd'), test);
+        QCOMPARE(ba.size(), test.size());
+        test = "xx";
+        QCOMPARE(ba.assign(20, 'd').assign(2, 'x'), test);
+        QCOMPARE(ba.size(), test.size());
+        test = "ddddd";
+        QCOMPARE(ba.assign(0, 'x').assign(5, 'd'), test);
+        QCOMPARE(ba.size(), test.size());
+        test = "\0\0\0"_ba;
+        QCOMPARE(ba.assign(0, 'x').assign(3, '\0'), test);
+        QCOMPARE(ba.size(), test.size());
+    }
+    // QByteArray &assign(InputIterator, InputIterator)
+    {
+        QByteArray ba;
+        QByteArrayView test;
+
+        QList<char> l = {'\0', 'T', 'E', 'S', 'T'};
+
+        ba.assign(l.begin(), l.begin());
+        QVERIFY(ba.isEmpty());
+        QCOMPARE(*ba.constData(), '\0');
+
+        ba.assign(l.begin(), l.end());
+        test = "\0TEST"_ba;
+        QCOMPARE(ba, test);
+        QCOMPARE(ba.size(), test.size());
+
+        const std::byte bytes[] = {std::byte('T'), std::byte(0), std::byte('S'), std::byte('T')};
+        test = QByteArrayView::fromArray(bytes);
+        QCOMPARE(ba.assign(test.begin(), test.end()), test);
+        QCOMPARE(ba.size(), test.size());
+
+        std::stringstream ss;
+        ss << "T " << '\0' << ' ' << "S " << "T ";
+        ba.assign(std::istream_iterator<char>{ss}, std::istream_iterator<char>{});
+        test = "T\0ST"_ba;
+        QCOMPARE(ba, test);
+        QCOMPARE(ba.size(), test.size());
+
+        ba.assign(l.begin(), l.begin());
+        QVERIFY(ba.isEmpty());
+        QCOMPARE(*ba.constData(), '\0');
+    }
+    // Test chaining
+    {
+        QByteArray ba;
+        QByteArray test("TTTTT");
+        char arr[] = {'T', 'E', 'S', 'T'};
+        ba.assign(std::begin(arr), std::end(arr)).assign({"Hello World!"}).assign(5, 'T');
+        QCOMPARE(ba, test);
+        QCOMPARE(ba.size(), test.size());
+        test = "DATA";
+        QCOMPARE(ba.assign(300, 'T').assign({"DATA"}), test);
+        QCOMPARE(ba.size(), test.size());
+        test = QByteArray(arr, q20::ssize(arr));
+        QCOMPARE(ba.assign(10, 'c').assign(std::begin(arr), std::end(arr)), test);
+        QCOMPARE(ba.size(), test.size());
+        test = "TTT";
+        QCOMPARE(ba.assign("data").assign(QByteArrayView::fromArray(
+                         {std::byte('T'), std::byte('T'), std::byte('T')})), test);
+        QCOMPARE(ba.size(), test.size());
+        test = "\0data";
+        QCOMPARE(ba.assign("data").assign("\0data"), test);
+        QCOMPARE(ba.size(), test.size());
+    }
+}
+
+void tst_QByteArray::assignShared()
+{
+    {
+        QByteArray ba;
+        ba.assign({"DATA"});
+        QVERIFY(ba.isDetached());
+        QCOMPARE(ba, QByteArray("DATA"));
+
+        auto baCopy = ba;
+        QVERIFY(!ba.isDetached());
+        QVERIFY(!baCopy.isDetached());
+        QVERIFY(ba.isSharedWith(baCopy));
+        QVERIFY(baCopy.isSharedWith(ba));
+
+        ba.assign(10, 'D');
+        QVERIFY(ba.isDetached());
+        QVERIFY(baCopy.isDetached());
+        QVERIFY(!ba.isSharedWith(baCopy));
+        QVERIFY(!baCopy.isSharedWith(ba));
+        QCOMPARE(ba, QByteArray("DDDDDDDDDD"));
+        QCOMPARE(baCopy, QByteArray("DATA"));
+    }
+    {
+        QByteArray ba("START");
+        QByteArrayView bav("DATA");
+        QVERIFY(ba.isDetached());
+        QCOMPARE(ba, QByteArray("START"));
+
+        auto copyForwardIt = ba;
+        QVERIFY(!ba.isDetached());
+        QVERIFY(!copyForwardIt.isDetached());
+        QVERIFY(ba.isSharedWith(copyForwardIt));
+        QVERIFY(copyForwardIt.isSharedWith(ba));
+
+        ba.assign(bav.begin(), bav.end());
+        QVERIFY(ba.isDetached());
+        QVERIFY(copyForwardIt.isDetached());
+        QVERIFY(!ba.isSharedWith(copyForwardIt));
+        QVERIFY(!copyForwardIt.isSharedWith(ba));
+        QCOMPARE(ba, QByteArray("DATA"));
+        QCOMPARE(copyForwardIt, QByteArray("START"));
+
+        auto copyInputIt = ba;
+        QVERIFY(!ba.isDetached());
+        QVERIFY(!copyInputIt.isDetached());
+        QVERIFY(ba.isSharedWith(copyInputIt));
+        QVERIFY(copyInputIt.isSharedWith(ba));
+
+        std::stringstream ss("1 2 3 4 5 6 ");
+        ba.assign(std::istream_iterator<char>{ss}, std::istream_iterator<char>{});
+        QVERIFY(ba.isDetached());
+        QVERIFY(copyInputIt.isDetached());
+        QVERIFY(!ba.isSharedWith(copyInputIt));
+        QVERIFY(!copyInputIt.isSharedWith(ba));
+        QCOMPARE(ba, QByteArray("123456"));
+        QCOMPARE(copyInputIt, QByteArray("DATA"));
+    }
+}
+
+void tst_QByteArray::assignUsesPrependBuffer()
+{
+    const auto capBegin = [](const QByteArray &ba) {
+        return ba.begin() - ba.d.freeSpaceAtBegin();
+    };
+    const auto capEnd = [](const QByteArray &ba) {
+        return ba.end() + ba.d.freeSpaceAtEnd();
+    };
+    // QByteArray &assign(QByteArrayView)
+    {
+        QByteArray withFreeSpaceAtBegin;
+        for (int i = 0; i < 100 && withFreeSpaceAtBegin.d.freeSpaceAtBegin() < 2; ++i)
+            withFreeSpaceAtBegin.prepend("data");
+        QCOMPARE_GT(withFreeSpaceAtBegin.d.freeSpaceAtBegin(), 1);
+
+        const auto oldCapBegin = capBegin(withFreeSpaceAtBegin);
+        const auto oldCapEnd = capEnd(withFreeSpaceAtBegin);
+
+        std::string test(withFreeSpaceAtBegin.d.freeSpaceAtBegin(), 'd');
+        withFreeSpaceAtBegin.assign(test);
+
+        QCOMPARE_EQ(withFreeSpaceAtBegin.d.freeSpaceAtBegin(), 0); // we used the prepend buffer
+        QCOMPARE_EQ(capBegin(withFreeSpaceAtBegin), oldCapBegin);
+        QCOMPARE_EQ(capEnd(withFreeSpaceAtBegin), oldCapEnd);
+        QCOMPARE(withFreeSpaceAtBegin, test.data());
+    }
+    // QByteArray &assign(InputIterator, InputIterator)
+    {
+        QByteArray withFreeSpaceAtBegin;
+        for (int i = 0; i < 100 && withFreeSpaceAtBegin.d.freeSpaceAtBegin() < 2; ++i)
+            withFreeSpaceAtBegin.prepend("data");
+        QCOMPARE_GT(withFreeSpaceAtBegin.d.freeSpaceAtBegin(), 1);
+
+        const auto oldCapBegin = capBegin(withFreeSpaceAtBegin);
+        const auto oldCapEnd = capEnd(withFreeSpaceAtBegin);
+
+        std::stringstream ss;
+        for (qsizetype i = 0; i < withFreeSpaceAtBegin.d.freeSpaceAtBegin(); ++i)
+            ss << "d ";
+
+        withFreeSpaceAtBegin.assign(std::istream_iterator<char>{ss}, std::istream_iterator<char>{});
+        QCOMPARE_EQ(withFreeSpaceAtBegin.d.freeSpaceAtBegin(), 0); // we used the prepend buffer
+        QCOMPARE_EQ(capBegin(withFreeSpaceAtBegin), oldCapBegin);
+        QCOMPARE_EQ(capEnd(withFreeSpaceAtBegin), oldCapEnd);
+    }
+}
+
 void tst_QByteArray::insert()
 {
     const char data[] = "data";
@@ -1116,7 +1357,15 @@ void tst_QByteArray::removeIf()
     QVERIFY(!a.isDetached());
 
     a = QByteArray("aBcAbC");
+    // Test when it's not shared
+    QVERIFY(a.isDetached());
     QCOMPARE(a.removeIf(removeA), QByteArray("BcbC"));
+
+    a = QByteArray("aBcAbC");
+    QByteArray b = a;
+    // Test when it's shared
+    QVERIFY(!b.isDetached());
+    QCOMPARE(b.removeIf(removeA), QByteArray("BcbC"));
 }
 
 void tst_QByteArray::erase()
@@ -1295,7 +1544,8 @@ void tst_QByteArray::number_double()
     QFETCH(char, format);
     QFETCH(int, precision);
 
-    if constexpr (std::numeric_limits<double>::has_denorm != std::denorm_present) {
+    QT_IGNORE_DEPRECATIONS(constexpr bool has_denorm = std::numeric_limits<double>::has_denorm != std::denorm_present;)
+    if constexpr (has_denorm) {
         if (::qstrcmp(QTest::currentDataTag(), "Very small number, very high precision, format 'f', precision 350") == 0) {
             QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
         }
@@ -1483,17 +1733,6 @@ void tst_QByteArray::resizeAfterFromRawData()
     QVERIFY(array.constData() != buffer.constData());
     // check null termination
     QVERIFY(array.constData()[5] == 0);
-}
-
-void tst_QByteArray::appendAfterFromRawData()
-{
-    QByteArray arr;
-    {
-        char data[] = "X";
-        arr += QByteArray::fromRawData(data, sizeof(data));
-        data[0] = 'Y';
-    }
-    QCOMPARE(arr.at(0), 'X');
 }
 
 void tst_QByteArray::toFromHex_data()
@@ -2355,9 +2594,96 @@ void tst_QByteArray::isLower()
     QVERIFY(QByteArray("`abyz{").isLower());
 }
 
+using ByteArrayOrChar = std::variant<QByteArray, char>;
+void tst_QByteArray::indexOf_data()
+{
+    qRegisterMetaType<ByteArrayOrChar>();
+    QTest::addColumn<QByteArray>("haystack");
+    QTest::addColumn<ByteArrayOrChar>("needle");
+    QTest::addColumn<int>("expectedIndex");
+    QTest::addColumn<int>("from");
+
+    const QByteArray haystack = "abc 123 cba \x80 \x08 \x00 \x01 \x81"_ba;
+
+    QTest::newRow("not_found_1_char_string") << haystack << ByteArrayOrChar("d"_ba) << -1 << 0;
+    QTest::newRow("not_found_char") << haystack << ByteArrayOrChar('d') << -1 << 0;
+
+    QTest::newRow("not_found_string") << haystack << ByteArrayOrChar("abcd"_ba) << -1 << 0;
+    QTest::newRow("found_1_char_string") << haystack << ByteArrayOrChar("a"_ba) << 0 << 0;
+
+    QTest::newRow("found_char") << haystack << ByteArrayOrChar('a') << 0 << 0;
+    QTest::newRow("found_string") << haystack << ByteArrayOrChar("cba"_ba) << 8 << 0;
+
+    QTest::newRow("found_empty_string") << haystack << ByteArrayOrChar(""_ba) << 0 << 0;
+
+    QTest::newRow("found_embedded_null") << haystack << ByteArrayOrChar("\x00"_ba) << 16 << 0;
+    QTest::newRow("not_found_terminating_null") << haystack << ByteArrayOrChar("\x00"_ba) << -1 << 17;
+    QTest::newRow("found_char_star_0x80") << haystack << ByteArrayOrChar("\x80"_ba) << 12 << 0;
+    QTest::newRow("found_char_0x80") << haystack << ByteArrayOrChar('\x80') << 12 << 0;
+    QTest::newRow("found_char_0x81") << haystack << ByteArrayOrChar('\x81') << 20 << 0;
+}
+
+void tst_QByteArray::indexOf()
+{
+    QFETCH(QByteArray, haystack);
+    QFETCH(ByteArrayOrChar, needle);
+    QFETCH(int, expectedIndex);
+    QFETCH(int, from);
+
+    if (auto *qba = std::get_if<QByteArray>(&needle)) {
+        QCOMPARE(haystack.indexOf(*qba, from), expectedIndex);
+    } else {
+        char c = std::get<char>(needle);
+        QCOMPARE(haystack.indexOf(c, from), expectedIndex);
+    }
+}
+
+void tst_QByteArray::lastIndexOf_data()
+{
+    qRegisterMetaType<ByteArrayOrChar>();
+    QTest::addColumn<QByteArray>("haystack");
+    QTest::addColumn<ByteArrayOrChar>("needle");
+    QTest::addColumn<int>("expectedIndex");
+    QTest::addColumn<int>("from");
+
+    const QByteArray haystack = "abc 123 cba \x80 \x08 \x00 \x01 \x81"_ba;
+
+    QTest::newRow("not_found_1_char_string") << haystack << ByteArrayOrChar("d"_ba) << -1 << -1;
+    QTest::newRow("not_found_char") << haystack << ByteArrayOrChar('d') << -1 << -1;
+
+    QTest::newRow("not_found_string") << haystack << ByteArrayOrChar("abcd"_ba) << -1 << -1;
+    QTest::newRow("found_1_char_string") << haystack << ByteArrayOrChar("a"_ba) << 10 << -1;
+
+    QTest::newRow("found_char") << haystack << ByteArrayOrChar('a') << 10 << -1;
+    QTest::newRow("found_string") << haystack << ByteArrayOrChar("cba"_ba) << 8 << -1;
+
+    QTest::newRow("found_empty_string") << haystack << ByteArrayOrChar(""_ba) << haystack.size() << -1;
+
+    QTest::newRow("found_embedded_null") << haystack << ByteArrayOrChar("\x00"_ba) << 16 << -1;
+    QTest::newRow("not_found_leading_null") << haystack << ByteArrayOrChar("\x00"_ba) << -1 << 15;
+    QTest::newRow("found_char_star_0x80") << haystack << ByteArrayOrChar("\x80"_ba) << 12 << -1;
+    QTest::newRow("found_char_0x80") << haystack << ByteArrayOrChar('\x80') << 12 << -1;
+    QTest::newRow("found_char_0x81") << haystack << ByteArrayOrChar('\x81') << 20 << -1;
+}
+
+void tst_QByteArray::lastIndexOf()
+{
+    QFETCH(QByteArray, haystack);
+    QFETCH(ByteArrayOrChar, needle);
+    QFETCH(int, expectedIndex);
+    QFETCH(int, from);
+
+    if (auto *qba = std::get_if<QByteArray>(&needle)) {
+        QCOMPARE(haystack.lastIndexOf(*qba, from), expectedIndex);
+    } else {
+        char c = std::get<char>(needle);
+        QCOMPARE(haystack.lastIndexOf(c, from), expectedIndex);
+    }
+}
+
 void tst_QByteArray::macTypes()
 {
-#ifndef Q_OS_MAC
+#ifndef Q_OS_DARWIN
     QSKIP("This is a Apple-only test");
 #else
     extern void tst_QByteArray_macTypes(); // in qbytearray_mac.mm
@@ -2465,6 +2791,39 @@ void tst_QByteArray::truncate()
     QVERIFY(a.isEmpty());
 }
 
+void tst_QByteArray::trimmed_data()
+{
+    QTest::addColumn<QByteArray>("full" );
+    QTest::addColumn<QByteArray>("trimmed" );
+
+    QTest::addRow("null") << QByteArray() << QByteArray();
+    QTest::addRow("simple") << "Text"_ba << "Text"_ba;
+    QTest::addRow("single-space") << " "_ba << ""_ba;
+    QTest::addRow("single-char") << " a   "_ba << "a"_ba;
+    QTest::addRow("mixed") << " a \n\t\v b   "_ba << "a \n\t\v b"_ba;
+}
+
+void tst_QByteArray::trimmed()
+{
+    QFETCH(QByteArray, full);
+    QFETCH(QByteArray, trimmed);
+
+    // Shared
+    if (!full.isNull())
+        QVERIFY(!full.isDetached());
+    QCOMPARE(full.trimmed(), trimmed); // lvalue
+    QCOMPARE(QByteArray(full).trimmed(), trimmed); // rvalue
+    QCOMPARE(full.isNull(), trimmed.isNull());
+
+    // Not shared
+    full = QByteArrayView(full).toByteArray();
+    if (!full.isNull())
+        QVERIFY(full.isDetached());
+    QCOMPARE(full.trimmed(), trimmed); // lvalue
+    QCOMPARE(QByteArray(full).trimmed(), trimmed); // rvalue
+    QCOMPARE(full.isNull(), trimmed.isNull());
+}
+
 void tst_QByteArray::simplified()
 {
     QFETCH(QByteArray, source);
@@ -2494,15 +2853,37 @@ void tst_QByteArray::simplified_data()
 void tst_QByteArray::left()
 {
     QByteArray a;
+    QCOMPARE(QByteArray().left(0), QByteArray());
+    QCOMPARE(QByteArray().left(10), QByteArray());
     QCOMPARE(a.left(0), QByteArray());
     QCOMPARE(a.left(10), QByteArray());
     QVERIFY(!a.isDetached());
+    QCOMPARE(QByteArray(a).left(0), QByteArray());
+    QCOMPARE(QByteArray(a).left(10), QByteArray());
+    QCOMPARE(detached(a).left(0), QByteArray());
+    QCOMPARE(detached(a).left(10), QByteArray());
 
     a = QByteArray("abcdefgh");
     const char *ptr = a.constData();
+
+    // lvalue
     QCOMPARE(a.left(5), QByteArray("abcde"));
     QCOMPARE(a.left(20), a);
     QCOMPARE(a.left(-5), QByteArray());
+    // calling left() does not modify the source array
+    QCOMPARE(a.constData(), ptr);
+
+    // rvalue, not detached
+    QCOMPARE(QByteArray(a).left(5), QByteArray("abcde"));
+    QCOMPARE(QByteArray(a).left(20), a);
+    QCOMPARE(QByteArray(a).left(-5), QByteArray());
+    // calling left() does not modify the source array
+    QCOMPARE(a.constData(), ptr);
+
+    // rvalue, detached
+    QCOMPARE(detached(a).left(5), QByteArray("abcde"));
+    QCOMPARE(detached(a).left(20), a);
+    QCOMPARE(detached(a).left(-5), QByteArray());
     // calling left() does not modify the source array
     QCOMPARE(a.constData(), ptr);
 }
@@ -2510,15 +2891,37 @@ void tst_QByteArray::left()
 void tst_QByteArray::right()
 {
     QByteArray a;
+    QCOMPARE(QByteArray().right(0), QByteArray());
+    QCOMPARE(QByteArray().right(10), QByteArray());
     QCOMPARE(a.right(0), QByteArray());
     QCOMPARE(a.right(10), QByteArray());
     QVERIFY(!a.isDetached());
+    QCOMPARE(QByteArray(a).right(0), QByteArray());
+    QCOMPARE(QByteArray(a).right(10), QByteArray());
+    QCOMPARE(detached(a).right(0), QByteArray());
+    QCOMPARE(detached(a).right(10), QByteArray());
 
     a = QByteArray("abcdefgh");
     const char *ptr = a.constData();
+
+    // lvalue
     QCOMPARE(a.right(5), QByteArray("defgh"));
     QCOMPARE(a.right(20), a);
     QCOMPARE(a.right(-5), QByteArray());
+    // calling right() does not modify the source array
+    QCOMPARE(a.constData(), ptr);
+
+    // rvalue, not detached
+    QCOMPARE(QByteArray(a).right(5), QByteArray("defgh"));
+    QCOMPARE(QByteArray(a).right(20), a);
+    QCOMPARE(QByteArray(a).right(-5), QByteArray());
+    // calling right() does not modify the source array
+    QCOMPARE(a.constData(), ptr);
+
+    // rvalue, detached
+    QCOMPARE(detached(a).right(5), QByteArray("defgh"));
+    QCOMPARE(detached(a).right(20), a);
+    QCOMPARE(detached(a).right(-5), QByteArray());
     // calling right() does not modify the source array
     QCOMPARE(a.constData(), ptr);
 }
@@ -2526,18 +2929,46 @@ void tst_QByteArray::right()
 void tst_QByteArray::mid()
 {
     QByteArray a;
+    QCOMPARE(QByteArray().mid(0), QByteArray());
+    QCOMPARE(a.mid(0, 10), QByteArray());
     QCOMPARE(a.mid(0), QByteArray());
     QCOMPARE(a.mid(0, 10), QByteArray());
     QCOMPARE(a.mid(10), QByteArray());
     QVERIFY(!a.isDetached());
+    QCOMPARE(QByteArray(a).mid(0), QByteArray());
+    QCOMPARE(QByteArray(a).mid(0, 10), QByteArray());
+    QCOMPARE(QByteArray(a).mid(10), QByteArray());
+    QCOMPARE(detached(a).mid(0), QByteArray());
+    QCOMPARE(detached(a).mid(0, 10), QByteArray());
+    QCOMPARE(detached(a).mid(10), QByteArray());
 
     a = QByteArray("abcdefgh");
     const char *ptr = a.constData();
+
+    // lvalue
     QCOMPARE(a.mid(2), QByteArray("cdefgh"));
     QCOMPARE(a.mid(2, 3), QByteArray("cde"));
     QCOMPARE(a.mid(20), QByteArray());
     QCOMPARE(a.mid(-5), QByteArray("abcdefgh"));
     QCOMPARE(a.mid(-5, 8), QByteArray("abc"));
+    // calling mid() does not modify the source array
+    QCOMPARE(a.constData(), ptr);
+
+    // rvalue, not detached
+    QCOMPARE(QByteArray(a).mid(2), QByteArray("cdefgh"));
+    QCOMPARE(QByteArray(a).mid(2, 3), QByteArray("cde"));
+    QCOMPARE(QByteArray(a).mid(20), QByteArray());
+    QCOMPARE(QByteArray(a).mid(-5), QByteArray("abcdefgh"));
+    QCOMPARE(QByteArray(a).mid(-5, 8), QByteArray("abc"));
+    // calling mid() does not modify the source array
+    QCOMPARE(a.constData(), ptr);
+
+    // rvalue, detached
+    QCOMPARE(detached(a).mid(2), QByteArray("cdefgh"));
+    QCOMPARE(detached(a).mid(2, 3), QByteArray("cde"));
+    QCOMPARE(detached(a).mid(20), QByteArray());
+    QCOMPARE(detached(a).mid(-5), QByteArray("abcdefgh"));
+    QCOMPARE(detached(a).mid(-5, 8), QByteArray("abc"));
     // calling mid() does not modify the source array
     QCOMPARE(a.constData(), ptr);
 }
@@ -2568,6 +2999,32 @@ void tst_QByteArray::length_data()
     QTest::newRow("with space chars") << QByteArray(" abc\r\n123\t\v") << qsizetype(11);
     QTest::newRow("with '\\0'") << QByteArray("abc\0def", 7) << qsizetype(7);
     QTest::newRow("with '\\0' no size") << QByteArray("abc\0def") << qsizetype(3);
+}
+
+void tst_QByteArray::slice() const
+{
+    QByteArray a;
+
+    a.slice(0);
+    QVERIFY(a.isEmpty());
+    QVERIFY(a.isNull());
+    a.slice(0, 0);
+    QVERIFY(a.isEmpty());
+    QVERIFY(a.isNull());
+
+    a = "Five pineapples";
+
+    a.slice(5);
+    QCOMPARE_EQ(a, "pineapples");
+
+    a.slice(4, 3);
+    QCOMPARE_EQ(a, "app");
+
+    a.slice(a.size());
+    QVERIFY(a.isEmpty());
+
+    a.slice(0, 0);
+    QVERIFY(a.isEmpty());
 }
 
 QTEST_MAIN(tst_QByteArray)

@@ -6,15 +6,20 @@
 
 #include <qpa/qplatformintegration.h>
 #include <private/qtguiglobal_p.h>
+#include <QtCore/qhash.h>
 #include <QtCore/qmutex.h>
 
 #include <screen/screen.h>
+#include <QtCore/QLoggingCategory>
 
 #if QT_CONFIG(opengl)
 #include <EGL/egl.h>
 #endif
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_LOGGING_CATEGORY(lcQpaQnx);
+Q_DECLARE_LOGGING_CATEGORY(lcQpaGLContext);
 
 class QQnxScreenEventThread;
 class QQnxFileDialogHelper;
@@ -39,8 +44,7 @@ class QQnxButtonEventNotifier;
 class QQnxClipboard;
 #endif
 
-template<class K, class V> class QHash;
-typedef QHash<screen_window_t, QWindow *> QQnxWindowMapper;
+using QQnxWindowMapper = QHash<screen_window_t, QWindow *>;
 
 class QQnxIntegration : public QPlatformIntegration
 {

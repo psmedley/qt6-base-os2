@@ -1,5 +1,5 @@
 // Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QLibraryInfo>
@@ -246,7 +246,7 @@ void tst_qdbusxml2cpp::process_data()
                "</method>"
             << QRegularExpression("Q_SLOTS:.*Q_DECL_DEPRECATED inline QDBusPendingReply<> Method\\(\\)",
                                   QRegularExpression::DotMatchesEverythingOption)
-            << QRegularExpression("Q_SLOTS:.*void Method\\(\\)",
+            << QRegularExpression("Q_SLOTS:.*\n\\s*void Method\\(\\)",  // no Q_DECL_DEPRECATED
                                   QRegularExpression::DotMatchesEverythingOption);
 
     QTest::newRow("method-deprecated-2out")
@@ -258,7 +258,7 @@ void tst_qdbusxml2cpp::process_data()
             << QRegularExpression("Q_SLOTS:.*Q_DECL_DEPRECATED inline QDBusPendingReply<QString, QString> Method\\(\\)"
                                   ".*Q_DECL_DEPRECATED inline QDBusReply<QString> Method\\(QString &\\w*\\)",
                                   QRegularExpression::DotMatchesEverythingOption)
-            << QRegularExpression("Q_SLOTS:.*QString Method\\(QString &",
+            << QRegularExpression("Q_SLOTS:.*\n\\s*QString Method\\(QString &", // no Q_DECL_DEPRECATED
                                   QRegularExpression::DotMatchesEverythingOption);
 
     QTest::newRow("method-noreply")
@@ -308,7 +308,7 @@ void tst_qdbusxml2cpp::process_data()
                   </signal>)"
             << QRegularExpression(R"(Q_SIGNALS:.*\bQ_DECL_DEPRECATED void Signal\(\))",
                                   QRegularExpression::DotMatchesEverythingOption)
-            << QRegularExpression(R"(Q_SIGNALS:.*\bvoid Signal\(\))",
+            << QRegularExpression(R"(Q_SIGNALS:.*\n\s*void Signal\(\))",    // no Q_DECL_DEPRECATED
                                   QRegularExpression::DotMatchesEverythingOption);
 }
 
@@ -371,36 +371,43 @@ void tst_qdbusxml2cpp::missingAnnotation_data()
 {
     QTest::addColumn<QString>("xmlSnippet");
     QTest::addColumn<QString>("annotationName");
+    QTest::addColumn<QString>("location");
 
     QTest::newRow("property")
             << R"(<property type="%1" name="name" access="readwrite"/>)"
-            << "org.qtproject.QtDBus.QtTypeName";
+            << "org.qtproject.QtDBus.QtTypeName"
+            << "7:2";
     QTest::newRow("method-in")
             << R"(<method name="Method">
                     <arg type="%1" name="name" direction="in"/>
                   </method>)"
-            << "org.qtproject.QtDBus.QtTypeName.In0";
+            << "org.qtproject.QtDBus.QtTypeName.In0"
+            << "8:22";
     QTest::newRow("method-out")
             << R"(<method name="Method">
                     <arg type="%1" name="name" direction="out"/>
                   </method>)"
-            << "org.qtproject.QtDBus.QtTypeName.Out0";
+            << "org.qtproject.QtDBus.QtTypeName.Out0"
+            << "8:22";
     QTest::newRow("signal")
             << R"(<signal name="Signal">
                     <arg type="%1" name="name"/>
                   </signal>)"
-            << "org.qtproject.QtDBus.QtTypeName.Out0";
+            << "org.qtproject.QtDBus.QtTypeName.Out0"
+            << "8:22";
     QTest::newRow("signal-out")
             << R"(<signal name="Signal">
                     <arg type="%1" name="name" direction="out"/>
                   </signal>)"
-            << "org.qtproject.QtDBus.QtTypeName.Out0";
+            << "org.qtproject.QtDBus.QtTypeName.Out0"
+            << "8:22";
 }
 
 void tst_qdbusxml2cpp::missingAnnotation()
 {
     QFETCH(QString, xmlSnippet);
     QFETCH(QString, annotationName);
+    QFETCH(QString, location);
 
     QString type = "(ii)";
     QProcess process;
@@ -415,9 +422,9 @@ void tst_qdbusxml2cpp::missingAnnotation()
     QVERIFY(!errOutput.isEmpty());
 
     // check it did suggest the right annotation
-    QString expected = R"(qdbusxml2cpp: Got unknown type `%1' processing ''
-You should add <annotation name="%2" value="<type>"/> to the XML description for 'name')";
-    expected = expected.arg(type, annotationName);
+    QString expected = R"(<standard input>:%3: error: unknown type `%1'
+<standard input>:%3: note: you should add <annotation name="%2" value="<type>"/>)";
+    expected = expected.arg(type, annotationName, location);
     QCOMPARE(errOutput, expected);
 }
 

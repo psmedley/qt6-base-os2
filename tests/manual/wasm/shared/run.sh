@@ -1,7 +1,7 @@
 #! /bin/bash
 
 # Copyright (C) 2022 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 set -m
 
@@ -20,7 +20,7 @@ trap removeServer EXIT
 
 script_dir=`dirname ${BASH_SOURCE[0]}`
 cd "$script_dir/../../../../"
-python3 -m http.server 8001 &
+python3 util/wasm/qtwasmserver/qtwasmserver.py -p 8001 &
 cleanupPid=$!
 cd -
 

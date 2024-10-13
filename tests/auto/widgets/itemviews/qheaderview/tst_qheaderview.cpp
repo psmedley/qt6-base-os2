@@ -1,6 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2012 Thorbjørn Lund Martsum - tmartsum[at]gmail.com
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QHeaderView>
 #include <QProxyStyle>
@@ -227,6 +227,7 @@ private slots:
     void statusTips();
     void testRemovingColumnsViaLayoutChanged();
     void testModelMovingColumns();
+    void testModelMovingRows();
 
 protected:
     void setupTestData(bool use_reset_model = false);
@@ -305,6 +306,12 @@ public:
         beginRemoveRows(QModelIndex(), 0, rows - 1);
         rows = 0;
         endRemoveRows();
+    }
+
+    void moveRow(int from, int to)
+    {
+        beginMoveRows(QModelIndex(), from, from, QModelIndex(), to);
+        endMoveRows();
     }
 
     void removeOneColumn(int col)
@@ -1613,7 +1620,6 @@ void tst_QHeaderView::focusPolicy()
 
     widget.show();
     widget.setFocus(Qt::OtherFocusReason);
-    QApplicationPrivate::setActiveWindow(&widget);
     widget.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&widget));
     QVERIFY(widget.hasFocus());
@@ -2191,6 +2197,9 @@ void tst_QHeaderView::preserveHiddenSectionWidth()
 
 void tst_QHeaderView::invisibleStretchLastSection()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("eglfs"), Qt::CaseInsensitive))
+        QSKIP("EGLFS does not allow resizing on top window");
+
     int count = 6;
     QStandardItemModel model(1, count);
     QHeaderView view(Qt::Horizontal);
@@ -3602,7 +3611,6 @@ void tst_QHeaderView::statusTips()
     headerView.setGeometry(QRect(QPoint(QGuiApplication::primaryScreen()->geometry().center() - QPoint(250, 250)),
                            QSize(500, 500)));
     headerView.show();
-    QApplicationPrivate::setActiveWindow(&headerView);
     QVERIFY(QTest::qWaitForWindowActive(&headerView));
 
     // Ensure it is moved away first and then moved to the relevant section
@@ -3644,10 +3652,33 @@ void tst_QHeaderView::testModelMovingColumns()
     hv.setModel(&model);
     hv.resizeSections(QHeaderView::ResizeToContents);
     hv.show();
+    hv.hideSection(3);
+    QVERIFY(!hv.isSectionHidden(1));
+    QVERIFY(hv.isSectionHidden(3));
 
     QPersistentModelIndex index3 = model.index(0, 3);
     model.moveColumn(3, 1);
     QCOMPARE(index3.column(), 1);
+    QVERIFY(hv.isSectionHidden(1));
+    QVERIFY(!hv.isSectionHidden(3));
+}
+
+void tst_QHeaderView::testModelMovingRows()
+{
+    QtTestModel model(10, 10);
+    QHeaderView hv(Qt::Vertical);
+    hv.setModel(&model);
+    hv.resizeSections(QHeaderView::ResizeToContents);
+    hv.show();
+    hv.hideSection(3);
+    QVERIFY(!hv.isSectionHidden(1));
+    QVERIFY(hv.isSectionHidden(3));
+
+    QPersistentModelIndex index3 = model.index(3, 0);
+    model.moveRow(3, 1);
+    QCOMPARE(index3.row(), 1);
+    QVERIFY(hv.isSectionHidden(1));
+    QVERIFY(!hv.isSectionHidden(3));
 }
 
 QTEST_MAIN(tst_QHeaderView)

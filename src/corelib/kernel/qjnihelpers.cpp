@@ -10,12 +10,17 @@
 #include "qsemaphore.h"
 #include "qreadwritelock.h"
 #include <QtCore/private/qcoreapplication_p.h>
+#include <QtCore/private/qlocking_p.h>
 
 #include <android/log.h>
 #include <deque>
 #include <memory>
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_JNI_CLASS(QtInputDelegate, "org/qtproject/qt/android/QtInputDelegate");
+Q_DECLARE_JNI_CLASS(MotionEvent, "android/view/MotionEvent");
+Q_DECLARE_JNI_CLASS(KeyEvent, "android/view/KeyEvent");
 
 namespace QtAndroidPrivate {
     // *Listener virtual function implementations.
@@ -25,8 +30,6 @@ namespace QtAndroidPrivate {
     ResumePauseListener::~ResumePauseListener() {}
     void ResumePauseListener::handlePause() {}
     void ResumePauseListener::handleResume() {}
-    GenericMotionEventListener::~GenericMotionEventListener() {}
-    KeyEventListener::~KeyEventListener() {}
 }
 
 static JavaVM *g_javaVM = nullptr;
@@ -34,46 +37,12 @@ static jobject g_jActivity = nullptr;
 static jobject g_jService = nullptr;
 static jobject g_jClassLoader = nullptr;
 
-Q_GLOBAL_STATIC(QtAndroidPrivate::OnBindListener *, g_onBindListener, nullptr);
-Q_GLOBAL_STATIC(QMutex, g_onBindListenerMutex);
+Q_CONSTINIT static QtAndroidPrivate::OnBindListener *g_onBindListener;
+Q_CONSTINIT static QBasicMutex g_onBindListenerMutex;
 Q_GLOBAL_STATIC(QSemaphore, g_waitForServiceSetupSemaphore);
-Q_GLOBAL_STATIC(QAtomicInt, g_serviceSetupLockers);
+Q_CONSTINIT static QBasicAtomicInt g_serviceSetupLockers = Q_BASIC_ATOMIC_INITIALIZER(0);
 
 Q_GLOBAL_STATIC(QReadWriteLock, g_updateMutex);
-
-namespace {
-    struct GenericMotionEventListeners {
-        QMutex mutex;
-        QList<QtAndroidPrivate::GenericMotionEventListener *> listeners;
-    };
-}
-Q_GLOBAL_STATIC(GenericMotionEventListeners, g_genericMotionEventListeners)
-
-static jboolean dispatchGenericMotionEvent(JNIEnv *, jclass, jobject event)
-{
-    jboolean ret = JNI_FALSE;
-    QMutexLocker locker(&g_genericMotionEventListeners()->mutex);
-    for (auto *listener : std::as_const(g_genericMotionEventListeners()->listeners))
-        ret |= listener->handleGenericMotionEvent(event);
-    return ret;
-}
-
-namespace {
-    struct KeyEventListeners {
-        QMutex mutex;
-        QList<QtAndroidPrivate::KeyEventListener *> listeners;
-    };
-}
-Q_GLOBAL_STATIC(KeyEventListeners, g_keyEventListeners)
-
-static jboolean dispatchKeyEvent(JNIEnv *, jclass, jobject event)
-{
-    jboolean ret = JNI_FALSE;
-    QMutexLocker locker(&g_keyEventListeners()->mutex);
-    for (auto *listener : std::as_const(g_keyEventListeners()->listeners))
-        ret |= listener->handleKeyEvent(event);
-    return ret;
-}
 
 static jboolean updateNativeActivity(JNIEnv *env, jclass = nullptr)
 {
@@ -176,6 +145,68 @@ void QtAndroidPrivate::handleNewIntent(JNIEnv *env, jobject intent)
     }
 }
 
+QtAndroidPrivate::GenericMotionEventListener::~GenericMotionEventListener() {}
+namespace {
+struct GenericMotionEventListeners {
+    QMutex mutex;
+    QList<QtAndroidPrivate::GenericMotionEventListener *> listeners;
+};
+}
+Q_GLOBAL_STATIC(GenericMotionEventListeners, g_genericMotionEventListeners)
+
+static jboolean dispatchGenericMotionEvent(JNIEnv *, jclass, QtJniTypes::MotionEvent event)
+{
+    jboolean ret = JNI_FALSE;
+    QMutexLocker locker(&g_genericMotionEventListeners()->mutex);
+    for (auto *listener : std::as_const(g_genericMotionEventListeners()->listeners))
+        ret |= listener->handleGenericMotionEvent(event.object());
+    return ret;
+}
+Q_DECLARE_JNI_NATIVE_METHOD(dispatchGenericMotionEvent);
+
+QtAndroidPrivate::KeyEventListener::~KeyEventListener() {}
+namespace {
+struct KeyEventListeners {
+    QMutex mutex;
+    QList<QtAndroidPrivate::KeyEventListener *> listeners;
+};
+}
+Q_GLOBAL_STATIC(KeyEventListeners, g_keyEventListeners)
+
+static jboolean dispatchKeyEvent(JNIEnv *, jclass, QtJniTypes::KeyEvent event)
+{
+    jboolean ret = JNI_FALSE;
+    QMutexLocker locker(&g_keyEventListeners()->mutex);
+    for (auto *listener : std::as_const(g_keyEventListeners()->listeners))
+        ret |= listener->handleKeyEvent(event.object());
+    return ret;
+}
+Q_DECLARE_JNI_NATIVE_METHOD(dispatchKeyEvent);
+
+void QtAndroidPrivate::registerGenericMotionEventListener(QtAndroidPrivate::GenericMotionEventListener *listener)
+{
+    QMutexLocker locker(&g_genericMotionEventListeners()->mutex);
+    g_genericMotionEventListeners()->listeners.push_back(listener);
+}
+
+void QtAndroidPrivate::unregisterGenericMotionEventListener(QtAndroidPrivate::GenericMotionEventListener *listener)
+{
+    QMutexLocker locker(&g_genericMotionEventListeners()->mutex);
+    g_genericMotionEventListeners()->listeners.removeOne(listener);
+}
+
+void QtAndroidPrivate::registerKeyEventListener(QtAndroidPrivate::KeyEventListener *listener)
+{
+    QMutexLocker locker(&g_keyEventListeners()->mutex);
+    g_keyEventListeners()->listeners.push_back(listener);
+}
+
+void QtAndroidPrivate::unregisterKeyEventListener(QtAndroidPrivate::KeyEventListener *listener)
+{
+    QMutexLocker locker(&g_keyEventListeners()->mutex);
+    g_keyEventListeners()->listeners.removeOne(listener);
+}
+
 namespace {
     class ResumePauseListeners
     {
@@ -271,8 +302,6 @@ jint QtAndroidPrivate::initJNI(JavaVM *vm, JNIEnv *env)
     }
 
     static const JNINativeMethod methods[] = {
-        {"dispatchGenericMotionEvent", "(Landroid/view/MotionEvent;)Z", reinterpret_cast<void *>(dispatchGenericMotionEvent)},
-        {"dispatchKeyEvent", "(Landroid/view/KeyEvent;)Z", reinterpret_cast<void *>(dispatchKeyEvent)},
         {"updateNativeActivity", "()Z", reinterpret_cast<void *>(updateNativeActivity) },
     };
 
@@ -281,19 +310,44 @@ jint QtAndroidPrivate::initJNI(JavaVM *vm, JNIEnv *env)
     if (!regOk && QJniEnvironment::checkAndClearExceptions(env))
         return JNI_ERR;
 
-    if (!registerPermissionNatives())
+    QJniEnvironment qJniEnv;
+    using namespace QtJniTypes;
+    if (!QtInputDelegate::registerNativeMethods(
+                { Q_JNI_NATIVE_METHOD(dispatchGenericMotionEvent),
+                  Q_JNI_NATIVE_METHOD(dispatchKeyEvent) })) {
+        qCritical() << "Failed to register natives methods for"
+                    << Traits<QtInputDelegate>::className();
+        return JNI_ERR;
+    }
+
+    if (!registerPermissionNatives(qJniEnv))
         return JNI_ERR;
 
-    if (!registerNativeInterfaceNatives())
+    if (!registerNativeInterfaceNatives(qJniEnv))
+        return JNI_ERR;
+
+    if (!registerExtrasNatives(qJniEnv))
         return JNI_ERR;
 
     return JNI_OK;
 }
 
+Q_CORE_EXPORT jobject qt_androidActivity()
+{
+    QReadLocker locker(g_updateMutex());
+    return g_jActivity;
+}
+
+
 QtJniTypes::Activity QtAndroidPrivate::activity()
 {
     QReadLocker locker(g_updateMutex());
     return g_jActivity;
+}
+
+Q_CORE_EXPORT jobject qt_androidService()
+{
+    return g_jService;
 }
 
 QtJniTypes::Service QtAndroidPrivate::service()
@@ -330,30 +384,6 @@ jint QtAndroidPrivate::androidSdkVersion()
     return sdkVersion;
 }
 
-void QtAndroidPrivate::registerGenericMotionEventListener(QtAndroidPrivate::GenericMotionEventListener *listener)
-{
-    QMutexLocker locker(&g_genericMotionEventListeners()->mutex);
-    g_genericMotionEventListeners()->listeners.push_back(listener);
-}
-
-void QtAndroidPrivate::unregisterGenericMotionEventListener(QtAndroidPrivate::GenericMotionEventListener *listener)
-{
-    QMutexLocker locker(&g_genericMotionEventListeners()->mutex);
-    g_genericMotionEventListeners()->listeners.removeOne(listener);
-}
-
-void QtAndroidPrivate::registerKeyEventListener(QtAndroidPrivate::KeyEventListener *listener)
-{
-    QMutexLocker locker(&g_keyEventListeners()->mutex);
-    g_keyEventListeners()->listeners.push_back(listener);
-}
-
-void QtAndroidPrivate::unregisterKeyEventListener(QtAndroidPrivate::KeyEventListener *listener)
-{
-    QMutexLocker locker(&g_keyEventListeners()->mutex);
-    g_keyEventListeners()->listeners.removeOne(listener);
-}
-
 void QtAndroidPrivate::waitForServiceSetup()
 {
     g_waitForServiceSetupSemaphore->acquire();
@@ -361,36 +391,36 @@ void QtAndroidPrivate::waitForServiceSetup()
 
 int QtAndroidPrivate::acuqireServiceSetup(int flags)
 {
-    g_serviceSetupLockers->ref();
+    g_serviceSetupLockers.ref();
     return flags;
 }
 
 void QtAndroidPrivate::setOnBindListener(QtAndroidPrivate::OnBindListener *listener)
 {
-    QMutexLocker lock(g_onBindListenerMutex());
-    *g_onBindListener = listener;
-    if (!g_serviceSetupLockers->deref())
+    const auto lock = qt_scoped_lock(g_onBindListenerMutex);
+    g_onBindListener = listener;
+    if (!g_serviceSetupLockers.deref())
         g_waitForServiceSetupSemaphore->release();
 }
 
 jobject QtAndroidPrivate::callOnBindListener(jobject intent)
 {
-    QMutexLocker lock(g_onBindListenerMutex());
-    if (*g_onBindListener)
-        return (*g_onBindListener)->onBind(intent);
+    const auto lock = qt_scoped_lock(g_onBindListenerMutex);
+    if (g_onBindListener)
+        return g_onBindListener->onBind(intent);
     return nullptr;
 }
 
-Q_GLOBAL_STATIC(QAtomicInt, g_androidDeadlockProtector);
+Q_CONSTINIT static QBasicAtomicInt g_androidDeadlockProtector = Q_BASIC_ATOMIC_INITIALIZER(0);
 
 bool QtAndroidPrivate::acquireAndroidDeadlockProtector()
 {
-    return g_androidDeadlockProtector->testAndSetAcquire(0, 1);
+    return g_androidDeadlockProtector.testAndSetAcquire(0, 1);
 }
 
 void QtAndroidPrivate::releaseAndroidDeadlockProtector()
 {
-    g_androidDeadlockProtector->storeRelease(0);
+    g_androidDeadlockProtector.storeRelease(0);
 }
 
 QT_END_NAMESPACE

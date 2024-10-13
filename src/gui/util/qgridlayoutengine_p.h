@@ -24,6 +24,7 @@
 #include <QtCore/qpair.h>
 #include <QtCore/qsize.h>
 #include <QtCore/qrect.h>
+#include <QtCore/qdebug.h>
 
 #include <float.h>
 #include "qlayoutpolicy_p.h"
@@ -283,6 +284,8 @@ public:
 
     virtual QLayoutPolicy::ControlTypes controlTypes(LayoutSide side) const;
 
+    inline virtual QString toString() const { return QDebug::toString(this); }
+
     QRectF geometryWithin(qreal x, qreal y, qreal width, qreal height, qreal rowDescent, Qt::Alignment align, bool snapToPixelGrid) const;
     QGridLayoutBox box(Qt::Orientation orientation, bool snapToPixelGrid, qreal constraint = -1.0) const;
 
@@ -333,6 +336,12 @@ public:
                         Qt::Orientation orientation = Qt::Vertical);
     qreal rowSizeHint(Qt::SizeHint which, int row,
                       Qt::Orientation orientation = Qt::Vertical) const;
+
+    bool uniformCellWidths() const;
+    void setUniformCellWidths(bool uniformCellWidths);
+
+    bool uniformCellHeights() const;
+    void setUniformCellHeights(bool uniformCellHeights);
 
     void setRowAlignment(int row, Qt::Alignment alignment, Qt::Orientation orientation);
     Qt::Alignment rowAlignment(int row, Qt::Orientation orientation) const;
@@ -415,6 +424,8 @@ private:
     // Configuration
     Qt::Alignment m_defaultAlignment;
     unsigned m_snapToPixelGrid : 1;
+    unsigned m_uniformCellWidths : 1;
+    unsigned m_uniformCellHeights : 1;
 
     // Lazily computed from the above user input
     mutable QHVContainer<int> q_cachedEffectiveFirstRows;

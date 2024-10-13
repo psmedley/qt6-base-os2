@@ -12,6 +12,8 @@
 #include <qvariant.h>
 #include <private/qtools_p.h>
 
+#include <cstdio>
+
 #include <stdio.h>
 
 QT_BEGIN_NAMESPACE
@@ -163,15 +165,15 @@ static bool write_xbm_image(const QImage &sourceImage, QIODevice *device, const 
     int        w = image.width();
     int        h = image.height();
     int        i;
-    QString    s = fileName; // get file base name
-    int        msize = s.size() + 100;
+    const QByteArray s = fileName.toUtf8(); // get file base name
+    const auto msize = s.size() + 100;
     char *buf = new char[msize];
 
-    qsnprintf(buf, msize, "#define %s_width %d\n", s.toUtf8().data(), w);
+    std::snprintf(buf, msize, "#define %s_width %d\n", s.data(), w);
     device->write(buf, qstrlen(buf));
-    qsnprintf(buf, msize, "#define %s_height %d\n", s.toUtf8().data(), h);
+    std::snprintf(buf, msize, "#define %s_height %d\n", s.data(), h);
     device->write(buf, qstrlen(buf));
-    qsnprintf(buf, msize, "static char %s_bits[] = {\n ", s.toUtf8().data());
+    std::snprintf(buf, msize, "static char %s_bits[] = {\n ", s.data());
     device->write(buf, qstrlen(buf));
 
     if (image.format() != QImage::Format_MonoLSB)

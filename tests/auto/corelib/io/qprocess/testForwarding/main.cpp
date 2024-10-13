@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDeadlineTimer>
@@ -13,7 +13,7 @@ static bool waitForDoneFileWritten(const QString &filePath, int msecs = 30000)
 {
     QDeadlineTimer t(msecs);
     do {
-        QThread::msleep(250);
+        QThread::sleep(std::chrono::milliseconds{250});
         QFile file(filePath);
         if (!file.open(QIODevice::ReadOnly))
             continue;

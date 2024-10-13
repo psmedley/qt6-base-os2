@@ -61,7 +61,7 @@ static QIcon messageIcon2qIcon(QSystemTrayIcon::MessageIcon icon)
     called the \e{system tray} or \e{notification area}, where long-running
     applications can display icons and short messages.
 
-    \image system-tray.png The system tray on Windows XP.
+    \image system-tray.webp The system tray on Windows 10.
 
     The QSystemTrayIcon class can be used on the following platforms:
 
@@ -162,12 +162,16 @@ void QSystemTrayIcon::setContextMenu(QMenu *menu)
 {
     Q_D(QSystemTrayIcon);
     QMenu *oldMenu = d->menu.data();
+    if (oldMenu == menu)
+        return;
+
     d->menu = menu;
     d->updateMenu_sys();
-    if (oldMenu != menu && d->qpa_sys) {
+
+    if (d->qpa_sys) {
         // Show the QMenu-based menu for QPA plugins that do not provide native menus
         if (oldMenu && !oldMenu->platformMenu())
-            QObject::disconnect(d->qpa_sys, &QPlatformSystemTrayIcon::contextMenuRequested, menu, nullptr);
+            QObject::disconnect(d->qpa_sys, &QPlatformSystemTrayIcon::contextMenuRequested, oldMenu, nullptr);
         if (menu && !menu->platformMenu()) {
             QObject::connect(d->qpa_sys, &QPlatformSystemTrayIcon::contextMenuRequested,
                              menu,

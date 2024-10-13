@@ -1,9 +1,11 @@
 // Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2023 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QPROCESS_H
 #define QPROCESS_H
 
+#include <QtCore/qcompare.h>
 #include <QtCore/qiodevice.h>
 #include <QtCore/qstringlist.h>
 #include <QtCore/qshareddata.h>
@@ -40,9 +42,11 @@ public:
 
     void swap(QProcessEnvironment &other) noexcept { d.swap(other.d); }
 
+#if QT_CORE_REMOVED_SINCE(6, 8)
     bool operator==(const QProcessEnvironment &other) const;
     inline bool operator!=(const QProcessEnvironment &other) const
-    { return !(*this == other); }
+    { return !operator==(other); }
+#endif
 
     bool isEmpty() const;
     [[nodiscard]] bool inheritsFromParent() const;
@@ -62,6 +66,9 @@ public:
     static QProcessEnvironment systemEnvironment();
 
 private:
+    friend Q_CORE_EXPORT bool comparesEqual(const QProcessEnvironment &lhs,
+                                            const QProcessEnvironment &rhs);
+    Q_DECLARE_EQUALITY_COMPARABLE_NON_NOEXCEPT(QProcessEnvironment)
     friend class QProcessPrivate;
     friend class QProcessEnvironmentPrivate;
     QSharedDataPointer<QProcessEnvironmentPrivate> d;
@@ -173,6 +180,29 @@ public:
 #if defined(Q_OS_UNIX) || defined(Q_QDOC)
     std::function<void(void)> childProcessModifier() const;
     void setChildProcessModifier(const std::function<void(void)> &modifier);
+    Q_NORETURN void failChildProcessModifier(const char *description, int error = 0) noexcept;
+
+    enum class UnixProcessFlag : quint32 {
+        ResetSignalHandlers                 = 0x0001, // like POSIX_SPAWN_SETSIGDEF
+        IgnoreSigPipe                       = 0x0002,
+        // some room if we want to add IgnoreSigHup or so
+        CloseFileDescriptors                = 0x0010,
+        UseVFork                            = 0x0020, // like POSIX_SPAWN_USEVFORK
+        CreateNewSession                    = 0x0040, // like POSIX_SPAWN_SETSID
+        DisconnectControllingTerminal       = 0x0080,
+        ResetIds                            = 0x0100, // like POSIX_SPAWN_RESETIDS
+    };
+    Q_DECLARE_FLAGS(UnixProcessFlags, UnixProcessFlag)
+    struct UnixProcessParameters
+    {
+        UnixProcessFlags flags = {};
+        int lowestFileDescriptorToClose = 0;
+
+        quint32 _reserved[6] {};
+    };
+    UnixProcessParameters unixProcessParameters() const noexcept;
+    void setUnixProcessParameters(const UnixProcessParameters &params);
+    void setUnixProcessParameters(UnixProcessFlags flagsOnly);
 #endif
 
 #if defined(Q_OS_OS2) || defined(Q_CLANG_QDOC)
@@ -264,6 +294,10 @@ private:
     friend class QProcessManager; //from qt 5.15.2 qprocess.h
 #endif
 };
+
+#ifdef Q_OS_UNIX
+Q_DECLARE_OPERATORS_FOR_FLAGS(QProcess::UnixProcessFlags)
+#endif
 
 #endif // QT_CONFIG(process)
 

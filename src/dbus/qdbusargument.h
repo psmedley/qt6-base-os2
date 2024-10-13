@@ -47,7 +47,7 @@ public:
 
     void swap(QDBusArgument &other) noexcept { qt_ptr_swap(d, other.d); }
 
-    // used for marshalling (Qt -> D-BUS)
+    // used for marshalling (Qt -> D-Bus)
     QDBusArgument &operator<<(uchar arg);
     QDBusArgument &operator<<(bool arg);
     QDBusArgument &operator<<(short arg);
@@ -80,7 +80,7 @@ public:
 
     void appendVariant(const QVariant &v);
 
-    // used for de-marshalling (D-BUS -> Qt)
+    // used for de-marshalling (D-Bus -> Qt)
     QString currentSignature() const;
     ElementType currentType() const;
 
@@ -222,10 +222,8 @@ inline const QDBusArgument &operator>>(const QDBusArgument &arg, Container<T> &l
 inline QDBusArgument &operator<<(QDBusArgument &arg, const QVariantList &list)
 {
     arg.beginArray(QMetaType::fromType<QDBusVariant>());
-    QVariantList::ConstIterator it = list.constBegin();
-    QVariantList::ConstIterator end = list.constEnd();
-    for ( ; it != end; ++it)
-        arg << QDBusVariant(*it);
+    for (const QVariant &value : list)
+        arg << QDBusVariant(value);
     arg.endArray();
     return arg;
 }
@@ -284,11 +282,9 @@ inline const QDBusArgument &operator>>(const QDBusArgument &arg, Container<Key, 
 inline QDBusArgument &operator<<(QDBusArgument &arg, const QVariantMap &map)
 {
     arg.beginMap(QMetaType::fromType<QString>(), QMetaType::fromType<QDBusVariant>());
-    QVariantMap::ConstIterator it = map.constBegin();
-    QVariantMap::ConstIterator end = map.constEnd();
-    for ( ; it != end; ++it) {
+    for (const auto &[key, value] : map.asKeyValueRange()) {
         arg.beginMapEntry();
-        arg << it.key() << QDBusVariant(it.value());
+        arg << key << QDBusVariant(value);
         arg.endMapEntry();
     }
     arg.endMap();
@@ -298,11 +294,9 @@ inline QDBusArgument &operator<<(QDBusArgument &arg, const QVariantMap &map)
 inline QDBusArgument &operator<<(QDBusArgument &arg, const QVariantHash &map)
 {
     arg.beginMap(QMetaType::fromType<QString>(), QMetaType::fromType<QDBusVariant>());
-    QVariantHash::ConstIterator it = map.constBegin();
-    QVariantHash::ConstIterator end = map.constEnd();
-    for ( ; it != end; ++it) {
+    for (const auto &[key, value] : map.asKeyValueRange()) {
         arg.beginMapEntry();
-        arg << it.key() << QDBusVariant(it.value());
+        arg << key << QDBusVariant(value);
         arg.endMapEntry();
     }
     arg.endMap();
@@ -310,7 +304,7 @@ inline QDBusArgument &operator<<(QDBusArgument &arg, const QVariantHash &map)
 }
 
 template <typename T1, typename T2>
-inline QDBusArgument &operator<<(QDBusArgument &arg, const QPair<T1, T2> &pair)
+inline QDBusArgument &operator<<(QDBusArgument &arg, const std::pair<T1, T2> &pair)
 {
     arg.beginStructure();
     arg << pair.first << pair.second;
@@ -319,7 +313,7 @@ inline QDBusArgument &operator<<(QDBusArgument &arg, const QPair<T1, T2> &pair)
 }
 
 template <typename T1, typename T2>
-inline const QDBusArgument &operator>>(const QDBusArgument &arg, QPair<T1, T2> &pair)
+inline const QDBusArgument &operator>>(const QDBusArgument &arg, std::pair<T1, T2> &pair)
 {
     arg.beginStructure();
     arg >> pair.first >> pair.second;

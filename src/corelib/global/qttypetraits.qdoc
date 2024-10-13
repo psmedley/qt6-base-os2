@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
+    \headerfile <QtTypeTraits>
+    \inmodule QtCore
+    \since 6.5
+    \title Qt Type Traits
+    \brief Functionality for type traits and transformations.
+*/
+
+/*!
     \fn template <typename Enum> std::underlying_type_t<Enum> qToUnderlying(Enum e)
     \relates <QtTypeTraits>
     \since 6.2
@@ -14,6 +22,8 @@
     \fn template <typename T> typename std::add_const<T>::type &qAsConst(T &t)
     \relates <QtTypeTraits>
     \since 5.7
+
+    \deprecated [6.6] Use std::as_const() instead.
 
     Returns \a t cast to \c{const T}.
 
@@ -44,6 +54,20 @@
 
     To prevent this construct from compiling (and failing at runtime), qAsConst() has
     a second, deleted, overload which binds to rvalues.
+
+    \note You can make the qAsConst() function unavailable by defining
+    the \l{QT_NO_QASCONST} macro.
+*/
+
+/*!
+    \macro QT_NO_QASCONST
+    \since 6.8
+    \relates <QtTypeTraits>
+
+    Defining this macro removes the availability of the qAsConst()
+    function.
+
+    \sa qAsConst
 */
 
 /*!
@@ -51,6 +75,8 @@
     \relates <QtTypeTraits>
     \since 5.7
     \overload
+
+    \deprecated [6.6]
 
     This overload is deleted to prevent a dangling reference in code like
     \snippet code/src_corelib_global_qglobal.cpp as-const-4
@@ -67,6 +93,7 @@
     only in that it is \c constexpr already before C++20 and noexcept already before C++23.
 
     We strongly advise to use std::exchange() when you don't need the C++20 or C++23 variants.
+    You can make qExchange() unavailable by defining the \l{QT_NO_QEXCHANGE} macro.
 
     Here is how to use qExchange() to implement move constructors:
     \code
@@ -105,4 +132,15 @@
     This is perfectly safe, as the for-loop keeps the result of qExchange() alive for as
     long as the loop runs, saving the declaration of a temporary variable. Be aware, though,
     that qExchange() returns a non-const object, so Qt containers may detach.
+*/
+
+/*!
+    \macro QT_NO_QEXCHANGE
+    \since 6.6
+    \relates <QtTypeTraits>
+
+    Defining this macro removes the availability of the qExchange()
+    function.
+
+    \sa qExchange
 */

@@ -173,7 +173,7 @@ void QXcbBackingStoreImage::init(const QSize &size, uint depth, QImage::Format f
     m_qimage_format = format;
     m_hasAlpha = QImage::toPixelFormat(m_qimage_format).alphaUsage() == QPixelFormat::UsesAlpha;
     if (!m_hasAlpha)
-        m_qimage_format = qt_maybeAlphaVersionWithSameDepth(m_qimage_format);
+        m_qimage_format = qt_maybeDataCompatibleAlphaVersion(m_qimage_format);
 
     memset(&m_shm_info, 0, sizeof m_shm_info);
 
@@ -877,8 +877,10 @@ QPlatformBackingStore::FlushResult QXcbBackingStore::rhiFlush(QWindow *window,
 
     m_image->flushScrolledRegion(true);
 
-    QPlatformBackingStore::rhiFlush(window, sourceDevicePixelRatio, region, offset, textures, translucentBackground);
-
+    auto result = QPlatformBackingStore::rhiFlush(window, sourceDevicePixelRatio, region, offset,
+                                                  textures, translucentBackground);
+    if (result != FlushSuccess)
+        return result;
     QXcbWindow *platformWindow = static_cast<QXcbWindow *>(window->handle());
     if (platformWindow->needsSync()) {
         platformWindow->updateSyncRequestCounter();

@@ -26,15 +26,9 @@
 #include <security.h>
 #include <schnlsp.h>
 
-#if NTDDI_VERSION >= NTDDI_WINBLUE && !defined(Q_CC_MINGW)
+#if NTDDI_VERSION >= NTDDI_WINBLUE && defined(SECBUFFER_APPLICATION_PROTOCOLS)
 // ALPN = Application Layer Protocol Negotiation
 #define SUPPORTS_ALPN 1
-#endif
-
-// Redstone 5/1809 has all the API available, but TLS 1.3 is not enabled until a later version of
-// Win 10, checked at runtime in supportsTls13()
-#if defined(NTDDI_WIN10_RS5) && NTDDI_VERSION >= NTDDI_WIN10_RS5
-#define SUPPORTS_TLS13 1
 #endif
 
 // Not defined in MinGW
@@ -93,6 +87,12 @@
 #ifndef SP_PROT_TLS1_3
 #define SP_PROT_TLS1_3 (SP_PROT_TLS1_3_CLIENT | SP_PROT_TLS1_3_SERVER)
 #endif
+#ifndef BCRYPT_ECDH_ALGORITHM
+#define BCRYPT_ECDH_ALGORITHM L"ECDH"
+#endif
+#ifndef BCRYPT_ECDSA_ALGORITHM
+#define BCRYPT_ECDSA_ALGORITHM L"ECDSA"
+#endif
 
 /*
     @future!:
@@ -114,10 +114,6 @@
         - Check if SEC_I_INCOMPLETE_CREDENTIALS is still returned for both "missing certificate" and
             "missing PSK" when calling InitializeSecurityContext in "performHandshake".
 
-    Medium priority:
-    - Setting cipher-suites (or ALG_ID)
-        - People have survived without it in WinRT
-
     Low priority:
     - Possibly make RAII wrappers for SecBuffer (which I commonly create QScopeGuards for)
 
@@ -133,38 +129,340 @@ Q_LOGGING_CATEGORY(lcTlsBackendSchannel, "qt.tlsbackend.schannel");
 QByteArray _q_makePkcs12(const QList<QSslCertificate> &certs, const QSslKey &key,
                          const QString &passPhrase);
 
-namespace QTlsPrivate {
-
-QList<QSslCipher> defaultCiphers()
-{
-    // Previously the code was in QSslSocketBackendPrivate.
-    QList<QSslCipher> ciphers;
-    const QString protocolStrings[] = { QStringLiteral("TLSv1"), QStringLiteral("TLSv1.1"),
-                                        QStringLiteral("TLSv1.2"), QStringLiteral("TLSv1.3") };
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
-    const QSsl::SslProtocol protocols[] = { QSsl::TlsV1_0, QSsl::TlsV1_1,
-                                            QSsl::TlsV1_2, QSsl::TlsV1_3 };
-QT_WARNING_POP
-    const int size = ARRAYSIZE(protocols);
-    static_assert(size == ARRAYSIZE(protocolStrings));
-    ciphers.reserve(size);
-    for (int i = 0; i < size; ++i) {
-        const QSslCipher cipher = QTlsBackend::createCipher(QStringLiteral("Schannel"),
-                                                            protocols[i], protocolStrings[i]);
-
-        ciphers.append(cipher);
-    }
-
-    return ciphers;
-
-}
-
-} // namespace QTlsPrivate
-
 namespace {
 bool supportsTls13();
 }
+
+namespace QTlsPrivate {
+
+QList<QSslCipher> defaultCiphers();
+
+struct SchannelCipherInfo {
+    const char *openSslCipherSuite;
+    const char *schannelCipherSuite;
+    const char *keyExchangeMethod;
+    const char *authenticationMethod;
+    const char *encryptionMethod;
+    int encryptionBits;
+    const char *hashMethod;
+    QList<QSsl::SslProtocol> protocols;
+};
+
+// The list of supported ciphers according to
+//   https://learn.microsoft.com/en-us/windows/win32/secauthn/tls-cipher-suites-in-windows-server-2022
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+std::array<SchannelCipherInfo, 44> schannelCipherInfo = {{
+    {"TLS_AES_256_GCM_SHA384",        "TLS_AES_256_GCM_SHA384",                  "",     "",      "AES",  256, "SHA384", {QSsl::TlsV1_3}},
+    {"TLS_AES_128_GCM_SHA256",        "TLS_AES_128_GCM_SHA256",                  "",     "",      "AES",  128, "SHA256", {QSsl::TlsV1_3}},
+    {"ECDHE-ECDSA-AES256-GCM-SHA384", "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384", "ECDH", "ECDSA", "AES",  256, "SHA384", {QSsl::TlsV1_2}},
+    {"ECDHE-ECDSA-AES128-GCM-SHA256", "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "ECDH", "ECDSA", "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"ECDHE-RSA-AES256-GCM-SHA384",   "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",   "ECDH", "RSA",   "AES",  256, "SHA384", {QSsl::TlsV1_2}},
+    {"ECDHE-RSA-AES128-GCM-SHA256",   "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",   "ECDH", "RSA",   "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"DHE-RSA-AES256-GCM-SHA384",     "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",     "DH",   "RSA",   "AES",  256, "SHA384", {QSsl::TlsV1_2}},
+    {"DHE-RSA-AES128-GCM-SHA256",     "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256",     "DH",   "RSA",   "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"ECDHE-ECDSA-AES256-SHA384",     "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384", "ECDH", "ECDSA", "AES",  256, "SHA384", {QSsl::TlsV1_2}},
+    {"ECDHE-ECDSA-AES128-SHA256",     "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256", "ECDH", "ECDSA", "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"ECDHE-RSA-AES256-SHA384",       "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",   "ECDH", "RSA",   "AES",  256, "SHA384", {QSsl::TlsV1_2}},
+    {"ECDHE-RSA-AES128-SHA256",       "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",   "ECDH", "RSA",   "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"ECDHE-ECDSA-AES256-SHA",        "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",    "ECDH", "ECDSA", "AES",  256, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"ECDHE-ECDSA-AES128-SHA",        "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",    "ECDH", "ECDSA", "AES",  128, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"ECDHE-RSA-AES256-SHA",          "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",      "ECDH", "RSA",   "AES",  256, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"ECDHE-RSA-AES128-SHA",          "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",      "ECDH", "RSA",   "AES",  128, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"AES256-GCM-SHA384",             "TLS_RSA_WITH_AES_256_GCM_SHA384",         "RSA",  "RSA",   "AES",  256, "SHA384", {QSsl::TlsV1_2}},
+    {"AES128-GCM-SHA256",             "TLS_RSA_WITH_AES_128_GCM_SHA256",         "RSA",  "RSA",   "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"AES256-SHA256",                 "TLS_RSA_WITH_AES_256_CBC_SHA256",         "RSA",  "RSA",   "AES",  256, "SHA256", {QSsl::TlsV1_2}},
+    {"AES128-SHA256",                 "TLS_RSA_WITH_AES_128_CBC_SHA256",         "RSA",  "RSA",   "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"AES256-SHA",                    "TLS_RSA_WITH_AES_256_CBC_SHA",            "RSA",  "RSA",   "AES",  256, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"AES128-SHA",                    "TLS_RSA_WITH_AES_128_CBC_SHA",            "RSA",  "RSA",   "AES",  128, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"DES-CBC3-SHA",                  "TLS_RSA_WITH_3DES_EDE_CBC_SHA",           "RSA",  "RSA",   "3DES", 168, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"NULL-SHA256",                   "TLS_RSA_WITH_NULL_SHA256",                "RSA",  "RSA",   "",     0,   "SHA256", {QSsl::TlsV1_2}},
+    {"NULL-SHA",                      "TLS_RSA_WITH_NULL_SHA",                   "RSA",  "RSA",   "",     0,   "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+
+    // the following cipher suites are not enabled by default in schannel provider
+    {"TLS_CHACHA20_POLY1305_SHA256",  "TLS_CHACHA20_POLY1305_SHA256",            "",     "",      "CHACHA20_POLY1305", 0, "", {QSsl::TlsV1_3}},
+    {"DHE-RSA-AES256-SHA",            "TLS_DHE_RSA_WITH_AES_256_CBC_SHA",        "DH",   "RSA",   "AES",  256, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"DHE-RSA-AES128-SHA",            "TLS_DHE_RSA_WITH_AES_128_CBC_SHA",        "DH",   "RSA",   "AES",  128, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"DHE-DSS-AES256-SHA256",         "TLS_DHE_DSS_WITH_AES_256_CBC_SHA256",     "DH",   "DSA",   "AES",  256, "SHA256", {QSsl::TlsV1_2}},
+    {"DHE-DSS-AES128-SHA256",         "TLS_DHE_DSS_WITH_AES_128_CBC_SHA256",     "DH",   "DSA",   "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"DHE-DSS-AES256-SHA",            "TLS_DHE_DSS_WITH_AES_256_CBC_SHA",        "DH",   "DSA",   "AES",  256, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"DHE-DSS-AES128-SHA",            "TLS_DHE_DSS_WITH_AES_128_CBC_SHA",        "DH",   "DSA",   "AES",  128, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"EDH-DSS-DES-CBC3-SHA",          "TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA",       "DH",   "DSA",   "3DES", 168, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"RC4-SHA",                       "TLS_RSA_WITH_RC4_128_SHA",                "RSA",  "RSA",   "RC4",  128, "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"RC4-MD5",                       "TLS_RSA_WITH_RC4_128_MD5",                "RSA",  "RSA",   "RC4",  128, "MD5",    {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"DES-CBC-SHA",                   "TLS_RSA_WITH_DES_CBC_SHA",                "RSA",  "RSA",   "DES",  56,  "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"EDH-DSS-DES-CBC-SHA",           "TLS_DHE_DSS_WITH_DES_CBC_SHA",            "DH",   "DSA",   "DES",  56,  "SHA1",   {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+    {"NULL-MD5",                      "TLS_RSA_WITH_NULL_MD5",                   "RSA",  "RSA",   "",     0,   "MD5",    {QSsl::TlsV1_2, QSsl::TlsV1_1, QSsl::TlsV1_0}},
+
+    // PSK cipher suites
+    {"PSK-AES256-GCM-SHA384",         "TLS_PSK_WITH_AES_256_GCM_SHA384",         "PSK",  "",      "AES",  256, "SHA384", {QSsl::TlsV1_2}},
+    {"PSK-AES128-GCM-SHA256",         "TLS_PSK_WITH_AES_128_GCM_SHA256",         "PSK",  "",      "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"PSK-AES256-CBC-SHA384",         "TLS_PSK_WITH_AES_256_CBC_SHA384",         "PSK",  "",      "AES",  256, "SHA384", {QSsl::TlsV1_2}},
+    {"PSK-AES128-CBC-SHA256",         "TLS_PSK_WITH_AES_128_CBC_SHA256",         "PSK",  "",      "AES",  128, "SHA256", {QSsl::TlsV1_2}},
+    {"PSK-NULL-SHA384",               "TLS_PSK_WITH_NULL_SHA384",                "PSK",  "",      "",     0,   "SHA384", {QSsl::TlsV1_2}},
+    {"PSK-NULL-SHA256",               "TLS_PSK_WITH_NULL_SHA256",                "PSK",  "",      "",     0,   "SHA256", {QSsl::TlsV1_2}},
+}};
+QT_WARNING_POP
+
+const SchannelCipherInfo *cipherInfoByOpenSslName(const QString &name)
+{
+    for (const auto &cipherInfo : schannelCipherInfo) {
+        if (name == QLatin1StringView(cipherInfo.openSslCipherSuite))
+            return &cipherInfo;
+    }
+
+    return nullptr;
+}
+
+UNICODE_STRING cbcChainingMode = {
+    sizeof(BCRYPT_CHAIN_MODE_CBC) - 2,
+    sizeof(BCRYPT_CHAIN_MODE_CBC),
+    const_cast<PWSTR>(BCRYPT_CHAIN_MODE_CBC)
+};
+
+UNICODE_STRING gcmChainingMode = {
+    sizeof(BCRYPT_CHAIN_MODE_GCM) - 2,
+    sizeof(BCRYPT_CHAIN_MODE_GCM),
+    const_cast<PWSTR>(BCRYPT_CHAIN_MODE_GCM)
+};
+
+/**
+ Determines which algorithms are not used by the requested ciphers to build
+ up a black list that can be passed to SCH_CREDENTIALS.
+ */
+QList<CRYPTO_SETTINGS> cryptoSettingsForCiphers(const QList<QSslCipher> &ciphers)
+{
+    static const QList<QSslCipher> defaultCipherList = defaultCiphers();
+
+    if (defaultCipherList == ciphers) {
+        // the ciphers have not been restricted for this session, so no black listing needed
+        return {};
+    }
+
+    QList<const SchannelCipherInfo*> cipherInfo;
+
+    for (const auto &cipher : ciphers) {
+        if (cipher.isNull())
+            continue;
+
+        const auto *info = cipherInfoByOpenSslName(cipher.name());
+        if (!cipherInfo.contains(info))
+            cipherInfo.append(info);
+    }
+
+    QList<CRYPTO_SETTINGS> cryptoSettings;
+
+    const auto assignUnicodeString = [](UNICODE_STRING &unicodeString, const wchar_t *characters) {
+        unicodeString.Length = static_cast<USHORT>(wcslen(characters) * sizeof(WCHAR));
+        unicodeString.MaximumLength = unicodeString.Length + sizeof(UNICODE_NULL);
+        unicodeString.Buffer = const_cast<wchar_t*>(characters);
+    };
+
+    // black list of key exchange algorithms
+    const auto allKeyExchangeAlgorithms = {BCRYPT_RSA_ALGORITHM,
+                                           BCRYPT_ECDH_ALGORITHM,
+                                           BCRYPT_DH_ALGORITHM};
+
+    for (const auto &algorithm : allKeyExchangeAlgorithms) {
+        const auto method = QStringView(algorithm);
+
+        const auto usesMethod = [method](const SchannelCipherInfo *info) {
+            return QLatin1StringView(info->keyExchangeMethod) == method;
+        };
+
+        const bool exclude = std::none_of(cipherInfo.cbegin(), cipherInfo.cend(), usesMethod);
+
+        if (exclude) {
+            CRYPTO_SETTINGS settings = {};
+            settings.eAlgorithmUsage = TlsParametersCngAlgUsageKeyExchange;
+            assignUnicodeString(settings.strCngAlgId, algorithm);
+            cryptoSettings.append(settings);
+        }
+    }
+
+    // black list of authentication algorithms
+    const auto allAuthenticationAlgorithms = {BCRYPT_RSA_ALGORITHM,
+                                              BCRYPT_DSA_ALGORITHM,
+                                              BCRYPT_ECDSA_ALGORITHM,
+                                              BCRYPT_DH_ALGORITHM};
+
+    for (const auto &algorithm : allAuthenticationAlgorithms) {
+        const auto method = QStringView(algorithm);
+
+        const auto usesMethod = [method](const SchannelCipherInfo *info) {
+            return QLatin1StringView(info->authenticationMethod) == method;
+        };
+
+        const bool exclude = std::none_of(cipherInfo.begin(), cipherInfo.end(), usesMethod);
+
+        if (exclude) {
+            CRYPTO_SETTINGS settings = {};
+            settings.eAlgorithmUsage = TlsParametersCngAlgUsageSignature;
+            assignUnicodeString(settings.strCngAlgId, algorithm);
+            cryptoSettings.append(settings);
+        }
+    }
+
+
+    // black list of encryption algorithms
+    const auto allEncryptionAlgorithms = {BCRYPT_AES_ALGORITHM,
+                                          BCRYPT_RC4_ALGORITHM,
+                                          BCRYPT_DES_ALGORITHM,
+                                          BCRYPT_3DES_ALGORITHM};
+
+    for (const auto &algorithm : allEncryptionAlgorithms) {
+        const auto method = QStringView(algorithm);
+
+        if (method == QLatin1StringView("AES")) {
+            bool uses128Bit = false;
+            bool uses256Bit = false;
+            bool usesGcm = false;
+            bool usesCbc = false;
+            for (const auto *info : cipherInfo) {
+                if (QLatin1StringView(info->encryptionMethod) == method) {
+                    uses128Bit = uses128Bit || (info->encryptionBits == 128);
+                    uses256Bit = uses256Bit || (info->encryptionBits == 256);
+                    usesGcm = usesGcm ||
+                              QLatin1StringView(info->schannelCipherSuite).contains("_GCM_"_L1);
+                    usesCbc = usesCbc ||
+                              QLatin1StringView(info->schannelCipherSuite).contains("_CBC_"_L1);
+                }
+            }
+
+            CRYPTO_SETTINGS settings = {};
+            settings.eAlgorithmUsage = TlsParametersCngAlgUsageCipher;
+            assignUnicodeString(settings.strCngAlgId, algorithm);
+
+            if (usesGcm && !usesCbc) {
+                settings.cChainingModes = 1;
+                settings.rgstrChainingModes = &cbcChainingMode;
+            } else if (!usesGcm && usesCbc) {
+                settings.cChainingModes = 1;
+                settings.rgstrChainingModes = &gcmChainingMode;
+            }
+
+            if (!uses128Bit && uses256Bit) {
+                settings.dwMinBitLength = 256;
+                cryptoSettings.append(settings);
+            } else if (uses128Bit && !uses256Bit) {
+                settings.dwMaxBitLength = 128;
+                cryptoSettings.append(settings);
+            } else if (!uses128Bit && !uses256Bit) {
+                cryptoSettings.append(settings);
+            }
+        } else {
+            const auto usesMethod = [method](const SchannelCipherInfo *info) {
+                return QLatin1StringView(info->encryptionMethod) == method;
+            };
+
+            const bool exclude = std::none_of(cipherInfo.begin(), cipherInfo.end(), usesMethod);
+
+            if (exclude) {
+                CRYPTO_SETTINGS settings = {};
+                settings.eAlgorithmUsage = TlsParametersCngAlgUsageCipher;
+                assignUnicodeString(settings.strCngAlgId, algorithm);
+                cryptoSettings.append(settings);
+            }
+        }
+    }
+
+    // black list of hash algorithms
+    const auto allHashAlgorithms = {BCRYPT_MD5_ALGORITHM,
+                                    BCRYPT_SHA1_ALGORITHM,
+                                    BCRYPT_SHA256_ALGORITHM,
+                                    BCRYPT_SHA384_ALGORITHM};
+
+    for (const auto &algorithm : allHashAlgorithms) {
+        const auto method = QStringView(algorithm);
+
+        const auto usesMethod = [method](const SchannelCipherInfo *info) {
+            return QLatin1StringView(info->hashMethod) == method;
+        };
+
+        const bool exclude = std::none_of(cipherInfo.begin(), cipherInfo.end(), usesMethod);
+
+        if (exclude) {
+            CRYPTO_SETTINGS settings = {};
+            settings.eAlgorithmUsage = TlsParametersCngAlgUsageDigest;
+            assignUnicodeString(settings.strCngAlgId, algorithm);
+            cryptoSettings.append(settings);
+        }
+    }
+
+    return cryptoSettings;
+}
+
+QList<QSslCipher> ciphersByName(QStringView schannelSuiteName)
+{
+    QList<QSslCipher> ciphers;
+
+    for (const auto &cipher : schannelCipherInfo) {
+        if (QLatin1StringView(cipher.schannelCipherSuite) == schannelSuiteName) {
+            for (const auto &protocol : cipher.protocols) {
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+                const QString protocolName = (
+                                              protocol == QSsl::TlsV1_0 ? QStringLiteral("TLSv1.0") :
+                                              protocol == QSsl::TlsV1_1 ? QStringLiteral("TLSv1.1") :
+                                              protocol == QSsl::TlsV1_2 ? QStringLiteral("TLSv1.2") :
+                                              protocol == QSsl::TlsV1_3 ? QStringLiteral("TLSv1.3") :
+                                                                          QString());
+QT_WARNING_POP
+
+                ciphers.append(QTlsBackend::createCiphersuite(QLatin1StringView(cipher.openSslCipherSuite),
+                                                              QLatin1StringView(cipher.keyExchangeMethod),
+                                                              QLatin1StringView(cipher.encryptionMethod),
+                                                              QLatin1StringView(cipher.authenticationMethod),
+                                                              cipher.encryptionBits,
+                                                              protocol, protocolName));
+            }
+        }
+    }
+
+    return ciphers;
+}
+
+QList<QSslCipher> defaultCiphers()
+{
+    ULONG contextFunctionsCount = {};
+    PCRYPT_CONTEXT_FUNCTIONS contextFunctions = {};
+
+    const auto status = BCryptEnumContextFunctions(CRYPT_LOCAL, L"SSL", NCRYPT_SCHANNEL_INTERFACE,
+                                                   &contextFunctionsCount, &contextFunctions);
+    if (!NT_SUCCESS(status)) {
+        qCWarning(lcTlsBackendSchannel, "Failed to enumerate ciphers");
+        return {};
+    }
+
+    const bool supportsV13 = supportsTls13();
+
+    QList<QSslCipher> ciphers;
+
+    for (ULONG index = 0; index < contextFunctions->cFunctions; ++index) {
+        const auto suiteName = QStringView(contextFunctions->rgpszFunctions[index]);
+
+        const QList<QSslCipher> allCiphers = ciphersByName(suiteName);
+
+        for (const auto &cipher : allCiphers) {
+            if (!supportsV13 && (cipher.protocol() == QSsl::TlsV1_3))
+                continue;
+
+            ciphers.append(cipher);
+        }
+    }
+
+    BCryptFreeBuffer(contextFunctions);
+
+    return ciphers;
+}
+
+bool containsTls13Cipher(const QList<QSslCipher> &ciphers)
+{
+    return std::any_of(ciphers.cbegin(), ciphers.cend(),
+                       [](const QSslCipher &cipher) { return cipher.protocol() == QSsl::TlsV1_3; });
+}
+
+} // namespace QTlsPrivate
 
 bool QSchannelBackend::s_loadedCiphersAndCerts = false;
 Q_GLOBAL_STATIC(QRecursiveMutex, qt_schannel_mutex)
@@ -298,7 +596,11 @@ QList<QSslCertificate> QSchannelBackend::systemCaCertificatesImplementation()
     // Similar to non-Darwin version found in qtlsbackend_openssl.cpp,
     // QTlsPrivate::systemCaCertificates function.
     QList<QSslCertificate> systemCerts;
-    auto hSystemStore = QHCertStorePointer(CertOpenSystemStore(0, L"ROOT"));
+
+    auto hSystemStore = QHCertStorePointer(
+            CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0,
+                          CERT_STORE_READONLY_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"ROOT"));
+
     if (hSystemStore) {
         PCCERT_CONTEXT pc = nullptr;
         while ((pc = CertFindCertificateInStore(hSystemStore.get(), X509_ASN_ENCODING, 0,
@@ -317,6 +619,11 @@ QTlsPrivate::X509PemReaderPtr QSchannelBackend::X509PemReader() const
 QTlsPrivate::X509DerReaderPtr QSchannelBackend::X509DerReader() const
 {
     return QTlsPrivate::X509CertificateGeneric::certificatesFromDer;
+}
+
+QTlsPrivate::X509Pkcs12ReaderPtr QSchannelBackend::X509Pkcs12Reader() const
+{
+    return QTlsPrivate::X509CertificateSchannel::importPkcs12;
 }
 
 namespace {
@@ -383,7 +690,6 @@ QString schannelErrorToString(qint32 status)
 
 bool supportsTls13()
 {
-#ifdef SUPPORTS_TLS13
     static bool supported = []() {
         const auto current = QOperatingSystemVersion::current();
         // 20221 just happens to be the preview version I run on my laptop where I tested TLS 1.3.
@@ -391,10 +697,8 @@ bool supportsTls13()
                 QOperatingSystemVersion(QOperatingSystemVersion::Windows, 10, 0, 20221);
         return current >= minimum;
     }();
+
     return supported;
-#else
-    return false;
-#endif
 }
 
 DWORD toSchannelProtocol(QSsl::SslProtocol protocol)
@@ -459,17 +763,15 @@ QT_WARNING_POP
     return protocols;
 }
 
-#ifdef SUPPORTS_TLS13
 // In the new API that descended down upon us we are not asked which protocols we want
 // but rather which protocols we don't want. So now we have this function to disable
 // anything that is not enabled.
-DWORD toSchannelProtocolNegated(QSsl::SslProtocol protocol)
+DWORD negatedSchannelProtocols(DWORD wantedProtocols)
 {
     DWORD protocols = SP_PROT_ALL; // all protocols
-    protocols &= ~toSchannelProtocol(protocol); // minus the one(s) we want
+    protocols &= ~wantedProtocols; // minus the one(s) we want
     return protocols;
 }
-#endif
 
 /*!
     \internal
@@ -507,8 +809,7 @@ bool netscapeWrongCertType(const QList<QSslCertificateExtension> &extensions, bo
     const auto netscapeIt = std::find_if(
             extensions.cbegin(), extensions.cend(),
             [](const QSslCertificateExtension &extension) {
-                const auto netscapeCertType = QStringLiteral("2.16.840.1.113730.1.1");
-                return extension.oid() == netscapeCertType;
+                return extension.oid() == u"2.16.840.1.113730.1.1";
             });
     if (netscapeIt != extensions.cend()) {
         const QByteArray netscapeCertTypeByte = netscapeIt->value().toByteArray();
@@ -679,6 +980,10 @@ qint64 checkIncompleteData(const SecBuffer &secBuffer)
     return 0;
 }
 
+DWORD defaultCredsFlag()
+{
+    return qEnvironmentVariableIsSet("QT_SCH_DEFAULT_CREDS") ? 0 : SCH_CRED_NO_DEFAULT_CREDS;
+}
 } // anonymous namespace
 
 
@@ -718,6 +1023,10 @@ bool TlsCryptographSchannel::sendToken(void *token, unsigned long tokenLength, b
     Q_ASSERT(d);
     auto *plainSocket = d->plainTcpSocket();
     Q_ASSERT(plainSocket);
+    if (plainSocket->state() == QAbstractSocket::UnconnectedState || !plainSocket->isValid()
+        || !plainSocket->isOpen()) {
+        return false;
+    }
 
     const qint64 written = plainSocket->write(static_cast<const char *>(token), tokenLength);
     if (written != qint64(tokenLength)) {
@@ -780,7 +1089,7 @@ bool TlsCryptographSchannel::acquireCredentialsHandle()
     Q_ASSERT(schannelState == SchannelState::InitializeHandshake);
 
     const bool isClient = d->tlsMode() == QSslSocket::SslClientMode;
-    const DWORD protocols = toSchannelProtocol(configuration.protocol());
+    DWORD protocols = toSchannelProtocol(configuration.protocol());
     if (protocols == DWORD(-1)) {
         setErrorAndEmit(d, QAbstractSocket::SslInvalidUserDataError,
                         QSslSocket::tr("Invalid protocol chosen"));
@@ -834,79 +1143,49 @@ bool TlsCryptographSchannel::acquireCredentialsHandle()
         certsCount = 1;
         Q_ASSERT(localCertContext);
     }
-    void *credentials = nullptr;
-#ifdef SUPPORTS_TLS13
+
+    const QList<QSslCipher> ciphers = configuration.ciphers();
+    if (!ciphers.isEmpty() && !containsTls13Cipher(ciphers))
+        protocols &= ~SP_PROT_TLS1_3;
+
+    QList<CRYPTO_SETTINGS> cryptoSettings;
+    if (!ciphers.isEmpty())
+        cryptoSettings = cryptoSettingsForCiphers(ciphers);
+
     TLS_PARAMETERS tlsParameters = {
         0,
         nullptr,
-        toSchannelProtocolNegated(configuration.protocol()), // what protocols to disable
-        0,
-        nullptr,
+        negatedSchannelProtocols(protocols), // what protocols to disable
+        static_cast<DWORD>(cryptoSettings.size()),
+        (cryptoSettings.isEmpty() ? nullptr : cryptoSettings.data()),
         0
     };
-    if (supportsTls13()) {
-        SCH_CREDENTIALS *cred = new SCH_CREDENTIALS{
-            SCH_CREDENTIALS_VERSION,
-            0,
-            certsCount,
-            &localCertContext,
-            nullptr,
-            0,
-            nullptr,
-            0,
-            SCH_CRED_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT
-                    | SCH_CRED_NO_DEFAULT_CREDS,
-            1,
-            &tlsParameters
-        };
-        credentials = cred;
-    } else
-#endif // SUPPORTS_TLS13
-    {
-        SCHANNEL_CRED *cred = new SCHANNEL_CRED{
-            SCHANNEL_CRED_VERSION, // dwVersion
-            certsCount, // cCreds
-            &localCertContext, // paCred (certificate(s) containing a private key for authentication)
-            nullptr, // hRootStore
 
-            0, // cMappers (reserved)
-            nullptr, // aphMappers (reserved)
-
-            0, // cSupportedAlgs
-            nullptr, // palgSupportedAlgs (nullptr = system default)
-
-            protocols, // grbitEnabledProtocols
-            0, // dwMinimumCipherStrength (0 = system default)
-            0, // dwMaximumCipherStrength (0 = system default)
-            0, // dwSessionLifespan (0 = schannel default, 10 hours)
-            SCH_CRED_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT
-                    | SCH_CRED_NO_DEFAULT_CREDS, // dwFlags
-            0 // dwCredFormat (must be 0)
-        };
-        credentials = cred;
-    }
-    Q_ASSERT(credentials != nullptr);
+    SCH_CREDENTIALS credentials = {
+        SCH_CREDENTIALS_VERSION,
+        0,
+        certsCount,
+        &localCertContext,
+        nullptr,
+        0,
+        nullptr,
+        0,
+        SCH_CRED_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT | defaultCredsFlag(),
+        1,
+        &tlsParameters
+    };
 
     TimeStamp expiration{};
     auto status = AcquireCredentialsHandle(nullptr, // pszPrincipal (unused)
                                            const_cast<wchar_t *>(UNISP_NAME), // pszPackage
                                            isClient ? SECPKG_CRED_OUTBOUND : SECPKG_CRED_INBOUND, // fCredentialUse
                                            nullptr, // pvLogonID (unused)
-                                           credentials, // pAuthData
+                                           &credentials, // pAuthData
                                            nullptr, // pGetKeyFn (unused)
                                            nullptr, // pvGetKeyArgument (unused)
                                            &credentialHandle, // phCredential
                                            &expiration // ptsExpir
     );
-
-#ifdef SUPPORTS_TLS13
-    if (supportsTls13()) {
-        delete static_cast<SCH_CREDENTIALS *>(credentials);
-    } else
-#endif // SUPPORTS_TLS13
-    {
-        delete static_cast<SCHANNEL_CRED *>(credentials);
-    }
 
     if (status != SEC_E_OK) {
         setErrorAndEmit(d, QAbstractSocket::SslInternalError, schannelErrorToString(status));
@@ -1112,7 +1391,8 @@ bool TlsCryptographSchannel::performHandshake()
     auto *plainSocket = d->plainTcpSocket();
     Q_ASSERT(plainSocket);
 
-    if (plainSocket->state() == QAbstractSocket::UnconnectedState) {
+    if (plainSocket->state() == QAbstractSocket::UnconnectedState || !plainSocket->isValid()
+        || !plainSocket->isOpen()) {
         setErrorAndEmit(d, QAbstractSocket::RemoteHostClosedError,
                         QSslSocket::tr("The TLS/SSL connection has been closed"));
         return false;
@@ -1281,6 +1561,11 @@ bool TlsCryptographSchannel::verifyHandshake()
 
     // Get session cipher info
     status = QueryContextAttributes(&contextHandle,
+                                    SECPKG_ATTR_CIPHER_INFO,
+                                    &cipherInfo);
+    CHECK_STATUS(status);
+
+    status = QueryContextAttributes(&contextHandle,
                                     SECPKG_ATTR_CONNECTION_INFO,
                                     &connectionInfo);
     CHECK_STATUS(status);
@@ -1433,6 +1718,7 @@ void TlsCryptographSchannel::reset()
     deallocateContext();
     freeCredentialsHandle(); // in case we already had one (@future: session resumption requires re-use)
 
+    cipherInfo = {};
     connectionInfo = {};
     streamSizes = {};
 
@@ -1482,8 +1768,10 @@ void TlsCryptographSchannel::transmit()
         return; // This function should not have been called
 
     // Can happen if called through QSslSocket::abort->QSslSocket::close->QSslSocket::flush->here
-    if (plainSocket->state() == QAbstractSocket::SocketState::UnconnectedState)
+    if (plainSocket->state() == QAbstractSocket::UnconnectedState || !plainSocket->isValid()
+        || !plainSocket->isOpen()) {
         return;
+    }
 
     if (schannelState != SchannelState::Done) {
         continueHandshake();
@@ -1635,8 +1923,12 @@ void TlsCryptographSchannel::transmit()
             qCWarning(lcTlsBackendSchannel, "The internal SSPI handle is invalid!");
             Q_UNREACHABLE();
         } else if (status == SEC_E_INVALID_TOKEN) {
-            qCWarning(lcTlsBackendSchannel, "Got SEC_E_INVALID_TOKEN!");
-            Q_UNREACHABLE(); // Happened once due to a bug, but shouldn't generally happen(?)
+            // Supposedly we have an invalid token, it's under-documented what
+            // this means, so to be safe we disconnect.
+            shutdown = true;
+            disconnectFromHost();
+            setErrorAndEmit(d, QAbstractSocket::SslInternalError, schannelErrorToString(status));
+            break;
         } else if (status == SEC_E_MESSAGE_ALTERED) {
             // The message has been altered, disconnect now.
             shutdown = true; // skips sending the shutdown alert
@@ -1807,8 +2099,17 @@ QSslCipher TlsCryptographSchannel::sessionCipher() const
     Q_ASSERT(q);
 
     if (!q->isEncrypted())
-        return QSslCipher();
-    return QSslCipher(QStringLiteral("Schannel"), sessionProtocol());
+        return {};
+
+    const auto sessionProtocol = toQtSslProtocol(connectionInfo.dwProtocol);
+
+    const auto ciphers = ciphersByName(QStringView(cipherInfo.szCipherSuite));
+    for (const auto& cipher : ciphers) {
+        if (cipher.protocol() == sessionProtocol)
+            return cipher;
+    }
+
+    return {};
 }
 
 QSsl::SslProtocol TlsCryptographSchannel::sessionProtocol() const
@@ -1992,7 +2293,10 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
         // the Ca list, not just included during verification.
         // That being said, it's not trivial to add the root certificates (if and only if they
         // came from the system root store). And I don't see this mentioned in our documentation.
-        auto rootStore = QHCertStorePointer(CertOpenSystemStore(0, L"ROOT"));
+        auto rootStore = QHCertStorePointer(
+                CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0,
+                              CERT_STORE_READONLY_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"ROOT"));
+
         if (!rootStore) {
 #ifdef QSSLSOCKET_DEBUG
             qCWarning(lcTlsBackendSchannel, "Failed to open the system root CA certificate store!");
@@ -2131,6 +2435,15 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
     for (DWORD i = 0; i < verifyDepth; i++) {
         CERT_CHAIN_ELEMENT *element = chain->rgpElement[i];
         QSslCertificate certificate = getCertificateFromChainElement(element);
+        if (certificate.isNull()) {
+            const auto &previousCert = !peerCertificateChain.isEmpty() ? peerCertificateChain.last()
+                                                                       : QSslCertificate();
+            auto error = QSslError(QSslError::SslError::UnableToGetIssuerCertificate, previousCert);
+            sslErrors += error;
+            emit q->peerVerifyError(error);
+            if (previousCert.isNull() || q->state() != QAbstractSocket::ConnectedState)
+                return false;
+        }
         const QList<QSslCertificateExtension> extensions = certificate.extensions();
 
 #ifdef QSSLSOCKET_DEBUG
@@ -2278,7 +2591,7 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
     }
 
     if (!peerCertificateChain.isEmpty())
-        QTlsBackend::storePeerCertificate(d, peerCertificateChain.first());
+        QTlsBackend::storePeerCertificate(d, peerCertificateChain.constFirst());
 
     const auto &configuration = q->sslConfiguration(); // Probably, updated by QTlsBackend::storePeerCertificate etc.
     // @Note: Somewhat copied from qsslsocket_mac.cpp

@@ -43,6 +43,12 @@ QUrlModel::QUrlModel(QObject *parent) : QStandardItemModel(parent), showFullPath
 {
 }
 
+QUrlModel::~QUrlModel()
+{
+    for (const auto &conn : std::as_const(modelConnections))
+        disconnect(conn);
+}
+
 /*!
     \reimp
 */
@@ -177,11 +183,14 @@ void QUrlModel::setUrl(const QModelIndex &index, const QUrl &url, const QModelIn
             setData(index, true, EnabledRole);
         }
 
+        // newIcon could be null if fileSystemModel->iconProvider() returns null
+        if (!newIcon.isNull()) {
         // Make sure that we have at least 32x32 images
-        const QSize size = newIcon.actualSize(QSize(32,32));
-        if (size.width() < 32) {
-            QPixmap smallPixmap = newIcon.pixmap(QSize(32, 32));
-            newIcon.addPixmap(smallPixmap.scaledToWidth(32, Qt::SmoothTransformation));
+            const QSize size = newIcon.actualSize(QSize(32,32));
+            if (size.width() < 32) {
+                QPixmap smallPixmap = newIcon.pixmap(QSize(32, 32));
+                newIcon.addPixmap(smallPixmap.scaledToWidth(32, Qt::SmoothTransformation));
+            }
         }
 
         if (index.data().toString() != newName)
@@ -266,21 +275,19 @@ void QUrlModel::setFileSystemModel(QFileSystemModel *model)
     if (model == fileSystemModel)
         return;
     if (fileSystemModel != nullptr) {
-        disconnect(model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-            this, SLOT(dataChanged(QModelIndex,QModelIndex)));
-        disconnect(model, SIGNAL(layoutChanged()),
-            this, SLOT(layoutChanged()));
-        disconnect(model, SIGNAL(rowsRemoved(QModelIndex,int,int)),
-            this, SLOT(layoutChanged()));
+        for (const auto &conn : std::as_const(modelConnections))
+            disconnect(conn);
     }
     fileSystemModel = model;
     if (fileSystemModel != nullptr) {
-        connect(model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-            this, SLOT(dataChanged(QModelIndex,QModelIndex)));
-        connect(model, SIGNAL(layoutChanged()),
-            this, SLOT(layoutChanged()));
-        connect(model, SIGNAL(rowsRemoved(QModelIndex,int,int)),
-            this, SLOT(layoutChanged()));
+        modelConnections = {
+            connect(model, &QFileSystemModel::dataChanged,
+                    this, &QUrlModel::dataChanged),
+            connect(model, &QFileSystemModel::layoutChanged,
+                    this, &QUrlModel::layoutChanged),
+            connect(model, &QFileSystemModel::rowsRemoved,
+                    this, &QUrlModel::layoutChanged),
+        };
     }
     clear();
     insertColumns(0, 1);
@@ -352,14 +359,16 @@ void QSidebar::setModelAndUrls(QFileSystemModel *model, const QList<QUrl> &newUr
     setModel(urlModel);
     setItemDelegate(new QSideBarDelegate(this));
 
-    connect(selectionModel(), SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-            this, SLOT(clicked(QModelIndex)));
+    connect(selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &QSidebar::clicked);
 #if QT_CONFIG(draganddrop)
     setDragDropMode(QAbstractItemView::DragDrop);
 #endif
+#if QT_CONFIG(menu)
     setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(this, SIGNAL(customContextMenuRequested(QPoint)),
-            this, SLOT(showContextMenu(QPoint)));
+    connect(this, &QSidebar::customContextMenuRequested,
+            this, &QSidebar::showContextMenu);
+#endif
     urlModel->setUrls(newUrls);
     setCurrentIndex(this->model()->index(0,0));
 }
@@ -385,8 +394,8 @@ QSize QSidebar::sizeHint() const
 
 void QSidebar::selectUrl(const QUrl &url)
 {
-    disconnect(selectionModel(), SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-               this, SLOT(clicked(QModelIndex)));
+    disconnect(selectionModel(), &QItemSelectionModel::currentChanged,
+               this, &QSidebar::clicked);
 
     selectionModel()->clear();
     for (int i = 0; i < model()->rowCount(); ++i) {
@@ -396,8 +405,8 @@ void QSidebar::selectUrl(const QUrl &url)
         }
     }
 
-    connect(selectionModel(), SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-            this, SLOT(clicked(QModelIndex)));
+    connect(selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &QSidebar::clicked);
 }
 
 #if QT_CONFIG(menu)
@@ -413,7 +422,7 @@ void QSidebar::showContextMenu(const QPoint &position)
         QAction *action = new QAction(QFileDialog::tr("Remove"), this);
         if (indexAt(position).data(QUrlModel::UrlRole).toUrl().path().isEmpty())
             action->setEnabled(false);
-        connect(action, SIGNAL(triggered()), this, SLOT(removeEntry()));
+        connect(action, &QAction::triggered, this, &QSidebar::removeEntry);
         actions.append(action);
     }
     if (actions.size() > 0)

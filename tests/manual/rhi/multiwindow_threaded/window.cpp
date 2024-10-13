@@ -1,12 +1,8 @@
 // Copyright (C) 2018 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "window.h"
 #include <QPlatformSurfaceEvent>
-
-#ifndef QT_NO_OPENGL
-#include <QtGui/private/qrhigles2_p.h>
-#endif
 
 #if QT_CONFIG(vulkan)
 extern QVulkanInstance *instance;
@@ -25,6 +21,7 @@ Window::Window(const QString &title, GraphicsApi api)
 #endif
         break;
     case D3D11:
+    case D3D12:
         setSurfaceType(Direct3DSurface);
         break;
     case Metal:

@@ -6,6 +6,7 @@
 
 #include <QtCore/qnamespace.h>
 #include <qpa/qwindowsysteminterface.h>
+#include <QtCore/QMap>
 
 #include <emscripten/val.h>
 
@@ -34,6 +35,11 @@ private:
     std::unique_ptr<qstdweb::EventCallback> m_pointerMoveCallback;
     std::unique_ptr<qstdweb::EventCallback> m_pointerUpCallback;
     std::unique_ptr<qstdweb::EventCallback> m_pointerCancelCallback;
+
+    std::unique_ptr<qstdweb::EventCallback> m_dragOverCallback;
+    std::unique_ptr<qstdweb::EventCallback> m_dragStartCallback;
+    std::unique_ptr<qstdweb::EventCallback> m_dragEndCallback;
+    std::unique_ptr<qstdweb::EventCallback> m_dropCallback;
 
     QMap<int, QWindowSystemInterface::TouchPoint> m_pointerIdToTouchPoints;
 

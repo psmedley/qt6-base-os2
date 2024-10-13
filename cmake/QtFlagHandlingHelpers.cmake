@@ -1,6 +1,23 @@
 # Copyright (C) 2022 The Qt Company Ltd.
 # SPDX-License-Identifier: BSD-3-Clause
 
+# Sets '${var}' to a genex that extracts the target's property.
+# Sets 'have_${var}' to a genex that checks that the property has a
+# non-empty value.
+macro(qt_internal_genex_get_property var target property)
+    set(${var} "$<TARGET_PROPERTY:${target},${property}>")
+    set(have_${var} "$<BOOL:${${var}}>")
+endmacro()
+
+# Sets '${var}' to a genex that will join the given property values
+# using '${glue}' and will surround the entire output with '${prefix}'
+# and '${suffix}'.
+macro(qt_internal_genex_get_joined_property var target property prefix suffix glue)
+    qt_internal_genex_get_property("${var}" "${target}" "${property}")
+    set(${var}
+        "$<${have_${var}}:${prefix}$<JOIN:${${var}},${glue}>${suffix}>")
+endmacro()
+
 # This function generates LD version script for the target and uses it in the target linker line.
 # Function has two modes dependending on the specified arguments.
 # Arguments:
@@ -23,7 +40,40 @@ function(qt_internal_add_linker_version_script target)
     endif()
 
     if(TEST_ld_version_script)
-        set(contents "Qt_${PROJECT_VERSION_MAJOR}_PRIVATE_API {\n    qt_private_api_tag*;\n")
+        # Create a list of mangled symbol matches for all "std::" symbols. This
+        # list will catch most symbols, but will miss global-namespace symbols
+        # that only have std parameters.
+        # See https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangle.name for reference
+        set(contents "NonQt {\nlocal:")
+
+        # For types: vtable, VTT, typeinfo, typeinfo name
+        foreach(ptrqualifier "" "P" "PK")       # T, T *, const T * (volatile ignored)
+            string(APPEND contents "\n    _ZT[VTIS]${ptrqualifier}S*;"
+                "_ZT[VTIS]${ptrqualifier}NS*;")
+        endforeach()
+
+        # For functions and variables
+        foreach(special ""
+                "G[VR]"             # guard variables, extended-lifetime references
+                "GTt")              # transaction entry points
+            foreach(cvqualifier "" "[VK]" "VK")     # plain, const|volatile, const volatile
+                string(APPEND contents "\n   ")
+                foreach(refqualifier "" "[RO]")    # plain, & or &&
+                    # For names in the std:: namespace, compression applies
+                    # (https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling-compression)
+                    string(APPEND contents
+                        " _Z${special}${cvqualifier}${refqualifier}S*;"     # plain
+                        " _Z${special}N${cvqualifier}${refqualifier}S*;"    # nested name
+                    )
+                endforeach()
+            endforeach()
+        endforeach()
+
+        string(APPEND contents "\n};\nQt_${PROJECT_VERSION_MAJOR}")
+        if(QT_FEATURE_elf_private_full_version)
+            string(APPEND contents ".${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
+        endif()
+        string(APPEND contents "_PRIVATE_API { qt_private_api_tag*;\n")
         if(arg_PRIVATE_HEADERS)
             foreach(ph ${arg_PRIVATE_HEADERS})
                 string(APPEND contents "    @FILE:${ph}@\n")
@@ -33,9 +83,27 @@ function(qt_internal_add_linker_version_script target)
         endif()
         string(APPEND contents "};\n")
         set(current "Qt_${PROJECT_VERSION_MAJOR}")
-        string(APPEND contents "${current} { *; };\n")
+        string(APPEND contents "${current} {\n    *;")
 
-        get_target_property(type ${target} TYPE)
+        get_target_property(target_type ${target} TYPE)
+        if(NOT target_type STREQUAL "INTERFACE_LIBRARY")
+            # Export all specializations of the QExplicitlySharedDataPointer
+            # and QSharedDataPointer destructors; due to use of the
+            # QT_DECLARE_Q{,E}SDP_SPECIALIZATION_DTOR_WITH_EXPORT macros
+            string(APPEND contents "\n    _ZN*18QSharedDataPointerI*D?Ev;")
+            string(APPEND contents "\n    _ZN*28QExplicitlySharedDataPointerI*D?Ev;")
+
+            set(genex_prefix "\n    ")
+            set(genex_glue "$<SEMICOLON>\n    ")
+            set(genex_suffix "$<SEMICOLON>")
+            qt_internal_genex_get_joined_property(
+                linker_exports "${target}" _qt_extra_linker_script_exports
+                "${genex_prefix}" "${genex_suffix}" "${genex_glue}"
+            )
+            string(APPEND contents "${linker_exports}")
+        endif()
+        string(APPEND contents "\n};\n")
+
         if(NOT target_type STREQUAL "INTERFACE_LIBRARY")
             set(property_genex "$<TARGET_PROPERTY:${target},_qt_extra_linker_script_content>")
             set(check_genex "$<BOOL:${property_genex}>")
@@ -78,6 +146,12 @@ endfunction()
 
 function(qt_internal_add_link_flags_no_undefined target)
     if (NOT QT_BUILD_SHARED_LIBS OR WASM)
+        return()
+    endif()
+    if (VXWORKS)
+        # VxWorks requires thread_local-related symbols to be found at
+        # runtime, resulting in linker error when no-undefined flag is
+        # set and thread_local is used
         return()
     endif()
     if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -167,6 +241,7 @@ function(qt_internal_apply_gc_binaries target visibility)
     endif()
 endfunction()
 
+# Only applied to Bootstrap and BundledPCRE2.
 function(qt_internal_apply_intel_cet target visibility)
     if(NOT QT_FEATURE_intelcet)
         return()
@@ -186,31 +261,34 @@ function(qt_internal_apply_intel_cet target visibility)
             ">:-mshstk>")
     endif()
     if(flags)
+        set(opt_out_condition "$<NOT:$<BOOL:$<TARGET_PROPERTY:_qt_no_intel_cet_harderning>>>")
+        set(flags "$<${opt_out_condition}:${flags}>")
         target_compile_options("${target}" ${visibility} "${flags}")
     endif()
 endfunction()
 
-function(qt_internal_library_deprecation_level result)
-    # QT_DISABLE_DEPRECATED_UP_TO controls which version we use as a cut-off
-    # compiling in to the library. E.g. if it is set to QT_VERSION then no
-    # code which was deprecated before QT_VERSION will be compiled in.
-    if (NOT DEFINED QT_DISABLE_DEPRECATED_UP_TO)
-        if(WIN32)
-            # On Windows, due to the way DLLs work, we need to export all functions,
-            # including the inlines
-            list(APPEND deprecations "QT_DISABLE_DEPRECATED_UP_TO=0x040800")
-        else()
-            # On other platforms, Qt's own compilation does need to compile the Qt 5.0 API
-            list(APPEND deprecations "QT_DISABLE_DEPRECATED_UP_TO=0x050000")
-        endif()
-    else()
-        list(APPEND deprecations "QT_DISABLE_DEPRECATED_UP_TO=${QT_DISABLE_DEPRECATED_UP_TO}")
+# Meant to be applied to PlatformCommonInternal.
+function(qt_internal_apply_intel_cet_harderning target)
+    if(NOT QT_FEATURE_intelcet)
+        return()
     endif()
-    # QT_WARN_DEPRECATED_UP_TO controls the upper-bound of deprecation
-    # warnings that are emitted. E.g. if it is set to 0x060500 then all use of
-    # things deprecated in or before 6.5.0 will be warned against.
-    list(APPEND deprecations "QT_WARN_DEPRECATED_UP_TO=0x070000")
-    set("${result}" "${deprecations}" PARENT_SCOPE)
+
+    set(opt_out_condition "$<NOT:$<BOOL:$<TARGET_PROPERTY:_qt_no_intel_cet_harderning>>>")
+
+    if(MSVC)
+        set(intel_cet_flag "-CETCOMPAT")
+        set(condition "$<${opt_out_condition}:${intel_cet_flag}>")
+        qt_internal_platform_link_options("${target}" INTERFACE "${condition}")
+    else()
+        set(intel_cet_flag "-fcf-protection=full")
+        set(condition "$<${opt_out_condition}:${intel_cet_flag}>")
+        target_compile_options("${target}" INTERFACE "${condition}")
+    endif()
+endfunction()
+
+# Allow opting out of the Intel CET hardening on a per-target basis.
+function(qt_internal_skip_intel_cet_hardening target)
+    set_target_properties("${target}" PROPERTIES _qt_no_intel_cet_harderning TRUE)
 endfunction()
 
 # Sets the exceptions flags for the given target according to exceptions_on
@@ -221,21 +299,21 @@ function(qt_internal_set_exceptions_flags target exceptions_on)
         if(MSVC)
             set(_flag "/EHsc")
             if((MSVC_VERSION GREATER_EQUAL 1929) AND NOT CLANG)
+                # Use the undocumented compiler flag to make our binary smaller on x64.
+                # https://devblogs.microsoft.com/cppblog/making-cpp-exception-handling-smaller-x64/
+                # NOTE: It seems we'll use this new exception handling model unconditionally without
+                # this hack since some unknown MSVC version.
                 set(_flag ${_flag} "/d2FH4")
             endif()
+        else()
+            set(_flag "-fexceptions")
         endif()
     else()
         set(_defs "QT_NO_EXCEPTIONS")
-        if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+        if(MSVC)
             set(_flag "/EHs-c-" "/wd4530" "/wd4577")
-        elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU|AppleClang|InteLLLVM")
+        else()
             set(_flag "-fno-exceptions")
-        elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-            if (MSVC)
-                set(_flag "/EHs-c-" "/wd4530" "/wd4577")
-            else()
-                set(_flag "-fno-exceptions")
-            endif()
         endif()
     endif()
 
@@ -336,7 +414,7 @@ function(qt_internal_enable_unicode_defines)
         set(no_unicode_condition
             "$<NOT:$<BOOL:$<TARGET_PROPERTY:QT_NO_UNICODE_DEFINES>>>")
         target_compile_definitions(Platform
-            INTERFACE "$<${no_unicode_condition}:UNICODE;_UNICODE>")
+            INTERFACE "$<${no_unicode_condition}:UNICODE$<SEMICOLON>_UNICODE>")
     endif()
 endfunction()
 

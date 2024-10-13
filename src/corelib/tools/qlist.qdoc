@@ -130,6 +130,9 @@
     per-function basis.
 
     For iterating over the items, see \l {Iterating over Containers}.
+    For using QList with functions from \c {<algorithm>} header, such as
+    \c {std::sort()}, \c {std::reverse()}, and \c {std::count_if()},
+    see \l {Qt containers and std algorithms}.
 
     In addition to QList, Qt also provides QVarLengthArray, a very
     low-level class with little functionality that is optimized for
@@ -247,6 +250,31 @@
     \sa resize()
 */
 
+/*! \fn template <typename T> QList<T>::QList(qsizetype size, Qt::Initialization)
+    \since 6.8
+
+    Constructs a list with an initial size of \a size elements.
+
+    QList will make an attempt at \b{not initializing} the elements.
+
+//! [qlist-uninitialized-strategy]
+    Specifically:
+
+    \list
+
+    \li if \c{T} has a constructor that accepts \c{Qt::Uninitialized},
+    that constructor will be used to initialize the elements;
+
+    \li otherwise, each element is default constructed. For
+    trivially constructible types (such as \c{int}, \c{float}, etc.)
+    this is equivalent to not initializing them.
+
+    \endlist
+//! [qlist-uninitialized-strategy]
+
+    \sa resizeForOverwrite()
+*/
+
 /*! \fn template <typename T> QList<T>::QList(qsizetype size, parameter_type value)
 
     Constructs a list with an initial size of \a size elements.
@@ -274,10 +302,14 @@
     Constructs a list from the std::initializer_list given by \a args.
 */
 
-/*! \fn template <typename T> template<typename InputIterator> QList<T>::QList(InputIterator first, InputIterator last)
+/*! \fn template<typename T> template <typename InputIterator, QList<T>::if_input_iterator<InputIterator> = true> QList<T>::QList(InputIterator first, InputIterator last)
     \since 5.14
 
     Constructs a list with the contents in the iterator range [\a first, \a last).
+
+    \note This constructor only participates in overload resolution if
+    \c InputIterator meets the requirements of a
+    \l {https://en.cppreference.com/w/cpp/named_req/InputIterator} {LegacyInputIterator}.
 
     The value type of \c InputIterator must be convertible to \c T.
 */
@@ -438,6 +470,17 @@
     preserving the capacity.
 
     \sa size()
+*/
+
+/*! \fn template <typename T> void QList<T>::resizeForOverwrite(qsizetype size)
+    \since 6.8
+
+    Sets the size of the list to \a size. If \a size is less than the
+    current size, elements are removed from the end. If \a size is
+    greater than the current size, elements are added to the end; QList
+    will make an attempt at \b{not initializing} these new elements.
+
+    \include qlist.qdoc qlist-uninitialized-strategy
 */
 
 /*! \fn template <typename T> qsizetype QList<T>::capacity() const
@@ -1289,6 +1332,15 @@
     returns \c false.
 */
 
+/*! \fn template <typename T> qsizetype QList<T>::max_size() const
+    \fn template <typename T> qsizetype QList<T>::maxSize()
+    \since 6.8
+
+    It returns the maximum number of elements that the list can
+    theoretically hold. In practice, the number can be much smaller,
+    limited by the amount of memory available to the system.
+*/
+
 /*! \fn template <typename T> QList<T> &QList<T>::operator+=(const QList<T> &other)
 
     Appends the items of the \a other list to this list and
@@ -1533,4 +1585,48 @@
     any.
 
     \sa erase
+*/
+
+/*! \fn template <typename T> QList<T>& QList<T>::assign(qsizetype n, parameter_type t)
+    \since 6.6
+
+    Replaces the contents of this list with \a n copies of \a t.
+
+    The size of this list will be equal to \a n.
+
+    This function will only allocate memory if \a n exceeds the capacity of the
+    list or this list is shared.
+*/
+
+/*! \fn template <typename T> template <typename InputIterator, QList<T>::if_input_iterator<InputIterator>> QList<T>& QList<T>::assign(InputIterator first, InputIterator last)
+    \since 6.6
+
+    Replaces the contents of this list with a copy of the elements in the
+    iterator range [\a first, \a last).
+
+    The size of this list will be equal to the number of elements in the
+    range [\a first, \a last).
+
+    This function will only allocate memory if the number of elements in the
+    range exceeds the capacity of this list or this list is shared.
+
+    \note This function overload only participates in overload resolution if
+    \c InputIterator meets the requirements of a
+    \l {https://en.cppreference.com/w/cpp/named_req/InputIterator} {LegacyInputIterator}.
+
+    \note The behavior is undefined if either argument is an iterator into
+    *this.
+*/
+
+/*! \fn template <typename T> QList<T>& QList<T>::assign(std::initializer_list<T> l)
+    \since 6.6
+
+    Replaces the contents of this list with a copy of the elements of
+    \a l.
+
+    The size of this list will be equal to the number of elements in
+    \a l.
+
+    This function only allocates memory if the number of elements in \a l
+    exceeds the capacity of this list or this list is shared.
 */

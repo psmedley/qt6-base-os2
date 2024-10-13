@@ -7,6 +7,7 @@
 #include "qwasmevent.h"
 #include "qwasmscreen.h"
 #include "qwasmwindow.h"
+#include "qwasmdrag.h"
 
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/qpointingdevice.h>
@@ -19,8 +20,9 @@ ClientArea::ClientArea(QWasmWindow *window, QWasmScreen *screen, emscripten::val
     : m_screen(screen), m_window(window), m_element(element)
 {
     const auto callback = std::function([this](emscripten::val event) {
-        if (processPointer(*PointerEvent::fromWeb(event)))
-            event.call<void>("preventDefault");
+        processPointer(*PointerEvent::fromWeb(event));
+        event.call<void>("preventDefault");
+        event.call<void>("stopPropagation");
     });
 
     m_pointerDownCallback =
@@ -30,33 +32,49 @@ ClientArea::ClientArea(QWasmWindow *window, QWasmScreen *screen, emscripten::val
     m_pointerUpCallback = std::make_unique<qstdweb::EventCallback>(element, "pointerup", callback);
     m_pointerCancelCallback =
             std::make_unique<qstdweb::EventCallback>(element, "pointercancel", callback);
+
+        element.call<void>("setAttribute", emscripten::val("draggable"), emscripten::val("true"));
+
+        m_dragStartCallback = std::make_unique<qstdweb::EventCallback>(
+                    element, "dragstart", [this](emscripten::val webEvent) {
+                            webEvent.call<void>("preventDefault");
+                            auto event = *DragEvent::fromWeb(webEvent, m_window->window());
+                            QWasmDrag::instance()->onNativeDragStarted(&event);
+                        });
+        m_dragOverCallback = std::make_unique<qstdweb::EventCallback>(
+                    element, "dragover", [this](emscripten::val webEvent) {
+                            webEvent.call<void>("preventDefault");
+                            auto event = *DragEvent::fromWeb(webEvent, m_window->window());
+                            QWasmDrag::instance()->onNativeDragOver(&event);
+                        });
+        m_dropCallback = std::make_unique<qstdweb::EventCallback>(
+                    element, "drop", [this](emscripten::val webEvent) {
+                            webEvent.call<void>("preventDefault");
+                            auto event = *DragEvent::fromWeb(webEvent, m_window->window());
+                            QWasmDrag::instance()->onNativeDrop(&event);
+                        });
+        m_dragEndCallback = std::make_unique<qstdweb::EventCallback>(
+                    element, "dragend", [this](emscripten::val webEvent) {
+                            webEvent.call<void>("preventDefault");
+                            auto event = *DragEvent::fromWeb(webEvent, m_window->window());
+                            QWasmDrag::instance()->onNativeDragFinished(&event);
+                        });
+
 }
 
 bool ClientArea::processPointer(const PointerEvent &event)
 {
-    const auto localScreenPoint =
-            dom::mapPoint(event.target, m_screen->element(), event.localPoint);
-    const auto pointInScreen = m_screen->mapFromLocal(localScreenPoint);
-
-    const QPointF pointInTargetWindowCoords = m_window->window()->mapFromGlobal(pointInScreen);
 
     switch (event.type) {
     case EventType::PointerDown:
         m_element.call<void>("setPointerCapture", event.pointerId);
-        m_window->window()->requestActivate();
+        if ((m_window->window()->flags() & Qt::WindowDoesNotAcceptFocus)
+                    != Qt::WindowDoesNotAcceptFocus
+            && m_window->window()->isTopLevel())
+                m_window->window()->requestActivate();
         break;
     case EventType::PointerUp:
         m_element.call<void>("releasePointerCapture", event.pointerId);
-        break;
-    case EventType::PointerEnter:
-        if (event.isPrimary) {
-            QWindowSystemInterface::handleEnterEvent(m_window->window(), pointInTargetWindowCoords,
-                                                     pointInScreen);
-        }
-        break;
-    case EventType::PointerLeave:
-        if (event.isPrimary)
-            QWindowSystemInterface::handleLeaveEvent(m_window->window());
         break;
     default:
         break;
@@ -71,7 +89,7 @@ bool ClientArea::processPointer(const PointerEvent &event)
 bool ClientArea::deliverEvent(const PointerEvent &event)
 {
     const auto pointInScreen = m_screen->mapFromLocal(
-            dom::mapPoint(event.target, m_screen->element(), event.localPoint));
+        dom::mapPoint(event.target(), m_screen->element(), event.localPoint));
 
     const auto geometryF = m_screen->geometry().toRectF();
     const QPointF targetPointClippedToScreen(
@@ -90,6 +108,31 @@ bool ClientArea::deliverEvent(const PointerEvent &event)
                         eventType, event.modifiers);
     }
 
+    if (event.pointerType == PointerType::Pen) {
+        qreal pressure;
+        switch (event.type) {
+            case EventType::PointerDown :
+            case EventType::PointerMove :
+                pressure = event.pressure;
+                break;
+            case EventType::PointerUp :
+                pressure = 0.0;
+                break;
+            default:
+                return false;
+        }
+        // Tilt in the browser is in the range +-90, but QTabletEvent only goes to +-60.
+        qreal xTilt = qBound(-60.0, event.tiltX, 60.0);
+        qreal yTilt = qBound(-60.0, event.tiltY, 60.0);
+        // Barrel rotation is reported as 0 to 359, but QTabletEvent wants a signed value.
+        qreal rotation = event.twist > 180.0 ? 360.0 - event.twist : event.twist;
+        return QWindowSystemInterface::handleTabletEvent(
+            m_window->window(), QWasmIntegration::getTimestamp(), m_screen->tabletDevice(),
+            m_window->window()->mapFromGlobal(targetPointClippedToScreen),
+            targetPointClippedToScreen, event.mouseButtons, pressure, xTilt, yTilt,
+            event.tangentialPressure, rotation, event.modifiers);
+    }
+
     QWindowSystemInterface::TouchPoint *touchPoint;
 
     QPointF pointInTargetWindowCoords =
@@ -98,7 +141,7 @@ bool ClientArea::deliverEvent(const PointerEvent &event)
                            pointInTargetWindowCoords.y() / m_window->window()->height());
 
     const auto tp = m_pointerIdToTouchPoints.find(event.pointerId);
-    if (tp != m_pointerIdToTouchPoints.end()) {
+    if (event.pointerType != PointerType::Pen && tp != m_pointerIdToTouchPoints.end()) {
         touchPoint = &tp.value();
     } else {
         touchPoint = &m_pointerIdToTouchPoints

@@ -36,17 +36,20 @@ class QPlatformGraphicsBuffer;
 class QRhi;
 class QRhiTexture;
 class QRhiResourceUpdateBatch;
-class QRhiSwapChain;
 
 struct Q_GUI_EXPORT QPlatformBackingStoreRhiConfig
 {
+    Q_GADGET
+public:
     enum Api {
         OpenGL,
         Metal,
         Vulkan,
         D3D11,
+        D3D12,
         Null
     };
+    Q_ENUM(Api)
 
     QPlatformBackingStoreRhiConfig()
         : m_enable(false)
@@ -93,7 +96,8 @@ public:
     enum Flag {
         StacksOnTop = 0x01,
         TextureIsSrgb = 0x02,
-        NeedsPremultipliedAlphaBlending = 0x04
+        NeedsPremultipliedAlphaBlending = 0x04,
+        MirrorVertically = 0x08
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -170,11 +174,10 @@ public:
     virtual void beginPaint(const QRegion &);
     virtual void endPaint();
 
-    void setRhiConfig(const QPlatformBackingStoreRhiConfig &config);
-    QRhi *rhi() const;
-    QRhiSwapChain *rhiSwapChain() const;
+    void createRhi(QWindow *window, QPlatformBackingStoreRhiConfig config);
+    QRhi *rhi(QWindow *window) const;
     void surfaceAboutToBeDestroyed();
-    void graphicsDeviceReportedLost();
+    void graphicsDeviceReportedLost(QWindow *window);
 
 private:
     QPlatformBackingStorePrivate *d_ptr;

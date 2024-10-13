@@ -12,8 +12,6 @@
 #include <QTcpSocket>
 #include <QTimer>
 
-static const int MaxBufferSize = 1024000;
-
 class Connection : public QTcpSocket
 {
     Q_OBJECT
@@ -22,6 +20,7 @@ public:
     enum ConnectionState {
         WaitingForGreeting,
         ReadingGreeting,
+        ProcessingGreeting,
         ReadyForUse
     };
     enum DataType {
@@ -32,13 +31,15 @@ public:
         Undefined
     };
 
-    Connection(QObject *parent = nullptr);
-    Connection(qintptr socketDescriptor, QObject *parent = nullptr);
+    explicit Connection(QObject *parent = nullptr);
+    explicit Connection(qintptr socketDescriptor, QObject *parent = nullptr);
     ~Connection();
 
     QString name() const;
-    void setGreetingMessage(const QString &message);
+    void setGreetingMessage(const QString &message, const QByteArray &uniqueId);
     bool sendMessage(const QString &message);
+
+    QByteArray uniqueId() const;
 
 signals:
     void readyForUse();
@@ -59,15 +60,17 @@ private:
 
     QCborStreamReader reader;
     QCborStreamWriter writer;
-    QString greetingMessage;
-    QString username;
+    QString greetingMessage = tr("undefined");
+    QString username = tr("unknown");
     QTimer pingTimer;
     QElapsedTimer pongTime;
     QString buffer;
-    ConnectionState state;
-    DataType currentDataType;
-    int transferTimerId;
-    bool isGreetingMessageSent;
+    QByteArray localUniqueId;
+    QByteArray peerUniqueId;
+    ConnectionState state = WaitingForGreeting;
+    DataType currentDataType = Undefined;
+    int transferTimerId = -1;
+    bool isGreetingMessageSent = false;
 };
 
 #endif

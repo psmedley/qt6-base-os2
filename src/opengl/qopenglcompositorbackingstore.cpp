@@ -6,7 +6,7 @@
 #include <QtGui/QPainter>
 #include <qpa/qplatformbackingstore.h>
 #include <private/qwindow_p.h>
-#include <private/qrhi_p.h>
+#include <rhi/qrhi.h>
 
 #include "qopenglcompositorbackingstore_p.h"
 #include "qopenglcompositor_p.h"
@@ -134,37 +134,24 @@ void QOpenGLCompositorBackingStore::updateTexture()
     }
 }
 
-void QOpenGLCompositorBackingStore::flush(QWindow *window, const QRegion &region, const QPoint &offset)
+void QOpenGLCompositorBackingStore::flush(QWindow *flushedWindow, const QRegion &region, const QPoint &offset)
 {
     // Called for ordinary raster windows.
 
     Q_UNUSED(region);
     Q_UNUSED(offset);
 
-    m_rhi = rhi();
-    if (!m_rhi) {
-        setRhiConfig(QPlatformBackingStoreRhiConfig(QPlatformBackingStoreRhiConfig::OpenGL));
-        m_rhi = rhi();
+    if (!rhi(flushedWindow)) {
+        QPlatformBackingStoreRhiConfig rhiConfig;
+        rhiConfig.setApi(QPlatformBackingStoreRhiConfig::OpenGL);
+        rhiConfig.setEnabled(true);
+        createRhi(flushedWindow, rhiConfig);
     }
-    Q_ASSERT(m_rhi);
 
-    QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
-    QOpenGLContext *dstCtx = compositor->context();
-    if (!dstCtx)
-        return;
-
-    QWindow *dstWin = compositor->targetWindow();
-    if (!dstWin)
-        return;
-
-    if (!dstCtx->makeCurrent(dstWin))
-        return;
-
-    updateTexture();
-    m_textures->clear();
-    m_textures->appendTexture(nullptr, m_bsTextureWrapper, window->geometry());
-
-    compositor->update();
+    static QPlatformTextureList emptyTextureList;
+    bool translucentBackground = m_image.hasAlphaChannel();
+    rhiFlush(flushedWindow, flushedWindow->devicePixelRatio(),
+        region, offset, &emptyTextureList, translucentBackground);
 }
 
 QPlatformBackingStore::FlushResult QOpenGLCompositorBackingStore::rhiFlush(QWindow *window,
@@ -181,11 +168,7 @@ QPlatformBackingStore::FlushResult QOpenGLCompositorBackingStore::rhiFlush(QWind
     Q_UNUSED(translucentBackground);
     Q_UNUSED(sourceDevicePixelRatio);
 
-    m_rhi = rhi();
-    if (!m_rhi) {
-        setRhiConfig(QPlatformBackingStoreRhiConfig(QPlatformBackingStoreRhiConfig::OpenGL));
-        m_rhi = rhi();
-    }
+    m_rhi = rhi(window);
     Q_ASSERT(m_rhi);
 
     QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
@@ -246,6 +229,8 @@ void QOpenGLCompositorBackingStore::resize(const QSize &size, const QRegion &sta
 
     QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
     QOpenGLContext *dstCtx = compositor->context();
+    if (!dstCtx)
+        return;
     QWindow *dstWin = compositor->targetWindow();
     if (!dstWin)
         return;

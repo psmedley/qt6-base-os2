@@ -78,7 +78,6 @@ struct QWindowsWindowData
 {
     Qt::WindowFlags flags;
     QRect geometry;
-    QRect preMoveGeometry;
     QRect restoreGeometry;
     QMargins fullFrameMargins; // Do not use directly for windows, see FrameDirty.
     QMargins customMargins;    // User-defined, additional frame for NCCALCSIZE
@@ -129,6 +128,7 @@ public:
 protected:
     HWND parentHwnd() const { return GetAncestor(handle(), GA_PARENT); }
     bool isTopLevel_sys() const;
+    inline bool hasMaximumSize() const;
     QRect frameGeometry_sys() const;
     QRect geometry_sys() const;
     void setGeometry_sys(const QRect &rect) const;
@@ -160,6 +160,7 @@ class QWindowsForeignWindow : public QWindowsBaseWindow
 {
 public:
     explicit QWindowsForeignWindow(QWindow *window, HWND hwnd);
+    ~QWindowsForeignWindow();
 
     void setParent(const QPlatformWindow *window) override;
     void setGeometry(const QRect &rect) override { setGeometry_sys(rect); }
@@ -222,11 +223,6 @@ public:
     QRect normalGeometry() const override;
     QRect restoreGeometry() const { return m_data.restoreGeometry; }
     void updateRestoreGeometry();
-
-    static QWindow *topTransientOf(QWindow *w);
-    QRect preMoveRect() const { return m_data.preMoveGeometry; }
-    void setPreMoveRect(const QRect &rect) { m_data.preMoveGeometry = rect; }
-    void moveTransientChildren();
 
     void setVisible(bool visible) override;
     bool isVisible() const;
@@ -330,7 +326,6 @@ public:
 
     void *surface(void *nativeConfig, int *err);
     void invalidateSurface() override;
-    void aboutToMakeCurrent();
 
     void setAlertState(bool enabled) override;
     bool isAlertState() const override { return testFlag(AlertState); }
@@ -353,6 +348,8 @@ public:
     void setSavedDpi(int dpi) { m_savedDpi = dpi; }
     int savedDpi() const { return m_savedDpi; }
     qreal dpiRelativeScale(const UINT dpi) const;
+
+    bool isFrameless() const { return m_data.flags.testFlag(Qt::FramelessWindowHint); }
 
 private:
     inline void show_sys() const;

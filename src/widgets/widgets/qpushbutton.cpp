@@ -525,7 +525,8 @@ void QPushButton::setMenu(QMenu* menu)
         return;
 
     if (menu && !d->menu) {
-        connect(this, SIGNAL(pressed()), this, SLOT(_q_popupPressed()), Qt::UniqueConnection);
+        QObjectPrivate::connect(this, &QPushButton::pressed,
+                                d, &QPushButtonPrivate::popupPressed, Qt::UniqueConnection);
     }
     if (d->menu)
         removeAction(d->menu->menuAction());
@@ -562,10 +563,10 @@ void QPushButton::showMenu()
     if (!d || !d->menu)
         return;
     setDown(true);
-    d->_q_popupPressed();
+    d->popupPressed();
 }
 
-void QPushButtonPrivate::_q_popupPressed()
+void QPushButtonPrivate::popupPressed()
 {
     Q_Q(QPushButton);
     if (!down || !menu)
@@ -575,17 +576,14 @@ void QPushButtonPrivate::_q_popupPressed()
 
     QPoint menuPos = adjustedMenuPosition();
 
-    QPointer<QPushButton> guard(q);
-    QMenuPrivate::get(menu)->causedPopup.widget = guard;
+    QMenuPrivate::get(menu)->causedPopup.widget = q;
 
     //Because of a delay in menu effects, we must keep track of the
     //menu visibility to avoid flicker on button release
     menuOpen = true;
-    menu->exec(menuPos);
-    if (guard) {
-        menuOpen = false;
-        q->setDown(false);
-    }
+    QObject::connect(menu, &QMenu::aboutToHide,
+                     q, [q, this]{ menuOpen = false; q->setDown(false); }, Qt::SingleShotConnection);
+    menu->popup(menuPos);
 }
 
 QPoint QPushButtonPrivate::adjustedMenuPosition()

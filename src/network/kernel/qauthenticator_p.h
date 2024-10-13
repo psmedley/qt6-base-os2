@@ -26,13 +26,14 @@
 QT_BEGIN_NAMESPACE
 
 class QHttpResponseHeader;
+class QHttpHeaders;
 #if QT_CONFIG(sspi) // SSPI
 class QSSPIWindowsHandles;
 #elif QT_CONFIG(gssapi) // GSSAPI
 class QGssApiHandles;
 #endif
 
-class Q_AUTOTEST_EXPORT QAuthenticatorPrivate
+class Q_NETWORK_EXPORT QAuthenticatorPrivate
 {
 public:
     enum Method { None, Basic, Negotiate, Ntlm, DigestMd5, };
@@ -80,8 +81,7 @@ public:
     static QHash<QByteArray, QByteArray>
     parseDigestAuthenticationChallenge(QByteArrayView challenge);
 
-    void parseHttpResponse(const QList<QPair<QByteArray, QByteArray>> &, bool isProxy,
-                           QStringView host);
+    void parseHttpResponse(const QHttpHeaders &headers, bool isProxy, QStringView host);
     void updateCredentials();
 
     static bool isMethodSupported(QByteArrayView method);

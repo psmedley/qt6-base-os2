@@ -21,6 +21,8 @@
 #include <QTest>
 #include <private/qglobal_p.h>
 
+#include <cstdio>
+
 QT_BEGIN_NAMESPACE
 
 namespace QTestPrivate {
@@ -44,19 +46,15 @@ namespace QTestPrivate {
 */
 #define QPROPERTY_TEST_COMPARISON_HELPER(actual, expected, comparator, represent)                  \
     do {                                                                                           \
-        const size_t maxMsgLen = 1024;                                                             \
-        char msg[maxMsgLen] = { '\0' };                                                            \
-        auto actualStr = represent(actual);                                                        \
-        auto expectedStr = represent(expected);                                                    \
-        const size_t len1 = mbstowcs(nullptr, #actual, maxMsgLen);                                 \
-        const size_t len2 = mbstowcs(nullptr, #expected, maxMsgLen);                               \
-        qsnprintf(msg, maxMsgLen, "\n%s\n   Actual   (%s)%*s %s\n   Expected (%s)%*s %s\n",        \
-                  "Comparison failed!", #actual, qMax(len1, len2) - len1 + 1, ":",                 \
-                  actualStr ? actualStr : "<null>", #expected, qMax(len1, len2) - len2 + 1, ":",   \
-                  expectedStr ? expectedStr : "<null>");                                           \
-        delete[] actualStr;                                                                        \
-        delete[] expectedStr;                                                                      \
-        QVERIFY2(comparator(actual, expected), msg);                                               \
+        char qprop_tst_cmp_hlp_buf[1024]; \
+        const auto qprop_tst_cmp_hlp_act = std::unique_ptr<char[]>(represent(actual)); \
+        const auto qprop_tst_cmp_hlp_exp = std::unique_ptr<char[]>(represent(expected)); \
+        QVERIFY2(comparator(actual, expected), \
+                 QTest::Internal::formatPropertyTestHelperFailure(qprop_tst_cmp_hlp_buf, \
+                                                                  sizeof qprop_tst_cmp_hlp_buf, \
+                                                                  qprop_tst_cmp_hlp_act.get(), \
+                                                                  qprop_tst_cmp_hlp_exp.get(), \
+                                                                  #actual, #expected)); \
     } while (false)
 
 /*!
@@ -84,6 +82,14 @@ namespace QTestPrivate {
     allocate its returned string using \c {new char[]}, so that it can be used
     in place of \l {QTest::toString()}.
 
+    The \a helperConstructor method is used to create another instance of
+    \c TestedClass. This instance is used to test for binding loops. By default,
+    the method returns a default-constructed \c TestedClass. A custom
+    \a helperConstructor should be provided if \c TestedClass is not
+    default-constructible. Some very specific properties cannot be tested for
+    binding loops. Pass a lambda that returns an \c {std::nullptr} as
+    \a helperConstructor in such case.
+
     \note Any test calling this method will need to call
     \code
     if (QTest::currentTestFailed())
@@ -100,7 +106,9 @@ void testReadWritePropertyBasics(
         std::function<bool(const PropertyType &, const PropertyType &)> comparator =
                 [](const PropertyType &lhs, const PropertyType &rhs) { return lhs == rhs; },
         std::function<char *(const PropertyType &)> represent =
-                [](const PropertyType &val) { return QTest::toString(val); })
+                [](const PropertyType &val) { return QTest::toString(val); },
+        std::function<std::unique_ptr<TestedClass>(void)> helperConstructor =
+                []() { return std::make_unique<TestedClass>(); })
 {
     // get the property
     const QMetaObject *metaObject = instance.metaObject();
@@ -189,6 +197,45 @@ void testReadWritePropertyBasics(
     // value didn't change -> the signal should not be emitted
     if (spy)
         QCOMPARE(spy->size(), 4);
+
+    // test binding loop
+    if (std::unique_ptr<TestedClass> helperObj = helperConstructor()) {
+        // Reset to 'initial', so that the binding loop test could check the
+        // 'changed' value, because some tests already rely on the 'instance' to
+        // have the 'changed' value once this test passes
+        testedObj.setProperty(propertyName, QVariant::fromValue(initial));
+        const QPropertyBinding<PropertyType> binding([&]() {
+            QObject *obj = static_cast<QObject *>(helperObj.get());
+            obj->setProperty(propertyName, QVariant::fromValue(changed));
+            return obj->property(propertyName).template value<PropertyType>();
+        }, {});
+        bindable.setBinding(binding);
+        QPROPERTY_TEST_COMPARISON_HELPER(
+                testedObj.property(propertyName).template value<PropertyType>(), changed,
+                comparator, represent);
+        QVERIFY2(!binding.error().hasError(), qPrintable(binding.error().description()));
+    }
+}
+
+/*!
+    \internal
+    \overload
+
+    This overload supports the case where the caller only needs to override
+    the default for \a helperConstructor. It uses the defaults for all the other
+    parameters.
+*/
+template<typename TestedClass, typename PropertyType>
+void testReadWritePropertyBasics(
+        TestedClass &instance, const PropertyType &initial, const PropertyType &changed,
+        const char *propertyName,
+        std::function<std::unique_ptr<TestedClass>(void)> helperConstructor)
+{
+    testReadWritePropertyBasics<TestedClass, PropertyType>(
+            instance, initial, changed, propertyName,
+            [](const PropertyType &lhs, const PropertyType &rhs) { return lhs == rhs; },
+            [](const PropertyType &val) { return QTest::toString(val); },
+            helperConstructor);
 }
 
 /*!
@@ -224,6 +271,14 @@ void testReadWritePropertyBasics(
     allocate its returned string using \c {new char[]}, so that it can be used
     in place of \l {QTest::toString()}.
 
+    The \a helperConstructor method is used to create another instance of
+    \c TestedClass. This instance is used to test for binding loops. By default,
+    the method returns a default-constructed \c TestedClass. A custom
+    \a helperConstructor should be provided if \c TestedClass is not
+    default-constructible. Some very specific properties cannot be tested for
+    binding loops. Pass a lambda that returns an \c {std::nullptr} as
+    \a helperConstructor in such case.
+
     \note Any test calling this method will need to call
     \code
     if (QTest::currentTestFailed())
@@ -242,7 +297,9 @@ void testWriteOncePropertyBasics(
         std::function<bool(const PropertyType &, const PropertyType &)> comparator =
                 [](const PropertyType &lhs, const PropertyType &rhs) { return lhs == rhs; },
         std::function<char *(const PropertyType &)> represent =
-                [](const PropertyType &val) { return QTest::toString(val); })
+                [](const PropertyType &val) { return QTest::toString(val); },
+        std::function<std::unique_ptr<TestedClass>(void)> helperConstructor =
+                []() { return std::make_unique<TestedClass>(); })
 {
     // get the property
     const QMetaObject *metaObject = instance.metaObject();
@@ -276,10 +333,19 @@ void testWriteOncePropertyBasics(
     propObserver.setBinding(bindable.makeBinding());
     QPROPERTY_TEST_COMPARISON_HELPER(propObserver.value(), prior, comparator, represent);
 
-    // Create a binding that sets the 'changed' value to the property
-    QProperty<PropertyType> propSetter(changed);
+    // Create a binding that sets the 'changed' value to the property.
+    // This also tests binding loops.
     QVERIFY(!bindable.hasBinding());
-    bindable.setBinding(Qt::makePropertyBinding(propSetter));
+    std::unique_ptr<TestedClass> helperObj = helperConstructor();
+    QProperty<PropertyType> propSetter(changed); // if the helperConstructor() returns nullptr
+    const QPropertyBinding<PropertyType> binding = helperObj
+            ? Qt::makePropertyBinding([&]() {
+                  QObject *obj = static_cast<QObject *>(helperObj.get());
+                  obj->setProperty(propertyName, QVariant::fromValue(changed));
+                  return obj->property(propertyName).template value<PropertyType>();
+              })
+            : Qt::makePropertyBinding(propSetter);
+    bindable.setBinding(binding);
     QVERIFY(bindable.hasBinding());
 
     QPROPERTY_TEST_COMPARISON_HELPER(
@@ -303,6 +369,27 @@ void testWriteOncePropertyBasics(
         QVERIFY(!bindable.hasBinding());
 }
 
+/*!
+    \internal
+    \overload
+
+    This overload supports the case where the caller only needs to override
+    the default for \a helperConstructor. It uses the defaults for all the other
+    parameters.
+*/
+template<typename TestedClass, typename PropertyType>
+void testWriteOncePropertyBasics(
+        TestedClass &instance, const PropertyType &prior, const PropertyType &changed,
+        const char *propertyName,
+        bool bindingPreservedOnWrite,
+        std::function<std::unique_ptr<TestedClass>(void)> helperConstructor)
+{
+    testWriteOncePropertyBasics<TestedClass, PropertyType>(
+            instance, prior, changed, propertyName, bindingPreservedOnWrite,
+            [](const PropertyType &lhs, const PropertyType &rhs) { return lhs == rhs; },
+            [](const PropertyType &val) { return QTest::toString(val); },
+            helperConstructor);
+}
 
 /*!
     \internal

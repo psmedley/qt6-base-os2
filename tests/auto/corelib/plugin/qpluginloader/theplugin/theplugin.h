@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #ifndef THEPLUGIN_H
 #define THEPLUGIN_H
 
@@ -15,6 +15,7 @@ class ThePlugin : public QObject, public PluginInterface
 
 public:
     virtual QString pluginName() const override;
+    const char *architectureName() const override;
 };
 
 #endif // THEPLUGIN_H

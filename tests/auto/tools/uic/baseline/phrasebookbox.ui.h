@@ -1,7 +1,7 @@
 /*
 
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 */
 
@@ -135,7 +135,7 @@ public:
 
         buttonLayout->addWidget(closeBut);
 
-        spacer1 = new QSpacerItem(20, 51, QSizePolicy::Minimum, QSizePolicy::Expanding);
+        spacer1 = new QSpacerItem(20, 51, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
 
         buttonLayout->addItem(spacer1);
 

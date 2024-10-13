@@ -32,6 +32,9 @@ public:
     QVariant themeHint(ThemeHint) const override;
 
     Qt::ColorScheme colorScheme() const override;
+    void requestColorScheme(Qt::ColorScheme scheme) override;
+
+    static void handleSettingsChanged();
 
     const QPalette *palette(Palette type = SystemPalette) const override
         { return m_palettes[type]; }
@@ -41,6 +44,7 @@ public:
     QPixmap standardPixmap(StandardPixmap sp, const QSizeF &size) const override;
 
     QIcon fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptions iconOptions = {}) const override;
+    QIconEngine *createIconEngine(const QString &iconName) const override;
 
     void windowsThemeChanged(QWindow *window);
     void displayChanged() { refreshIconPixmapSizes(); }
@@ -53,8 +57,6 @@ public:
     void showPlatformMenuBar() override;
 
     static bool useNativeMenus();
-    static bool queryDarkMode();
-    static bool queryHighContrast();
 
     void refreshFonts();
     void refresh();
@@ -69,7 +71,17 @@ private:
     void clearFonts();
     void refreshIconPixmapSizes();
 
+    static void populateLightSystemBasePalette(QPalette &result);
+    static void populateDarkSystemBasePalette(QPalette &result);
+
+    static Qt::ColorScheme queryColorScheme();
+    static Qt::ColorScheme effectiveColorScheme();
+    static bool queryHighContrast();
+
     static QWindowsTheme *m_instance;
+    static inline Qt::ColorScheme s_colorScheme = Qt::ColorScheme::Unknown;
+    static inline Qt::ColorScheme s_colorSchemeOverride = Qt::ColorScheme::Unknown;
+
     QPalette *m_palettes[NPalettes];
     QFont *m_fonts[NFonts];
     QList<QSize> m_fileIconSizes;

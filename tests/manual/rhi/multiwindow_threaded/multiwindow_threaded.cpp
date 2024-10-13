@@ -1,5 +1,5 @@
 // Copyright (C) 2018 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QApplication>
 #include <QWidget>
@@ -16,27 +16,10 @@
 #include <QEvent>
 #include <QCommandLineParser>
 #include <QElapsedTimer>
-
-#include <QtGui/private/qshader_p.h>
 #include <QFile>
-
-#ifndef QT_NO_OPENGL
-#include <QtGui/private/qrhigles2_p.h>
-#include <QOffscreenSurface>
-#endif
-
-#if QT_CONFIG(vulkan)
 #include <QLoggingCategory>
-#include <QtGui/private/qrhivulkan_p.h>
-#endif
-
-#ifdef Q_OS_WIN
-#include <QtGui/private/qrhid3d11_p.h>
-#endif
-
-#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
-#include <QtGui/private/qrhimetal_p.h>
-#endif
+#include <QOffscreenSurface>
+#include <rhi/qrhi.h>
 
 #ifdef Q_OS_DARWIN
 #include <QtCore/private/qcore_mac_p.h>
@@ -66,6 +49,8 @@ static QString graphicsApiName()
         return QLatin1String("Vulkan");
     case D3D11:
         return QLatin1String("Direct3D 11");
+    case D3D12:
+        return QLatin1String("Direct3D 12");
     case Metal:
         return QLatin1String("Metal");
     default:
@@ -329,10 +314,14 @@ void Renderer::createRhi()
         QRhiD3D11InitParams params;
         params.enableDebugLayer = true;
         r = QRhi::create(QRhi::D3D11, &params, rhiFlags);
+    } else if (graphicsApi == D3D12) {
+        QRhiD3D12InitParams params;
+        params.enableDebugLayer = true;
+        r = QRhi::create(QRhi::D3D12, &params, rhiFlags);
     }
 #endif
 
-#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+#if QT_CONFIG(metal)
     if (graphicsApi == Metal) {
         QRhiMetalInitParams params;
         r = QRhi::create(QRhi::Metal, &params, rhiFlags);
@@ -634,7 +623,7 @@ void createWindow()
     static QColor colors[] = { Qt::red, Qt::green, Qt::blue, Qt::yellow, Qt::cyan, Qt::gray };
     const int n = windows.count();
     Window *w = new Window(QString::asprintf("Window+Thread #%d (%s)", n, qPrintable(graphicsApiName())), graphicsApi);
-    Renderer *renderer = new Renderer(w, colors[n % 6], n % 3);;
+    Renderer *renderer = new Renderer(w, colors[n % 6], n % 3);
     QObject::connect(w, &Window::initRequested, w, [renderer] {
         renderer->sendInit();
     });
@@ -665,7 +654,7 @@ int main(int argc, char **argv)
 
 #if defined(Q_OS_WIN)
     graphicsApi = D3D11;
-#elif defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+#elif QT_CONFIG(metal)
     graphicsApi = Metal;
 #elif QT_CONFIG(vulkan)
     graphicsApi = Vulkan;
@@ -681,6 +670,8 @@ int main(int argc, char **argv)
     cmdLineParser.addOption(vkOption);
     QCommandLineOption d3dOption({ "d", "d3d11" }, QLatin1String("Direct3D 11"));
     cmdLineParser.addOption(d3dOption);
+    QCommandLineOption d3d12Option({ "D", "d3d12" }, QLatin1String("Direct3D 12"));
+    cmdLineParser.addOption(d3d12Option);
     QCommandLineOption mtlOption({ "m", "metal" }, QLatin1String("Metal"));
     cmdLineParser.addOption(mtlOption);
     cmdLineParser.process(app);
@@ -690,6 +681,8 @@ int main(int argc, char **argv)
         graphicsApi = Vulkan;
     if (cmdLineParser.isSet(d3dOption))
         graphicsApi = D3D11;
+    if (cmdLineParser.isSet(d3d12Option))
+        graphicsApi = D3D12;
     if (cmdLineParser.isSet(mtlOption))
         graphicsApi = Metal;
 

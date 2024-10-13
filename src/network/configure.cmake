@@ -12,7 +12,7 @@ qt_find_package(Libproxy PROVIDED_TARGETS PkgConfig::Libproxy MODULE_NAME networ
 qt_find_package(GSSAPI PROVIDED_TARGETS GSSAPI::GSSAPI MODULE_NAME network QMAKE_LIB gssapi)
 qt_find_package(GLIB2 OPTIONAL_COMPONENTS GOBJECT PROVIDED_TARGETS GLIB2::GOBJECT MODULE_NAME core QMAKE_LIB gobject)
 qt_find_package(GLIB2 OPTIONAL_COMPONENTS GIO PROVIDED_TARGETS GLIB2::GIO MODULE_NAME core QMAKE_LIB gio)
-
+qt_find_package(WrapResolv PROVIDED_TARGETS WrapResolv::WrapResolv MODULE_NAME network QMAKE_LIB libresolv)
 
 #### Tests
 
@@ -36,22 +36,6 @@ freeifaddrs(list);
 }
 "# FIXME: use: unmapped library: network
 )
-
-# ifr_index
-qt_config_compile_test(ifr_index
-    LABEL "ifr_index"
-    CODE
-"#include <net/if.h>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-struct ifreq req;
-req.ifr_index = 0;
-    /* END TEST: */
-    return 0;
-}
-")
 
 # ipv6ifname
 qt_config_compile_test(ipv6ifname
@@ -99,6 +83,25 @@ ci.ifa_prefered = ci.ifa_valid = 0;
     return 0;
 }
 ")
+
+# res_setserver
+qt_config_compile_test(res_setservers
+    LABEL "res_setservers()"
+    LIBRARIES
+        WrapResolv::WrapResolv
+    CODE
+"#include <sys/types.h>
+#include <netinet/in.h>
+#include <resolv.h>
+int main()
+{
+    union res_sockaddr_union sa;
+    res_state s = nullptr;
+    res_setservers(s, &sa, 1);
+    return 0;
+}
+"
+)
 
 # sctp
 qt_config_compile_test(sctp
@@ -190,18 +193,19 @@ connectionPointContainer->FindConnectionPoint(IID_INetworkConnectionEvents, &con
 
 qt_feature("getifaddrs" PUBLIC
     LABEL "getifaddrs()"
-    CONDITION TEST_getifaddrs
+    CONDITION VXWORKS OR UNIX AND NOT QT_FEATURE_linux_netlink AND TEST_getifaddrs
 )
 qt_feature_definition("getifaddrs" "QT_NO_GETIFADDRS" NEGATE VALUE "1")
-qt_feature("ifr_index" PRIVATE
-    LABEL "ifr_index"
-    CONDITION TEST_ifr_index
-)
 qt_feature("ipv6ifname" PUBLIC
     LABEL "IPv6 ifname"
-    CONDITION TEST_ipv6ifname
+    CONDITION VXWORKS OR UNIX AND NOT QT_FEATURE_linux_netlink AND TEST_ipv6ifname
 )
 qt_feature_definition("ipv6ifname" "QT_NO_IPV6IFNAME" NEGATE VALUE "1")
+qt_feature("libresolv" PRIVATE
+    LABEL "libresolv"
+    CONDITION WrapResolv_FOUND
+    AUTODETECT UNIX
+)
 qt_feature("libproxy" PRIVATE
     LABEL "libproxy"
     AUTODETECT OFF
@@ -210,6 +214,10 @@ qt_feature("libproxy" PRIVATE
 qt_feature("linux-netlink" PRIVATE
     LABEL "Linux AF_NETLINK"
     CONDITION LINUX AND NOT ANDROID AND TEST_linux_netlink
+)
+qt_feature("res_setservers" PRIVATE
+    LABEL "res_setservers()"
+    CONDITION QT_FEATURE_libresolv AND TEST_res_setservers
 )
 qt_feature("securetransport" PUBLIC
     LABEL "SecureTransport"
@@ -307,7 +315,7 @@ qt_feature("dnslookup" PUBLIC
     SECTION "Networking"
     LABEL "QDnsLookup"
     PURPOSE "Provides API for DNS lookups."
-    CONDITION NOT INTEGRITY
+    CONDITION QT_FEATURE_thread AND NOT INTEGRITY
 )
 qt_feature("gssapi" PUBLIC
     SECTION "Networking"
@@ -333,7 +341,7 @@ qt_feature("topleveldomain" PUBLIC
     SECTION "Networking"
     LABEL "qIsEffectiveTLD()"
     PURPOSE "Provides support for checking if a domain is a top level domain. If enabled, a binary dump of the Public Suffix List (http://www.publicsuffix.org, Mozilla License) is included. The data is used in QNetworkCookieJar."
-
+    AUTODETECT NOT WASM
     DISABLE INPUT_publicsuffix STREQUAL "no"
 )
 qt_feature("publicsuffix-qt" PRIVATE

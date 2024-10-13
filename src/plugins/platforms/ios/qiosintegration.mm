@@ -1,19 +1,25 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
+#undef QT_NO_FOREACH // this file contains unported legacy Q_FOREACH uses
+
 #include "qiosintegration.h"
 #include "qioseventdispatcher.h"
 #include "qiosglobal.h"
 #include "qioswindow.h"
 #include "qiosscreen.h"
 #include "qiosplatformaccessibility.h"
-#ifndef Q_OS_TVOS
+#if QT_CONFIG(clipboard)
 #include "qiosclipboard.h"
 #endif
 #include "qiosinputcontext.h"
 #include "qiostheme.h"
 #include "qiosservices.h"
 #include "qiosoptionalplugininterface.h"
+
+#if defined(Q_OS_VISIONOS)
+#include "qiosswiftintegration.h"
+#endif
 
 #include <QtGui/qpointingdevice.h>
 #include <QtGui/private/qguiapplication_p.h>
@@ -49,7 +55,7 @@ QIOSIntegration *QIOSIntegration::instance()
 
 QIOSIntegration::QIOSIntegration()
     : m_fontDatabase(new QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>)
-#if !defined(Q_OS_TVOS) && !defined(QT_NO_CLIPBOARD)
+#if QT_CONFIG(clipboard)
     , m_clipboard(new QIOSClipboard)
 #endif
     , m_inputContext(0)
@@ -70,6 +76,10 @@ QIOSIntegration::QIOSIntegration()
 
 void QIOSIntegration::initialize()
 {
+#if defined(Q_OS_VISIONOS)
+    // Qt requires a screen, so let's give it a dummy one
+    QWindowSystemInterface::handleScreenAdded(new QIOSScreen);
+#else
     UIScreen *mainScreen = [UIScreen mainScreen];
     NSMutableArray<UIScreen *> *screens = [[[UIScreen screens] mutableCopy] autorelease];
     if (![screens containsObject:mainScreen]) {
@@ -79,6 +89,7 @@ void QIOSIntegration::initialize()
 
     for (UIScreen *screen in screens)
         QWindowSystemInterface::handleScreenAdded(new QIOSScreen(screen));
+#endif
 
     // Depends on a primary screen being present
     m_inputContext = new QIOSInputContext;
@@ -86,8 +97,10 @@ void QIOSIntegration::initialize()
     m_touchDevice = new QPointingDevice;
     m_touchDevice->setType(QInputDevice::DeviceType::TouchScreen);
     QPointingDevice::Capabilities touchCapabilities = QPointingDevice::Capability::Position | QPointingDevice::Capability::NormalizedPosition;
+#if !defined(Q_OS_VISIONOS)
     if (mainScreen.traitCollection.forceTouchCapability == UIForceTouchCapabilityAvailable)
         touchCapabilities |= QPointingDevice::Capability::Pressure;
+#endif
     m_touchDevice->setCapabilities(touchCapabilities);
     QWindowSystemInterface::registerInputDevice(m_touchDevice);
 #if QT_CONFIG(tabletevent)
@@ -105,7 +118,7 @@ QIOSIntegration::~QIOSIntegration()
     delete m_fontDatabase;
     m_fontDatabase = 0;
 
-#if !defined(Q_OS_TVOS) && !defined(QT_NO_CLIPBOARD)
+#if QT_CONFIG(clipboard)
     delete m_clipboard;
     m_clipboard = 0;
 #endif
@@ -148,6 +161,8 @@ bool QIOSIntegration::hasCapability(Capability cap) const
         return false;
     case ApplicationState:
         return true;
+    case ForeignWindows:
+        return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
     }
@@ -156,6 +171,11 @@ bool QIOSIntegration::hasCapability(Capability cap) const
 QPlatformWindow *QIOSIntegration::createPlatformWindow(QWindow *window) const
 {
     return new QIOSWindow(window);
+}
+
+QPlatformWindow *QIOSIntegration::createForeignWindow(QWindow *window, WId nativeHandle) const
+{
+    return new QIOSWindow(window, nativeHandle);
 }
 
 QPlatformBackingStore *QIOSIntegration::createPlatformBackingStore(QWindow *window) const
@@ -199,14 +219,10 @@ QPlatformFontDatabase * QIOSIntegration::fontDatabase() const
     return m_fontDatabase;
 }
 
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
 QPlatformClipboard *QIOSIntegration::clipboard() const
 {
-#ifndef Q_OS_TVOS
     return m_clipboard;
-#else
-    return QPlatformIntegration::clipboard();
-#endif
 }
 #endif
 
@@ -281,6 +297,52 @@ void QIOSIntegration::setApplicationBadge(qint64 number)
 {
     UIApplication.sharedApplication.applicationIconBadgeNumber = number;
 }
+
+// ---------------------------------------------------------
+
+#if defined(Q_OS_VISIONOS)
+void QIOSIntegration::openImmersiveSpace()
+{
+    [ImmersiveSpaceManager openImmersiveSpace];
+}
+
+void QIOSIntegration::dismissImmersiveSpace()
+{
+    [ImmersiveSpaceManager dismissImmersiveSpace];
+}
+
+void QIOSIntegration::setImmersiveSpaceCompositorLayer(CompositorLayer *layer)
+{
+    m_immersiveSpaceCompositorLayer = layer;
+}
+
+void QIOSIntegration::configureCompositorLayer(cp_layer_renderer_capabilities_t capabilities,
+                                               cp_layer_renderer_configuration_t configuration)
+{
+    if (m_immersiveSpaceCompositorLayer)
+        m_immersiveSpaceCompositorLayer->configure(capabilities, configuration);
+}
+
+void QIOSIntegration::renderCompositorLayer(cp_layer_renderer_t renderer)
+{
+    if (m_immersiveSpaceCompositorLayer)
+        m_immersiveSpaceCompositorLayer->render(renderer);
+}
+
+void QIOSIntegration::handleSpatialEvents(const char *jsonString)
+{
+    if (m_immersiveSpaceCompositorLayer) {
+        QJsonParseError error;
+        QJsonDocument doc = QJsonDocument::fromJson(QByteArray(jsonString), &error);
+        if (error.error != QJsonParseError::NoError) {
+            qWarning() << "Error parsing JSON: " << error.errorString();
+            return;
+        }
+        m_immersiveSpaceCompositorLayer->handleSpatialEvents(doc.object());
+    }
+}
+
+#endif
 
 // ---------------------------------------------------------
 

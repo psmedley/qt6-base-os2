@@ -8,6 +8,7 @@
 #include <QtCore/qstring.h>
 #ifndef QT_NO_QOBJECT
 #include <QtCore/qcoreevent.h>
+#include <QtCore/qdeadlinetimer.h>
 #include <QtCore/qeventloop.h>
 #include <QtCore/qobject.h>
 #else
@@ -32,6 +33,7 @@ class QTranslator;
 class QPostEventList;
 class QAbstractEventDispatcher;
 class QAbstractNativeEventFilter;
+class QEventLoopLocker;
 
 #if QT_CONFIG(permissions) || defined(Q_QDOC)
 class QPermission;
@@ -58,6 +60,11 @@ class Q_CORE_EXPORT QCoreApplication
 #endif
 
     Q_DECLARE_PRIVATE(QCoreApplication)
+    friend class QEventLoopLocker;
+#if QT_CONFIG(permissions)
+    using RequestPermissionPrototype = void(*)(QPermission);
+#endif
+
 public:
     enum { ApplicationFlags = QT_VERSION
     };
@@ -87,12 +94,13 @@ public:
     static void setSetuidAllowed(bool allow);
     static bool isSetuidAllowed();
 
-    static QCoreApplication *instance() { return self; }
+    static QCoreApplication *instance() noexcept { return self; }
 
 #ifndef QT_NO_QOBJECT
     static int exec();
     static void processEvents(QEventLoop::ProcessEventsFlags flags = QEventLoop::AllEvents);
     static void processEvents(QEventLoop::ProcessEventsFlags flags, int maxtime);
+    static void processEvents(QEventLoop::ProcessEventsFlags flags, QDeadlineTimer deadline);
 
     static bool sendEvent(QObject *receiver, QEvent *event);
     static void postEvent(QObject *receiver, QEvent *event, int priority = Qt::NormalEventPriority);
@@ -116,66 +124,45 @@ public:
 
 # ifdef Q_QDOC
     template <typename Functor>
-    void requestPermission(const QPermission &permission, Functor functor);
-    template <typename Functor>
     void requestPermission(const QPermission &permission, const QObject *context, Functor functor);
 # else
-    template <typename Slot> // requestPermission to a QObject slot
+    // requestPermission with context or receiver object; need to require here that receiver is the
+    // right type to avoid ambiguity with the private implementation function.
+    template <typename Functor,
+              std::enable_if_t<
+                    QtPrivate::AreFunctionsCompatible<RequestPermissionPrototype, Functor>::value,
+                    bool> = true>
     void requestPermission(const QPermission &permission,
-        const typename QtPrivate::FunctionPointer<Slot>::Object *receiver, Slot slot)
+                           const typename QtPrivate::ContextTypeForFunctor<Functor>::ContextType *receiver,
+                           Functor &&func)
     {
-        using CallbackSignature = QtPrivate::FunctionPointer<void (*)(QPermission)>;
-        using SlotSignature = QtPrivate::FunctionPointer<Slot>;
-
-        static_assert(int(SlotSignature::ArgumentCount) <= int(CallbackSignature::ArgumentCount),
-            "Slot requires more arguments than what can be provided.");
-        static_assert((QtPrivate::CheckCompatibleArguments<typename CallbackSignature::Arguments, typename SlotSignature::Arguments>::value),
-            "Slot arguments are not compatible (must be QPermission)");
-
-        auto slotObj = new QtPrivate::QSlotObject<Slot, typename SlotSignature::Arguments, void>(slot);
-        requestPermission(permission, slotObj, receiver);
+        requestPermission(permission,
+                          QtPrivate::makeCallableObject<RequestPermissionPrototype>(std::forward<Functor>(func)),
+                          receiver);
     }
+# endif // Q_QDOC
 
-    // requestPermission to a functor or function pointer (with context)
-    template <typename Func, std::enable_if_t<
-        !QtPrivate::FunctionPointer<Func>::IsPointerToMemberFunction
-        && !std::is_same<const char *, Func>::value, bool> = true>
-    void requestPermission(const QPermission &permission, const QObject *context, Func func)
-    {
-        using CallbackSignature = QtPrivate::FunctionPointer<void (*)(QPermission)>;
-        constexpr int MatchingArgumentCount = QtPrivate::ComputeFunctorArgumentCount<
-            Func, CallbackSignature::Arguments>::Value;
-
-        static_assert(MatchingArgumentCount == 0
-            || MatchingArgumentCount == CallbackSignature::ArgumentCount,
-           "Functor arguments are not compatible (must be QPermission)");
-
-        QtPrivate::QSlotObjectBase *slotObj = nullptr;
-        if constexpr (MatchingArgumentCount == CallbackSignature::ArgumentCount) {
-            slotObj = new QtPrivate::QFunctorSlotObject<Func, 1,
-                typename CallbackSignature::Arguments, void>(std::move(func));
-        } else {
-            slotObj = new QtPrivate::QFunctorSlotObject<Func, 0,
-                typename QtPrivate::List_Left<void, 0>::Value, void>(std::move(func));
-        }
-
-        requestPermission(permission, slotObj, context);
-    }
-
+#ifndef QT_NO_CONTEXTLESS_CONNECT
+    #ifdef Q_QDOC
+    template <typename Functor>
+    #else
     // requestPermission to a functor or function pointer (without context)
-    template <typename Func, std::enable_if_t<
-        !QtPrivate::FunctionPointer<Func>::IsPointerToMemberFunction
-        && !std::is_same<const char *, Func>::value, bool> = true>
-    void requestPermission(const QPermission &permission, Func func)
+    template <typename Functor,
+              std::enable_if_t<
+                    QtPrivate::AreFunctionsCompatible<RequestPermissionPrototype, Functor>::value,
+                    bool> = true>
+    #endif
+    void requestPermission(const QPermission &permission, Functor &&func)
     {
-        requestPermission(permission, nullptr, std::move(func));
+        requestPermission(permission, nullptr, std::forward<Functor>(func));
     }
+#endif // QT_NO_CONTEXTLESS_CONNECT
 
 private:
+    // ### Qt 7: rename to requestPermissionImpl to avoid ambiguity
     void requestPermission(const QPermission &permission,
         QtPrivate::QSlotObjectBase *slotObj, const QObject *context);
 public:
-# endif // Q_QDOC
 
 #endif // QT_CONFIG(permission)
 
@@ -251,6 +238,7 @@ private:
     friend class QWidget;
     friend class QWidgetWindow;
     friend class QWidgetPrivate;
+    friend class QWindowPrivate;
 #ifndef QT_NO_QOBJECT
     friend class QEventDispatcherUNIXPrivate;
     friend class QCocoaEventDispatcherPrivate;

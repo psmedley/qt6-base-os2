@@ -36,7 +36,7 @@ function(qt_get_android_sdk_jar_for_api api out_jar_location)
 endfunction()
 
 # Minimum recommend android SDK api version
-set(QT_ANDROID_API_VERSION "android-33")
+set(QT_ANDROID_API_VERSION "android-34")
 
 function(qt_internal_sort_android_platforms out_var)
     if(CMAKE_VERSION GREATER_EQUAL 3.18)
@@ -185,7 +185,7 @@ define_property(TARGET
 )
 
 # Returns test execution arguments for Android targets
-function(qt_internal_android_test_arguments target out_test_runner out_test_arguments)
+function(qt_internal_android_test_arguments target timeout out_test_runner out_test_arguments)
     set(${out_test_runner} "${QT_HOST_PATH}/${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_BINDIR}/androidtestrunner" PARENT_SCOPE)
     set(deployment_tool "${QT_HOST_PATH}/${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_BINDIR}/androiddeployqt")
 
@@ -195,15 +195,19 @@ function(qt_internal_android_test_arguments target out_test_runner out_test_argu
     endif()
 
     set(target_binary_dir "$<TARGET_PROPERTY:${target},BINARY_DIR>")
-    set(apk_dir "${target_binary_dir}/android-build")
-
+    if(QT_USE_TARGET_ANDROID_BUILD_DIR)
+        set(apk_dir "${target_binary_dir}/android-build-${target}")
+    else()
+        set(apk_dir "${target_binary_dir}/android-build")
+    endif()
     set(${out_test_arguments}
         "--path" "${apk_dir}"
         "--adb" "${ANDROID_SDK_ROOT}/platform-tools/adb"
         "--skip-install-root"
-        "--make" "${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target ${target}_make_apk"
+        "--make" "\"${CMAKE_COMMAND}\" --build ${CMAKE_BINARY_DIR} --target ${target}_make_apk"
         "--apk" "${apk_dir}/${target}.apk"
-        "--timeout" "-1"
+        "--ndk-stack" "${ANDROID_NDK_ROOT}/ndk-stack"
+        "--timeout" "${timeout}"
         "--verbose"
         PARENT_SCOPE
     )

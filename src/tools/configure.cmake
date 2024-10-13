@@ -12,12 +12,12 @@ qt_feature("macdeployqt" PRIVATE
     LABEL "macOS deployment tool"
     PURPOSE "The Mac deployment tool automates the process of creating a deployable application bundle that contains the Qt libraries as private frameworks."
     AUTODETECT CMAKE_HOST_APPLE
-    CONDITION MACOS)
+    CONDITION MACOS AND QT_FEATURE_thread)
 
 qt_feature("windeployqt" PRIVATE
     SECTION "Deployment"
     LABEL "Windows deployment tool"
-    PURPOSE "The Windows deployment tool is designed to automate the process of creating a deployable folder containing the Qt-related dependencies (libraries, QML imports, plugins, and translations) required to run the application from that folder. It creates a sandbox for Universal Windows Platform (UWP) or an installation tree for Windows desktop applications, which can be easily bundled into an installation package."
+    PURPOSE "The Windows deployment tool is designed to automate the process of creating a deployable folder containing the Qt-related dependencies (libraries, QML imports, plugins, and translations) required to run the application from that folder. The folder can be easily bundled into an installation package."
     AUTODETECT CMAKE_HOST_WIN32
     CONDITION WIN32)
 

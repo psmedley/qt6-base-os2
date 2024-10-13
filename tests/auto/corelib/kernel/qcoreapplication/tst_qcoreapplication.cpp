@@ -1,6 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "tst_qcoreapplication.h"
 
@@ -9,6 +9,7 @@
 
 #include <private/qabstracteventdispatcher_p.h> // for qGlobalPostedEventsCount()
 #include <private/qcoreapplication_p.h>
+#include <private/qcoreevent_p.h>
 #include <private/qeventloop_p.h>
 #include <private/qthread_p.h>
 
@@ -24,9 +25,12 @@ class EventSpy : public QObject
 
 public:
     QList<int> recordedEvents;
-    bool eventFilter(QObject *, QEvent *event) override
+    std::function<void(QObject *, QEvent *)> eventCallback;
+    bool eventFilter(QObject *target, QEvent *event) override
     {
         recordedEvents.append(event->type());
+        if (eventCallback)
+            eventCallback(target, event);
         return false;
     }
 };
@@ -1037,7 +1041,7 @@ void tst_QCoreApplication::addRemoveLibPaths()
 static bool theMainThreadIsSet()
 {
     // QCoreApplicationPrivate::mainThread() has a Q_ASSERT we'd trigger
-    return QCoreApplicationPrivate::theMainThread.loadRelaxed() != nullptr;
+    return QCoreApplicationPrivate::theMainThreadId.loadRelaxed() != nullptr;
 }
 
 static bool theMainThreadWasUnset = !theMainThreadIsSet(); // global static
@@ -1049,8 +1053,8 @@ void tst_QCoreApplication::theMainThread()
     int argc = 1;
     char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     TestApplication app(argc, argv);
-    QVERIFY(QCoreApplicationPrivate::theMainThread.loadRelaxed());
-    QCOMPARE(QCoreApplicationPrivate::theMainThread.loadRelaxed(), thread());
+    QVERIFY(QCoreApplicationPrivate::theMainThreadId.loadRelaxed());
+    QVERIFY(QThread::isMainThread());
     QCOMPARE(app.thread(), thread());
     QCOMPARE(app.thread(), QThread::currentThread());
 }
@@ -1061,9 +1065,9 @@ static void createQObjectOnDestruction()
     // QThread) after the last QObject has been destroyed (especially after
     // QCoreApplication has).
 
-#if !defined(QT_QGUIAPPLICATIONTEST) && !defined(Q_OS_WIN)
+#if !defined(QT_QGUIAPPLICATIONTEST) && !defined(Q_OS_WIN) && !defined(Q_OS_VXWORKS)
     // QCoreApplicationData's global static destructor has run and cleaned up
-    // the QAdoptedThrad.
+    // the QAdoptedThread.
     if (theMainThreadIsSet())
         qFatal("theMainThreadIsSet() returned true; some QObject must have leaked");
 #endif
@@ -1080,6 +1084,80 @@ static void createQObjectOnDestruction()
     // the QAdoptedThread won't get cleaned up
 }
 Q_DESTRUCTOR_FUNCTION(createQObjectOnDestruction)
+
+void tst_QCoreApplication::testDeleteLaterFromBeforeOutermostEventLoop()
+{
+    int argc = 0;
+    QCoreApplication app(argc, nullptr);
+
+    EventSpy *spy = new EventSpy();
+    QPointer<QObject> spyPointer = spy;
+
+    app.installEventFilter(spy);
+    spy->eventCallback = [spy](QObject *, QEvent *event) {
+        if (event->type() == QEvent::User + 1)
+            spy->deleteLater();
+    };
+
+    QCoreApplication::postEvent(&app, new QEvent(QEvent::Type(QEvent::User + 1)));
+    QCoreApplication::processEvents();
+
+    QEventLoop loop;
+    QTimer::singleShot(0, &loop, &QEventLoop::quit);
+    loop.exec();
+    QVERIFY(!spyPointer);
+}
+
+void tst_QCoreApplication::setIndividualAttributes_data()
+{
+    QTest::addColumn<Qt::ApplicationAttribute>("attribute");
+
+    const QMetaEnum &metaEnum = Qt::staticMetaObject.enumerator(Qt::staticMetaObject.indexOfEnumerator("ApplicationAttribute"));
+    // - 1 to avoid AA_AttributeCount.
+    for (int i = 0; i < metaEnum.keyCount(); ++i) {
+        const auto attribute = static_cast<Qt::ApplicationAttribute>(metaEnum.value(i));
+        if (attribute == Qt::AA_AttributeCount)
+            continue;
+
+        QTest::addRow("%s", metaEnum.key(i)) << attribute;
+    }
+}
+
+void tst_QCoreApplication::setIndividualAttributes()
+{
+    QFETCH(Qt::ApplicationAttribute, attribute);
+
+    const auto originalValue = QCoreApplication::testAttribute(attribute);
+    auto cleanup = qScopeGuard([=]() {
+        QCoreApplication::setAttribute(attribute, originalValue);
+    });
+
+    QCoreApplication::setAttribute(attribute, true);
+    QVERIFY(QCoreApplication::testAttribute(attribute));
+
+    QCoreApplication::setAttribute(attribute, false);
+    QVERIFY(!QCoreApplication::testAttribute(attribute));
+}
+
+void tst_QCoreApplication::setMultipleAttributes()
+{
+    const auto originalDontUseNativeMenuWindowsValue = QCoreApplication::testAttribute(Qt::AA_DontUseNativeMenuWindows);
+    const auto originalDisableSessionManagerValue = QCoreApplication::testAttribute(Qt::AA_DisableSessionManager);
+    auto cleanup = qScopeGuard([=]() {
+        QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows, originalDontUseNativeMenuWindowsValue);
+        QCoreApplication::setAttribute(Qt::AA_DisableSessionManager, originalDisableSessionManagerValue);
+    });
+
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows, true);
+    QCoreApplication::setAttribute(Qt::AA_DisableSessionManager, true);
+    QVERIFY(QCoreApplication::testAttribute(Qt::AA_DontUseNativeMenuWindows));
+    QVERIFY(QCoreApplication::testAttribute(Qt::AA_DisableSessionManager));
+
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows, false);
+    QCoreApplication::setAttribute(Qt::AA_DisableSessionManager, false);
+    QVERIFY(!QCoreApplication::testAttribute(Qt::AA_DontUseNativeMenuWindows));
+    QVERIFY(!QCoreApplication::testAttribute(Qt::AA_DisableSessionManager));
+}
 
 #ifndef QT_QGUIAPPLICATIONTEST
 QTEST_APPLESS_MAIN(tst_QCoreApplication)

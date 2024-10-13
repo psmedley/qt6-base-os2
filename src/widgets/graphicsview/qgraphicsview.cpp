@@ -483,8 +483,8 @@ void QGraphicsViewPrivate::centerView(QGraphicsView::ViewportAnchor anchor)
         if (q->underMouse()) {
             // Last scene pos: lastMouseMoveScenePoint
             // Current mouse pos:
-            QPointF transformationDiff = q->mapToScene(viewport->rect().center())
-                                         - q->mapToScene(viewport->mapFromGlobal(QCursor::pos()));
+            QPointF transformationDiff = mapToScene(viewport->rect().toRectF().center())
+                                         - mapToScene(viewport->mapFromGlobal(QCursor::pos().toPointF()));
             q->centerOn(lastMouseMoveScenePoint + transformationDiff);
         } else {
             q->centerOn(lastCenterPoint);
@@ -504,8 +504,7 @@ void QGraphicsViewPrivate::centerView(QGraphicsView::ViewportAnchor anchor)
 */
 void QGraphicsViewPrivate::updateLastCenterPoint()
 {
-    Q_Q(QGraphicsView);
-    lastCenterPoint = q->mapToScene(viewport->rect().center());
+    lastCenterPoint = mapToScene(viewport->rect().toRectF().center());
 }
 
 /*!
@@ -1559,7 +1558,7 @@ void QGraphicsView::setRubberBandSelectionMode(Qt::ItemSelectionMode mode)
    is currently doing an itemselection with rubber band. When the user is not using the
    rubber band this functions returns (a null) QRectF().
 
-   Notice that part of this QRect can be outise the visual viewport. It can e.g
+   Notice that part of this QRect can be outside the visual viewport. It can e.g
    contain negative values.
 
    \sa rubberBandSelectionMode, rubberBandChanged()
@@ -1892,14 +1891,14 @@ void QGraphicsView::centerOn(const QPointF &pos)
             qint64 horizontal = 0;
             horizontal += horizontalScrollBar()->minimum();
             horizontal += horizontalScrollBar()->maximum();
-            horizontal -= int(viewPoint.x() - width / 2.0);
+            horizontal -= qRound(viewPoint.x() - width / 2.0);
             horizontalScrollBar()->setValue(horizontal);
         } else {
-            horizontalScrollBar()->setValue(int(viewPoint.x() - width / 2.0));
+            horizontalScrollBar()->setValue(qRound(viewPoint.x() - width / 2.0));
         }
     }
     if (!d->topIndent)
-        verticalScrollBar()->setValue(int(viewPoint.y() - height / 2.0));
+        verticalScrollBar()->setValue(qRound(viewPoint.y() - height / 2.0));
     d->lastCenterPoint = oldCenterPoint;
 }
 
@@ -2343,7 +2342,7 @@ QGraphicsItem *QGraphicsView::itemAt(const QPoint &pos) const
     if (!d->scene)
         return nullptr;
     const QList<QGraphicsItem *> itemsAtPos = items(pos);
-    return itemsAtPos.isEmpty() ? 0 : itemsAtPos.first();
+    return itemsAtPos.isEmpty() ? nullptr : itemsAtPos.first();
 }
 
 /*!

@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -223,4 +223,3 @@ void tst_QExplicitlySharedDataPointer::swap() const
 QTEST_MAIN(tst_QExplicitlySharedDataPointer)
 
 #include "tst_qexplicitlyshareddatapointer.moc"
-// vim: et:ts=4:sw=4:sts=4

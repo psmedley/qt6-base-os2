@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include <QTableView>
 #include <QVBoxLayout>
-#include <QItemDelegate>
+#include <QStyledItemDelegate>
 #include <QItemEditorFactory>
 #include <QDoubleSpinBox>
 
@@ -26,26 +26,26 @@ public:
 class EditorFactory : public QItemEditorFactory
 {
 public:
-    EditorFactory() {
-        static DoubleEditorCreator double_editor_creator;
-        registerEditor(QVariant::Double, &double_editor_creator);
+    EditorFactory()
+    {
+        // registerEditor() assumes ownership of the creator.
+        registerEditor(QVariant::Double, new DoubleEditorCreator);
     }
 };
 
 LocaleWidget::LocaleWidget(QWidget *parent)
-    : QWidget(parent)
+    : QWidget(parent),
+      m_model(new LocaleModel(this)),
+      m_view(new QTableView(this))
 {
-    m_model = new LocaleModel(this);
-    m_view = new QTableView(this);
-
-    QItemDelegate *delegate = qobject_cast<QItemDelegate*>(m_view->itemDelegate());
+    QStyledItemDelegate *delegate = qobject_cast<QStyledItemDelegate*>(m_view->itemDelegate());
     Q_ASSERT(delegate != 0);
-    static EditorFactory editor_factory;
-    delegate->setItemEditorFactory(&editor_factory);
+    static EditorFactory editorFactory;
+    delegate->setItemEditorFactory(&editorFactory);
 
     m_view->setModel(m_model);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
-    layout->setMargin(0);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_view);
 }

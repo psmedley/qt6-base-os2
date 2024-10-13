@@ -76,7 +76,7 @@ QFilePrivate::openExternalFile(QIODevice::OpenMode flags, FILE *fh, QFile::FileH
 QAbstractFileEngine *QFilePrivate::engine() const
 {
     if (!fileEngine)
-        fileEngine.reset(QAbstractFileEngine::create(fileName));
+        fileEngine = QAbstractFileEngine::create(fileName);
     return fileEngine.get();
 }
 
@@ -459,6 +459,26 @@ QFile::remove(const QString &fileName)
     and sets the fileName() to the path at which the file can be found within the trash;
     otherwise returns \c false.
 
+//! [move-to-trash-common]
+    The time for this function to run is independent of the size of the file
+    being trashed. If this function is called on a directory, it may be
+    proportional to the number of files being trashed. If the current
+    fileName() points to a symbolic link, this function will move the link to
+    the trash, possibly breaking it, not the target of the link.
+
+    This function uses the Windows and \macos APIs to perform the trashing on
+    those two operating systems. Elsewhere (Unix systems), this function
+    implements the \l{FreeDesktop.org Trash specification version 1.0}.
+
+    \note When using the FreeDesktop.org Trash implementation, this function
+    will fail if it is unable to move the files to the trash location by way of
+    file renames and hardlinks. This condition arises if the file being trashed
+    resides on a volume (mount point) on which the current user does not have
+    permission to create the \c{.Trash} directory, or with some unusual
+    filesystem types or configurations (such as sub-volumes that aren't
+    themselves mount points).
+//! [move-to-trash-common]
+
     \note On systems where the system API doesn't report the location of the file in the
     trash, fileName() will be set to the null string once the file has been moved. On
     systems that don't have a trash can, this function always returns false.
@@ -492,13 +512,16 @@ QFile::moveToTrash()
     \since 5.15
     \overload
 
-    Moves the file specified by fileName() to the trash. Returns \c true if successful,
+    Moves the file specified by \a fileName to the trash. Returns \c true if successful,
     and sets \a pathInTrash (if provided) to the path at which the file can be found within
     the trash; otherwise returns \c false.
+
+    \include qfile.cpp move-to-trash-common
 
     \note On systems where the system API doesn't report the path of the file in the
     trash, \a pathInTrash will be set to the null string once the file has been moved.
     On systems that don't have a trash can, this function always returns false.
+
 */
 bool
 QFile::moveToTrash(const QString &fileName, QString *pathInTrash)
@@ -563,7 +586,7 @@ QFile::rename(const QString &newName)
             return false;
         }
 
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) && QT_CONFIG(temporaryfile)
         // rename() on Linux simply does nothing when renaming "foo" to "Foo" on a case-insensitive
         // FS, such as FAT32. Move the file away and rename in 2 steps to work around.
         QTemporaryFileName tfn(d->fileName);
@@ -768,7 +791,7 @@ QFile::copy(const QString &newName)
                 d->setError(QFile::CopyError, tr("Cannot open %1 for input").arg(d->fileName));
             } else {
                 const auto fileTemplate = "%1/qt_temp.XXXXXX"_L1;
-#ifdef QT_NO_TEMPORARYFILE
+#if !QT_CONFIG(temporaryfile)
                 QFile out(fileTemplate.arg(QFileInfo(newName).path()));
                 if (!out.open(QIODevice::ReadWrite))
                     error = true;
@@ -781,9 +804,9 @@ QFile::copy(const QString &newName)
                 }
 #endif
                 if (error) {
+                    d->setError(QFile::CopyError, tr("Cannot open for output: %1").arg(out.errorString()));
                     out.close();
                     close();
-                    d->setError(QFile::CopyError, tr("Cannot open for output: %1").arg(out.errorString()));
                 } else {
                     if (!d->engine()->cloneTo(out.d_func()->engine())) {
                         char block[4096];
@@ -820,7 +843,7 @@ QFile::copy(const QString &newName)
                                         .arg(newName, out.errorString()));
                         }
                     }
-#ifdef QT_NO_TEMPORARYFILE
+#if !QT_CONFIG(temporaryfile)
                     if (error)
                         out.remove();
 #else
@@ -876,6 +899,8 @@ QFile::copy(const QString &fileName, const QString &newName)
     of the file name, otherwise, it won't be possible to create this
     non-existing file.
 
+    \sa QT_USE_NODISCARD_FILE_OPEN
+
     \sa QIODevice::OpenMode, setFileName()
 */
 bool QFile::open(OpenMode mode)
@@ -920,7 +945,7 @@ bool QFile::open(OpenMode mode)
     such permissions will generate warnings when the Security tab of the Properties dialog
     is opened. Granting the group all permissions granted to others avoids such warnings.
 
-    \sa QIODevice::OpenMode, setFileName()
+    \sa QIODevice::OpenMode, setFileName(), QT_USE_NODISCARD_FILE_OPEN
     \since 6.3
 */
 bool QFile::open(OpenMode mode, QFile::Permissions permissions)
@@ -977,7 +1002,7 @@ bool QFile::open(OpenMode mode, QFile::Permissions permissions)
            you cannot use this QFile with a QFileInfo.
     \endlist
 
-    \sa close()
+    \sa close(), QT_USE_NODISCARD_FILE_OPEN
 
     \b{Note for the Windows Platform}
 
@@ -1043,7 +1068,7 @@ bool QFile::open(FILE *fh, OpenMode mode, FileHandleFlags handleFlags)
     \warning Since this function opens the file without specifying the file name,
              you cannot use this QFile with a QFileInfo.
 
-    \sa close()
+    \sa close(), QT_USE_NODISCARD_FILE_OPEN
 */
 bool QFile::open(int fd, OpenMode mode, FileHandleFlags handleFlags)
 {
@@ -1249,6 +1274,107 @@ qint64 QFile::size() const
     \overload
 */
 
+
+/*!
+    \class QNtfsPermissionCheckGuard
+    \since 6.6
+    \inmodule QtCore
+    \brief The QNtfsPermissionCheckGuard class is a RAII class to manage NTFS
+    permission checking.
+
+    \ingroup io
+
+    For performance reasons, QFile, QFileInfo, and related classes do not
+    perform full ownership and permission (ACL) checking on NTFS file systems
+    by default. During the lifetime of any instance of this class, that
+    default is overridden and advanced checking is performed. This provides
+    a safe and easy way to manage enabling and disabling this change to the
+    default behavior.
+
+    Example:
+
+    \snippet ntfsp.cpp raii
+
+    This class is available only on Windows.
+
+    \section1 qt_ntfs_permission_lookup
+
+    Prior to Qt 6.6, the user had to directly manipulate the global variable
+    \c qt_ntfs_permission_lookup. However, this was a non-atomic global
+    variable and as such it was prone to data races.
+
+    The variable \c qt_ntfs_permission_lookup is therefore deprecated since Qt
+    6.6.
+*/
+
+/*!
+    \fn QNtfsPermissionCheckGuard::QNtfsPermissionCheckGuard()
+
+    Creates a guard and calls the function qEnableNtfsPermissionChecks().
+*/
+
+/*!
+    \fn QNtfsPermissionCheckGuard::~QNtfsPermissionCheckGuard()
+
+    Destroys the guard and calls the function qDisableNtfsPermissionChecks().
+*/
+
+
+/*!
+    \fn bool qEnableNtfsPermissionChecks()
+    \since 6.6
+    \threadsafe
+    \relates QNtfsPermissionCheckGuard
+
+    Enables permission checking on NTFS file systems. Returns \c true if the check
+    was already enabled before the call to this function, meaning that there
+    are other users.
+
+    This function is only available on Windows and makes the direct
+    manipulation of \l qt_ntfs_permission_lookup obsolete.
+
+    This is a low-level function, please consider the RAII class
+    \l QNtfsPermissionCheckGuard instead.
+
+    \note The thread-safety of this function holds only as long as there are no
+    concurrent updates to \l qt_ntfs_permission_lookup.
+*/
+
+/*!
+    \fn bool qDisableNtfsPermissionChecks()
+    \since 6.6
+    \threadsafe
+    \relates QNtfsPermissionCheckGuard
+
+    Disables permission checking on NTFS file systems. Returns \c true if the
+    check is disabled, meaning that there are no more users.
+
+    This function is only available on Windows and makes the direct
+    manipulation of \l qt_ntfs_permission_lookup obsolete.
+
+    This is a low-level function and must (only) be called to match one earlier
+    call to qEnableNtfsPermissionChecks(). Please consider the RAII class
+    \l QNtfsPermissionCheckGuard instead.
+
+    \note The thread-safety of this function holds only as long as there are no
+    concurrent updates to \l qt_ntfs_permission_lookup.
+*/
+
+/*!
+    \fn bool qAreNtfsPermissionChecksEnabled()
+    \since 6.6
+    \threadsafe
+    \relates QNtfsPermissionCheckGuard
+
+    Checks the status of the permission checks on NTFS file systems. Returns
+    \c true if the check is enabled.
+
+    This function is only available on Windows and makes the direct
+    manipulation of \l qt_ntfs_permission_lookup obsolete.
+
+    \note The thread-safety of this function holds only as long as there are no
+    concurrent updates to \l qt_ntfs_permission_lookup.
+*/
 
 QT_END_NAMESPACE
 

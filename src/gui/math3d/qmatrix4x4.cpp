@@ -100,7 +100,7 @@ QMatrix4x4::QMatrix4x4(const float *values)
 */
 
 /*!
-    \fn QGenericMatrix<N, M, float> QMatrix4x4::toGenericMatrix() const
+    \fn template <int N, int M> QGenericMatrix<N, M, float> QMatrix4x4::toGenericMatrix() const
 
     Constructs a NxM generic matrix from the left-most N columns and
     top-most M rows of this 4x4 matrix.  If N or M is greater than 4,
@@ -735,7 +735,7 @@ QMatrix4x4 operator/(const QMatrix4x4& matrix, float divisor)
     Returns \c true if \a m1 and \a m2 are equal, allowing for a small
     fuzziness factor for floating-point comparisons; false otherwise.
 */
-bool qFuzzyCompare(const QMatrix4x4& m1, const QMatrix4x4& m2)
+bool qFuzzyCompare(const QMatrix4x4& m1, const QMatrix4x4& m2) noexcept
 {
     return qFuzzyCompare(m1.m[0][0], m2.m[0][0]) &&
             qFuzzyCompare(m1.m[0][1], m2.m[0][1]) &&

@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QListWidget>
@@ -68,8 +68,14 @@ public:
     {
         return QListView::visualRegionForSelection(selectionModel()->selection());
     }
+    void moveEvent(QMoveEvent *e) override
+    {
+      QListView::moveEvent(e);
+      m_gotValidResizeEvent = !e->pos().isNull();
+    }
 
     friend class tst_QListView;
+    bool m_gotValidResizeEvent = false;
 };
 
 class tst_QListView : public QObject
@@ -613,7 +619,7 @@ void tst_QListView::moveCursor4()
 
 void tst_QListView::moveCursor5()
 {
-    PublicListView listView;;
+    PublicListView listView;
     QStandardItemModel model;
     QIcon icon(QPixmap(300,300));
     model.appendRow(new QStandardItem(icon,"11"));
@@ -1701,7 +1707,6 @@ void tst_QListView::keyboardSearch()
     QListView view;
     view.setModel(&model);
     view.show();
-    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QTest::keyClick(&view, Qt::Key_K);
@@ -1803,7 +1808,6 @@ void tst_QListView::shiftSelectionWithItemAlignment()
     view.resize(300, view.sizeHintForRow(0) * items.size() / 2 + view.horizontalScrollBar()->height());
 
     view.show();
-    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(static_cast<QWidget *>(&view), QApplication::activeWindow());
 
@@ -1862,7 +1866,6 @@ void tst_QListView::task262152_setModelColumnNavigate()
     view.setModelColumn(1);
 
     view.show();
-    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(&view, QApplication::activeWindow());
     QTest::keyClick(&view, Qt::Key_Down);
@@ -2808,7 +2811,6 @@ void tst_QListView::moveLastRow()
     view.setViewMode(QListView::IconMode);
     view.show();
 
-    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QModelIndex sourceParent = model.index(0, 0);
@@ -2995,6 +2997,7 @@ void tst_QListView::internalDragDropMove()
     // The test relies on the global position of mouse events; make sure
     // the window is properly mapped on X11.
     QVERIFY(QTest::qWaitForWindowActive(&list));
+    QVERIFY(QTest::qWaitFor([&]() { return list.m_gotValidResizeEvent; }));
     // execute as soon as the eventloop is running again
     // which is the case inside list.startDrag()
     QTimer::singleShot(0, [&]()

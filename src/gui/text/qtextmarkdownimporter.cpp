@@ -27,6 +27,8 @@ Q_LOGGING_CATEGORY(lcMD, "qt.text.markdown")
 static const QChar qtmi_Newline = u'\n';
 static const QChar qtmi_Space = u' ';
 
+static constexpr auto markerString() noexcept { return "---"_L1; }
+
 // TODO maybe eliminate the margins after all views recognize BlockQuoteLevel, CSS can format it, etc.
 static const int qtmi_BlockQuoteIndent =
         40; // pixels, same as in QTextHtmlParserNode::initializeProperties
@@ -46,7 +48,8 @@ static_assert(int(QTextMarkdownImporter::FeaturePermissiveAutoLinks) == MD_FLAG_
 static_assert(int(QTextMarkdownImporter::FeatureTasklists) == MD_FLAG_TASKLISTS);
 static_assert(int(QTextMarkdownImporter::FeatureNoHTML) == MD_FLAG_NOHTML);
 static_assert(int(QTextMarkdownImporter::DialectCommonMark) == MD_DIALECT_COMMONMARK);
-static_assert(int(QTextMarkdownImporter::DialectGitHub) == (MD_DIALECT_GITHUB | MD_FLAG_UNDERLINE));
+static_assert(int(QTextMarkdownImporter::DialectGitHub) ==
+              (MD_DIALECT_GITHUB | MD_FLAG_UNDERLINE | QTextMarkdownImporter::FeatureFrontMatter));
 
 // --------------------------------------------------------
 // MD4C callback function wrappers
@@ -104,18 +107,19 @@ static Qt::Alignment MdAlignment(MD_ALIGN a, Qt::Alignment defaultAlignment = Qt
     }
 }
 
-QTextMarkdownImporter::QTextMarkdownImporter(QTextMarkdownImporter::Features features)
-  : m_monoFont(QFontDatabase::systemFont(QFontDatabase::FixedFont))
+QTextMarkdownImporter::QTextMarkdownImporter(QTextDocument *doc, QTextMarkdownImporter::Features features)
+  : m_cursor(doc)
+  , m_monoFont(QFontDatabase::systemFont(QFontDatabase::FixedFont))
   , m_features(features)
 {
 }
 
-QTextMarkdownImporter::QTextMarkdownImporter(QTextDocument::MarkdownFeatures features)
-  : QTextMarkdownImporter(static_cast<QTextMarkdownImporter::Features>(int(features)))
+QTextMarkdownImporter::QTextMarkdownImporter(QTextDocument *doc, QTextDocument::MarkdownFeatures features)
+  : QTextMarkdownImporter(doc, static_cast<QTextMarkdownImporter::Features>(int(features)))
 {
 }
 
-void QTextMarkdownImporter::import(QTextDocument *doc, const QString &markdown)
+void QTextMarkdownImporter::import(const QString &markdown)
 {
     MD_PARSER callbacks = {
         0, // abi_version
@@ -128,21 +132,36 @@ void QTextMarkdownImporter::import(QTextDocument *doc, const QString &markdown)
         &CbDebugLog,
         nullptr // syntax
     };
-    m_doc = doc;
-    m_paragraphMargin = m_doc->defaultFont().pointSize() * 2 / 3;
-    m_cursor = new QTextCursor(doc);
+    QTextDocument *doc = m_cursor.document();
+    const auto defaultFont = doc->defaultFont();
+    m_paragraphMargin = defaultFont.pointSize() * 2 / 3;
     doc->clear();
-    if (doc->defaultFont().pointSize() != -1)
-        m_monoFont.setPointSize(doc->defaultFont().pointSize());
+    if (defaultFont.pointSize() != -1)
+        m_monoFont.setPointSize(defaultFont.pointSize());
     else
-        m_monoFont.setPixelSize(doc->defaultFont().pixelSize());
-    qCDebug(lcMD) << "default font" << doc->defaultFont() << "mono font" << m_monoFont;
-    QByteArray md = markdown.toUtf8();
-    m_cursor->beginEditBlock();
-    md_parse(md.constData(), MD_SIZE(md.size()), &callbacks, this);
-    m_cursor->endEditBlock();
-    delete m_cursor;
-    m_cursor = nullptr;
+        m_monoFont.setPixelSize(defaultFont.pixelSize());
+    qCDebug(lcMD) << "default font" << defaultFont << "mono font" << m_monoFont;
+    QStringView md = markdown;
+
+    if (m_features.testFlag(QTextMarkdownImporter::FeatureFrontMatter) && md.startsWith(markerString())) {
+        qsizetype endMarkerPos = md.indexOf(markerString(), markerString().size() + 1);
+        if (endMarkerPos > 4) {
+            qsizetype firstLinePos = 4; // first line of yaml
+            while (md.at(firstLinePos) == '\n'_L1 || md.at(firstLinePos) == '\r'_L1)
+                ++firstLinePos;
+            auto frontMatter = md.sliced(firstLinePos, endMarkerPos - firstLinePos);
+            firstLinePos = endMarkerPos + 4; // first line of markdown after yaml
+            while (md.size() > firstLinePos && (md.at(firstLinePos) == '\n'_L1 || md.at(firstLinePos) == '\r'_L1))
+                ++firstLinePos;
+            md = md.sliced(firstLinePos);
+            doc->setMetaInformation(QTextDocument::FrontMatter, frontMatter.toString());
+            qCDebug(lcMD) << "extracted FrontMatter: size" << frontMatter.size();
+        }
+    }
+    const auto mdUtf8 = md.toUtf8();
+    m_cursor.beginEditBlock();
+    md_parse(mdUtf8.constData(), MD_SIZE(mdUtf8.size()), &callbacks, this);
+    m_cursor.endEditBlock();
 }
 
 int QTextMarkdownImporter::cbEnterBlock(int blockType, void *det)
@@ -181,11 +200,11 @@ int QTextMarkdownImporter::cbEnterBlock(int blockType, void *det)
         charFmt.setFontWeight(QFont::Bold);
         blockFmt.setHeadingLevel(int(detail->level));
         m_needsInsertBlock = false;
-        if (m_doc->isEmpty()) {
-            m_cursor->setBlockFormat(blockFmt);
-            m_cursor->setCharFormat(charFmt);
+        if (m_cursor.document()->isEmpty()) {
+            m_cursor.setBlockFormat(blockFmt);
+            m_cursor.setCharFormat(charFmt);
         } else {
-            m_cursor->insertBlock(blockFmt, charFmt);
+            m_cursor.insertBlock(blockFmt, charFmt);
         }
         qCDebug(lcMD, "H%d", detail->level);
     } break;
@@ -200,7 +219,7 @@ int QTextMarkdownImporter::cbEnterBlock(int blockType, void *det)
     } break;
     case MD_BLOCK_UL: {
         if (m_needsInsertList) // list nested in an empty list
-            m_listStack.push(m_cursor->insertList(m_listFormat));
+            m_listStack.push(m_cursor.insertList(m_listFormat));
         else
             m_needsInsertList = true;
         MD_BLOCK_UL_DETAIL *detail = static_cast<MD_BLOCK_UL_DETAIL *>(det);
@@ -221,7 +240,7 @@ int QTextMarkdownImporter::cbEnterBlock(int blockType, void *det)
     } break;
     case MD_BLOCK_OL: {
         if (m_needsInsertList) // list nested in an empty list
-            m_listStack.push(m_cursor->insertList(m_listFormat));
+            m_listStack.push(m_cursor.insertList(m_listFormat));
         else
             m_needsInsertList = true;
         MD_BLOCK_OL_DETAIL *detail = static_cast<MD_BLOCK_OL_DETAIL *>(det);
@@ -229,7 +248,8 @@ int QTextMarkdownImporter::cbEnterBlock(int blockType, void *det)
         m_listFormat.setIndent(m_listStack.size() + 1);
         m_listFormat.setNumberSuffix(QChar::fromLatin1(detail->mark_delimiter));
         m_listFormat.setStyle(QTextListFormat::ListDecimal);
-        qCDebug(lcMD, "OL xx%d level %d", detail->mark_delimiter, int(m_listStack.size()) + 1);
+        m_listFormat.setStart(detail->start);
+        qCDebug(lcMD, "OL xx%d level %d start %d", detail->mark_delimiter, int(m_listStack.size()) + 1, detail->start);
     } break;
     case MD_BLOCK_TD: {
         MD_BLOCK_TD_DETAIL *detail = static_cast<MD_BLOCK_TD_DETAIL *>(det);
@@ -241,10 +261,10 @@ int QTextMarkdownImporter::cbEnterBlock(int blockType, void *det)
             qWarning("malformed table in Markdown input");
             return 1;
         }
-        *m_cursor = cell.firstCursorPosition();
-        QTextBlockFormat blockFmt = m_cursor->blockFormat();
+        m_cursor = cell.firstCursorPosition();
+        QTextBlockFormat blockFmt = m_cursor.blockFormat();
         blockFmt.setAlignment(MdAlignment(detail->align));
-        m_cursor->setBlockFormat(blockFmt);
+        m_cursor.setBlockFormat(blockFmt);
         qCDebug(lcMD) << "TD; align" << detail->align << MdAlignment(detail->align) << "col" << m_tableCol;
     } break;
     case MD_BLOCK_TH: {
@@ -272,13 +292,13 @@ int QTextMarkdownImporter::cbEnterBlock(int blockType, void *det)
     case MD_BLOCK_TABLE:
         m_tableColumnCount = 0;
         m_tableRowCount = 0;
-        m_currentTable = m_cursor->insertTable(1, 1); // we don't know the dimensions yet
+        m_currentTable = m_cursor.insertTable(1, 1); // we don't know the dimensions yet
         break;
     case MD_BLOCK_HR: {
         qCDebug(lcMD, "HR");
         QTextBlockFormat blockFmt;
         blockFmt.setProperty(QTextFormat::BlockTrailingHorizontalRulerWidth, 1);
-        m_cursor->insertBlock(blockFmt, QTextCharFormat());
+        m_cursor.insertBlock(blockFmt, QTextCharFormat());
     } break;
     default:
         break; // nothing to do for now
@@ -296,7 +316,7 @@ int QTextMarkdownImporter::cbLeaveBlock(int blockType, void *detail)
     case MD_BLOCK_UL:
     case MD_BLOCK_OL:
         if (Q_UNLIKELY(m_needsInsertList))
-            m_listStack.push(m_cursor->createList(m_listFormat));
+            m_listStack.push(m_cursor.createList(m_listFormat));
         if (Q_UNLIKELY(m_listStack.isEmpty())) {
             qCWarning(lcMD, "list ended unexpectedly");
         } else {
@@ -334,7 +354,7 @@ int QTextMarkdownImporter::cbLeaveBlock(int blockType, void *detail)
     case MD_BLOCK_TABLE:
         qCDebug(lcMD) << "table ended with" << m_currentTable->columns() << "cols and" << m_currentTable->rows() << "rows";
         m_currentTable = nullptr;
-        m_cursor->movePosition(QTextCursor::End);
+        m_cursor.movePosition(QTextCursor::End);
         break;
     case MD_BLOCK_LI:
         qCDebug(lcMD, "LI at level %d ended", int(m_listStack.size()));
@@ -351,7 +371,7 @@ int QTextMarkdownImporter::cbLeaveBlock(int blockType, void *detail)
         m_needsInsertBlock = true;
     } break;
     case MD_BLOCK_H:
-        m_cursor->setCharFormat(QTextCharFormat());
+        m_cursor.setCharFormat(QTextCharFormat());
         break;
     default:
         break;
@@ -402,10 +422,10 @@ int QTextMarkdownImporter::cbEnterSpan(int spanType, void *det)
         break;
     }
     m_spanFormatStack.push(charFmt);
-    qCDebug(lcMD) << spanType << "setCharFormat" << charFmt.font().families().first()
+    qCDebug(lcMD) << spanType << "setCharFormat" << charFmt.font().families().constFirst()
                   << charFmt.fontWeight() << (charFmt.fontItalic() ? "italic" : "")
                   << charFmt.foreground().color().name();
-    m_cursor->setCharFormat(charFmt);
+    m_cursor.setCharFormat(charFmt);
     return 0; // no error
 }
 
@@ -418,8 +438,8 @@ int QTextMarkdownImporter::cbLeaveSpan(int spanType, void *detail)
         if (!m_spanFormatStack.isEmpty())
             charFmt = m_spanFormatStack.top();
     }
-    m_cursor->setCharFormat(charFmt);
-    qCDebug(lcMD) << spanType << "setCharFormat" << charFmt.font().families().first()
+    m_cursor.setCharFormat(charFmt);
+    qCDebug(lcMD) << spanType << "setCharFormat" << charFmt.font().families().constFirst()
                   << charFmt.fontWeight() << (charFmt.fontItalic() ? "italic" : "")
                   << charFmt.foreground().color().name();
     if (spanType == int(MD_SPAN_IMG))
@@ -463,7 +483,7 @@ int QTextMarkdownImporter::cbText(int textType, const char *text, unsigned size)
         if (m_htmlTagDepth)
             m_htmlAccumulator += s;
         else
-            m_cursor->insertHtml(s);
+            m_cursor.insertHtml(s);
         s = QString();
         break;
 #endif
@@ -485,11 +505,11 @@ int QTextMarkdownImporter::cbText(int textType, const char *text, unsigned size)
         m_htmlAccumulator += s;
         if (!m_htmlTagDepth) { // all open tags are now closed
             qCDebug(lcMD) << "HTML" << m_htmlAccumulator;
-            m_cursor->insertHtml(m_htmlAccumulator);
+            m_cursor.insertHtml(m_htmlAccumulator);
             if (m_spanFormatStack.isEmpty())
-                m_cursor->setCharFormat(QTextCharFormat());
+                m_cursor.setCharFormat(QTextCharFormat());
             else
-                m_cursor->setCharFormat(m_spanFormatStack.top());
+                m_cursor.setCharFormat(m_spanFormatStack.top());
             m_htmlAccumulator = QString();
         }
 #endif
@@ -519,24 +539,24 @@ int QTextMarkdownImporter::cbText(int textType, const char *text, unsigned size)
         m_imageFormat.setProperty(QTextFormat::ImageAltText, s);
         qCDebug(lcMD) << "image" << m_imageFormat.name()
                       << "title" << m_imageFormat.stringProperty(QTextFormat::ImageTitle)
-                      << "alt" << s << "relative to" << m_doc->baseUrl();
-        m_cursor->insertImage(m_imageFormat);
+                      << "alt" << s << "relative to" << m_cursor.document()->baseUrl();
+        m_cursor.insertImage(m_imageFormat);
         return 0; // no error
     }
 
     if (!s.isEmpty())
-        m_cursor->insertText(s);
-    if (m_cursor->currentList()) {
+        m_cursor.insertText(s);
+    if (m_cursor.currentList()) {
         // The list item will indent the list item's text, so we don't need indentation on the block.
-        QTextBlockFormat bfmt = m_cursor->blockFormat();
+        QTextBlockFormat bfmt = m_cursor.blockFormat();
         bfmt.setIndent(0);
-        m_cursor->setBlockFormat(bfmt);
+        m_cursor.setBlockFormat(bfmt);
     }
     if (lcMD().isEnabled(QtDebugMsg)) {
-        QTextBlockFormat bfmt = m_cursor->blockFormat();
+        QTextBlockFormat bfmt = m_cursor.blockFormat();
         QString debugInfo;
-        if (m_cursor->currentList())
-            debugInfo = "in list at depth "_L1 + QString::number(m_cursor->currentList()->format().indent());
+        if (m_cursor.currentList())
+            debugInfo = "in list at depth "_L1 + QString::number(m_cursor.currentList()->format().indent());
         if (bfmt.hasProperty(QTextFormat::BlockQuoteLevel))
             debugInfo += "in blockquote at depth "_L1 +
                     QString::number(bfmt.intProperty(QTextFormat::BlockQuoteLevel));
@@ -553,7 +573,7 @@ int QTextMarkdownImporter::cbText(int textType, const char *text, unsigned size)
     Insert a new block based on stored state.
 
     m_cursor cannot store the state for the _next_ block ahead of time, because
-    m_cursor->setBlockFormat() controls the format of the block that the cursor
+    m_cursor.setBlockFormat() controls the format of the block that the cursor
     is already in; so cbLeaveBlock() cannot call setBlockFormat() without
     altering the block that was just added. Therefore cbLeaveBlock() and the
     following cbEnterBlock() set variables to remember what formatting should
@@ -595,19 +615,19 @@ void QTextMarkdownImporter::insertBlock()
         blockFormat.setMarker(m_markerType);
     if (!m_listStack.isEmpty())
         blockFormat.setIndent(m_listStack.size());
-    if (m_doc->isEmpty()) {
-        m_cursor->setBlockFormat(blockFormat);
-        m_cursor->setCharFormat(charFormat);
+    if (m_cursor.document()->isEmpty()) {
+        m_cursor.setBlockFormat(blockFormat);
+        m_cursor.setCharFormat(charFormat);
     } else if (m_listItem) {
-        m_cursor->insertBlock(blockFormat, QTextCharFormat());
-        m_cursor->setCharFormat(charFormat);
+        m_cursor.insertBlock(blockFormat, QTextCharFormat());
+        m_cursor.setCharFormat(charFormat);
     } else {
-        m_cursor->insertBlock(blockFormat, charFormat);
+        m_cursor.insertBlock(blockFormat, charFormat);
     }
     if (m_needsInsertList) {
-        m_listStack.push(m_cursor->createList(m_listFormat));
+        m_listStack.push(m_cursor.createList(m_listFormat));
     } else if (!m_listStack.isEmpty() && m_listItem && m_listStack.top()) {
-        m_listStack.top()->add(m_cursor->block());
+        m_listStack.top()->add(m_cursor.block());
     }
     m_needsInsertList = false;
     m_needsInsertBlock = false;

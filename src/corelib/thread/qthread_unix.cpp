@@ -8,6 +8,7 @@
 
 #include <private/qcoreapplication_p.h>
 #include <private/qcore_unix_p.h>
+#include <private/qtools_p.h>
 
 #if defined(Q_OS_DARWIN)
 #  include <private/qeventdispatcher_cf_p.h>
@@ -19,7 +20,9 @@
 #  endif
 #endif
 
-#include <private/qeventdispatcher_unix_p.h>
+#if !defined(Q_OS_WASM)
+#  include <private/qeventdispatcher_unix_p.h>
+#endif
 
 #include "qthreadstorage.h"
 
@@ -40,11 +43,8 @@
 #  include <sys/sysctl.h>
 #endif
 #ifdef Q_OS_VXWORKS
-#  if (_WRS_VXWORKS_MAJOR > 6) || ((_WRS_VXWORKS_MAJOR == 6) && (_WRS_VXWORKS_MINOR >= 6))
-#    include <vxCpuLib.h>
-#    include <cpuset.h>
-#    define QT_VXWORKS_HAS_CPUSET
-#  endif
+#  include <vxCpuLib.h>
+#  include <cpuset.h>
 #endif
 
 #ifdef Q_OS_HPUX
@@ -69,6 +69,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace QtMiscUtils;
 
 #if QT_CONFIG(thread)
 
@@ -141,25 +143,25 @@ static void clear_thread_data()
 }
 
 template <typename T>
-static typename std::enable_if<QTypeInfo<T>::isIntegral, Qt::HANDLE>::type to_HANDLE(T id)
+static typename std::enable_if<std::is_integral_v<T>, Qt::HANDLE>::type to_HANDLE(T id)
 {
     return reinterpret_cast<Qt::HANDLE>(static_cast<intptr_t>(id));
 }
 
 template <typename T>
-static typename std::enable_if<QTypeInfo<T>::isIntegral, T>::type from_HANDLE(Qt::HANDLE id)
+static typename std::enable_if<std::is_integral_v<T>, T>::type from_HANDLE(Qt::HANDLE id)
 {
     return static_cast<T>(reinterpret_cast<intptr_t>(id));
 }
 
 template <typename T>
-static typename std::enable_if<QTypeInfo<T>::isPointer, Qt::HANDLE>::type to_HANDLE(T id)
+static typename std::enable_if<std::is_pointer_v<T>, Qt::HANDLE>::type to_HANDLE(T id)
 {
     return id;
 }
 
 template <typename T>
-static typename std::enable_if<QTypeInfo<T>::isPointer, T>::type from_HANDLE(Qt::HANDLE id)
+static typename std::enable_if<std::is_pointer_v<T>, T>::type from_HANDLE(Qt::HANDLE id)
 {
     return static_cast<T>(id);
 }
@@ -186,8 +188,12 @@ QThreadData *QThreadData::current(bool createIfNecessary)
         data->deref();
         data->isAdopted = true;
         data->threadId.storeRelaxed(to_HANDLE(pthread_self()));
-        if (!QCoreApplicationPrivate::theMainThread.loadAcquire())
-            QCoreApplicationPrivate::theMainThread.storeRelease(data->thread.loadRelaxed());
+        if (!QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
+            auto *mainThread = data->thread.loadRelaxed();
+            mainThread->setObjectName("Qt mainThread");
+            QCoreApplicationPrivate::theMainThread.storeRelease(mainThread);
+            QCoreApplicationPrivate::theMainThreadId.storeRelaxed(data->threadId.loadRelaxed());
+        }
     }
     return data;
 }
@@ -234,12 +240,12 @@ QAbstractEventDispatcher *QThreadPrivate::createEventDispatcher(QThreadData *dat
 
 #if QT_CONFIG(thread)
 
-#if (defined(Q_OS_LINUX) || defined(Q_OS_MAC) || defined(Q_OS_QNX))
+#if (defined(Q_OS_LINUX) || defined(Q_OS_DARWIN) || defined(Q_OS_QNX))
 static void setCurrentThreadName(const char *name)
 {
 #  if defined(Q_OS_LINUX) && !defined(QT_LINUXBASE)
     prctl(PR_SET_NAME, (unsigned long)name, 0, 0, 0);
-#  elif defined(Q_OS_MAC)
+#  elif defined(Q_OS_DARWIN)
     pthread_setname_np(name);
 #  elif defined(Q_OS_QNX)
     pthread_setname_np(pthread_self(), name);
@@ -272,11 +278,19 @@ void terminate_on_exception(T &&t)
 
 void *QThreadPrivate::start(void *arg)
 {
-#if !defined(Q_OS_ANDROID)
+#ifdef PTHREAD_CANCEL_DISABLE
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, nullptr);
 #endif
-    pthread_cleanup_push(QThreadPrivate::finish, arg);
-
+#if !defined(Q_OS_QNX) && !defined(Q_OS_VXWORKS)
+    // On QNX, calling finish() from a thread_local destructor causes the C
+    // library to hang.
+    // On VxWorks, its pthread implementation fails on call to `pthead_setspecific` which is made
+    // by first QObject constructor during `finish()`. This causes call to QThread::current, since
+    // QObject doesn't have parent, and since the pthread is already removed, it tries to set
+    // QThreadData for current pthread key, which crashes.
+    static thread_local
+#endif
+            auto cleanup = qScopeGuard([=] { finish(arg); });
     terminate_on_exception([&] {
         QThread *thr = reinterpret_cast<QThread *>(arg);
         QThreadData *data = QThreadData::get2(thr);
@@ -301,7 +315,7 @@ void *QThreadPrivate::start(void *arg)
         data->ensureEventDispatcher();
         data->eventDispatcher.loadRelaxed()->startingUp();
 
-#if (defined(Q_OS_LINUX) || defined(Q_OS_MAC) || defined(Q_OS_QNX))
+#if (defined(Q_OS_LINUX) || defined(Q_OS_DARWIN) || defined(Q_OS_QNX))
         {
             // Sets the name of the current thread. We can only do this
             // when the thread is starting, as we don't have a cross
@@ -314,18 +328,14 @@ void *QThreadPrivate::start(void *arg)
 #endif
 
         emit thr->started(QThread::QPrivateSignal());
-#if !defined(Q_OS_ANDROID)
+#ifdef PTHREAD_CANCEL_DISABLE
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, nullptr);
         pthread_testcancel();
 #endif
         thr->run();
     });
 
-    // This pop runs finish() below. It's outside the try/catch (and has its
-    // own try/catch) to prevent finish() to be run in case an exception is
-    // thrown.
-    pthread_cleanup_pop(1);
-
+    // The qScopeGuard above call runs finish() below.
     return nullptr;
 }
 
@@ -335,6 +345,13 @@ void QThreadPrivate::finish(void *arg)
         QThread *thr = reinterpret_cast<QThread *>(arg);
         QThreadPrivate *d = thr->d_func();
 
+        // Disable cancellation; we're already in the finishing touches of this
+        // thread, and we don't want cleanup to be disturbed by
+        // abi::__forced_unwind being thrown from all kinds of functions.
+#ifdef PTHREAD_CANCEL_DISABLE
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, nullptr);
+#endif
+
         QMutexLocker locker(&d->mutex);
 
         d->isInFinish = true;
@@ -342,6 +359,7 @@ void QThreadPrivate::finish(void *arg)
         void *data = &d->data->tls;
         locker.unlock();
         emit thr->finished(QThread::QPrivateSignal());
+        qCDebug(lcDeleteLater) << "Sending deferred delete events as part of finishing thread" << thr;
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QThreadStorageData::finish((void **)data);
         locker.relock();
@@ -357,7 +375,7 @@ void QThreadPrivate::finish(void *arg)
 
         d->running = false;
         d->finished = true;
-        d->interruptionRequested = false;
+        d->interruptionRequested.store(false, std::memory_order_relaxed);
 
         d->isInFinish = false;
         d->data->threadId.storeRelaxed(nullptr);
@@ -454,8 +472,6 @@ int QThread::idealThreadCount() noexcept
     // as of aug 2008 Integrity only supports one single core CPU
     cores = 1;
 #elif defined(Q_OS_VXWORKS)
-    // VxWorks
-#  if defined(QT_VXWORKS_HAS_CPUSET)
     cpuset_t cpus = vxCpuEnabledGet();
     cores = 0;
 
@@ -466,10 +482,6 @@ int QThread::idealThreadCount() noexcept
             cores++;
         }
     }
-#  else
-    // as of aug 2008 VxWorks < 6.6 only supports one single core CPU
-    cores = 1;
-#  endif
 #elif defined(Q_OS_WASM)
     cores = QThreadPrivate::idealThreadCount;
 #else
@@ -488,17 +500,6 @@ void QThread::yieldCurrentThread()
 
 #endif // QT_CONFIG(thread)
 
-static timespec makeTimespec(std::chrono::nanoseconds nsecs)
-{
-    using namespace std::chrono;
-    const seconds secs = duration_cast<seconds>(nsecs);
-    const nanoseconds frac = nsecs - secs;
-    struct timespec ts;
-    ts.tv_sec = secs.count();
-    ts.tv_nsec = frac.count();
-    return ts;
-}
-
 static void qt_nanosleep(timespec amount)
 {
     // We'd like to use clock_nanosleep.
@@ -510,22 +511,27 @@ static void qt_nanosleep(timespec amount)
     // nanosleep is POSIX.1-1993
 
     int r;
-    EINTR_LOOP(r, nanosleep(&amount, &amount));
+    QT_EINTR_LOOP(r, nanosleep(&amount, &amount));
 }
 
 void QThread::sleep(unsigned long secs)
 {
-    qt_nanosleep(makeTimespec(std::chrono::seconds{secs}));
+    sleep(std::chrono::seconds{secs});
 }
 
 void QThread::msleep(unsigned long msecs)
 {
-    qt_nanosleep(makeTimespec(std::chrono::milliseconds{msecs}));
+    sleep(std::chrono::milliseconds{msecs});
 }
 
 void QThread::usleep(unsigned long usecs)
 {
-    qt_nanosleep(makeTimespec(std::chrono::microseconds{usecs}));
+    sleep(std::chrono::microseconds{usecs});
+}
+
+void QThread::sleep(std::chrono::nanoseconds nsec)
+{
+    qt_nanosleep(durationToTimespec(nsec));
 }
 
 #if QT_CONFIG(thread)
@@ -640,7 +646,8 @@ void QThread::start(Priority priority)
     d->finished = false;
     d->returnCode = 0;
     d->exited = false;
-    d->interruptionRequested = false;
+    d->interruptionRequested.store(false, std::memory_order_relaxed);
+    d->terminated = false;
 
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -749,11 +756,28 @@ void QThread::terminate()
     Q_D(QThread);
     QMutexLocker locker(&d->mutex);
 
-    if (!d->data->threadId.loadRelaxed())
+    const auto id = d->data->threadId.loadRelaxed();
+    if (!id)
         return;
 
-    int code = pthread_cancel(from_HANDLE<pthread_t>(d->data->threadId.loadRelaxed()));
-    if (code) {
+    if (d->terminated) // don't try again, avoids killing the wrong thread on threadId reuse (ABA)
+        return;
+
+    d->terminated = true;
+
+    const bool selfCancelling = d->data == currentThreadData;
+    if (selfCancelling) {
+        // Posix doesn't seem to specify whether the stack of cancelled threads
+        // is unwound, and there's nothing preventing a QThread from
+        // terminate()ing itself, so drop the mutex before calling
+        // pthread_cancel():
+        locker.unlock();
+    }
+
+    if (int code = pthread_cancel(from_HANDLE<pthread_t>(id))) {
+        if (selfCancelling)
+            locker.relock();
+        d->terminated = false; // allow to try again
         qErrnoWarning(code, "QThread::start: Thread termination error");
     }
 #endif

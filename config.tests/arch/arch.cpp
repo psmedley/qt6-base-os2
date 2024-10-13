@@ -1,6 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// SPDX-License-Identifier: BSD-3-Clause
 
 #define QGLOBAL_H
 #include "../../src/corelib/global/archdetect.cpp"
@@ -141,7 +141,7 @@ const char msg2[] = "==Qt=magic=Qt== Sub-architecture:"
 // Leading-Zero bit count, Intel Core 4th Generation ("Haswell")
 " lzcnt"
 #endif
-#ifdef __MMX__
+#if defined(__MMX__) && defined(__i386__)
 // Multimedia Extensions, Pentium MMX, AMD K6-2
 " mmx"
 #endif
@@ -198,11 +198,11 @@ const char msg2[] = "==Qt=magic=Qt== Sub-architecture:"
 // Shadow stack, Intel processor TBA
 " shstk"
 #endif
-#if defined(__SSE__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1) || defined(_M_X64)
+#if (defined(__SSE__) && defined(__i386__)) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1 && defined(_M_IX86))
 // Streaming SIMD Extensions, Intel Pentium III, AMD Athlon
 " sse"
 #endif
-#if defined(__SSE2__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || defined(_M_X64)
+#if (defined(__SSE2__) && defined(__i386__)) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2 && defined(_M_IX86))
 // SSE2, Intel Pentium-M, Intel Pentium 4, AMD Opteron and Athlon 64
 " sse2"
 #endif
@@ -239,7 +239,7 @@ const char msg2[] = "==Qt=magic=Qt== Sub-architecture:"
 #endif
 
 // -- ARM --
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#if defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(_M_ARM64)
 " neon"
 #endif
 #ifdef __IWMMXT__

@@ -1,11 +1,10 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
 #include <QMessageBox>
 #include <QDebug>
-#include <QPair>
 #include <QSet>
 #include <QList>
 #include <QPointer>
@@ -38,6 +37,9 @@ private slots:
     void detailsButtonText();
     void expandDetailsWithoutMoving();
 
+    void optionsEmptyByDefault();
+    void changeNativeOption();
+
 #ifndef Q_OS_MAC
     void shortcut();
 #endif
@@ -59,6 +61,9 @@ private slots:
     void overrideDone();
 
     void hideNativeByDestruction();
+
+    void explicitDoneAfterButtonClicked();
+    void legacyApiReturnValue();
 
     void cleanup();
 };
@@ -435,7 +440,7 @@ void tst_QMessageBox::shortcut()
     msgBox.addButton("&Maybe", QMessageBox::YesRole);
     ExecCloseHelper closeHelper;
     closeHelper.start(Qt::Key_M, &msgBox);
-    QCOMPARE(msgBox.exec(), 2);
+    QCOMPARE(msgBox.exec(), 4);
 }
 #endif
 
@@ -470,59 +475,47 @@ void tst_QMessageBox::staticSourceCompat()
     // source compat tests for < 4.2
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
+#define COMPARE(real, exp) do {\
+    const auto pressed = static_cast<QMessageBox::StandardButton>(real);\
+    const auto expected = static_cast<QMessageBox::StandardButton>(exp);\
+    if (!QTest::qCompare(pressed, expected, #real, #exp, __FILE__, __LINE__)) \
+        return; } while (false)
+
     ExecCloseHelper closeHelper;
     closeHelper.start(Qt::Key_Enter);
     ret = QMessageBox::information(nullptr, "title", "text", QMessageBox::Yes, QMessageBox::No);
-    int expectedButton = int(QMessageBox::Yes);
-    if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme()) {
-        const int dialogButtonBoxLayout = theme->themeHint(QPlatformTheme::DialogButtonBoxLayout).toInt();
-        if (dialogButtonBoxLayout == QDialogButtonBox::MacLayout
-            || dialogButtonBoxLayout == QDialogButtonBox::GnomeLayout)
-            expectedButton = int(QMessageBox::No);
-    }
-    QCOMPARE(ret, expectedButton);
+    COMPARE(ret, QMessageBox::No);
     QVERIFY(closeHelper.done());
 
     closeHelper.start(Qt::Key_Enter);
     ret = QMessageBox::information(nullptr, "title", "text", QMessageBox::Yes | QMessageBox::Default, QMessageBox::No);
-    QCOMPARE(ret, int(QMessageBox::Yes));
+    COMPARE(ret, int(QMessageBox::Yes));
     QVERIFY(closeHelper.done());
 
 #if QT_DEPRECATED_SINCE(6, 2)
     // The overloads below are valid only before 6.2
     closeHelper.start(Qt::Key_Enter);
     ret = QMessageBox::information(nullptr, "title", "text", QMessageBox::Yes, QMessageBox::No | QMessageBox::Default);
-    QCOMPARE(ret, int(QMessageBox::No));
+    COMPARE(ret, int(QMessageBox::No));
     QVERIFY(closeHelper.done());
 
     closeHelper.start(Qt::Key_Enter);
     ret = QMessageBox::information(nullptr, "title", "text", QMessageBox::Yes | QMessageBox::Default, QMessageBox::No | QMessageBox::Escape);
-    QCOMPARE(ret, int(QMessageBox::Yes));
+    COMPARE(ret, int(QMessageBox::Yes));
     QVERIFY(closeHelper.done());
 
     closeHelper.start(Qt::Key_Enter);
     ret = QMessageBox::information(nullptr, "title", "text", QMessageBox::Yes | QMessageBox::Escape, QMessageBox::No | QMessageBox::Default);
-    QCOMPARE(ret, int(QMessageBox::No));
+    COMPARE(ret, int(QMessageBox::No));
     QVERIFY(closeHelper.done());
 
     // the button text versions
     closeHelper.start(Qt::Key_Enter);
     ret = QMessageBox::information(nullptr, "title", "text", "Yes", "No", QString(), 1);
-    QCOMPARE(ret, 1);
+    COMPARE(ret, 1);
     QVERIFY(closeHelper.done());
-
-    if (0) { // don't run these tests since the dialog won't close!
-        closeHelper.start(Qt::Key_Escape);
-        ret = QMessageBox::information(nullptr, "title", "text", "Yes", "No", QString(), 1);
-        QCOMPARE(ret, -1);
-        QVERIFY(closeHelper.done());
-
-        closeHelper.start(Qt::Key_Escape);
-        ret = QMessageBox::information(nullptr, "title", "text", "Yes", "No", QString(), 0, 1);
-        QCOMPARE(ret, 1);
-        QVERIFY(closeHelper.done());
-    }
 #endif // QT_DEPRECATED_SINCE(6, 2)
+#undef COMPARE
 QT_WARNING_POP
 }
 
@@ -548,9 +541,9 @@ void tst_QMessageBox::instanceSourceCompat()
 #ifndef Q_OS_MAC
     // mnemonics are not used on OS X
     closeHelper.start(QKeyCombination(Qt::ALT | Qt::Key_R).toCombined(), &mb);
-    QCOMPARE(mb.exec(), 0);
+    QCOMPARE(mb.exec(), 2);
     closeHelper.start(QKeyCombination(Qt::ALT | Qt::Key_Z).toCombined(), &mb);
-    QCOMPARE(mb.exec(), 1);
+    QCOMPARE(mb.exec(), 3);
 #endif
 }
 
@@ -625,6 +618,20 @@ void tst_QMessageBox::expandDetailsWithoutMoving() // QTBUG-32473
     QTRY_VERIFY(box.resized);
     QVERIFY(box.geometry().height() > geom.height());
     QCOMPARE(box.geometry().topLeft(), geom.topLeft());
+}
+
+void tst_QMessageBox::optionsEmptyByDefault()
+{
+    QMessageBox b;
+    QCOMPARE(b.options(), QMessageBox::Options());
+    QVERIFY(!b.testOption(QMessageBox::Option::DontUseNativeDialog));
+}
+
+void tst_QMessageBox::changeNativeOption()
+{
+    QMessageBox b;
+    b.setOption(QMessageBox::Option::DontUseNativeDialog);
+    QCOMPARE(b.options(), QMessageBox::Options(QMessageBox::Option::DontUseNativeDialog));
 }
 
 void tst_QMessageBox::incorrectDefaultButton()
@@ -792,7 +799,7 @@ void tst_QMessageBox::hideNativeByDestruction()
     // Make it application modal so that we don't end up with a sheet on macOS
     dialog->setWindowModality(Qt::ApplicationModal);
     window.show();
-    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
     dialog->open();
 
     // We test that the dialog opens and closes by watching the activation of the
@@ -809,6 +816,68 @@ void tst_QMessageBox::hideNativeByDestruction()
     // active
     window.activateWindow();
     QVERIFY(QTest::qWaitFor(windowActive));
+}
+
+void tst_QMessageBox::explicitDoneAfterButtonClicked()
+{
+    QMessageBox msgBox;
+    auto *standardButton = msgBox.addButton(QMessageBox::Ok);
+    auto *customButton = msgBox.addButton("Custom", QMessageBox::RejectRole);
+
+    QSignalSpy acceptedSpy(&msgBox, &QDialog::accepted);
+    QSignalSpy rejectedSpy(&msgBox, &QDialog::rejected);
+
+    msgBox.setDefaultButton(standardButton);
+    ExecCloseHelper closeHelper;
+    closeHelper.start(Qt::Key_Enter, &msgBox);
+    msgBox.exec();
+    QCOMPARE(msgBox.clickedButton(), standardButton);
+    QCOMPARE(msgBox.result(), QMessageBox::Ok);
+    QCOMPARE(acceptedSpy.size(), 1);
+    QCOMPARE(rejectedSpy.size(), 0);
+
+    msgBox.accept();
+    QCOMPARE(msgBox.result(), QDialog::Accepted);
+    QCOMPARE(acceptedSpy.size(), 2);
+    QCOMPARE(rejectedSpy.size(), 0);
+    msgBox.reject();
+    QCOMPARE(msgBox.result(), QDialog::Rejected);
+    QCOMPARE(acceptedSpy.size(), 2);
+    QCOMPARE(rejectedSpy.size(), 1);
+
+    msgBox.setDefaultButton(customButton);
+    closeHelper.start(Qt::Key_Enter, &msgBox);
+    msgBox.exec();
+    QCOMPARE(msgBox.clickedButton(), customButton);
+    QVERIFY(msgBox.result() != QDialog::Accepted);
+    QVERIFY(msgBox.result() != QDialog::Rejected);
+    QCOMPARE(acceptedSpy.size(), 2);
+    QCOMPARE(rejectedSpy.size(), 2);
+
+    msgBox.accept();
+    QCOMPARE(msgBox.result(), QDialog::Accepted);
+    QCOMPARE(acceptedSpy.size(), 3);
+    QCOMPARE(rejectedSpy.size(), 2);
+    msgBox.reject();
+    QCOMPARE(msgBox.result(), QDialog::Rejected);
+    QCOMPARE(acceptedSpy.size(), 3);
+    QCOMPARE(rejectedSpy.size(), 3);
+}
+
+void tst_QMessageBox::legacyApiReturnValue()
+{
+    ExecCloseHelper closeHelper;
+    for (int i = 0; i < 3; ++i) {
+        closeHelper.start(Qt::Key_Enter);
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+        QCOMPARE(QMessageBox::warning(nullptr, "Title", "Text",
+            "Button 0", "Button 1", "Button 2", i), i);
+        closeHelper.start(Qt::Key_Escape);
+        QCOMPARE(QMessageBox::warning(nullptr, "Title", "Text",
+            "Button 0", "Button 1", "Button 2", 0, i), i);
+QT_WARNING_POP
+    }
 }
 
 QTEST_MAIN(tst_QMessageBox)

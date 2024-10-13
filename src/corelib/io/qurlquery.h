@@ -5,7 +5,7 @@
 #ifndef QURLQUERY_H
 #define QURLQUERY_H
 
-#include <QtCore/qpair.h>
+#include <QtCore/qcompare.h>
 #include <QtCore/qshareddata.h>
 #include <QtCore/qurl.h>
 
@@ -22,10 +22,10 @@ public:
     QUrlQuery();
     explicit QUrlQuery(const QUrl &url);
     explicit QUrlQuery(const QString &queryString);
-    QUrlQuery(std::initializer_list<QPair<QString, QString>> list)
+    QUrlQuery(std::initializer_list<std::pair<QString, QString>> list)
         : QUrlQuery()
     {
-        for (const QPair<QString, QString> &item : list)
+        for (const std::pair<QString, QString> &item : list)
             addQueryItem(item.first, item.second);
     }
 
@@ -35,9 +35,11 @@ public:
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QUrlQuery)
     ~QUrlQuery();
 
+#if QT_CORE_REMOVED_SINCE(6, 8)
     bool operator==(const QUrlQuery &other) const;
     bool operator!=(const QUrlQuery &other) const
-    { return !(*this == other); }
+    { return !operator==(other); }
+#endif
 
     void swap(QUrlQuery &other) noexcept { d.swap(other.d); }
 
@@ -54,8 +56,8 @@ public:
     QChar queryValueDelimiter() const;
     QChar queryPairDelimiter() const;
 
-    void setQueryItems(const QList<QPair<QString, QString> > &query);
-    QList<QPair<QString, QString> > queryItems(QUrl::ComponentFormattingOptions encoding = QUrl::PrettyDecoded) const;
+    void setQueryItems(const QList<std::pair<QString, QString> > &query);
+    QList<std::pair<QString, QString> > queryItems(QUrl::ComponentFormattingOptions encoding = QUrl::PrettyDecoded) const;
 
     bool hasQueryItem(const QString &key) const;
     void addQueryItem(const QString &key, const QString &value);
@@ -68,6 +70,8 @@ public:
     static constexpr char16_t defaultQueryPairDelimiter() noexcept { return u'&'; }
 
 private:
+    friend Q_CORE_EXPORT bool comparesEqual(const QUrlQuery &lhs, const QUrlQuery &rhs);
+    Q_DECLARE_EQUALITY_COMPARABLE_NON_NOEXCEPT(QUrlQuery)
     friend class QUrl;
     friend Q_CORE_EXPORT size_t qHash(const QUrlQuery &key, size_t seed) noexcept;
     QSharedDataPointer<QUrlQueryPrivate> d;

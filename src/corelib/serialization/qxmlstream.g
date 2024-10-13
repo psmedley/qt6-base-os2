@@ -58,7 +58,7 @@
 %token PCDATA "PCDATA"
 
 -- error
-%token ERROR
+%token XML_ERROR
 
 -- entities
 %token PARSE_ENTITY
@@ -110,7 +110,7 @@
 %start document
 
 /.// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only$
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 
 //
@@ -149,7 +149,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_XMLSTREAMREADER
+#if QT_CONFIG(xmlstreamreader)
 
 bool QXmlStreamReaderPrivate::parse()
 {
@@ -251,7 +251,7 @@ bool QXmlStreamReaderPrivate::parse()
             } else switch (token_char) {
             case 0xfffe:
             case 0xffff:
-                token = ERROR;
+                token = XML_ERROR;
                 break;
             case '\r':
                 token = SPACE;
@@ -1487,7 +1487,7 @@ nmtoken ::= COLON;
     return false;
 }
 
-#endif
+#endif // feature xmlstreamreader
 
 QT_END_NAMESPACE
 

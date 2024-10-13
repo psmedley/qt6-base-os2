@@ -5,7 +5,6 @@
 #include "qplatformdefs.h"
 
 #include "qcoreapplication.h"
-#include "qpair.h"
 #include "qhash.h"
 #include "qsocketnotifier.h"
 #include "qthread.h"
@@ -15,27 +14,25 @@
 #include <private/qcoreapplication_p.h>
 #include <private/qcore_unix_p.h>
 
+#include <cstdio>
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef QT_NO_EVENTFD
+#if __has_include(<sys/eventfd.h>)
 #  include <sys/eventfd.h>
+static constexpr bool UsingEventfd = true;
+#else
+static constexpr bool UsingEventfd = false;
 #endif
 
-// VxWorks doesn't correctly set the _POSIX_... options
 #if defined(Q_OS_VXWORKS)
-#  if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK <= 0)
-#    undef _POSIX_MONOTONIC_CLOCK
-#    define _POSIX_MONOTONIC_CLOCK 1
-#  endif
 #  include <pipeDrv.h>
-#  include <sys/time.h>
 #endif
 
-#if (_POSIX_MONOTONIC_CLOCK-0 <= 0) || defined(QT_BOOTSTRAPPED)
-#  include <sys/times.h>
-#endif
+using namespace std::chrono;
+using namespace std::chrono_literals;
 
 QT_BEGIN_NAMESPACE
 
@@ -55,11 +52,6 @@ static const char *socketType(QSocketNotifier::Type type)
 
 QThreadPipe::QThreadPipe()
 {
-    fds[0] = -1;
-    fds[1] = -1;
-#if defined(Q_OS_VXWORKS)
-    name[0] = '\0';
-#endif
 }
 
 QThreadPipe::~QThreadPipe()
@@ -67,7 +59,7 @@ QThreadPipe::~QThreadPipe()
     if (fds[0] >= 0)
         close(fds[0]);
 
-    if (fds[1] >= 0)
+    if (!UsingEventfd && fds[1] >= 0)
         close(fds[1]);
 
 #if defined(Q_OS_VXWORKS)
@@ -97,30 +89,32 @@ bool QThreadPipe::init()
 #if defined(Q_OS_WASM)
     // do nothing.
 #elif defined(Q_OS_VXWORKS)
-    qsnprintf(name, sizeof(name), "/pipe/qt_%08x", int(taskIdSelf()));
+    std::snprintf(name, sizeof(name), "/pipe/qt_%08x", int(taskIdSelf()));
 
     // make sure there is no pipe with this name
     pipeDevDelete(name, true);
 
     // create the pipe
     if (pipeDevCreate(name, 128 /*maxMsg*/, 1 /*maxLength*/) != OK) {
-        perror("QThreadPipe: Unable to create thread pipe device %s", name);
+        perror("QThreadPipe: Unable to create thread pipe device");
         return false;
     }
 
     if ((fds[0] = open(name, O_RDWR, 0)) < 0) {
-        perror("QThreadPipe: Unable to open pipe device %s", name);
+        perror("QThreadPipe: Unable to open pipe device");
         return false;
     }
 
     initThreadPipeFD(fds[0]);
     fds[1] = fds[0];
 #else
-#  ifndef QT_NO_EVENTFD
-    if ((fds[0] = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC)) >= 0)
-        return true;
+    int ret;
+#  ifdef EFD_CLOEXEC
+    ret = fds[0] = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
 #  endif
-    if (qt_safe_pipe(fds, O_NONBLOCK) == -1) {
+    if (!UsingEventfd)
+        ret = qt_safe_pipe(fds, O_NONBLOCK);
+    if (ret == -1) {
         perror("QThreadPipe: Unable to create pipe");
         return false;
     }
@@ -136,15 +130,10 @@ pollfd QThreadPipe::prepare() const
 
 void QThreadPipe::wakeUp()
 {
-    if (wakeUps.testAndSetAcquire(0, 1)) {
-#ifndef QT_NO_EVENTFD
-        if (fds[1] == -1) {
-            // eventfd
-            eventfd_t value = 1;
-            int ret;
-            EINTR_LOOP(ret, eventfd_write(fds[0], value));
-            return;
-        }
+    if ((wakeUps.fetchAndOrAcquire(1) & 1) == 0) {
+#  ifdef EFD_CLOEXEC
+        eventfd_write(fds[0], 1);
+        return;
 #endif
         char c = 0;
         qt_safe_write(fds[1], &c, 1);
@@ -165,14 +154,11 @@ int QThreadPipe::check(const pollfd &pfd)
         ::read(fds[0], c, sizeof(c));
         ::ioctl(fds[0], FIOFLUSH, 0);
 #else
-#  ifndef QT_NO_EVENTFD
-        if (fds[1] == -1) {
-            // eventfd
-            eventfd_t value;
-            eventfd_read(fds[0], &value);
-        } else
+#  ifdef EFD_CLOEXEC
+        eventfd_t value;
+        eventfd_read(fds[0], &value);
 #  endif
-        {
+        if (!UsingEventfd) {
             while (::read(fds[0], c, sizeof(c)) > 0) {}
         }
 #endif
@@ -195,7 +181,7 @@ QEventDispatcherUNIXPrivate::QEventDispatcherUNIXPrivate()
 QEventDispatcherUNIXPrivate::~QEventDispatcherUNIXPrivate()
 {
     // cleanup timers
-    qDeleteAll(timerList);
+    timerList.clearTimers();
 }
 
 void QEventDispatcherUNIXPrivate::setSocketNotifierPending(QSocketNotifier *notifier)
@@ -273,11 +259,11 @@ int QEventDispatcherUNIXPrivate::activateSocketNotifiers()
 }
 
 QEventDispatcherUNIX::QEventDispatcherUNIX(QObject *parent)
-    : QAbstractEventDispatcher(*new QEventDispatcherUNIXPrivate, parent)
+    : QAbstractEventDispatcherV2(*new QEventDispatcherUNIXPrivate, parent)
 { }
 
 QEventDispatcherUNIX::QEventDispatcherUNIX(QEventDispatcherUNIXPrivate &dd, QObject *parent)
-    : QAbstractEventDispatcher(dd, parent)
+    : QAbstractEventDispatcherV2(dd, parent)
 { }
 
 QEventDispatcherUNIX::~QEventDispatcherUNIX()
@@ -286,10 +272,10 @@ QEventDispatcherUNIX::~QEventDispatcherUNIX()
 /*!
     \internal
 */
-void QEventDispatcherUNIX::registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *obj)
+void QEventDispatcherUNIX::registerTimer(Qt::TimerId timerId, Duration interval, Qt::TimerType timerType, QObject *obj)
 {
 #ifndef QT_NO_DEBUG
-    if (timerId < 1 || interval < 0 || !obj) {
+    if (qToUnderlying(timerId) < 1 || interval.count() < 0 || !obj) {
         qWarning("QEventDispatcherUNIX::registerTimer: invalid arguments");
         return;
     } else if (obj->thread() != thread() || thread() != QThread::currentThread()) {
@@ -305,10 +291,10 @@ void QEventDispatcherUNIX::registerTimer(int timerId, qint64 interval, Qt::Timer
 /*!
     \internal
 */
-bool QEventDispatcherUNIX::unregisterTimer(int timerId)
+bool QEventDispatcherUNIX::unregisterTimer(Qt::TimerId timerId)
 {
 #ifndef QT_NO_DEBUG
-    if (timerId < 1) {
+    if (qToUnderlying(timerId) < 1) {
         qWarning("QEventDispatcherUNIX::unregisterTimer: invalid argument");
         return false;
     } else if (thread() != QThread::currentThread()) {
@@ -340,12 +326,12 @@ bool QEventDispatcherUNIX::unregisterTimers(QObject *object)
     return d->timerList.unregisterTimers(object);
 }
 
-QList<QEventDispatcherUNIX::TimerInfo>
-QEventDispatcherUNIX::registeredTimers(QObject *object) const
+QList<QEventDispatcherUNIX::TimerInfoV2>
+QEventDispatcherUNIX::timersForObject(QObject *object) const
 {
     if (!object) {
         qWarning("QEventDispatcherUNIX:registeredTimers: invalid argument");
-        return QList<TimerInfo>();
+        return QList<TimerInfoV2>();
     }
 
     Q_D(const QEventDispatcherUNIX);
@@ -445,11 +431,19 @@ bool QEventDispatcherUNIX::processEvents(QEventLoop::ProcessEventsFlags flags)
     if (d->interrupt.loadRelaxed())
         return false;
 
-    timespec *tm = nullptr;
-    timespec wait_tm = { 0, 0 };
-
-    if (!canWait || (include_timers && d->timerList.timerWait(wait_tm)))
-        tm = &wait_tm;
+    QDeadlineTimer deadline;
+    if (canWait) {
+        if (include_timers) {
+            std::optional<nanoseconds> remaining = d->timerList.timerWait();
+            deadline = remaining ? QDeadlineTimer{*remaining}
+                             : QDeadlineTimer(QDeadlineTimer::Forever);
+        } else {
+            deadline = QDeadlineTimer(QDeadlineTimer::Forever);
+        }
+    } else {
+        // Using the default-constructed `deadline`, which is already expired,
+        // ensures the code in the do-while loop in qt_safe_poll runs at least once.
+    }
 
     d->pollfds.clear();
     d->pollfds.reserve(1 + (include_notifiers ? d->socketNotifiers.size() : 0));
@@ -462,8 +456,7 @@ bool QEventDispatcherUNIX::processEvents(QEventLoop::ProcessEventsFlags flags)
     d->pollfds.append(d->threadPipe.prepare());
 
     int nevents = 0;
-
-    switch (qt_safe_poll(d->pollfds.data(), d->pollfds.size(), tm)) {
+    switch (qt_safe_poll(d->pollfds.data(), d->pollfds.size(), deadline)) {
     case -1:
         qErrnoWarning("qt_safe_poll");
         if (QT_CONFIG(poll_exit_on_error))
@@ -485,17 +478,17 @@ bool QEventDispatcherUNIX::processEvents(QEventLoop::ProcessEventsFlags flags)
     return (nevents > 0);
 }
 
-int QEventDispatcherUNIX::remainingTime(int timerId)
+auto QEventDispatcherUNIX::remainingTime(Qt::TimerId timerId) const -> Duration
 {
 #ifndef QT_NO_DEBUG
-    if (timerId < 1) {
+    if (int(timerId) < 1) {
         qWarning("QEventDispatcherUNIX::remainingTime: invalid argument");
-        return -1;
+        return Duration::min();
     }
 #endif
 
-    Q_D(QEventDispatcherUNIX);
-    return d->timerList.timerRemainingTime(timerId);
+    Q_D(const QEventDispatcherUNIX);
+    return d->timerList.remainingDuration(timerId);
 }
 
 void QEventDispatcherUNIX::wakeUp()

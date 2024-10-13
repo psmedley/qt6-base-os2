@@ -114,6 +114,20 @@ void QFileDevicePrivate::setError(QFileDevice::FileError err, int errNum)
     to increment or decrement \c qt_ntfs_permission_lookup before any
     threads other than the main thread have started or after every thread
     other than the main thread has ended.
+
+    \note From Qt 6.6 the variable \c qt_ntfs_permission_lookup is
+    deprecated. Please use the following alternatives.
+
+    The safe and easy way to manage permission checks is to use the RAII class
+    \c QNtfsPermissionCheckGuard.
+
+    \snippet ntfsp.cpp raii
+
+    If you need more fine-grained control, it is possible to manage the permission
+    with the following functions instead:
+
+    \snippet ntfsp.cpp free-funcs
+
 */
 
 //************* QFileDevice
@@ -153,6 +167,35 @@ void QFileDevicePrivate::setError(QFileDevice::FileError err, int errNum)
     \value DontCloseHandle If not explicitly closed, the underlying file
     handle is left open when the QFile object is destroyed.
  */
+
+/*!
+    \macro QT_USE_NODISCARD_FILE_OPEN
+    \macro QT_NO_USE_NODISCARD_FILE_OPEN
+    \relates QFileDevice
+    \since 6.8
+
+    File-related I/O classes (such as QFile, QSaveFile, QTemporaryFile)
+    have an \c{open()} method to open the file they act upon. It is
+    important to check the return value of the call to \c{open()}
+    before proceeding with reading or writing data into the file.
+
+    For this reason, starting with Qt 6.8, some overloads of \c{open()}
+    have been marked with the \c{[[nodiscard]]} attribute. Since this
+    change may raise warnings in existing codebases, user code can
+    opt-in or opt-out from having the attribute applied by defining
+    certain macros:
+
+    \list
+        \li If the \c{QT_USE_NODISCARD_FILE_OPEN} macro is defined,
+        overloads of \c{open()} are marked as \c{[[nodiscard]]}.
+        \li If the \c{QT_NO_USE_NODISCARD_FILE_OPEN} is defined, the
+        overloads of \c{open()} are \e{not} marked as \c{[[nodiscard]]}.
+        \li If neither macro is defined, then the default up to and
+        including Qt 6.9 is not to have the attribute. Starting from Qt 6.10,
+        the attribute is automatically applied.
+        \li If both macros are defined, the program is ill-formed.
+    \endlist
+*/
 
 #ifdef QT_NO_QOBJECT
 QFileDevice::QFileDevice()
@@ -720,15 +763,6 @@ bool QFileDevice::unmap(uchar *address)
     \sa setFileTime(), fileTime(), QFileInfo::fileTime()
 */
 
-static inline QAbstractFileEngine::FileTime FileDeviceTimeToAbstractFileEngineTime(QFileDevice::FileTime time)
-{
-    static_assert(int(QFileDevice::FileAccessTime) == int(QAbstractFileEngine::AccessTime));
-    static_assert(int(QFileDevice::FileBirthTime) == int(QAbstractFileEngine::BirthTime));
-    static_assert(int(QFileDevice::FileMetadataChangeTime) == int(QAbstractFileEngine::MetadataChangeTime));
-    static_assert(int(QFileDevice::FileModificationTime) == int(QAbstractFileEngine::ModificationTime));
-    return QAbstractFileEngine::FileTime(time);
-}
-
 /*!
     \since 5.10
     Returns the file time specified by \a time.
@@ -742,7 +776,7 @@ QDateTime QFileDevice::fileTime(QFileDevice::FileTime time) const
     Q_D(const QFileDevice);
 
     if (d->engine())
-        return d->engine()->fileTime(FileDeviceTimeToAbstractFileEngineTime(time));
+        return d->engine()->fileTime(time);
 
     return QDateTime();
 }
@@ -765,7 +799,7 @@ bool QFileDevice::setFileTime(const QDateTime &newDate, QFileDevice::FileTime fi
         return false;
     }
 
-    if (!d->fileEngine->setFileTime(newDate, FileDeviceTimeToAbstractFileEngineTime(fileTime))) {
+    if (!d->fileEngine->setFileTime(newDate, fileTime)) {
         d->setError(d->fileEngine->error(), d->fileEngine->errorString());
         return false;
     }

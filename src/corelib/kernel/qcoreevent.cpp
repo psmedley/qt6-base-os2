@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcoreevent.h"
+#include "qcoreevent_p.h"
 #include "qcoreapplication.h"
 #include "qcoreapplication_p.h"
 
@@ -78,6 +79,8 @@ Q_TRACE_POINT(qtcore, QEvent_dtor, QEvent *event, QEvent::Type type);
     \value ChildAdded                       An object gets a child (QChildEvent).
     \value ChildPolished                    A widget child gets polished (QChildEvent).
     \value ChildRemoved                     An object loses a child (QChildEvent).
+    \value [since 6.7] ChildWindowAdded     A child window was added to the window.
+    \value [since 6.7] ChildWindowRemoved   A child window was removed from the window.
     \value Clipboard                        The clipboard contents have changed.
     \value Close                            Widget was closed (QCloseEvent).
     \value CloseSoftwareInputPanel          A widget wants to close the software input panel (SIP).
@@ -85,6 +88,8 @@ Q_TRACE_POINT(qtcore, QEvent_dtor, QEvent *event, QEvent::Type type);
     \value ContextMenu                      Context popup menu (QContextMenuEvent).
     \value CursorChange                     The widget's cursor has changed.
     \value DeferredDelete                   The object will be deleted after it has cleaned up (QDeferredDeleteEvent)
+    \value [since 6.6] DevicePixelRatioChange
+                                            The devicePixelRatio has changed for this widget's or window's underlying backing store.
     \value DragEnter                        The cursor enters a widget during a drag and drop operation (QDragEnterEvent).
     \value DragLeave                        The cursor leaves a widget during a drag and drop operation (QDragLeaveEvent).
     \value DragMove                         A drag and drop operation is in progress (QDragMoveEvent).
@@ -157,8 +162,12 @@ Q_TRACE_POINT(qtcore, QEvent_dtor, QEvent *event, QEvent::Type type);
     \value OrientationChange                The screens orientation has changes (QScreenOrientationChangeEvent).
     \value Paint                            Screen update necessary (QPaintEvent).
     \value PaletteChange                    Palette of the widget changed.
-    \value ParentAboutToChange              The widget parent is about to change.
-    \value ParentChange                     The widget parent has changed.
+    \value ParentAboutToChange              The object parent is about to change.
+                                            Only sent to some object types, such as QWidget.
+    \value ParentChange                     The object parent has changed.
+                                            Only sent to some object types, such as QWidget.
+    \value [since 6.7] ParentWindowAboutToChange The parent window is about to change.
+    \value [since 6.7] ParentWindowChange   The parent window has changed.
     \value PlatformPanel                    A platform specific panel has been requested.
     \value PlatformSurface                  A native platform surface has been created or is about to be destroyed (QPlatformSurfaceEvent).
     \omitvalue Pointer
@@ -431,8 +440,9 @@ struct QBasicAtomicBitField {
         QBasicAtomicInteger<uint> &entry = data[which / BitsPerInt];
         const uint old = entry.loadRelaxed();
         const uint bit = 1U << (which % BitsPerInt);
-        return !(old & bit) // wasn't taken
-            && entry.testAndSetRelaxed(old, old | bit); // still wasn't taken
+        if (old & bit)
+            return false;       // already taken
+        return (entry.fetchAndOrRelaxed(bit) & bit) == 0;
 
         // don't update 'next' here - it's unlikely that it will need
         // to be updated, in the general case, and having 'next'
@@ -509,12 +519,12 @@ int QEvent::registerEventType(int hint) noexcept
     started one or more timers. Each timer has a unique identifier. A
     timer is started with QObject::startTimer().
 
-    The QTimer class provides a high-level programming interface that
+    The QChronoTimer class provides a high-level programming interface that
     uses signals instead of events. It also provides single-shot timers.
 
     The event handler QObject::timerEvent() receives timer events.
 
-    \sa QTimer, QObject::timerEvent(), QObject::startTimer(),
+    \sa QChronoTimer, QObject::timerEvent(), QObject::startTimer(),
     QObject::killTimer()
 */
 
@@ -523,8 +533,20 @@ int QEvent::registerEventType(int hint) noexcept
     \a timerId.
 */
 QTimerEvent::QTimerEvent(int timerId)
-    : QEvent(Timer), id(timerId)
+    : QTimerEvent(Qt::TimerId{timerId})
 {}
+
+/*!
+    \since 6.8
+
+    Constructs a timer event object with the timer identifier set to
+    \a timerId.
+*/
+QTimerEvent::QTimerEvent(Qt::TimerId timerId)
+    : QEvent(Timer), m_id(timerId)
+{
+    static_assert(sizeof(Qt::TimerId) == sizeof(int));
+}
 
 Q_IMPL_EVENT_COMMON(QTimerEvent)
 
@@ -533,6 +555,15 @@ Q_IMPL_EVENT_COMMON(QTimerEvent)
 
     Returns the unique timer identifier, which is the same identifier
     as returned from QObject::startTimer().
+*/
+
+/*!
+    \fn Qt::TimerId QTimerEvent::id() const
+    \since 6.8
+
+    Returns the Qt::TimerId of the timer associated with this event, which
+    is the same identifier returned by QObject::startTimer() cast to
+    Qt::TimerId.
 */
 
 /*!
@@ -632,22 +663,13 @@ Q_IMPL_EVENT_COMMON(QDynamicPropertyChangeEvent)
 */
 
 /*!
-    Constructs a deferred delete event with an initial loopLevel() of zero.
+    Constructs a deferred delete event with the given loop and scope level.
 */
-QDeferredDeleteEvent::QDeferredDeleteEvent()
-    : QEvent(QEvent::DeferredDelete)
-    , level(0)
+QDeferredDeleteEvent::QDeferredDeleteEvent(int loopLevel, int scopeLevel)
+    : QEvent(QEvent::DeferredDelete), m_loopLevel(loopLevel), m_scopeLevel(scopeLevel)
 { }
 
 Q_IMPL_EVENT_COMMON(QDeferredDeleteEvent)
-
-/*! \fn int QDeferredDeleteEvent::loopLevel() const
-
-    Returns the loop-level in which the event was posted. The
-    loop-level is set by QCoreApplication::postEvent().
-
-    \sa QObject::deleteLater()
-*/
 
 QT_END_NAMESPACE
 

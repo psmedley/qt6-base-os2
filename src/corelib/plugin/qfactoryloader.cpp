@@ -5,22 +5,19 @@
 #include "qfactoryloader_p.h"
 
 #ifndef QT_NO_QOBJECT
-#include "qfactoryinterface.h"
-
 #include "private/qcoreapplication_p.h"
 #include "private/qduplicatetracker_p.h"
 #include "private/qloggingregistry_p.h"
 #include "private/qobject_p.h"
 #include "qcborarray.h"
 #include "qcbormap.h"
+#include "qcborstreamreader.h"
 #include "qcborvalue.h"
-#include "qcborvalue.h"
-#include "qdiriterator.h"
+#include "qdirlisting.h"
 #include "qfileinfo.h"
 #include "qjsonarray.h"
 #include "qjsondocument.h"
 #include "qjsonobject.h"
-#include "qmap.h"
 #include "qmutex.h"
 #include "qplugin.h"
 #include "qplugin_p.h"
@@ -32,6 +29,7 @@
 
 #include <qtcore_tracepoints_p.h>
 
+#include <map>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -40,26 +38,180 @@ using namespace Qt::StringLiterals;
 
 Q_TRACE_POINT(qtcore, QFactoryLoader_update, const QString &fileName);
 
-bool QPluginParsedMetaData::parse(QByteArrayView raw)
+namespace {
+struct IterationResult
+{
+    enum Result {
+        FinishedSearch = 0,
+        ContinueSearch,
+
+        // parse errors
+        ParsingError = -1,
+        InvalidMetaDataVersion = -2,
+        InvalidTopLevelItem = -3,
+        InvalidHeaderItem = -4,
+    };
+    Result result;
+    QCborError error = { QCborError::NoError };
+
+    Q_IMPLICIT IterationResult(Result r) : result(r) {}
+    Q_IMPLICIT IterationResult(QCborError e) : result(ParsingError), error(e) {}
+};
+
+struct QFactoryLoaderIidSearch
+{
+    QLatin1StringView iid;
+    bool matchesIid = false;
+    QFactoryLoaderIidSearch(QLatin1StringView iid) : iid(iid)
+    { Q_ASSERT(!iid.isEmpty()); }
+
+    static IterationResult::Result skip(QCborStreamReader &reader)
+    {
+        // skip this, whatever it is
+        reader.next();
+        return IterationResult::ContinueSearch;
+    }
+
+    IterationResult::Result operator()(QtPluginMetaDataKeys key, QCborStreamReader &reader)
+    {
+        if (key != QtPluginMetaDataKeys::IID)
+            return skip(reader);
+        matchesIid = (reader.readAllString() == iid);
+        return IterationResult::FinishedSearch;
+    }
+    IterationResult::Result operator()(QUtf8StringView, QCborStreamReader &reader)
+    {
+        return skip(reader);
+    }
+};
+
+struct QFactoryLoaderMetaDataKeysExtractor : QFactoryLoaderIidSearch
+{
+    QCborArray keys;
+    QFactoryLoaderMetaDataKeysExtractor(QLatin1StringView iid)
+        : QFactoryLoaderIidSearch(iid)
+    {}
+
+    IterationResult::Result operator()(QtPluginMetaDataKeys key, QCborStreamReader &reader)
+    {
+        if (key == QtPluginMetaDataKeys::IID) {
+            QFactoryLoaderIidSearch::operator()(key, reader);
+            return IterationResult::ContinueSearch;
+        }
+        if (key != QtPluginMetaDataKeys::MetaData)
+            return skip(reader);
+
+        if (!matchesIid)
+            return IterationResult::FinishedSearch;
+        if (!reader.isMap() || !reader.isLengthKnown())
+            return IterationResult::InvalidHeaderItem;
+        if (!reader.enterContainer())
+            return IterationResult::ParsingError;
+        while (reader.isValid()) {
+            // the metadata is JSON, so keys are all strings
+            QByteArray key = reader.readAllUtf8String();
+            if (key == "Keys") {
+                if (!reader.isArray() || !reader.isLengthKnown())
+                    return IterationResult::InvalidHeaderItem;
+                keys = QCborValue::fromCbor(reader).toArray();
+                break;
+            }
+            skip(reader);
+        }
+        // warning: we may not have finished iterating over the header
+        return IterationResult::FinishedSearch;
+    }
+    using QFactoryLoaderIidSearch::operator();
+};
+} // unnamed namespace
+
+template <typename F> static IterationResult iterateInPluginMetaData(QByteArrayView raw, F &&f)
 {
     QPluginMetaData::Header header;
     Q_ASSERT(raw.size() >= qsizetype(sizeof(header)));
     memcpy(&header, raw.data(), sizeof(header));
     if (Q_UNLIKELY(header.version > QPluginMetaData::CurrentMetaDataVersion))
-        return setError(QFactoryLoader::tr("Invalid metadata version"));
+        return IterationResult::InvalidMetaDataVersion;
 
     // use fromRawData to keep QCborStreamReader from copying
     raw = raw.sliced(sizeof(header));
     QByteArray ba = QByteArray::fromRawData(raw.data(), raw.size());
-    QCborParserError err;
-    QCborValue metadata = QCborValue::fromCbor(ba, &err);
+    QCborStreamReader reader(ba);
+    if (reader.isInvalid())
+        return reader.lastError();
+    if (!reader.isMap())
+        return IterationResult::InvalidTopLevelItem;
+    if (!reader.enterContainer())
+        return reader.lastError();
+    while (reader.isValid()) {
+        IterationResult::Result r;
+        if (reader.isInteger()) {
+            // integer key, one of ours
+            qint64 value = reader.toInteger();
+            auto key = QtPluginMetaDataKeys(value);
+            if (qint64(key) != value)
+                return IterationResult::InvalidHeaderItem;
+            if (!reader.next())
+                return reader.lastError();
+            r = f(key, reader);
+        } else if (reader.isString()) {
+            QByteArray key = reader.readAllUtf8String();
+            if (key.isNull())
+                return reader.lastError();
+            r = f(QUtf8StringView(key), reader);
+        } else {
+            return IterationResult::InvalidTopLevelItem;
+        }
 
-    if (err.error != QCborError::NoError)
-        return setError(QFactoryLoader::tr("Metadata parsing error: %1").arg(err.error.toString()));
-    if (!metadata.isMap())
+        if (QCborError e = reader.lastError())
+            return e;
+        if (r != IterationResult::ContinueSearch)
+            return r;
+    }
+
+    if (!reader.leaveContainer())
+        return reader.lastError();
+    return IterationResult::FinishedSearch;
+}
+
+static bool isIidMatch(QByteArrayView raw, QLatin1StringView iid)
+{
+    QFactoryLoaderIidSearch search(iid);
+    iterateInPluginMetaData(raw, search);
+    return search.matchesIid;
+}
+
+bool QPluginParsedMetaData::parse(QByteArrayView raw)
+{
+    QCborMap map;
+    auto r = iterateInPluginMetaData(raw, [&](const auto &key, QCborStreamReader &reader) {
+        QCborValue item = QCborValue::fromCbor(reader);
+        if (item.isInvalid())
+            return IterationResult::ParsingError;
+        if constexpr (std::is_enum_v<std::decay_t<decltype(key)>>)
+            map[int(key)] = item;
+        else
+            map[QString::fromUtf8(key)] = item;
+        return IterationResult::ContinueSearch;
+    });
+
+    switch (r.result) {
+    case IterationResult::FinishedSearch:
+    case IterationResult::ContinueSearch:
+        break;
+
+    // parse errors
+    case IterationResult::ParsingError:
+        return setError(QFactoryLoader::tr("Metadata parsing error: %1").arg(r.error.toString()));
+    case IterationResult::InvalidMetaDataVersion:
+        return setError(QFactoryLoader::tr("Invalid metadata version"));
+    case IterationResult::InvalidTopLevelItem:
+    case IterationResult::InvalidHeaderItem:
         return setError(QFactoryLoader::tr("Unexpected metadata contents"));
-    QCborMap map = metadata.toMap();
-    metadata = {};
+    }
+
+    // header was validated
+    auto header = qFromUnaligned<QPluginMetaData::Header>(raw.data());
 
     DecodedArchRequirements archReq =
             header.version == 0 ? decodeVersion0ArchRequirements(header.plugin_arch_requirements)
@@ -109,7 +261,7 @@ public:
     mutable QMutex mutex;
     QDuplicateTracker<QString> loadedPaths;
     std::vector<QLibraryPrivate::UniquePtr> libraries;
-    QMap<QString,QLibraryPrivate*> keyMap;
+    std::map<QString, QLibraryPrivate*> keyMap;
     QString suffix;
     QString extraSearchPath;
     Qt::CaseSensitivity cs;
@@ -151,30 +303,17 @@ inline void QFactoryLoaderPrivate::updateSinglePath(const QString &path)
 
     qCDebug(lcFactoryLoader) << "checking directory path" << path << "...";
 
-    QDirIterator plugins(path,
+    QDirListing plugins(path,
 #if defined(Q_OS_DOSLIKE)
                 QStringList(QStringLiteral("*.dll")),
 #elif defined(Q_OS_ANDROID)
                 QStringList("libplugins_%1_*.so"_L1.arg(suffix)),
 #endif
-                QDir::Files);
+                QDirListing::IteratorFlag::FilesOnly);
 
-    while (plugins.hasNext()) {
-        QString fileName = plugins.next();
-#ifdef Q_OS_MAC
-        const bool isDebugPlugin = fileName.endsWith("_debug.dylib"_L1);
-        const bool isDebugLibrary =
-            #ifdef QT_DEBUG
-                true;
-            #else
-                false;
-            #endif
-
-        // Skip mismatching plugins so that we don't end up loading both debug and release
-        // versions of the same Qt libraries (due to the plugin's dependencies).
-        if (isDebugPlugin != isDebugLibrary)
-            continue;
-#elif defined(Q_PROCESSOR_X86)
+    for (const auto &dirEntry : plugins) {
+        const QString &fileName = dirEntry.fileName();
+#if defined(Q_PROCESSOR_X86)
         if (fileName.endsWith(".avx2"_L1) || fileName.endsWith(".avx512"_L1)) {
             // ignore AVX2-optimized file, we'll do a bait-and-switch to it later
             continue;
@@ -185,7 +324,7 @@ inline void QFactoryLoaderPrivate::updateSinglePath(const QString &path)
         Q_TRACE(QFactoryLoader_update, fileName);
 
         QLibraryPrivate::UniquePtr library;
-        library.reset(QLibraryPrivate::findOrCreate(QFileInfo(fileName).canonicalFilePath()));
+        library.reset(QLibraryPrivate::findOrCreate(dirEntry.canonicalFilePath()));
         if (!library->isPlugin()) {
             qCDebug(lcFactoryLoader) << library->errorString << Qt::endl
                                      << "         not a plugin";
@@ -211,20 +350,28 @@ inline void QFactoryLoaderPrivate::updateSinglePath(const QString &path)
 
         int keyUsageCount = 0;
         for (const QString &key : std::as_const(keys)) {
-            // first come first serve, unless the first
-            // library was built with a future Qt version,
-            // whereas the new one has a Qt version that fits
-            // better
-            constexpr int QtVersionNoPatch = QT_VERSION_CHECK(QT_VERSION_MAJOR, QT_VERSION_MINOR, 0);
-            QLibraryPrivate *previous = keyMap.value(key);
-            int prev_qt_version = 0;
-            if (previous)
-                prev_qt_version = int(previous->metaData.value(QtPluginMetaDataKeys::QtVersion).toInteger());
-            int qt_version = int(library->metaData.value(QtPluginMetaDataKeys::QtVersion).toInteger());
-            if (!previous || (prev_qt_version > QtVersionNoPatch && qt_version <= QtVersionNoPatch)) {
-                keyMap[key] = library.get();    // we WILL .release()
-                ++keyUsageCount;
+            QLibraryPrivate *&keyMapEntry = keyMap[key];
+            if (QLibraryPrivate *existingLibrary = keyMapEntry) {
+                static constexpr bool QtBuildIsDebug = QT_CONFIG(debug);
+                bool existingIsDebug = existingLibrary->metaData.value(QtPluginMetaDataKeys::IsDebug).toBool();
+                bool thisIsDebug = library->metaData.value(QtPluginMetaDataKeys::IsDebug).toBool();
+                bool configsAreDifferent = thisIsDebug != existingIsDebug;
+                bool thisConfigDoesNotMatchQt = thisIsDebug != QtBuildIsDebug;
+                if (configsAreDifferent && thisConfigDoesNotMatchQt)
+                    continue; // Existing library matches Qt's build config
+
+                // If the existing library was built with a future Qt version,
+                // whereas the one we're considering has a Qt version that fits
+                // better, we prioritize the better match.
+                static constexpr qint64 QtVersionNoPatch = QT_VERSION_CHECK(QT_VERSION_MAJOR, QT_VERSION_MINOR, 0);
+                int existingVersion = existingLibrary->metaData.value(QtPluginMetaDataKeys::QtVersion).toInteger();
+                int thisVersion = library->metaData.value(QtPluginMetaDataKeys::QtVersion).toInteger();
+                if (!(existingVersion > QtVersionNoPatch && thisVersion <= QtVersionNoPatch))
+                    continue; // Existing version is a better match
             }
+
+            keyMapEntry = library.get();
+            ++keyUsageCount;
         }
         if (keyUsageCount || keys.isEmpty()) {
             library->setLoadHints(QLibrary::PreventUnloadHint); // once loaded, don't unload
@@ -266,11 +413,14 @@ QFactoryLoader::~QFactoryLoader()
     }
 }
 
-#if defined(Q_OS_UNIX) && !defined (Q_OS_MAC)
+#if defined(Q_OS_UNIX) && !defined (Q_OS_DARWIN)
 QLibraryPrivate *QFactoryLoader::library(const QString &key) const
 {
     Q_D(const QFactoryLoader);
-    return d->keyMap.value(d->cs ? key : key.toLower());
+    const auto it = d->keyMap.find(d->cs ? key : key.toLower());
+    if (it == d->keyMap.cend())
+        return nullptr;
+    return it->second;
 }
 #endif
 
@@ -357,6 +507,35 @@ QFactoryLoader::MetaDataList QFactoryLoader::metaData() const
         metaData.append(std::move(parsed));
     }
 
+    // other portions of the code will cast to int (e.g., keyMap())
+    Q_ASSERT(metaData.size() <= std::numeric_limits<int>::max());
+    return metaData;
+}
+
+QList<QCborArray> QFactoryLoader::metaDataKeys() const
+{
+    Q_D(const QFactoryLoader);
+    QList<QCborArray> metaData;
+#if QT_CONFIG(library)
+    QMutexLocker locker(&d->mutex);
+    for (const auto &library : d->libraries) {
+        const QCborValue md = library->metaData.value(QtPluginMetaDataKeys::MetaData);
+        metaData.append(md["Keys"_L1].toArray());
+    }
+#endif
+
+    QLatin1StringView iid(d->iid.constData(), d->iid.size());
+    const auto staticPlugins = QPluginLoader::staticPlugins();
+    for (const QStaticPlugin &plugin : staticPlugins) {
+        QByteArrayView pluginData(static_cast<const char *>(plugin.rawMetaData),
+                                  plugin.rawMetaDataSize);
+        QFactoryLoaderMetaDataKeysExtractor extractor{ iid };
+        iterateInPluginMetaData(pluginData, extractor);
+        if (extractor.matchesIid)
+            metaData += std::move(extractor.keys);
+    }
+
+    // other portions of the code will cast to int (e.g., keyMap())
     Q_ASSERT(metaData.size() <= std::numeric_limits<int>::max());
     return metaData;
 }
@@ -387,8 +566,7 @@ QObject *QFactoryLoader::instance(int index) const
     const QList<QStaticPlugin> staticPlugins = QPluginLoader::staticPlugins();
     for (QStaticPlugin plugin : staticPlugins) {
         QByteArrayView pluginData(static_cast<const char *>(plugin.rawMetaData), plugin.rawMetaDataSize);
-        QPluginParsedMetaData parsed(pluginData);
-        if (parsed.isError() || parsed.value(QtPluginMetaDataKeys::IID) != iid)
+        if (!isIidMatch(pluginData, iid))
             continue;
 
         if (index == 0)
@@ -402,10 +580,9 @@ QObject *QFactoryLoader::instance(int index) const
 QMultiMap<int, QString> QFactoryLoader::keyMap() const
 {
     QMultiMap<int, QString> result;
-    const QList<QPluginParsedMetaData> metaDataList = metaData();
+    const QList<QCborArray> metaDataList = metaDataKeys();
     for (int i = 0; i < int(metaDataList.size()); ++i) {
-        const QCborMap metaData = metaDataList.at(i).value(QtPluginMetaDataKeys::MetaData).toMap();
-        const QCborArray keys = metaData.value("Keys"_L1).toArray();
+        const QCborArray &keys = metaDataList[i];
         for (QCborValueConstRef key : keys)
             result.insert(i, key.toString());
     }
@@ -414,10 +591,9 @@ QMultiMap<int, QString> QFactoryLoader::keyMap() const
 
 int QFactoryLoader::indexOf(const QString &needle) const
 {
-    const QList<QPluginParsedMetaData> metaDataList = metaData();
+    const QList<QCborArray> metaDataList = metaDataKeys();
     for (int i = 0; i < int(metaDataList.size()); ++i) {
-        const QCborMap metaData = metaDataList.at(i).value(QtPluginMetaDataKeys::MetaData).toMap();
-        const QCborArray keys = metaData.value("Keys"_L1).toArray();
+        const QCborArray &keys = metaDataList[i];
         for (QCborValueConstRef key : keys) {
             if (key.toString().compare(needle, Qt::CaseInsensitive) == 0)
                 return i;

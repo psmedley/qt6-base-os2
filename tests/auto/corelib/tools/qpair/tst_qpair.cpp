@@ -1,5 +1,5 @@
 // Copyright (C) 2012 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
@@ -65,7 +65,7 @@ static_assert( QTypeInfo<QPairPM>::isRelocatable );
 static_assert(!QTypeInfo<QPairPP>::isComplex);
 static_assert( QTypeInfo<QPairPP>::isRelocatable );
 
-static_assert(!QTypeInfo<QPairPP>::isPointer);
+static_assert(!std::is_pointer_v<QPairPP>);
 
 
 void tst_QPair::pairOfReferences()

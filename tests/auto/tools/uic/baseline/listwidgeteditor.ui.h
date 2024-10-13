@@ -1,7 +1,7 @@
 /*
 
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 */
 
@@ -88,7 +88,7 @@ public:
 
         horizontalLayout_2->addWidget(deleteItemButton);
 
-        spacerItem = new QSpacerItem(16, 10, QSizePolicy::Expanding, QSizePolicy::Minimum);
+        spacerItem = new QSpacerItem(16, 10, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
         horizontalLayout_2->addItem(spacerItem);
 
@@ -117,7 +117,7 @@ public:
 
         horizontalLayout->addWidget(itemIconSelector);
 
-        horizontalSpacer = new QSpacerItem(108, 21, QSizePolicy::Expanding, QSizePolicy::Minimum);
+        horizontalSpacer = new QSpacerItem(108, 21, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
         horizontalLayout->addItem(horizontalSpacer);
 

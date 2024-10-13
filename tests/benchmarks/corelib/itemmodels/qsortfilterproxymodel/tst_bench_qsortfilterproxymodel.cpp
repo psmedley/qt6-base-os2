@@ -1,5 +1,5 @@
 // Copyright (C) 2021 Igor Kushnir <igorkuo@gmail.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QSortFilterProxyModel>
 #include <QString>
@@ -31,6 +31,7 @@ class tst_QSortFilterProxyModel : public QObject
 private slots:
     void clearFilter_data();
     void clearFilter();
+    void setSourceModel();
 
 private:
     QStringList m_numberList; ///< Cache the strings for efficiency.
@@ -91,6 +92,19 @@ void tst_QSortFilterProxyModel::clearFilter()
     }
     QCOMPARE(model.rowCount(), itemCount);
     QCOMPARE(proxy.rowCount(), itemCount);
+}
+
+void tst_QSortFilterProxyModel::setSourceModel()
+{
+    QStringListModel model1;
+    QStringListModel model2;
+
+    QSortFilterProxyModel proxy;
+
+    QBENCHMARK {
+        proxy.setSourceModel(&model1);
+        proxy.setSourceModel(&model2);
+    }
 }
 
 QTEST_MAIN(tst_QSortFilterProxyModel)

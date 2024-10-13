@@ -1,7 +1,7 @@
 // Copyright (C) 2014 Jeremy Lainé <jeremy.laine@m4x.org>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
-#include "private/qasn1element_p.h"
+#include "qasn1element_p.h"
 
 #include <QTest>
 
@@ -121,6 +121,9 @@ void tst_QAsn1Element::dateTime_data()
     QTest::newRow("UTCTime - year 2000")
         << QByteArray::fromHex("170d3030313232343035353530305a")
         << QDateTime(QDate(2000, 12, 24), QTime(5, 55), QTimeZone::UTC);
+    QTest::newRow("UTCTime - leap day year 2000")
+        << QByteArray::fromHex("170d3030303232393035353530305a")
+        << QDateTime(QDate(2000, 2, 29), QTime(5, 55), QTimeZone::UTC);
     QTest::newRow("UTCTime - year 2049")
         << QByteArray::fromHex("170d3439313232343035353530305a")
         << QDateTime(QDate(2049, 12, 24), QTime(5, 55), QTimeZone::UTC);

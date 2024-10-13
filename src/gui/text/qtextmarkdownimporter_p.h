@@ -46,6 +46,7 @@ public:
         FeaturePermissiveWWWAutoLinks =   0x0400,
         FeatureTasklists =                0x0800,
         FeatureUnderline =                0x4000,
+        FeatureFrontMatter =            0x100000, // Qt feature, not yet in MD4C
         // composite flags
         FeaturePermissiveAutoLinks = FeaturePermissiveMailAutoLinks
             | FeaturePermissiveURLAutoLinks | FeaturePermissiveWWWAutoLinks,
@@ -55,10 +56,10 @@ public:
     };
     Q_DECLARE_FLAGS(Features, Feature)
 
-    QTextMarkdownImporter(Features features);
-    QTextMarkdownImporter(QTextDocument::MarkdownFeatures features);
+    QTextMarkdownImporter(QTextDocument *doc, Features features);
+    QTextMarkdownImporter(QTextDocument *doc, QTextDocument::MarkdownFeatures features);
 
-    void import(QTextDocument *doc, const QString &markdown);
+    void import(const QString &markdown);
 
 public:
     // MD4C callbacks
@@ -72,8 +73,7 @@ private:
     void insertBlock();
 
 private:
-    QTextDocument *m_doc = nullptr;
-    QTextCursor *m_cursor = nullptr;
+    QTextCursor m_cursor;
     QTextTable *m_currentTable = nullptr; // because m_cursor->currentTable() doesn't work
 #if QT_CONFIG(regularexpression)
     QString m_htmlAccumulator;

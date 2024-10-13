@@ -11,6 +11,7 @@
 #include <qlist.h>
 #include <qshareddata.h>
 
+QT_REQUIRE_CONFIG(dom);
 QT_BEGIN_NAMESPACE
 
 //
@@ -142,7 +143,8 @@ public:
     bool operator==(const QDomNodeListPrivate &) const;
     bool operator!=(const QDomNodeListPrivate &) const;
 
-    void createList();
+    void createList() const;
+    bool maybeCreateList() const;
     QDomNodePrivate *item(int index);
     int length() const;
 
@@ -153,8 +155,8 @@ public:
     QDomNodePrivate *node_impl;
     QString tagname;
     QString nsURI;
-    QList<QDomNodePrivate *> list;
-    long timestamp;
+    mutable QList<QDomNodePrivate *> list;
+    mutable long timestamp;
 };
 
 class QDomNamedNodeMapPrivate

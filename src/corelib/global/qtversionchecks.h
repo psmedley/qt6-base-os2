@@ -9,15 +9,7 @@
 #pragma qt_sync_stop_processing
 #endif
 
-#ifdef QT_BOOTSTRAPPED
-// qconfig-bootstrapped.h is not supposed to be a part of the synced header files. So we find it by
-// the include path specified for Bootstrap library in the source tree instead of the build tree as
-// it's done for regular header files.
-#include "qconfig-bootstrapped.h"
-#else
-#include <QtCore/qconfig.h>
-#include <QtCore/qtcore-config.h>
-#endif
+#include <QtCore/qtconfiginclude.h>
 
 /*
    QT_VERSION is (major << 16) | (minor << 8) | patch.
@@ -36,7 +28,7 @@
          void QT7_ONLY(Q_CORE_EXPORT) void operate();
      }
 */
-#if QT_VERSION_MAJOR == 7
+#if QT_VERSION_MAJOR == 7 || defined(QT_BOOTSTRAPPED)
 #  define QT7_ONLY(...)         __VA_ARGS__
 #  define QT6_ONLY(...)
 #elif QT_VERSION_MAJOR == 6
@@ -79,5 +71,44 @@
 # define QT6_CALL_NEW_OVERLOAD QT6_ONLY(Qt::Disambiguated)
 # define QT6_CALL_NEW_OVERLOAD_TAIL QT6_ONLY(, QT6_CALL_NEW_OVERLOAD)
 #endif
+
+/*
+    Macro to tag Tech Preview APIs.
+    It expands to nothing, because we want to use it in places where
+    nothing is generally allowed (not even an attribute); for instance:
+    to tag other macros, Q_PROPERTY declarations, and so on.
+
+    Still: use it as if it were an C++ attribute.
+
+    To mark a class as TP:
+        class QT_TECH_PREVIEW_API Q_CORE_EXPORT QClass { ... };
+
+    To mark a function:
+        QT_TECH_PREVIEW_API void qFunction();
+
+    To mark an enumeration or enumerator:
+        enum class QT_TECH_PREVIEW_API QEnum {
+            Enum1,
+            Enum2 QT_TECH_PREVIEW_API,
+        };
+
+    To mark parts of a class:
+        class QClass : public QObject
+        {
+            // Q_OBJECT omitted d/t QTBUG-123229
+
+            QT_TECH_PREVIEW_API
+            Q_PROPERTY(int countNG ...)   // this is TP
+
+            Q_PROPERTY(int count ...)     // this is stable API
+
+        public:
+            QT_TECH_PREVIEW_API
+            void f();     // TP
+
+            void g();     // stable
+        };
+*/
+#define QT_TECH_PREVIEW_API
 
 #endif /* QTVERSIONCHECKS_H */

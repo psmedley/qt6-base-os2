@@ -4,10 +4,28 @@
 # This function creates a CMake target for a Qt internal app.
 # Such projects had a load(qt_app) command.
 function(qt_internal_add_app target)
+    set(option_args
+        NO_INSTALL
+        INSTALL_VERSIONED_LINK
+        EXCEPTIONS
+        NO_UNITY_BUILD
+        ${__qt_internal_sbom_optional_args}
+    )
+    set(single_args
+        ${__default_target_info_args}
+        ${__qt_internal_sbom_single_args}
+        INSTALL_DIR
+    )
+    set(multi_args
+        ${__default_private_args}
+        ${__qt_internal_sbom_multi_args}
+        PUBLIC_LIBRARIES
+    )
+
     cmake_parse_arguments(PARSE_ARGV 1 arg
-        "NO_INSTALL;INSTALL_VERSIONED_LINK;EXCEPTIONS;NO_UNITY_BUILD"
-        "${__default_target_info_args};INSTALL_DIR"
-        "${__default_private_args};PUBLIC_LIBRARIES"
+        "${option_args}"
+        "${single_args}"
+        "${multi_args}"
     )
     _qt_internal_validate_all_args_are_parsed(arg)
 
@@ -34,8 +52,6 @@ function(qt_internal_add_app target)
             "qt_internal_add_app's PUBLIC_LIBRARIES option is deprecated, and will be removed in "
             "a future Qt version. Use the LIBRARIES option instead.")
     endif()
-
-    qt_internal_library_deprecation_level(deprecation_define)
 
     if(arg_NO_UNITY_BUILD)
         set(arg_NO_UNITY_BUILD "NO_UNITY_BUILD")
@@ -78,7 +94,6 @@ function(qt_internal_add_app target)
         # qt_set_target_info_properties knows how to process them
     )
     qt_internal_add_target_aliases("${target}")
-    _qt_internal_apply_strict_cpp("${target}")
     qt_internal_adjust_main_config_runtime_output_dir("${target}" "${output_directory}")
 
     # To mimic the default behaviors of qt_app.prf, we by default enable GUI Windows applications,
@@ -96,6 +111,43 @@ function(qt_internal_add_app target)
     if(NOT arg_NO_INSTALL AND arg_INSTALL_VERSIONED_LINK)
         qt_internal_install_versioned_link(WORKING_DIRECTORY "${arg_INSTALL_DIR}"
         TARGETS ${target})
+    endif()
+
+    if(QT_GENERATE_SBOM)
+        set(sbom_args "")
+        list(APPEND sbom_args TYPE QT_APP)
+
+        qt_get_cmake_configurations(cmake_configs)
+        foreach(cmake_config IN LISTS cmake_configs)
+            qt_get_install_target_default_args(
+                OUT_VAR unused_install_targets_default_args
+                OUT_VAR_RUNTIME runtime_install_destination
+                RUNTIME "${arg_INSTALL_DIR}"
+                CMAKE_CONFIG "${cmake_config}"
+                ALL_CMAKE_CONFIGS ${cmake_configs})
+
+            _qt_internal_sbom_append_multi_config_aware_single_arg_option(
+                RUNTIME_PATH
+                "${runtime_install_destination}"
+                "${cmake_config}"
+                sbom_args
+            )
+        endforeach()
+
+        _qt_internal_forward_function_args(
+            FORWARD_APPEND
+            FORWARD_PREFIX arg
+            FORWARD_OUT_VAR sbom_args
+            FORWARD_OPTIONS
+                NO_INSTALL
+                ${__qt_internal_sbom_optional_args}
+            FORWARD_SINGLE
+                ${__qt_internal_sbom_single_args}
+            FORWARD_MULTI
+                ${__qt_internal_sbom_multi_args}
+        )
+
+        _qt_internal_extend_sbom(${target} ${sbom_args})
     endif()
 
     qt_add_list_file_finalizer(qt_internal_finalize_app ${target})
@@ -145,4 +197,5 @@ function(qt_internal_finalize_app target)
     # set after a qt_internal_add_app call.
     qt_apply_rpaths(TARGET "${target}" INSTALL_PATH "${INSTALL_BINDIR}" RELATIVE_RPATH)
     qt_internal_apply_staging_prefix_build_rpath_workaround()
+    _qt_internal_finalize_sbom(${target})
 endfunction()

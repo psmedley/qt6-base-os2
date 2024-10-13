@@ -34,14 +34,20 @@ class QRasterWindowPrivate : public QPaintDeviceWindowPrivate
 {
     Q_DECLARE_PUBLIC(QRasterWindow)
 public:
+    void handleResizeEvent() override
+    {
+        Q_Q(QRasterWindow);
+        if (backingstore->size() != q->size())
+            markWindowAsDirty();
+    }
+
     void beginPaint(const QRegion &region) override
     {
         Q_Q(QRasterWindow);
         const QSize size = q->size();
-        if (backingstore->size() != size) {
+        if (backingstore->size() != size)
             backingstore->resize(size);
-            markWindowAsDirty();
-        }
+
         backingstore->beginPaint(region);
     }
 
@@ -100,6 +106,10 @@ QPaintDevice *QRasterWindow::redirected(QPoint *) const
 {
     Q_D(const QRasterWindow);
     return d->backingstore->paintDevice();
+}
+
+void QRasterWindow::resizeEvent(QResizeEvent *)
+{
 }
 
 QT_END_NAMESPACE

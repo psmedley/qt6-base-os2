@@ -4,7 +4,6 @@
 #define QT_NO_URL_CAST_FROM_STRING 1
 
 #include <QtCore/qt_windows.h>
-#include "qwindowscombase.h"
 #include "qwindowsdialoghelpers.h"
 
 #include "qwindowscontext.h"
@@ -33,6 +32,7 @@
 #include <QtCore/qtemporaryfile.h>
 #include <QtCore/private/qfunctions_win_p.h>
 #include <QtCore/private/qsystemerror_p.h>
+#include <QtCore/private/qcomobject_p.h>
 
 #include <algorithm>
 #include <vector>
@@ -42,26 +42,6 @@
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
-
-#ifndef QT_NO_DEBUG_STREAM
-/* Output UID (IID, CLSID) as C++ constants.
- * The constants are contained in the Windows SDK libs, but not for MinGW. */
-static inline QString guidToString(const GUID &g)
-{
-    QString rc;
-    QTextStream str(&rc);
-    str.setIntegerBase(16);
-    str.setNumberFlags(str.numberFlags() | QTextStream::ShowBase);
-    str << '{' << g.Data1 << ", " << g.Data2 << ", " << g.Data3;
-    str.setFieldWidth(2);
-    str.setFieldAlignment(QTextStream::AlignRight);
-    str.setPadChar(u'0');
-    str << ",{" << g.Data4[0] << ", " << g.Data4[1]  << ", " << g.Data4[2]  << ", " << g.Data4[3]
-        << ", " << g.Data4[4] << ", " << g.Data4[5]  << ", " << g.Data4[6]  << ", " << g.Data4[7]
-        << "}};";
-    return rc;
-}
-#endif // !QT_NO_DEBUG_STREAM
 
 // Return an allocated wchar_t array from a QString, reserve more memory if desired.
 static wchar_t *qStringToWCharArray(const QString &s, size_t reserveSize = 0)
@@ -443,7 +423,7 @@ inline void QWindowsFileDialogSharedData::fromOptions(const QSharedPointer<QFile
 
 class QWindowsNativeFileDialogBase;
 
-class QWindowsNativeFileDialogEventHandler : public QWindowsComBase<IFileDialogEvents>
+class QWindowsNativeFileDialogEventHandler : public QComObject<IFileDialogEvents>
 {
     Q_DISABLE_COPY_MOVE(QWindowsNativeFileDialogEventHandler)
 public:
@@ -586,7 +566,7 @@ QUrl QWindowsShellItem::url() const
     if (urlV.isValid())
         return urlV;
     // Last resort: encode the absolute desktop parsing id as data URL
-    const QString data = QStringLiteral("data:text/plain;base64,")
+    const QString data = "data:text/plain;base64,"_L1
         + QLatin1StringView(desktopAbsoluteParsing().toLatin1().toBase64());
     return QUrl(data);
 }
@@ -1379,7 +1359,7 @@ QString tempFilePattern(QString name)
     int lastDot = name.lastIndexOf(u'.');
     if (lastDot < 0)
         lastDot = name.size();
-    name.insert(lastDot, QStringLiteral("_XXXXXX"));
+    name.insert(lastDot, "_XXXXXX"_L1);
 
     for (int i = lastDot - 1; i >= 0; --i) {
         if (!validFileNameCharacter(name.at(i)))
@@ -1571,7 +1551,7 @@ QWindowsNativeDialogBase *QWindowsFileDialogHelper::createNativeDialog()
             if (!info.isDir())
                 result->selectFile(info.fileName());
         } else {
-            result->selectFile(url.path()); // TODO url.fileName() once it exists
+            result->selectFile(url.fileName());
         }
     }
     // No need to select initialNameFilter if mode is Dir
@@ -1605,7 +1585,7 @@ void QWindowsFileDialogHelper::selectFile(const QUrl &fileName)
     qCDebug(lcQpaDialogs) << __FUNCTION__ << fileName.toString();
 
     if (hasNativeDialog()) // Might be invoked from the QFileDialog constructor.
-        nativeFileDialog()->selectFile(fileName.toLocalFile()); // ## should use QUrl::fileName() once it exists
+        nativeFileDialog()->selectFile(fileName.fileName());
 }
 
 QList<QUrl> QWindowsFileDialogHelper::selectedFiles() const
@@ -1713,14 +1693,6 @@ static int QT_WIN_CALLBACK xpFileDialogGetExistingDirCallbackProc(HWND hwnd, UIN
     return dialog->existingDirCallback(hwnd, uMsg, lParam);
 }
 
-/* The correct declaration of the SHGetPathFromIDList symbol is
- * being used in mingw-w64 as of r6215, which is a v3 snapshot.  */
-#if defined(Q_CC_MINGW) && (!defined(__MINGW64_VERSION_MAJOR) || __MINGW64_VERSION_MAJOR < 3)
-typedef ITEMIDLIST *qt_LpItemIdList;
-#else
-using qt_LpItemIdList = PIDLIST_ABSOLUTE;
-#endif
-
 int QWindowsXpNativeFileDialog::existingDirCallback(HWND hwnd, UINT uMsg, LPARAM lParam)
 {
     switch (uMsg) {
@@ -1734,7 +1706,7 @@ int QWindowsXpNativeFileDialog::existingDirCallback(HWND hwnd, UINT uMsg, LPARAM
         break;
     case BFFM_SELCHANGED: {
         wchar_t path[MAX_PATH];
-        const bool ok = SHGetPathFromIDList(reinterpret_cast<qt_LpItemIdList>(lParam), path)
+        const bool ok = SHGetPathFromIDList(reinterpret_cast<PIDLIST_ABSOLUTE>(lParam), path)
                         && path[0];
         SendMessage(hwnd, BFFM_ENABLEOK, ok ? 1 : 0, 1);
     }
@@ -1756,7 +1728,7 @@ QList<QUrl> QWindowsXpNativeFileDialog::execExistingDir(HWND owner)
     bi.lpfn = xpFileDialogGetExistingDirCallbackProc;
     bi.lParam = LPARAM(this);
     QList<QUrl> selectedFiles;
-    if (qt_LpItemIdList pItemIDList = SHBrowseForFolder(&bi)) {
+    if (const auto pItemIDList = SHBrowseForFolder(&bi)) {
         wchar_t path[MAX_PATH];
         path[0] = 0;
         if (SHGetPathFromIDList(pItemIDList, path) && path[0])

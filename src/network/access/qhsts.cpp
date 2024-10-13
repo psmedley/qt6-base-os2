@@ -3,6 +3,8 @@
 
 #include "qhsts_p.h"
 
+#include "qhttpheaders.h"
+
 #include "QtCore/private/qipaddress_p.h"
 #include "QtCore/qlist.h"
 
@@ -40,7 +42,7 @@ static bool is_valid_domain_name(const QString &host)
     return true;
 }
 
-void QHstsCache::updateFromHeaders(const QList<QPair<QByteArray, QByteArray>> &headers,
+void QHstsCache::updateFromHeaders(const QHttpHeaders &headers,
                                    const QUrl &url)
 {
     if (!url.isValid())
@@ -286,7 +288,7 @@ static bool isSeparator(char c)
     return isLWS(c) || std::find(separators, end, c) != end;
 }
 
-static QByteArray unescapeMaxAge(const QByteArray &value)
+static QByteArrayView unescapeMaxAge(QByteArrayView value)
 {
     if (value.size() < 2 || value[0] != '"')
         return value;
@@ -324,27 +326,25 @@ quoted-pair    = "\" CHAR
 
 */
 
-bool QHstsHeaderParser::parse(const QList<QPair<QByteArray, QByteArray>> &headers)
+bool QHstsHeaderParser::parse(const QHttpHeaders &headers)
 {
-    for (const auto &h : headers) {
-        // We compare directly because header name was already 'trimmed' for us:
-        if (h.first.compare("Strict-Transport-Security", Qt::CaseInsensitive) == 0) {
-            header = h.second;
-            // RFC6797, 8.1:
-            //
-            //  The UA MUST ignore any STS header fields not conforming to the
-            // grammar specified in Section 6.1 ("Strict-Transport-Security HTTP
-            // Response Header Field").
-            //
-            // If a UA receives more than one STS header field in an HTTP
-            // response message over secure transport, then the UA MUST process
-            // only the first such header field.
-            //
-            // We read this as: ignore all invalid headers and take the first valid:
-            if (parseSTSHeader() && maxAgeFound) {
-                expiry = QDateTime::currentDateTimeUtc().addSecs(maxAge);
-                return true;
-            }
+    for (const auto &value : headers.values(
+                 QHttpHeaders::WellKnownHeader::StrictTransportSecurity)) {
+        header = value;
+        // RFC6797, 8.1:
+        //
+        //  The UA MUST ignore any STS header fields not conforming to the
+        // grammar specified in Section 6.1 ("Strict-Transport-Security HTTP
+        // Response Header Field").
+        //
+        // If a UA receives more than one STS header field in an HTTP
+        // response message over secure transport, then the UA MUST process
+        // only the first such header field.
+        //
+        // We read this as: ignore all invalid headers and take the first valid:
+        if (parseSTSHeader() && maxAgeFound) {
+            expiry = QDateTime::currentDateTimeUtc().addSecs(maxAge);
+            return true;
         }
     }
 
@@ -400,7 +400,7 @@ bool QHstsHeaderParser::parseDirective()
     if (token == ";") // That's a weird grammar, but that's what it is.
         return true;
 
-    if (!isTOKEN(token[0])) // Not a valid directive-name.
+    if (!isTOKEN(token.at(0))) // Not a valid directive-name.
         return false;
 
     const QByteArray directiveName = token;
@@ -445,7 +445,7 @@ bool QHstsHeaderParser::processDirective(const QByteArray &name, const QByteArra
             return false;
         }
 
-        const QByteArray unescapedValue = unescapeMaxAge(value);
+        const QByteArrayView unescapedValue = unescapeMaxAge(value);
         if (!unescapedValue.size())
             return false;
 
@@ -481,13 +481,13 @@ bool QHstsHeaderParser::nextToken()
 
     // Fortunately enough, by this point qhttpnetworkreply already got rid of
     // [CRLF] parts, but we can have 1*(SP|HT) yet.
-    while (tokenPos < header.size() && isLWS(header[tokenPos]))
+    while (tokenPos < header.size() && isLWS(header.at(tokenPos)))
         ++tokenPos;
 
     if (tokenPos == header.size())
         return true;
 
-    const char ch = header[tokenPos];
+    const char ch = header.at(tokenPos);
     if (ch == ';' || ch == '=') {
         token.append(ch);
         ++tokenPos;
@@ -501,17 +501,17 @@ bool QHstsHeaderParser::nextToken()
     if (ch == '"') {
         int last = tokenPos + 1;
         while (last < header.size()) {
-            if (header[last] == '"') {
+            if (header.at(last) == '"') {
                 // The end of a quoted-string.
                 break;
-            } else if (header[last] == '\\') {
+            } else if (header.at(last) == '\\') {
                 // quoted-pair    = "\" CHAR
-                if (last + 1 < header.size() && isCHAR(header[last + 1]))
+                if (last + 1 < header.size() && isCHAR(header.at(last + 1)))
                     last += 2;
                 else
                     return false;
             } else {
-                if (!isTEXT(header[last]))
+                if (!isTEXT(header.at(last)))
                     return false;
                 ++last;
             }
@@ -532,7 +532,7 @@ bool QHstsHeaderParser::nextToken()
         return false;
 
     int last = tokenPos + 1;
-    while (last < header.size() && isTOKEN(header[last]))
+    while (last < header.size() && isTOKEN(header.at(last)))
         ++last;
 
     token = header.mid(tokenPos, last - tokenPos);

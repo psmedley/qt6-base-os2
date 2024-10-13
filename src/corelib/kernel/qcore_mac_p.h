@@ -19,6 +19,8 @@
 
 #include <QtCore/qoperatingsystemversion.h>
 
+#include <optional>
+
 #ifdef Q_OS_MACOS
 #include <mach/port.h>
 struct mach_header;
@@ -48,7 +50,6 @@ kern_return_t IOObjectRelease(io_object_t object);
 #endif
 
 #include "qstring.h"
-#include "qscopedpointer.h"
 #include "qpair.h"
 
 #if defined( __OBJC__) && defined(QT_NAMESPACE)
@@ -85,15 +86,18 @@ template <typename T, typename U, auto RetainFunction, auto ReleaseFunction>
 class QAppleRefCounted
 {
 public:
-    QAppleRefCounted() : value() {}
-    QAppleRefCounted(const T &t) : value(t) {}
-    QAppleRefCounted(T &&t) noexcept(std::is_nothrow_move_constructible<T>::value)
+    Q_NODISCARD_CTOR QAppleRefCounted() : value() {}
+    Q_NODISCARD_CTOR QAppleRefCounted(const T &t) : value(t) {}
+    Q_NODISCARD_CTOR QAppleRefCounted(T &&t)
+            noexcept(std::is_nothrow_move_constructible<T>::value)
         : value(std::move(t)) {}
-    QAppleRefCounted(QAppleRefCounted &&other)
+    Q_NODISCARD_CTOR QAppleRefCounted(QAppleRefCounted &&other)
             noexcept(std::is_nothrow_move_assignable<T>::value &&
                      std::is_nothrow_move_constructible<T>::value)
         : value(std::exchange(other.value, T())) {}
-    QAppleRefCounted(const QAppleRefCounted &other) : value(other.value) { if (value) RetainFunction(value); }
+    Q_NODISCARD_CTOR QAppleRefCounted(const QAppleRefCounted &other)
+        : value(other.value)
+    { if (value) RetainFunction(value); }
     ~QAppleRefCounted() { if (value) ReleaseFunction(value); }
     operator T() const { return value; }
     void swap(QAppleRefCounted &other) noexcept(noexcept(qSwap(value, other.value)))
@@ -109,11 +113,11 @@ protected:
     T value;
 };
 
-class Q_CORE_EXPORT QMacAutoReleasePool
+class QMacAutoReleasePool
 {
 public:
-    QMacAutoReleasePool();
-    ~QMacAutoReleasePool();
+    Q_NODISCARD_CTOR Q_CORE_EXPORT QMacAutoReleasePool();
+    Q_CORE_EXPORT ~QMacAutoReleasePool();
 private:
     Q_DISABLE_COPY(QMacAutoReleasePool)
     void *pool;
@@ -123,10 +127,10 @@ private:
 class QMacRootLevelAutoReleasePool
 {
 public:
-    QMacRootLevelAutoReleasePool();
+    Q_NODISCARD_CTOR QMacRootLevelAutoReleasePool();
     ~QMacRootLevelAutoReleasePool();
 private:
-    QScopedPointer<QMacAutoReleasePool> pool;
+    std::optional<QMacAutoReleasePool> pool = std::nullopt;
 };
 #endif
 
@@ -148,7 +152,7 @@ class QCFType : public QAppleRefCounted<T, CFTypeRef, CFRetain, CFRelease>
     using Base = QAppleRefCounted<T, CFTypeRef, CFRetain, CFRelease>;
 public:
     using Base::Base;
-    explicit QCFType(CFTypeRef r) : Base(static_cast<T>(r)) {}
+    Q_NODISCARD_CTOR explicit QCFType(CFTypeRef r) : Base(static_cast<T>(r)) {}
     template <typename X> X as() const { return reinterpret_cast<X>(this->value); }
     static QCFType constructFromGet(const T &t)
     {
@@ -166,15 +170,15 @@ class QIOType : public QAppleRefCounted<T, io_object_t, IOObjectRetain, IOObject
 };
 #endif
 
-class Q_CORE_EXPORT QCFString : public QCFType<CFStringRef>
+class QCFString : public QCFType<CFStringRef>
 {
 public:
     using QCFType<CFStringRef>::QCFType;
-    inline QCFString(const QString &str) : QCFType<CFStringRef>(0), string(str) {}
-    inline QCFString(const CFStringRef cfstr = 0) : QCFType<CFStringRef>(cfstr) {}
-    inline QCFString(const QCFType<CFStringRef> &other) : QCFType<CFStringRef>(other) {}
-    operator QString() const;
-    operator CFStringRef() const;
+    Q_NODISCARD_CTOR QCFString(const QString &str) : QCFType<CFStringRef>(0), string(str) {}
+    Q_NODISCARD_CTOR QCFString(const CFStringRef cfstr = 0) : QCFType<CFStringRef>(cfstr) {}
+    Q_NODISCARD_CTOR QCFString(const QCFType<CFStringRef> &other) : QCFType<CFStringRef>(other) {}
+    Q_CORE_EXPORT operator QString() const;
+    Q_CORE_EXPORT operator CFStringRef() const;
 
 private:
     QString string;
@@ -201,7 +205,7 @@ Q_CORE_EXPORT bool qt_apple_isSandboxed();
 
 #if defined(__OBJC__)
 QT_END_NAMESPACE
-@interface NSObject (QtSandboxHelpers)
+@interface NSObject (QtExtras)
 - (id)qt_valueForPrivateKey:(NSString *)key;
 @end
 QT_BEGIN_NAMESPACE
@@ -233,8 +237,11 @@ QT_BEGIN_NAMESPACE
 class Q_CORE_EXPORT AppleUnifiedLogger
 {
 public:
-    static bool messageHandler(QtMsgType msgType, const QMessageLogContext &context, const QString &message,
-        const QString &subsystem = QString());
+    static bool messageHandler(QtMsgType msgType, const QMessageLogContext &context,
+                               const QString &message)
+    { return messageHandler(msgType, context, message, QString()); }
+    static bool messageHandler(QtMsgType msgType, const QMessageLogContext &context,
+                               const QString &message, const QString &subsystem);
     static bool preventsStderrLogging();
 private:
     static os_log_type_t logTypeForMessageType(QtMsgType msgType);
@@ -329,8 +336,11 @@ public:
     template<typename Functor>
     QMacNotificationObserver(NSObject *object, NSNotificationName name, Functor callback) {
         observer = [[NSNotificationCenter defaultCenter] addObserverForName:name
-            object:object queue:nil usingBlock:^(NSNotification *) {
-                callback();
+            object:object queue:nil usingBlock:^(NSNotification *notification) {
+                if constexpr (std::is_invocable_v<Functor, NSNotification *>)
+                    callback(notification);
+                else
+                    callback();
             }
         ];
     }
@@ -430,11 +440,25 @@ public:
 
 private:
     QMacVersion() = default;
-    using VersionTuple = QPair<QOperatingSystemVersion, QOperatingSystemVersion>;
+    using VersionTuple = std::pair<QOperatingSystemVersion, QOperatingSystemVersion>;
     static VersionTuple versionsForImage(const mach_header *machHeader);
     static VersionTuple applicationVersion();
     static VersionTuple libraryVersion();
 };
+
+// -------------------------------------------------------------------------
+
+#ifdef __OBJC__
+template <typename T>
+typename std::enable_if<std::is_pointer<T>::value, T>::type
+qt_objc_cast(id object)
+{
+    if ([object isKindOfClass:[typename std::remove_pointer<T>::type class]])
+        return static_cast<T>(object);
+
+    return nil;
+}
+#endif
 
 // -------------------------------------------------------------------------
 

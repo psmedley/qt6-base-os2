@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QWidget>
 #include <QHBoxLayout>
@@ -17,7 +17,7 @@ public:
 
     }
 
-    virtual void paintEvent(QPaintEvent * /*event*/)
+    void paintEvent(QPaintEvent * /*event*/) override
     {
         QPainter painter(this);
         QImageReader reader(fileName);
@@ -54,8 +54,8 @@ int main(int argc, char** argv)
     mainWidget.setWindowTitle("Colors in images are identical?");
     mainWidget.setMinimumSize(400,400);
     QHBoxLayout *l = new QHBoxLayout;
-    MyWidget *w1 = new MyWidget(&mainWidget,"Qt_logostrap_CMYK.jpg", false);
-    MyWidget *w2 = new MyWidget(&mainWidget,"Qt_logostrap_CMYK.jpg", true);
+    MyWidget *w1 = new MyWidget(&mainWidget,":/Qt_logostrap_CMYK.jpg", false);
+    MyWidget *w2 = new MyWidget(&mainWidget,":/Qt_logostrap_CMYK.jpg", true);
     l->addWidget(w1);
     l->addWidget(w2);
     mainWidget.setLayout(l);

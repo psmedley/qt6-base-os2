@@ -19,6 +19,8 @@ class Q_WIDGETS_EXPORT QHeaderView : public QAbstractItemView
     Q_OBJECT
     Q_PROPERTY(bool firstSectionMovable READ isFirstSectionMovable WRITE setFirstSectionMovable)
     Q_PROPERTY(bool showSortIndicator READ isSortIndicatorShown WRITE setSortIndicatorShown)
+    Q_PROPERTY(bool sectionsMovable READ sectionsMovable WRITE setSectionsMovable)
+    Q_PROPERTY(bool sectionsClickable READ sectionsClickable WRITE setSectionsClickable)
     Q_PROPERTY(bool highlightSections READ highlightSections WRITE setHighlightSections)
     Q_PROPERTY(bool stretchLastSection READ stretchLastSection WRITE setStretchLastSection)
     Q_PROPERTY(bool cascadingSectionResizes READ cascadingSectionResizes
@@ -211,14 +213,6 @@ protected:
 private:
     void initStyleOption(QStyleOptionFrame *option) const override;
 
-    // ### Qt6: make them protected slots in QHeaderViewPrivate
-    Q_PRIVATE_SLOT(d_func(), void _q_sectionsRemoved(const QModelIndex &parent, int logicalFirst, int logicalLast))
-    Q_PRIVATE_SLOT(d_func(), void _q_sectionsAboutToBeMoved(const QModelIndex &sourceParent, int logicalStart, int logicalEnd, const QModelIndex &destinationParent, int logicalDestination))
-    Q_PRIVATE_SLOT(d_func(), void _q_sectionsMoved(const QModelIndex &sourceParent, int logicalStart, int logicalEnd, const QModelIndex &destinationParent, int logicalDestination))
-    Q_PRIVATE_SLOT(d_func(), void _q_sectionsAboutToBeChanged(const QList<QPersistentModelIndex> &parents = QList<QPersistentModelIndex>(),
-                                                              QAbstractItemModel::LayoutChangeHint hint = QAbstractItemModel::NoLayoutChangeHint))
-    Q_PRIVATE_SLOT(d_func(), void _q_sectionsChanged(const QList<QPersistentModelIndex> &parents = QList<QPersistentModelIndex>(),
-                                                     QAbstractItemModel::LayoutChangeHint hint = QAbstractItemModel::NoLayoutChangeHint))
     Q_DECLARE_PRIVATE(QHeaderView)
     Q_DISABLE_COPY(QHeaderView)
 };

@@ -196,6 +196,25 @@ QString QStandardPaths::writableLocation(StandardLocation type)
             appendOrganizationAndApp(xdgCacheHome);
         return xdgCacheHome;
     }
+    case StateLocation:
+    case GenericStateLocation:
+    {
+        QString xdgStateHome;
+        if (isTestModeEnabled()) {
+            xdgStateHome = QDir::homePath() + "/.qttest/state"_L1;
+        } else {
+            // http://standards.freedesktop.org/basedir-spec/basedir-spec-0.8.html
+            xdgStateHome = QFile::decodeName(qgetenv("XDG_STATE_HOME"));
+            if (!xdgStateHome.startsWith(u'/'))
+                xdgStateHome.clear(); // spec says relative paths should be ignored
+
+            if (xdgStateHome.isEmpty())
+                xdgStateHome = QDir::homePath() + "/.local/state"_L1;
+        }
+        if (type == QStandardPaths::StateLocation)
+            appendOrganizationAndApp(xdgStateHome);
+        return xdgStateHome;
+    }
     case AppDataLocation:
     case AppLocalDataLocation:
     case GenericDataLocation:
@@ -358,9 +377,9 @@ static QStringList dirsList(const QString &xdgEnvVar)
         if (dir.startsWith(u'/'))
             dirs.push_back(QDir::cleanPath(dir.toString()));
 
-    // Remove duplicates from the list, there's no use for duplicated
-    // paths in XDG_DATA_DIRS - if it's not found in the given
-    // directory the first time, it won't be there the second time.
+    // Remove duplicates from the list, there's no use for duplicated paths
+    // in XDG_* env vars - if whatever is being looked for is not found in
+    // the given directory the first time, it won't be there the second time.
     // Plus duplicate paths causes problems for example for mimetypes,
     // where duplicate paths here lead to duplicated mime types returned
     // for a file, eg "text/plain,text/plain" instead of "text/plain"

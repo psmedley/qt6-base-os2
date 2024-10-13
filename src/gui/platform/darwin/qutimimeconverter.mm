@@ -3,6 +3,7 @@
 
 #include <ImageIO/ImageIO.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <UniformTypeIdentifiers/UTCoreTypes.h>
 
 #include <QtCore/qsystemdetection.h>
 #include <QtCore/qurl.h>
@@ -53,7 +54,21 @@ using namespace Qt::StringLiterals;
     By subclasses this class, one can extend Qt's drag and drop
     and clipboard handling to convert to and from unsupported, or proprietary, UTI formats.
 
-    A subclass of QUtiMimeConverter will automatically be registered, and active, upon instantiation.
+    Construct an instance of your converter implementation after instantiating
+    QGuiApplication:
+
+    \code
+    int main(int argc, char **argv)
+    {
+        QGuiApplication app(argc, argv);
+        JsonMimeConverter jsonConverter;
+    }
+    \endcode
+
+    Destroying the instance will unregister the converter and remove support
+    for the conversion. It is also valid to heap-allocate the converter
+    instance; Qt takes ownership and will delete the converter object during
+    QGuiApplication shut-down.
 
     Qt has predefined support for the following UTIs:
     \list
@@ -94,6 +109,8 @@ QUtiMimeConverter::QUtiMimeConverter(HandlerScope scope)
 /*!
     Constructs a new conversion object and adds it to the
     globally accessed list of available converters.
+
+    Call this constructor after QGuiApplication has been created.
 */
 QUtiMimeConverter::QUtiMimeConverter()
     : QUtiMimeConverter(HandlerScopeFlag::All)
@@ -488,7 +505,12 @@ QMacMimeRtfText::convertToMime(const QString &mimeType,
     NSRange range = NSMakeRange(0, [string length]);
     NSDictionary *dict = @{NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType};
     NSData *htmlData = [string dataFromRange:range documentAttributes:dict error:&error];
-    return QByteArray::fromNSData(htmlData);
+
+    // Note: We trim the data here, as NSAttributedString wrongly inserts a newline at the
+    // end when generating HTML, which HTML parsers (including our own QTextHtmlParser)
+    // correctly treat as an additional white space in the body of the HTML document
+    // (see HTML5 § 13.2.6.4.22 - The "after after body" insertion mode).
+    return QByteArray::fromNSData(htmlData).trimmed();
 }
 
 QList<QByteArray>
@@ -763,7 +785,7 @@ QList<QByteArray> QMacMimeTiff::convertFromMime(const QString &mime,
 
     QCFType<CFMutableDataRef> data = CFDataCreateMutable(0, 0);
     QCFType<CGImageDestinationRef> imageDestination = CGImageDestinationCreateWithData(data,
-                                                                        kUTTypeTIFF, 1, 0);
+                                                        (CFStringRef)UTTypeTIFF.identifier, 1, 0);
 
     if (!imageDestination)
         return QList<QByteArray>();

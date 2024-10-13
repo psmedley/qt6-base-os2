@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -63,6 +63,8 @@
 # define PREFIX         "lib"
 #endif
 
+using namespace Qt::StringLiterals;
+
 QT_FORWARD_DECLARE_CLASS(QLibrary)
 class tst_QLibrary : public QObject
 {
@@ -97,6 +99,8 @@ private slots:
     void version_data();
     void version();
     void loadTwoVersions();
+    void archSpecificVersion_data();
+    void archSpecificVersion();
     void setFileNameAndVersionTwice();
     void setFileNameAndVersionAfterFailedLoad_data() { version_data(); }
     void setFileNameAndVersionAfterFailedLoad();
@@ -229,6 +233,42 @@ void tst_QLibrary::loadTwoVersions()
     lib1.unload();
 }
 
+void tst_QLibrary::archSpecificVersion_data()
+{
+#if !defined(__GLIBC__) || !defined(Q_PROCESSOR_X86_64)
+    QSKIP("Test not applicable on this platform");
+#endif
+
+    QTest::addColumn<QString>("lib");
+    QTest::addColumn<int>("version");
+
+    for (const char *prefix : { "", PREFIX }) {
+        QString libname = prefix + u"myarchlib"_s;
+        QTest::addRow("%s v1", qPrintable(libname)) << libname << 1;
+        QTest::addRow("%s.so.1", qPrintable(libname)) << (libname + SUFFIX + ".1") << -1;
+    }
+}
+
+void tst_QLibrary::archSpecificVersion()
+{
+    QFETCH(QString, lib);
+    QFETCH(int, version);
+    QString expectedArch;
+
+#if defined(__GLIBC__) && defined(Q_PROCESSOR_X86_64)
+    if (__builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma"))
+        expectedArch = "x86-64-v3";
+#endif
+
+    QString appDir = directory;
+    QLibrary library(appDir + QLatin1Char('/') + lib, version);
+    QVERIFY2(library.load(), qPrintable(library.errorString()));
+
+    auto archfunction = (const char *(*)())library.resolve("archname");
+    QVERIFY(archfunction);
+    QCOMPARE(archfunction(), expectedArch);
+}
+
 void tst_QLibrary::setFileNameAndVersionTwice()
 {
 #if defined(Q_OS_ANDROID) || defined(Q_OS_WIN)
@@ -256,10 +296,10 @@ void tst_QLibrary::setFileNameAndVersionTwice()
     QVERIFY(!library.isLoaded());
 
     // set back
+    // it'll look like it isn't loaded, but it is and we can't unload it!
     library.setFileNameAndVersion(directory + "/mylib", 1);
-    QVERIFY(library.isLoaded());
-    QVERIFY(library.unload());
     QVERIFY(!library.isLoaded());
+    QVERIFY(!library.unload());
 }
 
 void tst_QLibrary::load_data()
@@ -273,7 +313,7 @@ void tst_QLibrary::load_data()
     QTest::newRow( "notexist" ) << appDir + "/nolib" << false;
     QTest::newRow( "badlibrary" ) << appDir + "/qlibrary.pro" << false;
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
     QTest::newRow("ok (libmylib ver. 1)") << appDir + "/libmylib" <<true;
 #endif
 
@@ -436,12 +476,23 @@ void tst_QLibrary::resolve()
     QFETCH( QString, symbol );
     QFETCH( bool, goodPointer );
 
-    QLibrary library( lib );
-    testFunc func = (testFunc) library.resolve( symbol.toLatin1() );
-    if ( goodPointer ) {
-        QVERIFY( func != 0 );
+    QLibrary library(lib);
+    QVERIFY(!library.isLoaded());
+    testFunc func = (testFunc) library.resolve(symbol.toLatin1());
+
+    if (goodPointer) {
+        QVERIFY(library.isLoaded());
+        QVERIFY(func);
+
+        QLibrary lib2(lib);
+        QVERIFY(!lib2.isLoaded());
+        QVERIFY(lib2.load());
+
+        // this unload() won't unload and it must still be loaded
+        QVERIFY(!lib2.unload());
+        func();                     // doesn't crash
     } else {
-        QVERIFY( func == 0 );
+        QVERIFY(func == nullptr);
     }
     library.unload();
 }
@@ -466,7 +517,7 @@ void tst_QLibrary::isLibrary_data()
     QTest::newRow("version+.so+version") << QString("liboil-0.3.so.0.1.0") << so_VALID;
 
     // special tests:
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
     QTest::newRow("good (libmylib.1.0.0.dylib)") << QString("libmylib.1.0.0.dylib") << true;
     QTest::newRow("good (libmylib.dylib)") << QString("libmylib.dylib") << true;
     QTest::newRow("good (libmylib.so)") << QString("libmylib.so") << true;
@@ -505,7 +556,7 @@ void tst_QLibrary::errorString_data()
 //    QTest::newRow("bad unload") << (int)Unload << QString("nosuchlib.dll") << false << QString("QLibrary::unload_sys: Cannot unload nosuchlib.dll (The specified module could not be found.)");
 #elif defined Q_OS_OS2
     QTest::newRow("bad load() with .dll suffix") << (int)Load << QString("nosuchlib.dll") << false << QString("Cannot load library nosuchlib.dll: \\(dlopen rc=2 extra=NOSUCHLIB\\)");
-#elif defined Q_OS_MAC
+#elif defined Q_OS_DARWIN
 #else
     QTest::newRow("load invalid file") << (int)Load << QFINDTESTDATA("library_path/invalid.so") << false << QString("Cannot load library.*");
 #endif
@@ -660,7 +711,7 @@ void tst_QLibrary::multipleInstancesForOneLibrary()
         QCOMPARE(lib2.isLoaded(), false);
         lib1.load();
         QCOMPARE(lib1.isLoaded(), true);
-        QCOMPARE(lib2.isLoaded(), true);
+        QCOMPARE(lib2.isLoaded(), false);   // lib2 didn't call load()
         QCOMPARE(lib1.unload(), true);
         QCOMPARE(lib1.isLoaded(), false);
         QCOMPARE(lib2.isLoaded(), false);
@@ -669,7 +720,7 @@ void tst_QLibrary::multipleInstancesForOneLibrary()
         QCOMPARE(lib1.isLoaded(), true);
         QCOMPARE(lib2.isLoaded(), true);
         QCOMPARE(lib1.unload(), false);
-        QCOMPARE(lib1.isLoaded(), true);
+        QCOMPARE(lib1.isLoaded(), false);   // lib1 did call unload()
         QCOMPARE(lib2.isLoaded(), true);
         QCOMPARE(lib2.unload(), true);
         QCOMPARE(lib1.isLoaded(), false);
@@ -678,17 +729,6 @@ void tst_QLibrary::multipleInstancesForOneLibrary()
         // Finally; unload on that is already unloaded
         QCOMPARE(lib1.unload(), false);
     }
-
-    //now let's try with a 3rd one that will go out of scope
-    {
-        QLibrary lib1(lib);
-        QCOMPARE(lib1.isLoaded(), false);
-        lib1.load();
-        QCOMPARE(lib1.isLoaded(), true);
-    }
-    QLibrary lib2(lib);
-    //lib2 should be loaded because lib1 was loaded and never unloaded
-    QCOMPARE(lib2.isLoaded(), true);
 }
 
 QTEST_MAIN(tst_QLibrary)

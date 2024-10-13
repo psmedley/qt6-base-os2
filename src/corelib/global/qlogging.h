@@ -1,10 +1,13 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
-#include <QtCore/qglobal.h>
-
 #ifndef QLOGGING_H
 #define QLOGGING_H
+
+#include <QtCore/qtclasshelpermacros.h>
+#include <QtCore/qtconfigmacros.h>
+#include <QtCore/qtcoreexports.h>
+#include <QtCore/qcontainerfwd.h>
 
 #if 0
 // header is automatically included in qglobal.h
@@ -22,24 +25,30 @@ QT_BEGIN_NAMESPACE
 class QDebug;
 class QNoDebug;
 
+
 enum QtMsgType {
     QtDebugMsg,
+    QT7_ONLY(QtInfoMsg,)
     QtWarningMsg,
     QtCriticalMsg,
     QtFatalMsg,
-    QtInfoMsg,
-    QtSystemMsg = QtCriticalMsg
+    QT6_ONLY(QtInfoMsg,)
+#if QT_DEPRECATED_SINCE(6, 7)
+    QtSystemMsg Q_DECL_ENUMERATOR_DEPRECATED_X("Use QtCriticalMsg instead.") = QtCriticalMsg
+#endif
 };
 
+class QInternalMessageLogContext;
 class QMessageLogContext
 {
     Q_DISABLE_COPY(QMessageLogContext)
 public:
+    static constexpr int CurrentVersion = 2;
     constexpr QMessageLogContext() noexcept = default;
     constexpr QMessageLogContext(const char *fileName, int lineNumber, const char *functionName, const char *categoryName) noexcept
         : line(lineNumber), file(fileName), function(functionName), category(categoryName) {}
 
-    int version = 2;
+    int version = CurrentVersion;
     int line = 0;
     const char *file = nullptr;
     const char *function = nullptr;
@@ -48,13 +57,13 @@ public:
 private:
     QMessageLogContext &copyContextFrom(const QMessageLogContext &logContext) noexcept;
 
+    friend class QInternalMessageLogContext;
     friend class QMessageLogger;
-    friend class QDebug;
 };
 
 class QLoggingCategory;
 
-#ifdef Q_CC_MSVC
+#if defined(Q_CC_MSVC_ONLY)
 #  define QT_MESSAGE_LOGGER_NORETURN
 #else
 #  define QT_MESSAGE_LOGGER_NORETURN Q_NORETURN

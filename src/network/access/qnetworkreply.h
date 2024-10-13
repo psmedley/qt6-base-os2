@@ -97,12 +97,19 @@ public:
     QVariant header(QNetworkRequest::KnownHeaders header) const;
 
     // raw headers:
+#if QT_NETWORK_REMOVED_SINCE(6, 7)
     bool hasRawHeader(const QByteArray &headerName) const;
+#endif
+    bool hasRawHeader(QAnyStringView headerName) const;
     QList<QByteArray> rawHeaderList() const;
+#if QT_NETWORK_REMOVED_SINCE(6, 7)
     QByteArray rawHeader(const QByteArray &headerName) const;
+#endif
+    QByteArray rawHeader(QAnyStringView headerName) const;
 
     typedef QPair<QByteArray, QByteArray> RawHeaderPair;
     const QList<RawHeaderPair>& rawHeaderPairs() const;
+    QHttpHeaders headers() const;
 
     // attributes
     QVariant attribute(QNetworkRequest::Attribute code) const;
@@ -146,6 +153,9 @@ protected:
     void setUrl(const QUrl &url);
     void setHeader(QNetworkRequest::KnownHeaders header, const QVariant &value);
     void setRawHeader(const QByteArray &headerName, const QByteArray &value);
+    void setHeaders(const QHttpHeaders &newHeaders);
+    void setHeaders(QHttpHeaders &&newHeaders);
+    void setWellKnownHeader(QHttpHeaders::WellKnownHeader name, QByteArrayView value);
     void setAttribute(QNetworkRequest::Attribute code, const QVariant &value);
 
 #if QT_CONFIG(ssl)

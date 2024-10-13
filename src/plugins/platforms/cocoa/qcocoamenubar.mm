@@ -25,18 +25,13 @@ QCocoaMenuBar::QCocoaMenuBar()
 {
     static_menubars.append(this);
 
-    // clicks into the menu bar should close all popup windows
-    static QMacNotificationObserver menuBarClickObserver(nil, NSMenuDidBeginTrackingNotification, ^{
-        QGuiApplicationPrivate::instance()->closeAllPopups();
-    });
-
     m_nativeMenu = [[NSMenu alloc] init];
     qCDebug(lcQpaMenus) << "Constructed" << this << "with" << m_nativeMenu;
 }
 
 QCocoaMenuBar::~QCocoaMenuBar()
 {
-    qCDebug(lcQpaMenus) << "Destructing" << this << "with" << m_nativeMenu;;
+    qCDebug(lcQpaMenus) << "Destructing" << this << "with" << m_nativeMenu;
     for (auto menu : std::as_const(m_menus)) {
         if (!menu)
             continue;
@@ -204,8 +199,7 @@ void QCocoaMenuBar::syncMenu_helper(QPlatformMenu *menu, bool menubarUpdate)
         // and document that the user needs to ensure their application matches
         // this translation.
         if ([menuTitle isEqual:@"Edit"] || [menuTitle isEqual:tr("Edit").toNSString()]) {
-            static const NSBundle *appKit = [NSBundle bundleForClass:NSApplication.class];
-            menuItem.title = [appKit localizedStringForKey:@"Edit" value:menuTitle table:@"InputManager"];
+            menuItem.title = qt_mac_AppKitString(@"InputManager", @"Edit");
         } else {
             // The Edit menu is the only case we know of so far, but to be on
             // the safe side we always sync the menu title.
@@ -327,7 +321,21 @@ void QCocoaMenuBar::updateMenuBarImmediately()
     }
 
     [mergedItems release];
-    [NSApp setMainMenu:mb->nsMenu()];
+
+    NSMenu *newMainMenu = mb->nsMenu();
+    if (NSApp.mainMenu == newMainMenu) {
+        // NSApplication triggers _customizeMainMenu when the menu
+        // changes, which takes care of adding text input items to
+        // the edit menu e.g., but this doesn't happen if the menu
+        // is the same. In our case we might be re-using an existing
+        // menu, but the menu might have new sub menus that need to
+        // be customized. To ensure NSApplication does the right
+        // thing we reset the main menu first.
+        qCDebug(lcQpaMenus) << "Clearing main menu temporarily";
+        NSApp.mainMenu = nil;
+    }
+    NSApp.mainMenu = newMainMenu;
+
     insertWindowMenu();
     [loader qtTranslateApplicationMenu];
 }
@@ -348,6 +356,15 @@ void QCocoaMenuBar::insertWindowMenu()
     winMenuItem.hidden = YES;
 
     winMenuItem.submenu = [[[NSMenu alloc] initWithTitle:@"QtWindowMenu"] autorelease];
+
+    // AppKit has a bug in [NSApplication setWindowsMenu:] where it will resolve
+    // the last item of the window menu's itemArray, but not account for the array
+    // being empty, resulting in a lookup of itemAtIndex:-1. To work around this,
+    // we insert a hidden dummy item into the menu. See FB13369198.
+    auto *dummyItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    dummyItem.hidden = YES;
+    [winMenuItem.submenu addItem:[dummyItem autorelease]];
+
     [mainMenu insertItem:winMenuItem atIndex:mainMenu.itemArray.count];
     app.windowsMenu = winMenuItem.submenu;
 

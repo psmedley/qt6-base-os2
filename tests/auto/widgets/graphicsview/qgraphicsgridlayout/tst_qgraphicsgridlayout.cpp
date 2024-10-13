@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -7,6 +7,8 @@
 #include <qgraphicswidget.h>
 #include <qgraphicsscene.h>
 #include <qgraphicsview.h>
+
+#include <cstdio>
 
 class tst_QGraphicsGridLayout : public QObject
 {
@@ -410,8 +412,9 @@ void tst_QGraphicsGridLayout::addItem()
         QTest::ignoreMessage(QtWarningMsg, "QGraphicsGridLayout::addItem: invalid row/column: -1");
     } else if (rowSpan < 1 || columnSpan < 1) {
         char buf[1024];
-        ::qsnprintf(buf, sizeof(buf), "QGraphicsGridLayout::addItem: invalid row span/column span: %d",
-            rowSpan < 1 ? rowSpan : columnSpan);
+        std::snprintf(buf, sizeof(buf),
+                      "QGraphicsGridLayout::addItem: invalid row span/column span: %d",
+                      rowSpan < 1 ? rowSpan : columnSpan);
         QTest::ignoreMessage(QtWarningMsg, buf);
     }
     layout->addItem(wid, row, column, rowSpan, columnSpan, alignment);
@@ -2974,11 +2977,6 @@ static QSizeF wfh(Qt::SizeHint /*which*/, const QSizeF &constraint)
         result.setWidth(ch);
     }
     return result;
-}
-
-bool qFuzzyCompare(const QSizeF &a, const QSizeF &b)
-{
-    return qFuzzyCompare(a.width(), b.width()) && qFuzzyCompare(a.height(), b.height());
 }
 
 void tst_QGraphicsGridLayout::heightForWidth()

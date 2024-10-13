@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -181,6 +181,10 @@ private slots:
     void insertHtmlWithComments();
 
     void delayedLayout();
+    void undoContentChangeIndices();
+
+    void restoreStrokeFromHtml();
+    void restoreForegroundGradientFromHtml();
 
 private:
     void backgroundImage_checkExpectedHtml(const QTextDocument &doc);
@@ -743,6 +747,9 @@ void tst_QTextDocument::mightBeRichText_data()
                                 "    PUBLIC ""-//W3C//DTD XHTML 1.0 Strict//EN\" \"DTD/xhtml1-strict.dtd\">\n"
                                 "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\">";
     QVERIFY(Qt::mightBeRichText(QString::fromLatin1(qtDocuHeader)));
+    QVERIFY(Qt::mightBeRichText(QLatin1StringView(qtDocuHeader)));
+    QVERIFY(QUtf8StringView(qtDocuHeader).isValidUtf8());
+    QVERIFY(Qt::mightBeRichText(QUtf8StringView(qtDocuHeader)));
     QTest::addColumn<QString>("input");
     QTest::addColumn<bool>("result");
 
@@ -762,6 +769,10 @@ void tst_QTextDocument::mightBeRichText()
     QFETCH(QString, input);
     QFETCH(bool, result);
     QCOMPARE(result, Qt::mightBeRichText(input));
+    QCOMPARE(result, Qt::mightBeRichText(QStringView(input)));
+    QCOMPARE(result, Qt::mightBeRichText(QUtf8StringView(input.toUtf8())));
+    QVERIFY(QtPrivate::isLatin1(input));
+    QCOMPARE(result, Qt::mightBeRichText(QLatin1StringView(input.toLatin1())));
 }
 
 Q_DECLARE_METATYPE(QTextDocumentFragment)
@@ -1161,7 +1172,7 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertTable(2, 2);
 
         QTest::newRow("simpletable") << QTextDocumentFragment(&doc)
-                                  << QString("<table border=\"1\" cellspacing=\"2\">"
+                                  << QString("<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">"
                                              "\n<tr>\n<td></td>\n<td></td></tr>"
                                              "\n<tr>\n<td></td>\n<td></td></tr>"
                                              "</table>");
@@ -1175,7 +1186,7 @@ void tst_QTextDocument::toHtml_data()
         table->mergeCells(0, 2, 1, 2);
 
         QTest::newRow("tablespans") << QTextDocumentFragment(&doc)
-                                 << QString("<table border=\"1\" cellspacing=\"2\">"
+                                 << QString("<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">"
                                              "\n<tr>\n<td colspan=\"2\"></td>\n<td colspan=\"2\"></td></tr>"
                                              "</table>");
     }
@@ -1194,7 +1205,7 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertTable(2, 2, fmt);
 
         QTest::newRow("tableattrs") << QTextDocumentFragment(&doc)
-                                  << QString("<table border=\"1\" style=\" float: right;\" align=\"center\" width=\"50%\" cellspacing=\"3\" cellpadding=\"3\" bgcolor=\"#ff00ff\">"
+                                  << QString("<table border=\"1\" style=\" float: right; border-collapse:collapse;\" align=\"center\" width=\"50%\" cellspacing=\"3\" cellpadding=\"3\" bgcolor=\"#ff00ff\">"
                                              "\n<tr>\n<td></td>\n<td></td></tr>"
                                              "\n<tr>\n<td></td>\n<td></td></tr>"
                                              "</table>");
@@ -1216,7 +1227,7 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertTable(2, 2, fmt);
 
         QTest::newRow("tableattrs2") << QTextDocumentFragment(&doc)
-                                  << QString("<table border=\"1\" style=\" float: right; margin-top:0px; margin-bottom:35px; margin-left:25px; margin-right:0px;\" align=\"center\" width=\"50%\" cellspacing=\"3\" cellpadding=\"3\" bgcolor=\"#ff00ff\">"
+                                  << QString("<table border=\"1\" style=\" float: right; margin-top:0px; margin-bottom:35px; margin-left:25px; margin-right:0px; border-collapse:collapse;\" align=\"center\" width=\"50%\" cellspacing=\"3\" cellpadding=\"3\" bgcolor=\"#ff00ff\">"
                                              "\n<tr>\n<td></td>\n<td></td></tr>"
                                              "\n<tr>\n<td></td>\n<td></td></tr>"
                                              "</table>");
@@ -1230,7 +1241,7 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertTable(4, 2, fmt);
 
         QTest::newRow("tableheader") << QTextDocumentFragment(&doc)
-                                  << QString("<table border=\"1\" cellspacing=\"2\">"
+                                  << QString("<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">"
                                              "<thead>\n<tr>\n<td></td>\n<td></td></tr>"
                                              "\n<tr>\n<td></td>\n<td></td></tr></thead>"
                                              "\n<tr>\n<td></td>\n<td></td></tr>"
@@ -1246,8 +1257,8 @@ void tst_QTextDocument::toHtml_data()
         subTable->cellAt(0, 0).firstCursorPosition().insertText("Hey");
 
         QTest::newRow("nestedtable") << QTextDocumentFragment(&doc)
-                                  << QString("<table border=\"1\" cellspacing=\"2\">"
-                                             "\n<tr>\n<td></td>\n<td>\n<table border=\"1\" cellspacing=\"2\">\n<tr>\n<td>\n<p DEFAULTBLOCKSTYLE>Hey</p></td></tr></table></td></tr>"
+                                  << QString("<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">"
+                                             "\n<tr>\n<td></td>\n<td>\n<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">\n<tr>\n<td>\n<p DEFAULTBLOCKSTYLE>Hey</p></td></tr></table></td></tr>"
                                              "\n<tr>\n<td></td>\n<td></td></tr>"
                                              "</table>");
     }
@@ -1264,7 +1275,7 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertTable(1, 3, fmt);
 
         QTest::newRow("colwidths") << QTextDocumentFragment(&doc)
-                                  << QString("<table border=\"1\" cellspacing=\"2\">"
+                                  << QString("<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">"
                                              "\n<tr>\n<td></td>\n<td width=\"30%\"></td>\n<td width=\"40\"></td></tr>"
                                              "</table>");
     }
@@ -1281,7 +1292,7 @@ void tst_QTextDocument::toHtml_data()
         cellCurs.mergeBlockCharFormat(fmt);
 
         QTest::newRow("cellproperties") << QTextDocumentFragment(&doc)
-                                     << QString("<table border=\"1\" cellspacing=\"2\">"
+                                     << QString("<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">"
                                                 "\n<tr>\n<td bgcolor=\"#ffffff\"></td></tr>"
                                                 "</table>");
     }
@@ -1548,7 +1559,7 @@ void tst_QTextDocument::toHtml_data()
         table->setFormat(fmt);
 
         QTest::newRow("mergedtablecolwidths") << QTextDocumentFragment(&doc)
-                                  << QString("<table border=\"1\" cellspacing=\"2\">"
+                                  << QString("<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">"
                                              "\n<tr>\n<td colspan=\"2\"></td></tr>"
                                              "\n<tr>\n<td width=\"20\"></td>\n<td width=\"40\"></td></tr>"
                                              "</table>");
@@ -1611,7 +1622,7 @@ void tst_QTextDocument::toHtml_data()
         table->cellAt(0, 0).firstCursorPosition().insertText("Blah");
 
         QTest::newRow("table-vertical-alignment") << QTextDocumentFragment(&doc)
-                                  << QString("<table border=\"1\" cellspacing=\"2\">"
+                                  << QString("<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">"
                                              "\n<tr>\n<td style=\" vertical-align:middle;\">\n"
                                              "<p DEFAULTBLOCKSTYLE>Blah</p></td>"
                                              "\n<td style=\" vertical-align:top;\"></td></tr>"
@@ -1640,7 +1651,7 @@ void tst_QTextDocument::toHtml_data()
         table->cellAt(0, 0).firstCursorPosition().insertText("Blah");
 
         QTest::newRow("table-cell-paddings") << QTextDocumentFragment(&doc)
-                                  << QString("<table border=\"1\" cellspacing=\"2\">"
+                                  << QString("<table border=\"1\" style=\" border-collapse:collapse;\" cellpadding=\"4\">"
                                              "\n<tr>\n<td style=\" padding-left:1;\">\n"
                                              "<p DEFAULTBLOCKSTYLE>Blah</p></td>"
                                              "\n<td style=\" padding-right:1;\"></td></tr>"
@@ -1658,7 +1669,7 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertTable(2, 2, fmt);
 
         QTest::newRow("tableborder") << QTextDocumentFragment(&doc)
-                                     << QString("<table border=\"1\" style=\" border-color:#0000ff; border-style:solid;\" cellspacing=\"2\">"
+                                     << QString("<table border=\"1\" style=\" border-color:#0000ff; border-style:solid; border-collapse:collapse;\" cellpadding=\"4\">"
                                                 "\n<tr>\n<td></td>\n<td></td></tr>"
                                                 "\n<tr>\n<td></td>\n<td></td></tr>"
                                                 "</table>");
@@ -1700,7 +1711,7 @@ void tst_QTextDocument::toHtml_data()
                                    << QString("EMPTYBLOCK") +
                                       QString("<p OPENDEFAULTBLOCKSTYLE page-break-before:always;\">Foo</p>"
                                               "\n<p OPENDEFAULTBLOCKSTYLE page-break-before:always; page-break-after:always;\">Bar</p>"
-                                              "\n<table border=\"1\" style=\" page-break-after:always;\" cellspacing=\"2\">\n<tr>\n<td></td></tr></table>");
+                                              "\n<table border=\"1\" style=\" page-break-after:always; border-collapse:collapse;\" cellpadding=\"4\">\n<tr>\n<td></td></tr></table>");
     }
 
     {
@@ -1779,6 +1790,22 @@ void tst_QTextDocument::toHtml_data()
                        "<li style=\" margin-top:12px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">bullet</li>\n"
                        "<li class=\"unchecked\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">unchecked item</li>\n"
                        "<li class=\"checked\" style=\" margin-top:0px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">checked item</li></ul>");
+    }
+
+    {
+        CREATE_DOC_AND_CURSOR();
+
+        QTextListFormat fmt;
+        fmt.setStyle(QTextListFormat::ListDecimal);
+        fmt.setStart(4);
+        cursor.insertList(fmt);
+        cursor.insertText("Blah");
+        cursor.insertBlock();
+        cursor.insertText("Bleh");
+
+        QTest::newRow("ordered list with start") << QTextDocumentFragment(&doc)
+            << QString("EMPTYBLOCK") +
+               QString("<ol start=\"4\" style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 1;\">\n<li style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</li>\n<li style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Bleh</li></ol>");
     }
 }
 
@@ -3963,6 +3990,259 @@ void tst_QTextDocument::delayedLayout()
 
     doc.setLayoutEnabled(true);
     QCOMPARE(layout->lineCount(), 1); // layout happened
+}
+
+void tst_QTextDocument::undoContentChangeIndices() // QTBUG-113865
+{
+    QTextDocument doc;
+    QTestDocumentLayout *layout = new QTestDocumentLayout(&doc);
+    QString content = QString("<html><body>"
+                              "<ul><li>Undo</li></ul>"
+                              "<ul><li>operation</li></ul>"
+                              "<ul><li>of</li></ul>"
+                              "<ul><li>unnumbered</li></ul>"
+                              "<ul><li>lists</li></ul>"
+                              "<ul><li>shows</li></ul>"
+                              "<ul><li>invalid</li></ul>"
+                              "<ul><li>content</li></ul>"
+                              "<ul><li>indices</li></ul>"
+                              "</body></html>");
+    doc.setDocumentLayout(layout);
+    doc.setHtml(content);
+
+    // Select the entire document content
+    QTextCursor cursor(&doc);
+    cursor.select(QTextCursor::Document);
+    cursor.removeSelectedText();
+
+    // Undo above operation
+    doc.undo();
+
+    // Move the cursor to the end
+    cursor.movePosition(QTextCursor::End);
+    cursor.insertHtml(content);
+
+    // Select the whole document and remove the content
+    cursor.select(QTextCursor::Document);
+    cursor.removeSelectedText();
+
+    int documentLength = 0;
+    int changeRemoved = 0;
+    int changeAdded = 0;
+    int changePos = 0;
+    connect(&doc, &QTextDocument::contentsChange, this, [&](int pos, int removed, int added){
+        documentLength = doc.characterCount();
+        changeRemoved = removed;
+        changeAdded = added;
+        changePos = pos;
+    });
+
+    // Undo above operation
+    doc.undo();
+
+    const int changeEnd = changeAdded + changeRemoved;
+
+    QVERIFY(documentLength > 0);
+    QCOMPARE(changePos, 0);
+    QVERIFY(changeRemoved >= 0);
+    QVERIFY(documentLength >= changeEnd);
+}
+
+void tst_QTextDocument::restoreStrokeFromHtml()
+{
+    QTextDocument document;
+    QTextCursor textCursor(&document);
+    QTextCharFormat textOutline;
+
+    // Set stroke color and width
+    {
+        QPen pen(Qt::red, 2.3, Qt::SolidLine);
+        textOutline.setTextOutline(pen);
+        textCursor.insertText("Outlined text", textOutline);
+    }
+
+    // Set Cap and Join styles
+    {
+        QPen pen;
+        pen.setCapStyle(Qt::FlatCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        textOutline.setTextOutline(pen);
+        textCursor.insertBlock();
+        textCursor.insertText("Cap and Join Style", textOutline);
+    }
+
+    // Set Miter limit
+    {
+        QPen pen;
+        pen.setJoinStyle(Qt::MiterJoin);
+        pen.setMiterLimit(4);
+        textOutline.setTextOutline(pen);
+        textCursor.insertBlock();
+        textCursor.insertText("Miter Limit", textOutline);
+    }
+
+    // Set Dash Array and Dash Offset
+    {
+        QPen pen;
+        QList<qreal> pattern;
+        const int dash = 2;
+        const int gap = 4;
+        pattern << dash << gap << dash << gap << dash << gap;
+        pen.setDashPattern(pattern);
+        pen.setDashOffset(3);
+        textOutline.setTextOutline(pen);
+        textCursor.insertBlock();
+        textCursor.insertText("Dash Pattern", textOutline);
+    }
+
+    {
+        QTextDocument otherDocument;
+        otherDocument.setHtml(document.toHtml());
+        QCOMPARE(otherDocument.blockCount(), document.blockCount());
+
+        QTextBlock block;
+        QTextFragment fragment;
+        QTextCharFormat fmt;
+        QPen pen;
+
+        {
+            block = otherDocument.findBlockByNumber(0);
+            fragment = block.begin().fragment();
+            QCOMPARE(fragment.text(), QStringLiteral("Outlined text"));
+            fmt = fragment.charFormat();
+            QVERIFY(fmt.hasProperty(QTextCharFormat::TextOutline));
+            pen = fmt.textOutline();
+            QCOMPARE(pen.color(), QColor(Qt::red));
+            QCOMPARE(pen.widthF(), 2.3);
+        }
+
+        {
+            block = otherDocument.findBlockByNumber(1);
+            qDebug() << block.text();
+            fragment = block.begin().fragment();
+            QCOMPARE(fragment.text(), QStringLiteral("Cap and Join Style"));
+            fmt = fragment.charFormat();
+            QVERIFY(fmt.hasProperty(QTextCharFormat::TextOutline));
+            pen = fmt.textOutline();
+            QCOMPARE(pen.capStyle(), Qt::FlatCap);
+            QCOMPARE(pen.joinStyle(), Qt::RoundJoin);
+        }
+
+        {
+            block = otherDocument.findBlockByNumber(2);
+            fragment = block.begin().fragment();
+            QCOMPARE(fragment.text(), QStringLiteral("Miter Limit"));
+            fmt = fragment.charFormat();
+            QVERIFY(fmt.hasProperty(QTextCharFormat::TextOutline));
+            pen = fmt.textOutline();
+            QCOMPARE(pen.joinStyle(), Qt::MiterJoin);
+            QCOMPARE(pen.miterLimit(), 4);
+        }
+
+
+        {
+            block = otherDocument.findBlockByNumber(3);
+            fragment = block.begin().fragment();
+            QCOMPARE(fragment.text(), QStringLiteral("Dash Pattern"));
+            fmt = fragment.charFormat();
+            QVERIFY(fmt.hasProperty(QTextCharFormat::TextOutline));
+            pen = fmt.textOutline();
+            QCOMPARE(pen.dashOffset(), 3);
+            QList<qreal> pattern;
+            const int dash = 2;
+            const int gap = 4;
+            pattern << dash << gap << dash << gap << dash << gap;
+            QCOMPARE(pen.dashPattern(), pattern);
+        }
+    }
+}
+
+void tst_QTextDocument::restoreForegroundGradientFromHtml()
+{
+    QTextDocument document;
+
+    QTextCursor textCursor(&document);
+
+    QTextCharFormat foregroundGradient;
+    QLinearGradient lg;
+    lg.setColorAt(0.0, Qt::green);
+    lg.setColorAt(1.0, Qt::blue);
+    lg.setStart(QPointF(0,0));
+    lg.setFinalStop(QPointF(800, 1000));
+    foregroundGradient.setForeground(QBrush(lg));
+    textCursor.insertText("Linear gradient text\n", foregroundGradient);
+
+    QRadialGradient rg;
+    rg.setCoordinateMode(QGradient::ObjectBoundingMode);
+    rg.setSpread(QGradient::ReflectSpread);
+    rg.setColorAt(0.0, Qt::green);
+    rg.setColorAt(1.0, Qt::blue);
+    QPointF center(0.5, 0.5);
+    rg.setCenter(center);
+    rg.setFocalPoint(center);
+    rg.setRadius(0.5);
+    foregroundGradient.setForeground(QBrush(rg));
+    textCursor.insertText("Radial gradient text\n", foregroundGradient);
+
+    QConicalGradient cg;
+    cg.setCoordinateMode(QGradient::ObjectMode);
+    cg.setSpread(QGradient::RepeatSpread);
+    cg.setColorAt(0.0, Qt::green);
+    cg.setColorAt(1.0, Qt::blue);
+    cg.setCenter(QPointF(0.5, 0.5));
+    cg.setAngle(0.0);
+    foregroundGradient.setForeground(QBrush(cg));
+    textCursor.insertText("Conical gradient text\n", foregroundGradient);
+
+    {
+        QTextDocument otherDocument;
+        otherDocument.setHtml(document.toHtml());
+
+        QCOMPARE(otherDocument.blockCount(), document.blockCount());
+
+        QTextBlock block = otherDocument.firstBlock();
+        QTextFragment fragment = block.begin().fragment();
+
+        QCOMPARE(fragment.text(), QStringLiteral("Linear gradient text"));
+
+        QTextCharFormat fmt = fragment.charFormat();
+        QVERIFY(fmt.hasProperty(QTextCharFormat::ForegroundBrush));
+
+        QBrush brush = fmt.foreground();
+        QCOMPARE(brush.style(), Qt::LinearGradientPattern);
+        QCOMPARE(brush.gradient()->coordinateMode(), lg.coordinateMode());
+        QCOMPARE(brush.gradient()->spread(), lg.spread());
+        QCOMPARE(brush.gradient()->stops().size(), lg.stops().size());
+        QCOMPARE(static_cast<const QLinearGradient *>(brush.gradient())->start(), lg.start());
+        QCOMPARE(static_cast<const QLinearGradient *>(brush.gradient())->finalStop(), lg.finalStop());
+
+        block = block.next();
+        fragment = block.begin().fragment();
+
+        fmt = fragment.charFormat();
+        QVERIFY(fmt.hasProperty(QTextCharFormat::ForegroundBrush));
+
+        brush = fmt.foreground();
+        QCOMPARE(brush.style(), Qt::RadialGradientPattern);
+        QCOMPARE(brush.gradient()->coordinateMode(), rg.coordinateMode());
+        QCOMPARE(brush.gradient()->spread(), rg.spread());
+        QCOMPARE(static_cast<const QRadialGradient *>(brush.gradient())->center(), rg.center());
+        QCOMPARE(static_cast<const QRadialGradient *>(brush.gradient())->focalPoint(), rg.focalPoint());
+        QCOMPARE(static_cast<const QRadialGradient *>(brush.gradient())->radius(), rg.radius());
+
+        block = block.next();
+        fragment = block.begin().fragment();
+
+        fmt = fragment.charFormat();
+        QVERIFY(fmt.hasProperty(QTextCharFormat::ForegroundBrush));
+
+        brush = fmt.foreground();
+        QCOMPARE(brush.style(), Qt::ConicalGradientPattern);
+        QCOMPARE(brush.gradient()->coordinateMode(), cg.coordinateMode());
+        QCOMPARE(brush.gradient()->spread(), cg.spread());
+        QCOMPARE(static_cast<const QConicalGradient *>(brush.gradient())->center(), cg.center());
+        QCOMPARE(static_cast<const QConicalGradient *>(brush.gradient())->angle(), cg.angle());
+    }
 }
 
 QTEST_MAIN(tst_QTextDocument)

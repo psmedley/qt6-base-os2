@@ -144,8 +144,25 @@ public:
 
 private:
     QModelIndex indexFromLogical(int row, int column = 0) const;
+};
+#endif
 
-    inline int logicalIndex(const QModelIndex &index) const;
+#if QT_CONFIG(listview)
+class QAccessibleList :public QAccessibleTable
+{
+public:
+    explicit QAccessibleList(QWidget *w)
+        : QAccessibleTable(w)
+    {}
+
+    QAccessibleInterface *child(int index) const override;
+
+    // table interface
+    QAccessibleInterface *cellAt(int row, int column) const override;
+
+    // selection
+    int selectedCellCount() const override;
+    QList<QAccessibleInterface*> selectedCells() const override;
 };
 #endif
 
@@ -200,6 +217,9 @@ friend class QAccessibleTable;
 #if QT_CONFIG(treeview)
 friend class QAccessibleTree;
 #endif
+#if QT_CONFIG(listview)
+friend class QAccessibleList;
+#endif
 };
 
 
@@ -235,6 +255,9 @@ private:
 friend class QAccessibleTable;
 #if QT_CONFIG(treeview)
 friend class QAccessibleTree;
+#endif
+#if QT_CONFIG(listview)
+friend class QAccessibleList;
 #endif
 };
 

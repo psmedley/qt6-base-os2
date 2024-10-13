@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -111,7 +111,12 @@ private slots:
     void mouseMoveWithPopup_data();
     void mouseMoveWithPopup();
 
+    void showHideWindowHandle_data();
+    void showHideWindowHandle();
+
     void resetFocusObjectOnDestruction();
+
+    void cleanupOnDestruction();
 
 private:
     QSize m_testWidgetSize;
@@ -686,7 +691,6 @@ void tst_QWidget_window::tst_dnd()
 
     dndTestWidget.show();
     QVERIFY(QTest::qWaitForWindowExposed(&dndTestWidget));
-    QApplicationPrivate::setActiveWindow(&dndTestWidget);
     QVERIFY(QTest::qWaitForWindowActive(&dndTestWidget));
 
     QMimeData mimeData;
@@ -1630,10 +1634,157 @@ void tst_QWidget_window::mouseMoveWithPopup()
 
     // but the release event will still be delivered to the first popup - dialogs might not get it
     QCOMPARE(mouseAction(Qt::LeftButton), QEvent::MouseButtonRelease);
-    if (topLevel.popup->mouseReleaseCount != 1
-        && !QGuiApplication::platformName().startsWith(QLatin1String("windows"), Qt::CaseInsensitive))
+    if (topLevel.popup->mouseReleaseCount != 1)
         QEXPECT_FAIL("Dialog", "Platform specific behavior", Continue);
     QCOMPARE(topLevel.popup->mouseReleaseCount, 1);
+}
+
+struct ShowHideEntry {
+    QEvent::Type action;
+    Qt::WindowType target;
+    using List = QList<ShowHideEntry>;
+};
+
+void tst_QWidget_window::showHideWindowHandle_data()
+{
+    QTest::addColumn<ShowHideEntry::List>("entries");
+
+    QTest::addRow("show/hide widget") << ShowHideEntry::List{
+        { QEvent::Show, Qt::Widget }, { QEvent::Hide, Qt::Widget }
+    };
+    QTest::addRow("show/hide window") << ShowHideEntry::List{
+        { QEvent::Show, Qt::Window }, { QEvent::Hide, Qt::Window }
+    };
+    QTest::addRow("show widget, hide window") << ShowHideEntry::List{
+        { QEvent::Show, Qt::Widget }, { QEvent::Hide, Qt::Window }
+    };
+    QTest::addRow("show window, hide widget") << ShowHideEntry::List{
+        { QEvent::Show, Qt::Window }, { QEvent::Hide, Qt::Widget }
+    };
+    QTest::addRow("show/hide widget, then show window, hide widget") << ShowHideEntry::List{
+        { QEvent::Show, Qt::Widget }, { QEvent::Hide, Qt::Widget },
+        { QEvent::Show, Qt::Window }, { QEvent::Hide, Qt::Widget }
+    };
+    QTest::addRow("show widget, close widget, show widget") << ShowHideEntry::List{
+        { QEvent::Show, Qt::Widget }, { QEvent::Close, Qt::Widget }, { QEvent::Show, Qt::Widget }
+    };
+    QTest::addRow("show widget, close widget, show window") << ShowHideEntry::List{
+        { QEvent::Show, Qt::Widget }, { QEvent::Close, Qt::Widget }, { QEvent::Show, Qt::Window }
+    };
+    QTest::addRow("show widget, close window, show widget") << ShowHideEntry::List{
+        { QEvent::Show, Qt::Widget }, { QEvent::Close, Qt::Window }, { QEvent::Show, Qt::Widget }
+    };
+    QTest::addRow("show widget, close window, show window") << ShowHideEntry::List{
+        { QEvent::Show, Qt::Widget }, { QEvent::Close, Qt::Window }, { QEvent::Show, Qt::Window }
+    };
+}
+
+void tst_QWidget_window::showHideWindowHandle()
+{
+    QWidget parent;
+    parent.setObjectName("Parent");
+    QCOMPARE(parent.isVisible(), false);
+    QCOMPARE(parent.testAttribute(Qt::WA_WState_ExplicitShowHide), false);
+    QCOMPARE(parent.testAttribute(Qt::WA_WState_Visible), false);
+    QCOMPARE(parent.testAttribute(Qt::WA_WState_Hidden), true);
+
+    QWidget child;
+    child.setObjectName("Child");
+    QCOMPARE(child.isVisible(), false);
+    QCOMPARE(child.testAttribute(Qt::WA_WState_ExplicitShowHide), false);
+    QCOMPARE(child.testAttribute(Qt::WA_WState_Visible), false);
+    QCOMPARE(child.testAttribute(Qt::WA_WState_Hidden), true);
+
+    child.setParent(&parent);
+    QCOMPARE(child.isVisible(), false);
+    QCOMPARE(child.testAttribute(Qt::WA_WState_ExplicitShowHide), false);
+    QCOMPARE(child.testAttribute(Qt::WA_WState_Visible), false);
+    QCOMPARE(child.testAttribute(Qt::WA_WState_Hidden), false);
+
+    QFETCH(QList<ShowHideEntry>, entries);
+    for (const auto entry : entries) {
+
+        if (entry.action == QEvent::Show) {
+            if (entry.target == Qt::Window && !parent.windowHandle()) {
+                parent.setAttribute(Qt::WA_NativeWindow);
+                QVERIFY(parent.windowHandle());
+
+                QCOMPARE(parent.isVisible(), false);
+                QCOMPARE(parent.testAttribute(Qt::WA_WState_ExplicitShowHide), false);
+                QCOMPARE(parent.testAttribute(Qt::WA_WState_Visible), false);
+                QCOMPARE(parent.testAttribute(Qt::WA_WState_Hidden), true);
+            }
+
+            bool wasExplicitShowHide = parent.testAttribute(Qt::WA_WState_ExplicitShowHide);
+
+            if (entry.target == Qt::Widget)
+                parent.show();
+            else
+                parent.windowHandle()->show();
+
+            QVERIFY(QTest::qWaitForWindowActive(&parent));
+
+            QCOMPARE(parent.isVisible(), true);
+            QVERIFY(parent.windowHandle());
+            QCOMPARE(parent.windowHandle()->isVisible(), true);
+
+            QCOMPARE(parent.testAttribute(Qt::WA_WState_Visible), true);
+            QCOMPARE(parent.testAttribute(Qt::WA_WState_Hidden), false);
+            QCOMPARE(parent.testAttribute(Qt::WA_WState_ExplicitShowHide),
+                entry.target == Qt::Widget || wasExplicitShowHide);
+
+            QCOMPARE(child.isVisible(), true);
+            QCOMPARE(child.testAttribute(Qt::WA_WState_ExplicitShowHide), false);
+            QCOMPARE(child.testAttribute(Qt::WA_WState_Visible), true);
+            QCOMPARE(child.testAttribute(Qt::WA_WState_Hidden), false);
+
+        } else if (entry.action == QEvent::Hide) {
+
+            bool wasExplicitShowHide = parent.testAttribute(Qt::WA_WState_ExplicitShowHide);
+
+            if (entry.target == Qt::Widget)
+                parent.hide();
+            else
+                parent.windowHandle()->hide();
+
+            QCOMPARE(parent.isVisible(), false);
+            QVERIFY(parent.windowHandle());
+            QCOMPARE(parent.windowHandle()->isVisible(), false);
+
+            QCOMPARE(parent.testAttribute(Qt::WA_WState_Visible), false);
+            QCOMPARE(parent.testAttribute(Qt::WA_WState_Hidden), true);
+            QCOMPARE(parent.testAttribute(Qt::WA_WState_ExplicitShowHide),
+                entry.target == Qt::Widget || wasExplicitShowHide);
+
+            QCOMPARE(child.isVisible(), false);
+            QCOMPARE(child.testAttribute(Qt::WA_WState_ExplicitShowHide), false);
+            QCOMPARE(child.testAttribute(Qt::WA_WState_Visible), false);
+            QCOMPARE(child.testAttribute(Qt::WA_WState_Hidden), false);
+
+        } else if (entry.action == QEvent::Close) {
+
+            bool wasExplicitShowHide = parent.testAttribute(Qt::WA_WState_ExplicitShowHide);
+
+            if (entry.target == Qt::Widget)
+                parent.close();
+            else
+                parent.windowHandle()->close();
+
+            QCOMPARE(parent.isVisible(), false);
+            QVERIFY(parent.windowHandle());
+            QCOMPARE(parent.windowHandle()->isVisible(), false);
+
+            QCOMPARE(parent.testAttribute(Qt::WA_WState_Visible), false);
+            QCOMPARE(parent.testAttribute(Qt::WA_WState_Hidden), true);
+            QCOMPARE(parent.testAttribute(Qt::WA_WState_ExplicitShowHide),
+                entry.target == Qt::Widget || wasExplicitShowHide);
+
+            QCOMPARE(child.isVisible(), false);
+            QCOMPARE(child.testAttribute(Qt::WA_WState_ExplicitShowHide), false);
+            QCOMPARE(child.testAttribute(Qt::WA_WState_Visible), false);
+            QCOMPARE(child.testAttribute(Qt::WA_WState_Hidden), false);
+        }
+    }
 }
 
 void tst_QWidget_window::resetFocusObjectOnDestruction()
@@ -1670,6 +1821,31 @@ void tst_QWidget_window::resetFocusObjectOnDestruction()
     // we might get more than one signal emission
     QVERIFY(focusObjectChangedSpy.size() > activeCount);
     QCOMPARE(focusObjectChangedSpy.last().last().value<QObject*>(), nullptr);
+}
+
+class CreateDestroyWidget : public QWidget
+{
+public:
+    using QWidget::create;
+    using QWidget::destroy;
+};
+
+void tst_QWidget_window::cleanupOnDestruction()
+{
+    CreateDestroyWidget widget;
+    QWidget child(&widget);
+
+    QWidget grandChild(&child);
+    // Ensure there's not a 1:1 native window hierarhcy that we could
+    // recurse during QWidget::destroy(), triggering the issue that
+    // we were failing to clean up when not destroyed via QWidget.
+    grandChild.setAttribute(Qt::WA_DontCreateNativeAncestors);
+    grandChild.winId();
+
+    widget.destroy();
+    widget.create();
+
+    widget.show();
 }
 
 QTEST_MAIN(tst_QWidget_window)

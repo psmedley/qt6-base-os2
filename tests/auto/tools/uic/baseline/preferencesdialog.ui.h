@@ -109,7 +109,7 @@ public:
 
         gridLayout->addWidget(m_removeTemplatePathButton, 1, 1, 1, 1);
 
-        spacerItem = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+        spacerItem = new QSpacerItem(40, 20, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
         gridLayout->addItem(spacerItem, 1, 2, 1, 1);
 
@@ -129,8 +129,8 @@ public:
 
         line = new QFrame(PreferencesDialog);
         line->setObjectName("line");
-        line->setFrameShape(QFrame::HLine);
-        line->setFrameShadow(QFrame::Sunken);
+        line->setFrameShape(QFrame::Shape::HLine);
+        line->setFrameShadow(QFrame::Shadow::Sunken);
 
         vboxLayout->addWidget(line);
 

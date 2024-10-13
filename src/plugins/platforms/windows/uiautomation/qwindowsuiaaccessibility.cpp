@@ -5,6 +5,7 @@
 #if QT_CONFIG(accessibility)
 
 #include "qwindowsuiaaccessibility.h"
+#include "qwindowsuiautomation.h"
 #include "qwindowsuiamainprovider.h"
 #include "qwindowsuiautils.h"
 
@@ -14,13 +15,13 @@
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtCore/qt_windows.h>
 #include <qpa/qplatformintegration.h>
-#include <QtGui/private/qwindowsuiawrapper_p.h>
 
 #include <QtCore/private/qwinregistry_p.h>
 
 QT_BEGIN_NAMESPACE
 
 using namespace QWindowsUiAutomation;
+using namespace Qt::Literals::StringLiterals;
 
 bool QWindowsUiaAccessibility::m_accessibleActive = false;
 
@@ -45,8 +46,8 @@ bool QWindowsUiaAccessibility::handleWmGetObject(HWND hwnd, WPARAM wParam, LPARA
 
     if (QWindow *window = QWindowsContext::instance()->findWindow(hwnd)) {
         if (QAccessibleInterface *accessible = window->accessibleRoot()) {
-            QWindowsUiaMainProvider *provider = QWindowsUiaMainProvider::providerForAccessible(accessible);
-            *lResult = QWindowsUiaWrapper::instance()->returnRawElementProvider(hwnd, wParam, lParam, provider);
+            auto provider = QWindowsUiaMainProvider::providerForAccessible(accessible);
+            *lResult = UiaReturnRawElementProvider(hwnd, wParam, lParam, provider.Get());
             return true;
         }
     }
@@ -78,8 +79,8 @@ static QString alertSound(const QObject *object)
 
 static QString soundFileName(const QString &soundName)
 {
-    const QString key = QStringLiteral("AppEvents\\Schemes\\Apps\\.Default\\")
-        + soundName + QStringLiteral("\\.Current");
+    const QString key = "AppEvents\\Schemes\\Apps\\.Default\\"_L1
+        + soundName + "\\.Current"_L1;
     return QWinRegistryKey(HKEY_CURRENT_USER, key).stringValue(L"");
 }
 
@@ -97,11 +98,7 @@ void QWindowsUiaAccessibility::notifyAccessibilityUpdate(QAccessibleEvent *event
     if (!event)
         return;
 
-    // Ignore events sent before the first UI Automation
-    // request or while QAccessible is being activated.
-    if (!m_accessibleActive)
-        return;
-
+    // Always handle system sound events
     switch (event->type()) {
         case QAccessible::PopupMenuStart:
             playSystemSound(QStringLiteral("MenuPopup"));
@@ -116,19 +113,23 @@ void QWindowsUiaAccessibility::notifyAccessibilityUpdate(QAccessibleEvent *event
             break;
     }
 
+    // Ignore events sent before the first UI Automation
+    // request or while QAccessible is being activated.
+    if (!m_accessibleActive)
+        return;
+
     QAccessibleInterface *accessible = event->accessibleInterface();
     if (!isActive() || !accessible || !accessible->isValid())
         return;
 
-    // Ensures QWindowsUiaWrapper is properly initialized.
-    if (!QWindowsUiaWrapper::instance()->ready())
-        return;
-
     // No need to do anything when nobody is listening.
-    if (!QWindowsUiaWrapper::instance()->clientsAreListening())
+    if (!UiaClientsAreListening())
         return;
 
     switch (event->type()) {
+    case QAccessible::Announcement:
+        QWindowsUiaMainProvider::raiseNotification(static_cast<QAccessibleAnnouncementEvent *>(event));
+        break;
     case QAccessible::Focus:
         QWindowsUiaMainProvider::notifyFocusChange(event);
         break;

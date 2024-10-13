@@ -14,6 +14,9 @@
 #include <emscripten/threading.h>
 #include <emscripten/val.h>
 
+using namespace std::chrono;
+using namespace std::chrono_literals;
+
 QT_BEGIN_NAMESPACE
 
 // using namespace emscripten;
@@ -40,6 +43,50 @@ static bool useAsyncify()
     return qstdweb::haveAsyncify();
 }
 
+static bool useJspi()
+{
+    return qstdweb::haveJspi();
+}
+
+// clang-format off
+EM_ASYNC_JS(void, qt_jspi_suspend_js, (), {
+    ++Module.qtJspiSuspensionCounter;
+
+    await new Promise(resolve => {
+        Module.qtAsyncifyWakeUp.push(resolve);
+    });
+});
+
+EM_JS(bool, qt_jspi_resume_js, (), {
+    if (!Module.qtJspiSuspensionCounter)
+        return false;
+
+    --Module.qtJspiSuspensionCounter;
+
+    setTimeout(() => {
+        const wakeUp = (Module.qtAsyncifyWakeUp ?? []).pop();
+        if (wakeUp) wakeUp();
+    });
+    return true;
+});
+
+EM_JS(bool, qt_jspi_can_resume_js, (), {
+    return Module.qtJspiSuspensionCounter > 0;
+});
+
+EM_JS(void, init_jspi_support_js, (), {
+    Module.qtAsyncifyWakeUp = [];
+    Module.qtJspiSuspensionCounter = 0;
+});
+// clang-format on
+
+void initJspiSupport() {
+    init_jspi_support_js();
+}
+
+Q_CONSTRUCTOR_FUNCTION(initJspiSupport);
+
+// clang-format off
 EM_JS(void, qt_asyncify_suspend_js, (), {
     if (Module.qtSuspendId === undefined)
         Module.qtSuspendId = 0;
@@ -66,6 +113,7 @@ EM_JS(void, qt_asyncify_resume_js, (), {
         wakeUp();
     });
 });
+// clang-format on
 
 #else
 
@@ -73,6 +121,28 @@ EM_JS(void, qt_asyncify_resume_js, (), {
 
 static bool useAsyncify()
 {
+    return false;
+}
+
+static bool useJspi()
+{
+    return false;
+}
+
+void qt_jspi_suspend_js()
+{
+    Q_UNREACHABLE();
+}
+
+bool qt_jspi_resume_js()
+{
+    Q_UNREACHABLE();
+    return false;
+}
+
+bool qt_jspi_can_resume_js()
+{
+    Q_UNREACHABLE();
     return false;
 }
 
@@ -103,26 +173,27 @@ bool qt_asyncify_suspend()
 
 // Wakes any currently suspended main thread. Returns true if the main
 // thread was suspended, in which case it will now be asynchronously woken.
-bool qt_asyncify_resume()
+void qt_asyncify_resume()
 {
     if (!g_is_asyncify_suspended)
-        return false;
+        return;
     g_is_asyncify_suspended = false;
     qt_asyncify_resume_js();
-    return true;
 }
+
 
 Q_CONSTINIT QEventDispatcherWasm *QEventDispatcherWasm::g_mainThreadEventDispatcher = nullptr;
 #if QT_CONFIG(thread)
 Q_CONSTINIT QVector<QEventDispatcherWasm *> QEventDispatcherWasm::g_secondaryThreadEventDispatchers;
 Q_CONSTINIT std::mutex QEventDispatcherWasm::g_staticDataMutex;
+emscripten::ProxyingQueue QEventDispatcherWasm::g_proxyingQueue;
+pthread_t QEventDispatcherWasm::g_mainThread;
 #endif
 // ### dynamic initialization:
 std::multimap<int, QSocketNotifier *> QEventDispatcherWasm::g_socketNotifiers;
 std::map<int, QEventDispatcherWasm::SocketReadyState> QEventDispatcherWasm::g_socketState;
 
 QEventDispatcherWasm::QEventDispatcherWasm()
-    : QAbstractEventDispatcher()
 {
     // QEventDispatcherWasm operates in two main modes:
     // - On the main thread:
@@ -144,6 +215,15 @@ QEventDispatcherWasm::QEventDispatcherWasm()
         // dispatchers so we set a global pointer to it.
         Q_ASSERT(g_mainThreadEventDispatcher == nullptr);
         g_mainThreadEventDispatcher = this;
+#if QT_CONFIG(thread)
+        g_mainThread = pthread_self();
+#endif
+
+        // Call the "onLoaded" JavaScript callback, unless startup tasks
+        // have been registered which should complete first. Run async
+        // to make sure event dispatcher construction (in particular any
+        // subclass construction) has completed first.
+        runAsync(callOnLoadedIfRequired);
     } else {
 #if QT_CONFIG(thread)
         std::lock_guard<std::mutex> lock(g_staticDataMutex);
@@ -198,7 +278,6 @@ bool QEventDispatcherWasm::isValidEventDispatcherPointer(QEventDispatcherWasm *e
     if (eventDispatcher == g_mainThreadEventDispatcher)
         return true;
 #if QT_CONFIG(thread)
-    Q_ASSERT(!g_staticDataMutex.try_lock()); // caller must lock mutex
     if (g_secondaryThreadEventDispatchers.contains(eventDispatcher))
         return true;
 #endif
@@ -218,8 +297,16 @@ bool QEventDispatcherWasm::processEvents(QEventLoop::ProcessEventsFlags flags)
             handleApplicationExec();
     }
 
-    QCoreApplication::sendPostedEvents();
-    processWindowSystemEvents(flags);
+#if QT_CONFIG(thread)
+    {
+        // Reset wakeUp state: if wakeUp() was called at some point before
+        // this then processPostedEvents() below will service that call.
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_wakeUpCalled = false;
+    }
+#endif
+
+    processPostedEvents();
 
     // The processPostedEvents() call above may process an event which deletes the
     // application object and the event dispatcher; stop event processing in that case.
@@ -242,11 +329,6 @@ bool QEventDispatcherWasm::processEvents(QEventLoop::ProcessEventsFlags flags)
     return false;
 }
 
-void QEventDispatcherWasm::processWindowSystemEvents(QEventLoop::ProcessEventsFlags flags)
-{
-    Q_UNUSED(flags);
-}
-
 void QEventDispatcherWasm::registerSocketNotifier(QSocketNotifier *notifier)
 {
     LOCK_GUARD(g_staticDataMutex);
@@ -254,7 +336,7 @@ void QEventDispatcherWasm::registerSocketNotifier(QSocketNotifier *notifier)
     bool wasEmpty = g_socketNotifiers.empty();
     g_socketNotifiers.insert({notifier->socket(), notifier});
     if (wasEmpty)
-        runOnMainThread([]{ setEmscriptenSocketCallbacks(); });
+        runOnMainThread([] { setEmscriptenSocketCallbacks(); });
 }
 
 void QEventDispatcherWasm::unregisterSocketNotifier(QSocketNotifier *notifier)
@@ -270,13 +352,13 @@ void QEventDispatcherWasm::unregisterSocketNotifier(QSocketNotifier *notifier)
     }
 
     if (g_socketNotifiers.empty())
-        runOnMainThread([]{ clearEmscriptenSocketCallbacks(); });
+        runOnMainThread([] { clearEmscriptenSocketCallbacks(); });
 }
 
-void QEventDispatcherWasm::registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object)
+void QEventDispatcherWasm::registerTimer(Qt::TimerId timerId, Duration interval, Qt::TimerType timerType, QObject *object)
 {
 #ifndef QT_NO_DEBUG
-    if (timerId < 1 || interval < 0 || !object) {
+    if (qToUnderlying(timerId) < 1 || interval < 0ns || !object) {
         qWarning("QEventDispatcherWasm::registerTimer: invalid arguments");
         return;
     } else if (object->thread() != thread() || thread() != QThread::currentThread()) {
@@ -285,16 +367,16 @@ void QEventDispatcherWasm::registerTimer(int timerId, qint64 interval, Qt::Timer
         return;
     }
 #endif
-    qCDebug(lcEventDispatcherTimers) << "registerTimer" << timerId << interval << timerType << object;
+    qCDebug(lcEventDispatcherTimers) << "registerTimer" << int(timerId) << interval << timerType << object;
 
     m_timerInfo->registerTimer(timerId, interval, timerType, object);
     updateNativeTimer();
 }
 
-bool QEventDispatcherWasm::unregisterTimer(int timerId)
+bool QEventDispatcherWasm::unregisterTimer(Qt::TimerId timerId)
 {
 #ifndef QT_NO_DEBUG
-    if (timerId < 1) {
+    if (qToUnderlying(timerId) < 1) {
         qWarning("QEventDispatcherWasm::unregisterTimer: invalid argument");
         return false;
     } else if (thread() != QThread::currentThread()) {
@@ -304,7 +386,7 @@ bool QEventDispatcherWasm::unregisterTimer(int timerId)
     }
 #endif
 
-    qCDebug(lcEventDispatcherTimers) << "unregisterTimer" << timerId;
+    qCDebug(lcEventDispatcherTimers) << "unregisterTimer" << int(timerId);
 
     bool ans = m_timerInfo->unregisterTimer(timerId);
     updateNativeTimer();
@@ -331,22 +413,22 @@ bool QEventDispatcherWasm::unregisterTimers(QObject *object)
     return ans;
 }
 
-QList<QAbstractEventDispatcher::TimerInfo>
-QEventDispatcherWasm::registeredTimers(QObject *object) const
+QList<QAbstractEventDispatcher::TimerInfoV2>
+QEventDispatcherWasm::timersForObject(QObject *object) const
 {
 #ifndef QT_NO_DEBUG
     if (!object) {
         qWarning("QEventDispatcherWasm:registeredTimers: invalid argument");
-        return QList<TimerInfo>();
+        return {};
     }
 #endif
 
     return m_timerInfo->registeredTimers(object);
 }
 
-int QEventDispatcherWasm::remainingTime(int timerId)
+QEventDispatcherWasm::Duration QEventDispatcherWasm::remainingTime(Qt::TimerId timerId) const
 {
-    return m_timerInfo->timerRemainingTime(timerId);
+    return m_timerInfo->remainingDuration(timerId);
 }
 
 void QEventDispatcherWasm::interrupt()
@@ -362,7 +444,9 @@ void QEventDispatcherWasm::wakeUp()
     // event loop. Make sure the thread is unblocked or make it
     // process events.
     bool wasBlocked = wakeEventDispatcherThread();
-    if (!wasBlocked && isMainThreadEventDispatcher()) {
+    // JSPI does not need a scheduled call to processPostedEvents, as the stack is not unwound
+    // at startup.
+    if (!qstdweb::haveJspi() && !wasBlocked && isMainThreadEventDispatcher()) {
         {
             LOCK_GUARD(m_mutex);
             if (m_pendingProcessEvents)
@@ -370,7 +454,7 @@ void QEventDispatcherWasm::wakeUp()
             m_pendingProcessEvents = true;
         }
         runOnMainThreadAsync([this](){
-            QEventDispatcherWasm::callProcessEvents(this);
+            QEventDispatcherWasm::callProcessPostedEvents(this);
         });
     }
 }
@@ -385,10 +469,14 @@ void QEventDispatcherWasm::handleApplicationExec()
     // Note that we don't use asyncify here: Emscripten supports one level of
     // asyncify only and we want to reserve that for dialog exec() instead of
     // using it for the one qApp exec().
-    const bool simulateInfiniteLoop = true;
-    emscripten_set_main_loop([](){
-        emscripten_pause_main_loop();
-    }, 0, simulateInfiniteLoop);
+    // When JSPI is used, awaited async calls are allowed to be nested, so we
+    // proceed normally.
+    if (!qstdweb::haveJspi()) {
+        const bool simulateInfiniteLoop = true;
+        emscripten_set_main_loop([](){
+            emscripten_pause_main_loop();
+        }, 0, simulateInfiniteLoop);
+    }
 }
 
 void QEventDispatcherWasm::handleDialogExec()
@@ -414,7 +502,12 @@ bool QEventDispatcherWasm::wait(int timeout)
     if (isSecondaryThreadEventDispatcher()) {
         std::unique_lock<std::mutex> lock(m_mutex);
 
-        m_wakeUpCalled = false;
+        // If wakeUp() was called there might be pending events in the event
+        // queue which should be processed. Don't block, instead return
+        // so that the event loop can spin and call processEvents() again.
+        if (m_wakeUpCalled)
+            return true;
+
         auto wait_time = timeout > 0 ? timeout * 1ms : std::chrono::duration<int, std::micro>::max();
         bool wakeUpCalled = m_moreEvents.wait_for(lock, wait_time, [=] { return m_wakeUpCalled; });
         return wakeUpCalled;
@@ -426,10 +519,14 @@ bool QEventDispatcherWasm::wait(int timeout)
         if (timeout > 0)
             qWarning() << "QEventDispatcherWasm asyncify wait with timeout is not supported; timeout will be ignored"; // FIXME
 
-        bool didSuspend = qt_asyncify_suspend();
-        if (!didSuspend) {
-            qWarning("QEventDispatcherWasm: current thread is already suspended; could not asyncify wait for events");
-            return false;
+        if (useJspi()) {
+            qt_jspi_suspend_js();
+        } else {
+            bool didSuspend = qt_asyncify_suspend();
+            if (!didSuspend) {
+                qWarning("QEventDispatcherWasm: current thread is already suspended; could not asyncify wait for events");
+                return false;
+            }
         }
         return true;
     } else {
@@ -453,16 +550,27 @@ bool QEventDispatcherWasm::wakeEventDispatcherThread()
     }
 #endif
     Q_ASSERT(isMainThreadEventDispatcher());
-    if (g_is_asyncify_suspended) {
-        runOnMainThread([]{ qt_asyncify_resume(); });
-        return true;
+    if (useJspi()) {
+
+#if QT_CONFIG(thread)
+        return qstdweb::runTaskOnMainThread<bool>(
+                []() { return qt_jspi_can_resume_js() && qt_jspi_resume_js(); }, &g_proxyingQueue);
+#else
+        return qstdweb::runTaskOnMainThread<bool>(
+                []() { return qt_jspi_can_resume_js() && qt_jspi_resume_js(); });
+#endif
+
+    } else {
+        if (!g_is_asyncify_suspended)
+            return false;
+        runOnMainThread([]() { qt_asyncify_resume(); });
     }
-    return false;
+    return true;
 }
 
 // Process event activation callbacks for the main thread event dispatcher.
 // Must be called on the main thread.
-void QEventDispatcherWasm::callProcessEvents(void *context)
+void QEventDispatcherWasm::callProcessPostedEvents(void *context)
 {
     Q_ASSERT(emscripten_is_main_runtime_thread());
 
@@ -470,7 +578,7 @@ void QEventDispatcherWasm::callProcessEvents(void *context)
     if (!g_mainThreadEventDispatcher)
         return;
 
-    // In the unlikely event that we get a callProcessEvents() call for
+    // In the unlikely event that we get a callProcessPostedEvents() call for
     // a previous main thread event dispatcher (i.e. the QApplication
     // object was deleted and created again): just ignore it and return.
     if (context != g_mainThreadEventDispatcher)
@@ -480,7 +588,14 @@ void QEventDispatcherWasm::callProcessEvents(void *context)
         LOCK_GUARD(g_mainThreadEventDispatcher->m_mutex);
         g_mainThreadEventDispatcher->m_pendingProcessEvents = false;
     }
-    g_mainThreadEventDispatcher->processEvents(QEventLoop::AllEvents);
+
+    g_mainThreadEventDispatcher->processPostedEvents();
+}
+
+bool QEventDispatcherWasm::processPostedEvents()
+{
+    QCoreApplication::sendPostedEvents();
+    return false;
 }
 
 void QEventDispatcherWasm::processTimers()
@@ -504,34 +619,32 @@ void QEventDispatcherWasm::updateNativeTimer()
     // access to m_timerInfo), and then call native API to set the new
     // wakeup time on the main thread.
 
-    auto timespecToNanosec = [](timespec ts) -> uint64_t {
-        return ts.tv_sec * 1000 + ts.tv_nsec / (1000 * 1000);
-    };
-    timespec toWait;
-    bool hasTimer = m_timerInfo->timerWait(toWait);
-    uint64_t currentTime = timespecToNanosec(m_timerInfo->currentTime);
-    uint64_t toWaitDuration = timespecToNanosec(toWait);
-    uint64_t newTargetTime = currentTime + toWaitDuration;
-
-    auto maintainNativeTimer = [this, hasTimer, toWaitDuration, newTargetTime]() {
+    const std::optional<std::chrono::nanoseconds> wait = m_timerInfo->timerWait();
+    const auto toWaitDuration = duration_cast<milliseconds>(wait.value_or(0ms));
+    const auto newTargetTimePoint = m_timerInfo->currentTime + toWaitDuration;
+    auto epochNsecs = newTargetTimePoint.time_since_epoch();
+    auto newTargetTime = std::chrono::duration_cast<std::chrono::milliseconds>(epochNsecs);
+    auto maintainNativeTimer = [this, wait, toWaitDuration, newTargetTime]() {
         Q_ASSERT(emscripten_is_main_runtime_thread());
 
-        if (!hasTimer) {
+        if (!wait) {
             if (m_timerId > 0) {
                 emscripten_clear_timeout(m_timerId);
                 m_timerId = 0;
-                m_timerTargetTime = 0;
+                m_timerTargetTime = 0ms;
             }
             return;
         }
 
-        if (m_timerTargetTime != 0 && newTargetTime >= m_timerTargetTime)
+        if (m_timerTargetTime != 0ms && newTargetTime >= m_timerTargetTime)
             return; // existing timer is good
 
         qCDebug(lcEventDispatcherTimers)
-                << "Created new native timer with wait" << toWaitDuration << "timeout" << newTargetTime;
+                << "Created new native timer with wait" << toWaitDuration.count() << "ms"
+                << "timeout" << newTargetTime.count() << "ms";
         emscripten_clear_timeout(m_timerId);
-        m_timerId = emscripten_set_timeout(&QEventDispatcherWasm::callProcessTimers, toWaitDuration, this);
+        m_timerId = emscripten_set_timeout(&QEventDispatcherWasm::callProcessTimers,
+                                           toWaitDuration.count(), this);
         m_timerTargetTime = newTargetTime;
     };
 
@@ -545,8 +658,8 @@ void QEventDispatcherWasm::updateNativeTimer()
         // and keep the mutex locked while updating the native timer to
         // prevent it from being deleted.
         LOCK_GUARD(g_staticDataMutex);
-        if (isValidEventDispatcherPointer(this))
-            maintainNativeTimer();
+            if (isValidEventDispatcherPointer(this))
+                maintainNativeTimer();
     });
 }
 
@@ -562,7 +675,7 @@ void QEventDispatcherWasm::callProcessTimers(void *context)
 
     // Process timers on this thread if this is the main event dispatcher
     if (reinterpret_cast<QEventDispatcherWasm *>(context) == g_mainThreadEventDispatcher) {
-        g_mainThreadEventDispatcher->m_timerTargetTime = 0;
+        g_mainThreadEventDispatcher->m_timerTargetTime = 0ms;
         g_mainThreadEventDispatcher->processTimers();
         return;
     }
@@ -572,7 +685,7 @@ void QEventDispatcherWasm::callProcessTimers(void *context)
     std::lock_guard<std::mutex> lock(g_staticDataMutex);
     if (g_secondaryThreadEventDispatchers.contains(context)) {
         QEventDispatcherWasm *eventDispatcher = reinterpret_cast<QEventDispatcherWasm *>(context);
-        eventDispatcher->m_timerTargetTime = 0;
+        eventDispatcher->m_timerTargetTime = 0ms;
         eventDispatcher->m_processTimers = true;
         eventDispatcher->wakeUp();
     }
@@ -789,6 +902,47 @@ void QEventDispatcherWasm::socketSelect(int timeout, int socket, bool waitForRea
 }
 
 namespace {
+    int g_startupTasks = 0;
+}
+
+// The following functions manages sending the "qtLoaded" event/callback
+// from qtloader.js on startup, once Qt initialization has been completed
+// and the application is ready to display the first frame. This can be
+// either as soon as the event loop is running, or later, if additional
+// startup tasks (e.g. local font loading) have been registered.
+
+void QEventDispatcherWasm::registerStartupTask()
+{
+    ++g_startupTasks;
+}
+
+void QEventDispatcherWasm::completeStarupTask()
+{
+    --g_startupTasks;
+    callOnLoadedIfRequired();
+}
+
+void QEventDispatcherWasm::callOnLoadedIfRequired()
+{
+    if (g_startupTasks > 0)
+        return;
+
+    static bool qtLoadedCalled = false;
+    if (qtLoadedCalled)
+        return;
+    qtLoadedCalled = true;
+}
+
+void QEventDispatcherWasm::onLoaded()
+{
+    // TODO: call qtloader.js onLoaded from here, in order to delay
+    // hiding the "Loading..." message until the app is ready to paint
+    // the first frame. Currently onLoaded must be called early before
+    // main() in order to ensure that the screen/container elements
+    // have valid geometry at startup.
+}
+
+namespace {
     void trampoline(void *context) {
 
         auto async_fn = [](void *context){
@@ -807,24 +961,19 @@ void QEventDispatcherWasm::run(std::function<void(void)> fn)
     fn();
 }
 
+void QEventDispatcherWasm::runOnMainThread(std::function<void(void)> fn)
+{
+#if QT_CONFIG(thread)
+    qstdweb::runTaskOnMainThread<void>(fn, &g_proxyingQueue);
+#else
+    qstdweb::runTaskOnMainThread<void>(fn);
+#endif
+}
+
 // Runs a function asynchronously. Main thread only.
 void QEventDispatcherWasm::runAsync(std::function<void(void)> fn)
 {
     trampoline(new std::function<void(void)>(fn));
-}
-
-// Runs a function on the main thread. The function runs synchronusly if
-// the calling thread is then main thread.
-void QEventDispatcherWasm::runOnMainThread(std::function<void(void)> fn)
-{
-#if QT_CONFIG(thread)
-    if (!emscripten_is_main_runtime_thread()) {
-        void *context = new std::function<void(void)>(fn);
-        emscripten_async_run_in_main_runtime_thread_(EM_FUNC_SIG_VI, reinterpret_cast<void *>(trampoline), context);
-        return;
-    }
-#endif
-    fn();
 }
 
 // Runs a function on the main thread. The function always runs asynchronously,
@@ -834,7 +983,9 @@ void QEventDispatcherWasm::runOnMainThreadAsync(std::function<void(void)> fn)
     void *context = new std::function<void(void)>(fn);
 #if QT_CONFIG(thread)
     if (!emscripten_is_main_runtime_thread()) {
-        emscripten_async_run_in_main_runtime_thread_(EM_FUNC_SIG_VI, reinterpret_cast<void *>(trampoline), context);
+        g_proxyingQueue.proxyAsync(g_mainThread, [context]{
+            trampoline(context);
+        });
         return;
     }
 #endif
@@ -842,3 +993,5 @@ void QEventDispatcherWasm::runOnMainThreadAsync(std::function<void(void)> fn)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qeventdispatcher_wasm_p.cpp"

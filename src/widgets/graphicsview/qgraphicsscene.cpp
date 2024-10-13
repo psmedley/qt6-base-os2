@@ -216,6 +216,8 @@
 #include <private/qgesturemanager_p.h>
 #include <private/qpathclipper_p.h>
 
+#include <QtCore/qpointer.h>
+
 // #define GESTURE_DEBUG
 #ifndef GESTURE_DEBUG
 # define DEBUG if (0) qDebug
@@ -1004,7 +1006,7 @@ void QGraphicsScenePrivate::ungrabMouse(QGraphicsItem *item, bool itemIsDying)
 void QGraphicsScenePrivate::clearMouseGrabber()
 {
     if (!mouseGrabberItems.isEmpty())
-        mouseGrabberItems.first()->ungrabMouse();
+        mouseGrabberItems.constFirst()->ungrabMouse();
     lastMouseGrabberItem = nullptr;
 }
 
@@ -2417,16 +2419,12 @@ void QGraphicsScene::addItem(QGraphicsItem *item)
         return;
     }
 
-    // QDeclarativeItems do not rely on initial itemChanged message, as the componentComplete
-    // function allows far more opportunity for delayed-construction optimization.
-    if (!item->d_ptr->isDeclarativeItem) {
-        if (d->unpolishedItems.isEmpty()) {
-            QMetaMethod method = metaObject()->method(d->polishItemsIndex);
-            method.invoke(this, Qt::QueuedConnection);
-        }
-        d->unpolishedItems.append(item);
-        item->d_ptr->pendingPolish = true;
+    if (d->unpolishedItems.isEmpty()) {
+        QMetaMethod method = metaObject()->method(d->polishItemsIndex);
+        method.invoke(this, Qt::QueuedConnection);
     }
+    d->unpolishedItems.append(item);
+    item->d_ptr->pendingPolish = true;
 
     // Detach this item from its parent if the parent's scene is different
     // from this scene.
@@ -2888,7 +2886,7 @@ void QGraphicsScene::setFocusItem(QGraphicsItem *item, Qt::FocusReason focusReas
 
 /*!
     Returns \c true if the scene has focus; otherwise returns \c false. If the scene
-    has focus, it will will forward key events from QKeyEvent to any item that
+    has focus, it will forward key events from QKeyEvent to any item that
     has focus.
 
     \sa setFocus(), setFocusItem()
@@ -3255,6 +3253,7 @@ bool QGraphicsScene::event(QEvent *event)
         // ### this should only be cleared if we received a new mouse move event,
         // which relies on us fixing the replay mechanism in QGraphicsView.
         d->cachedItemsUnderMouse.clear();
+        break;
     default:
         break;
     }

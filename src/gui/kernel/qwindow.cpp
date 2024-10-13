@@ -27,6 +27,8 @@
 #endif // QT_CONFIG(draganddrop)
 
 #include <private/qevent_p.h>
+#include <private/qeventpoint_p.h>
+#include <private/qguiapplication_p.h>
 
 #include <QtCore/QTimer>
 #include <QtCore/QDebug>
@@ -36,6 +38,8 @@
 #include <qpa/qplatformwindow_p.h>
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_LOGGING_CATEGORY(lcPopup)
 
 /*!
     \class QWindow
@@ -128,7 +132,7 @@ QWindow::QWindow(QScreen *targetScreen)
     , QSurface(QSurface::Window)
 {
     Q_D(QWindow);
-    d->init(targetScreen);
+    d->init(nullptr, targetScreen);
 }
 
 static QWindow *nonDesktopParent(QWindow *parent)
@@ -169,11 +173,11 @@ QWindow::QWindow(QWindow *parent)
     \sa setParent()
 */
 QWindow::QWindow(QWindowPrivate &dd, QWindow *parent)
-    : QObject(dd, nonDesktopParent(parent))
+    : QObject(dd, nullptr)
     , QSurface(QSurface::Window)
 {
     Q_D(QWindow);
-    d->init();
+    d->init(nonDesktopParent(parent));
 }
 
 /*!
@@ -183,7 +187,10 @@ QWindow::~QWindow()
 {
     Q_D(QWindow);
     d->destroy();
+    // Decouple from parent before window goes under
+    setParent(nullptr);
     QGuiApplicationPrivate::window_list.removeAll(this);
+    QGuiApplicationPrivate::popup_list.removeAll(this);
     if (!QGuiApplicationPrivate::is_app_closing)
         QGuiApplicationPrivate::instance()->modalWindowList.removeOne(this);
 
@@ -206,15 +213,19 @@ QWindowPrivate::QWindowPrivate()
 QWindowPrivate::~QWindowPrivate()
     = default;
 
-void QWindowPrivate::init(QScreen *targetScreen)
+void QWindowPrivate::init(QWindow *parent, QScreen *targetScreen)
 {
     Q_Q(QWindow);
+
+    q->QObject::setParent(parent);
 
     isWindow = true;
     parentWindow = static_cast<QWindow *>(q->QObject::parent());
 
+    QScreen *connectScreen = targetScreen ? targetScreen : QGuiApplication::primaryScreen();
+
     if (!parentWindow)
-        connectToScreen(targetScreen ? targetScreen : QGuiApplication::primaryScreen());
+        connectToScreen(connectScreen);
 
     // If your application aborts here, you are probably creating a QWindow
     // before the screen list is populated.
@@ -224,6 +235,27 @@ void QWindowPrivate::init(QScreen *targetScreen)
     QGuiApplicationPrivate::window_list.prepend(q);
 
     requestedFormat = QSurfaceFormat::defaultFormat();
+    devicePixelRatio = connectScreen->devicePixelRatio();
+
+    QObject::connect(q, &QWindow::screenChanged, q, [q, this](QScreen *){
+        // We may have changed scaling; trigger resize event if needed,
+        // except on Windows, where we send resize events during WM_DPICHANGED
+        // event handling. FIXME: unify DPI change handling across all platforms.
+#ifndef Q_OS_WIN
+        if (q->handle()) {
+            QWindowSystemInterfacePrivate::GeometryChangeEvent gce(q, QHighDpi::fromNativePixels(q->handle()->geometry(), q));
+            QGuiApplicationPrivate::processGeometryChangeEvent(&gce);
+        }
+#else
+        Q_UNUSED(q);
+#endif
+        updateDevicePixelRatio();
+    });
+
+    if (parentWindow) {
+        QChildWindowEvent childAddedEvent(QEvent::ChildWindowAdded, q);
+        QCoreApplication::sendEvent(parentWindow, &childAddedEvent);
+    }
 }
 
 /*!
@@ -384,6 +416,13 @@ void QWindowPrivate::setVisible(bool visible)
         QGuiApplicationPrivate::updateBlockedStatus(q);
     }
 
+    if (q->type() == Qt::Popup) {
+        if (visible)
+            QGuiApplicationPrivate::activatePopup(q);
+        else
+            QGuiApplicationPrivate::closePopup(q);
+    }
+
 #ifndef QT_NO_CURSOR
     if (visible && (hasCursor || QGuiApplication::overrideCursor()))
         applyCursor();
@@ -494,7 +533,9 @@ void QWindowPrivate::setTopLevelScreen(QScreen *newScreen, bool recreate)
     }
 }
 
-void QWindowPrivate::create(bool recursive, WId nativeHandle)
+static constexpr auto kForeignWindowId = "_q_foreignWinId";
+
+void QWindowPrivate::create(bool recursive)
 {
     Q_Q(QWindow);
     if (platformWindow)
@@ -508,12 +549,21 @@ void QWindowPrivate::create(bool recursive, WId nativeHandle)
     if (q->parent())
         q->parent()->create();
 
+    if (platformWindow) {
+        // Creating the parent window will end up creating any child window
+        // that was already visible, via setVisible. If this applies to us,
+        // we will already have a platform window at this point.
+        return;
+    }
+
     // QPlatformWindow will poll geometry() during construction below. Set the
     // screen here so that high-dpi scaling will use the correct scale factor.
     if (q->isTopLevel()) {
         if (QScreen *screen = screenForGeometry(geometry))
             setTopLevelScreen(screen, false);
     }
+
+    const WId nativeHandle = q->property(kForeignWindowId).value<WId>();
 
     QPlatformIntegration *platformIntegration = QGuiApplicationPrivate::platformIntegration();
     platformWindow = nativeHandle ? platformIntegration->createForeignWindow(q, nativeHandle)
@@ -549,6 +599,8 @@ void QWindowPrivate::create(bool recursive, WId nativeHandle)
 
     QPlatformSurfaceEvent e(QPlatformSurfaceEvent::SurfaceCreated);
     QGuiApplication::sendEvent(q, &e);
+
+    updateDevicePixelRatio();
 
     if (needsUpdate)
         q->requestUpdate();
@@ -594,8 +646,7 @@ void QWindowPrivate::setMinOrMaxSize(QSize *oldSizeMember, const QSize &size,
         || minimumSize.height() <= maximumSize.height()) {
         const QSize currentSize = q->size();
         const QSize boundedSize = currentSize.expandedTo(minimumSize).boundedTo(maximumSize);
-        if (currentSize != boundedSize)
-            q->resize(boundedSize);
+        q->resize(boundedSize);
     }
 }
 
@@ -668,7 +719,7 @@ bool QWindow::isVisible() const
     into an actual native surface. However, the window remains hidden until setVisible() is called.
 
     Note that it is not usually necessary to call this function directly, as it will be implicitly
-    called by show(), setVisible(), and other functions that require access to the platform
+    called by show(), setVisible(), winId(), and other functions that require access to the platform
     resources.
 
     Call destroy() to free the platform resources if necessary.
@@ -745,6 +796,10 @@ void QWindow::setParent(QWindow *parent)
         return;
     }
 
+    QEvent parentAboutToChangeEvent(QEvent::ParentWindowAboutToChange);
+    QCoreApplication::sendEvent(this, &parentAboutToChangeEvent);
+
+    const auto previousParent = d->parentWindow;
     QObject::setParent(parent);
     d->parentWindow = parent;
 
@@ -767,6 +822,19 @@ void QWindow::setParent(QWindow *parent)
     }
 
     QGuiApplicationPrivate::updateBlockedStatus(this);
+
+    if (previousParent) {
+        QChildWindowEvent childRemovedEvent(QEvent::ChildWindowRemoved, this);
+        QCoreApplication::sendEvent(previousParent, &childRemovedEvent);
+    }
+
+    if (parent) {
+        QChildWindowEvent childAddedEvent(QEvent::ChildWindowAdded, this);
+        QCoreApplication::sendEvent(parent, &childAddedEvent);
+    }
+
+    QEvent parentChangedEvent(QEvent::ParentWindowChange);
+    QCoreApplication::sendEvent(this, &parentChangedEvent);
 }
 
 /*!
@@ -1333,14 +1401,39 @@ Qt::ScreenOrientation QWindow::contentOrientation() const
 qreal QWindow::devicePixelRatio() const
 {
     Q_D(const QWindow);
+    return d->devicePixelRatio;
+}
 
-    // If there is no platform window use the associated screen's devicePixelRatio,
-    // which typically is the primary screen and will be correct for single-display
-    // systems (a very common case).
-    if (!d->platformWindow)
-        return screen()->devicePixelRatio();
+/*
+    Updates the cached devicePixelRatio value by polling for a new value.
+    Sends QEvent::DevicePixelRatioChange to the window if the DPR has changed.
+    Returns true if the DPR was changed.
+*/
+bool QWindowPrivate::updateDevicePixelRatio()
+{
+    Q_Q(QWindow);
 
-    return d->platformWindow->devicePixelRatio() * QHighDpiScaling::factor(this);
+    const qreal newDevicePixelRatio = [this, q]{
+        if (platformWindow)
+            return platformWindow->devicePixelRatio() * QHighDpiScaling::factor(q);
+
+        // If there is no platform window use the associated screen's devicePixelRatio,
+        // which typically is the primary screen and will be correct for single-display
+        // systems (a very common case).
+        if (auto *screen = q->screen())
+            return screen->devicePixelRatio();
+
+        // In some cases we are running without any QScreens, so fall back to QGuiApp
+        return qGuiApp->devicePixelRatio();
+    }();
+
+    if (newDevicePixelRatio == devicePixelRatio)
+        return false;
+
+    devicePixelRatio = newDevicePixelRatio;
+    QEvent dprChangeEvent(QEvent::DevicePixelRatioChange);
+    QGuiApplication::sendEvent(q, &dprChangeEvent);
+    return true;
 }
 
 Qt::WindowState QWindowPrivate::effectiveState(Qt::WindowStates state)
@@ -1611,20 +1704,18 @@ void QWindow::setY(int arg)
     \property QWindow::width
     \brief the width of the window's geometry
 */
-void QWindow::setWidth(int arg)
+void QWindow::setWidth(int w)
 {
-    if (width() != arg)
-        resize(arg, height());
+    resize(w, height());
 }
 
 /*!
     \property QWindow::height
     \brief the height of the window's geometry
 */
-void QWindow::setHeight(int arg)
+void QWindow::setHeight(int h)
 {
-    if (height() != arg)
-        resize(width(), arg);
+    resize(width(), h);
 }
 
 /*!
@@ -1946,12 +2037,16 @@ void QWindow::resize(int w, int h)
 void QWindow::resize(const QSize &newSize)
 {
     Q_D(QWindow);
+
+    const QSize oldSize = size();
+    if (newSize == oldSize)
+        return;
+
     d->positionPolicy = QWindowPrivate::WindowFrameExclusive;
     if (d->platformWindow) {
         d->platformWindow->setGeometry(
             QHighDpi::toNativeWindowGeometry(QRect(position(), newSize), this));
     } else {
-        const QSize oldSize = d->geometry.size();
         d->geometry.setSize(newSize);
         if (newSize.width() != oldSize.width())
             emit widthChanged(newSize.width());
@@ -2028,6 +2123,11 @@ void QWindowPrivate::destroy()
     resizeEventPending = true;
     receivedExpose = false;
     exposed = false;
+
+    // Position set via setFramePosition will have propagated back to
+    // our geometry member as client geometry, so when creating the
+    // window again we need to ensure the policy matches that.
+    positionPolicy = QWindowPrivate::WindowFrameExclusive;
 }
 
 /*!
@@ -2160,20 +2260,26 @@ QObject *QWindow::focusObject() const
 /*!
     Shows the window.
 
-    This is equivalent to calling showFullScreen(), showMaximized(), or showNormal(),
+    For child windows, this is equivalent to calling showNormal().
+    Otherwise, it is equivalent to calling showFullScreen(), showMaximized(), or showNormal(),
     depending on the platform's default behavior for the window type and flags.
 
     \sa showFullScreen(), showMaximized(), showNormal(), hide(), QStyleHints::showIsFullScreen(), flags()
 */
 void QWindow::show()
 {
-    Qt::WindowState defaultState = QGuiApplicationPrivate::platformIntegration()->defaultWindowState(d_func()->windowFlags);
-    if (defaultState == Qt::WindowFullScreen)
-        showFullScreen();
-    else if (defaultState == Qt::WindowMaximized)
-        showMaximized();
-    else
+    if (parent()) {
         showNormal();
+    } else {
+        const auto *platformIntegration = QGuiApplicationPrivate::platformIntegration();
+        Qt::WindowState defaultState = platformIntegration->defaultWindowState(d_func()->windowFlags);
+        if (defaultState == Qt::WindowFullScreen)
+            showFullScreen();
+        else if (defaultState == Qt::WindowMaximized)
+            showMaximized();
+        else
+            showNormal();
+    }
 }
 
 /*!
@@ -2270,8 +2376,13 @@ bool QWindow::close()
     if (!isTopLevel())
         return false;
 
-    if (!d->platformWindow)
+    if (!d->platformWindow) {
+        // dock widgets can transition back and forth to being popups;
+        // avoid getting stuck
+        if (QGuiApplicationPrivate::activePopupWindow() == this)
+            QGuiApplicationPrivate::closePopup(this);
         return true;
+    }
 
     // The window might be deleted during close,
     // as a result of delivering the close event.
@@ -2309,6 +2420,52 @@ bool QWindowPrivate::treatAsVisible() const
 {
     Q_Q(const QWindow);
     return q->isVisible();
+}
+
+/*! \internal
+    Returns the popup window that has consumed \a event, if any.
+    \a activePopupOnPress is the window that we have observed previously handling the press.
+*/
+const QWindow *QWindowPrivate::forwardToPopup(QEvent *event, const QWindow */*activePopupOnPress*/)
+{
+    Q_Q(const QWindow);
+    qCDebug(lcPopup) << "checking for popup alternative to" << q << "for" << event
+                     << "active popup?" << QGuiApplicationPrivate::activePopupWindow();
+    QWindow *ret = nullptr;
+    if (QWindow *popupWindow = QGuiApplicationPrivate::activePopupWindow()) {
+        if (q == popupWindow)
+            return nullptr; // avoid infinite recursion: we're already handling it
+        if (event->isPointerEvent()) {
+            // detach eventPoints before modifying them
+            QScopedPointer<QPointerEvent> pointerEvent(static_cast<QPointerEvent *>(event)->clone());
+            for (int i = 0; i < pointerEvent->pointCount(); ++i) {
+                QEventPoint &eventPoint = pointerEvent->point(i);
+                const QPoint globalPos = eventPoint.globalPosition().toPoint();
+                const QPointF mapped = popupWindow->mapFromGlobal(globalPos);
+                QMutableEventPoint::setPosition(eventPoint, mapped);
+                QMutableEventPoint::setScenePosition(eventPoint, mapped);
+            }
+
+            /*  Popups are expected to be able to directly handle the
+                drag-release sequence after pressing to open, as well as
+                any other mouse events that occur within the popup's bounds. */
+            if (QCoreApplication::sendSpontaneousEvent(popupWindow, pointerEvent.get())) {
+                event->setAccepted(pointerEvent->isAccepted());
+                if (pointerEvent->isAccepted())
+                    ret = popupWindow;
+            }
+            qCDebug(lcPopup) << q << "forwarded" << event->type() <<  "to popup" << popupWindow
+                             << "handled?" << (ret != nullptr) << event->isAccepted();
+            return ret;
+        } else if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
+            if (QCoreApplication::sendSpontaneousEvent(popupWindow, event))
+                ret = popupWindow;
+            qCDebug(lcPopup) << q << "forwarded" << event->type() <<  "to popup" << popupWindow
+                             << "handled?" << (ret != nullptr) << event->isAccepted();
+            return ret;
+        }
+    }
+    return ret;
 }
 
 /*!
@@ -2563,16 +2720,14 @@ bool QWindow::event(QEvent *ev)
         This logic could be simplified by always synthesizing events in
         QGuiApplicationPrivate, or perhaps even in each QPA plugin. See QTBUG-93486.
     */
-    static const QEvent::Type contextMenuTrigger =
-        QGuiApplicationPrivate::platformTheme()->themeHint(QPlatformTheme::ContextMenuOnMouseRelease).toBool() ?
-        QEvent::MouseButtonRelease : QEvent::MouseButtonPress;
     auto asMouseEvent = [](QEvent *ev) {
         const auto t = ev->type();
         return t == QEvent::MouseButtonPress || t == QEvent::MouseButtonRelease
                 ? static_cast<QMouseEvent *>(ev) : nullptr ;
     };
-    if (QMouseEvent *me = asMouseEvent(ev); me &&
-        ev->type() == contextMenuTrigger && me->button() == Qt::RightButton) {
+    if (QMouseEvent *me = asMouseEvent(ev);
+        me && ev->type() == QGuiApplicationPrivate::contextMenuEventType()
+        && me->button() == Qt::RightButton) {
         QContextMenuEvent e(QContextMenuEvent::Mouse, me->position().toPoint(),
                             me->globalPosition().toPoint(), me->modifiers());
         QGuiApplication::sendEvent(this, &e);
@@ -2584,11 +2739,13 @@ bool QWindow::event(QEvent *ev)
 /*!
     Schedules a QEvent::UpdateRequest event to be delivered to this window.
 
-    The event is delivered in sync with the display vsync on platforms
-    where this is possible. Otherwise, the event is delivered after a
-    delay of 5 ms. The additional time is there to give the event loop
-    a bit of idle time to gather system events, and can be overridden
-    using the QT_QPA_UPDATE_IDLE_TIME environment variable.
+    The event is delivered in sync with the display vsync on platforms where
+    this is possible. Otherwise, the event is delivered after a delay of at
+    most 5 ms. If the window's associated screen reports a
+    \l{QScreen::refreshRate()}{refresh rate} higher than 60 Hz, the interval is
+    scaled down to a value smaller than 5. The additional time is there to give
+    the event loop a bit of idle time to gather system events, and can be
+    overridden using the QT_QPA_UPDATE_IDLE_TIME environment variable.
 
     When driving animations, this function should be called once after drawing
     has completed. Calling this function multiple times will result in a single
@@ -2777,7 +2934,12 @@ QPointF QWindow::mapToGlobal(const QPointF &pos) const
     // Map the position (and the window's global position) to native coordinates, perform
     // the addition, and then map back to device independent coordinates.
     QPointF nativeLocalPos = QHighDpi::toNativeLocalPosition(pos, this);
-    QPointF nativeWindowGlobalPos = QHighDpi::toNativeGlobalPosition(QPointF(d->globalPosition()), this);
+    // Get the native window position directly from the platform window
+    // if available (it can be null if the window hasn't been shown yet),
+    // or fall back to scaling the QWindow position.
+    QPointF nativeWindowGlobalPos = d->platformWindow
+        ? d->platformWindow->mapToGlobal(QPoint(0,0)).toPointF()
+        : QHighDpi::toNativeGlobalPosition(QPointF(d->globalPosition()), this);
     QPointF nativeGlobalPos = nativeLocalPos + nativeWindowGlobalPos;
     QPointF deviceIndependentGlobalPos = QHighDpi::fromNativeGlobalPosition(nativeGlobalPos, this);
     return deviceIndependentGlobalPos;
@@ -2815,7 +2977,12 @@ QPointF QWindow::mapFromGlobal(const QPointF &pos) const
     // Calculate local position in the native coordinate system. (See comment for the
     // corresponding mapToGlobal() code above).
     QPointF nativeGlobalPos = QHighDpi::toNativeGlobalPosition(pos, this);
-    QPointF nativeWindowGlobalPos = QHighDpi::toNativeGlobalPosition(QPointF(d->globalPosition()), this);
+    // Get the native window position directly from the platform window
+    // if available (it can be null if the window hasn't been shown yet),
+    // or fall back to scaling the QWindow position.
+    QPointF nativeWindowGlobalPos = d->platformWindow
+        ? d->platformWindow->mapToGlobal(QPoint(0,0)).toPointF()
+        : QHighDpi::toNativeGlobalPosition(QPointF(d->globalPosition()), this);
     QPointF nativeLocalPos = nativeGlobalPos - nativeWindowGlobalPos;
     QPointF deviceIndependentLocalPos = QHighDpi::fromNativeLocalPosition(nativeLocalPos, this);
     return deviceIndependentLocalPos;
@@ -2897,7 +3064,11 @@ QWindow *QWindow::fromWinId(WId id)
     }
 
     QWindow *window = new QWindow;
-    qt_window_private(window)->create(false, id);
+
+    // Persist the winId in a private property so that we
+    // can recreate the window after being destroyed.
+    window->setProperty(kForeignWindowId, id);
+    window->create();
 
     if (!window->handle()) {
         delete window;
@@ -3046,8 +3217,12 @@ void *QWindow::resolveInterface(const char *name, int revision) const
     QT_NATIVE_INTERFACE_RETURN_IF(QCocoaWindow, platformWindow);
 #endif
 
-#if defined(Q_OS_UNIX)
+#if QT_CONFIG(wayland)
     QT_NATIVE_INTERFACE_RETURN_IF(QWaylandWindow, platformWindow);
+#endif
+
+#if defined(Q_OS_WASM)
+    QT_NATIVE_INTERFACE_RETURN_IF(QWasmWindow, platformWindow);
 #endif
 
     return nullptr;

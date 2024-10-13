@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -133,6 +133,7 @@ private slots:
     void placeholderVisibility_data();
     void placeholderVisibility();
     void scrollBarSignals();
+    void dontCrashWithCss();
 
 private:
     void createSelection();
@@ -1829,7 +1830,7 @@ void tst_QPlainTextEdit::placeholderVisibility_data()
     QTest::addColumn<QList<SetupCommand>>("setupCommands");
     QTest::addColumn<bool>("placeholderVisible");
     QTest::addRow("no placeholder set + no text set")
-            << QList<SetupCommand>{} << true;
+            << QList<SetupCommand>{} << false;
     QTest::addRow("no placeholder set + text set or text set + no placeholder set")
             << QList<SetupCommand>{ SetContent } << false;
     QTest::addRow("no placeholder set + text set + empty text set")
@@ -1839,7 +1840,7 @@ void tst_QPlainTextEdit::placeholderVisibility_data()
             << QList<SetupCommand>{ ClearContent, SetContent }
             << false;
     QTest::addRow("empty placeholder set + no text set")
-            << QList<SetupCommand>{ ClearPlaceHolder } << true;
+            << QList<SetupCommand>{ ClearPlaceHolder } << false;
     QTest::addRow("empty placeholder set + text set")
             << QList<SetupCommand>{ ClearPlaceHolder, SetContent }
             << false;
@@ -1916,7 +1917,7 @@ void tst_QPlainTextEdit::placeholderVisibility()
 
     plainTextEdit.show();
     QVERIFY(QTest::qWaitForWindowExposed(&plainTextEdit));
-    QTRY_VERIFY(plainTextEdit_d->placeholderVisible == placeholderVisible);
+    QTRY_COMPARE(plainTextEdit_d->placeholderTextShown, placeholderVisible);
 }
 
 
@@ -1943,6 +1944,15 @@ void tst_QPlainTextEdit::scrollBarSignals()
     QTest::keyClick(vbar, Qt::Key_PageUp);
     QTRY_COMPARE(spy.count(), 5);
 }
+
+void tst_QPlainTextEdit::dontCrashWithCss()
+{
+    qApp->setStyleSheet("QWidget { font: 10pt; }");
+    QPlainTextEdit edit;
+    edit.show();
+    qApp->setStyleSheet(QString());
+}
+
 
 QTEST_MAIN(tst_QPlainTextEdit)
 #include "tst_qplaintextedit.moc"

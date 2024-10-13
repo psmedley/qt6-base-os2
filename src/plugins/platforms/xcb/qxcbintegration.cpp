@@ -93,10 +93,17 @@ static bool runningUnderDebugger()
 #endif
 }
 
+class QXcbUnixServices : public QGenericUnixServices
+{
+public:
+    QString portalWindowIdentifier(QWindow *window) override;
+};
+
+
 QXcbIntegration *QXcbIntegration::m_instance = nullptr;
 
 QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char **argv)
-    : m_services(new QGenericUnixServices)
+    : m_services(new QXcbUnixServices)
     , m_instanceName(nullptr)
     , m_canGrab(true)
     , m_defaultVisualId(UINT_MAX)
@@ -197,7 +204,7 @@ QPlatformPixmap *QXcbIntegration::createPlatformPixmap(QPlatformPixmap::PixelTyp
 QPlatformWindow *QXcbIntegration::createPlatformWindow(QWindow *window) const
 {
     QXcbGlIntegration *glIntegration = nullptr;
-    const bool isTrayIconWindow = QXcbWindow::isTrayIconWindow(window);;
+    const bool isTrayIconWindow = QXcbWindow::isTrayIconWindow(window);
     if (window->type() != Qt::Desktop && !isTrayIconWindow) {
         if (window->supportsOpenGL()) {
             glIntegration = connection()->glIntegration();
@@ -337,11 +344,12 @@ void QXcbIntegration::initialize()
     const auto defaultInputContext = "compose"_L1;
     // Perform everything that may potentially need the event dispatcher (timers, socket
     // notifiers) here instead of the constructor.
-    QString icStr = QPlatformInputContextFactory::requested();
-    if (icStr.isNull())
-        icStr = defaultInputContext;
-    m_inputContext.reset(QPlatformInputContextFactory::create(icStr));
-    if (!m_inputContext && icStr != defaultInputContext && icStr != "none"_L1)
+    auto icStrs = QPlatformInputContextFactory::requested();
+    if (icStrs.isEmpty())
+        icStrs = { defaultInputContext };
+    m_inputContext.reset(QPlatformInputContextFactory::create(icStrs));
+    if (!m_inputContext && !icStrs.contains(defaultInputContext)
+        && icStrs != QStringList{"none"_L1})
         m_inputContext.reset(QPlatformInputContextFactory::create(defaultInputContext));
 
     connection()->keyboard()->initialize();
@@ -422,14 +430,9 @@ QPlatformServices *QXcbIntegration::services() const
     return m_services.data();
 }
 
-Qt::KeyboardModifiers QXcbIntegration::queryKeyboardModifiers() const
+QPlatformKeyMapper *QXcbIntegration::keyMapper() const
 {
-    return m_connection->queryKeyboardModifiers();
-}
-
-QList<int> QXcbIntegration::possibleKeys(const QKeyEvent *e) const
-{
-    return m_connection->keyboard()->possibleKeys(e);
+    return m_connection->keyboard();
 }
 
 QStringList QXcbIntegration::themeNames() const
@@ -591,6 +594,11 @@ void QXcbIntegration::setApplicationBadge(qint64 number)
 {
     auto unixServices = dynamic_cast<QGenericUnixServices *>(services());
     unixServices->setApplicationBadge(number);
+}
+
+QString QXcbUnixServices::portalWindowIdentifier(QWindow *window)
+{
+    return "x11:"_L1 + QString::number(window->winId(), 16);
 }
 
 QT_END_NAMESPACE

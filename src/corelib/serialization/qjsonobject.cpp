@@ -31,6 +31,10 @@ QT_BEGIN_NAMESPACE
 
     \brief The QJsonObject class encapsulates a JSON object.
 
+    \compares equality
+    \compareswith equality QJsonValue QJsonValueConstRef
+    \endcompareswith
+
     A JSON object is a list of key value pairs, where the keys are unique strings
     and the values are represented by a QJsonValue.
 
@@ -43,7 +47,7 @@ QT_BEGIN_NAMESPACE
 
     You can convert the object to and from text based JSON through QJsonDocument.
 
-    \sa {JSON Support in Qt}, {JSON Save Game Example}
+    \sa {JSON Support in Qt}, {Saving and Loading a Game}
 */
 
 /*!
@@ -85,7 +89,7 @@ QT_BEGIN_NAMESPACE
 QJsonObject::QJsonObject() = default;
 
 /*!
-    \fn QJsonObject::QJsonObject(std::initializer_list<QPair<QString, QJsonValue> > args)
+    \fn QJsonObject::QJsonObject(std::initializer_list<std::pair<QString, QJsonValue> > args)
     \since 5.4
     Constructs a QJsonObject instance initialized from \a args initialization list.
     For example:
@@ -111,7 +115,7 @@ QJsonObject::QJsonObject(QCborContainerPrivate *object)
  */
 QJsonObject::~QJsonObject() = default;
 
-QJsonObject::QJsonObject(std::initializer_list<QPair<QString, QJsonValue> > args)
+QJsonObject::QJsonObject(std::initializer_list<std::pair<QString, QJsonValue> > args)
 {
     for (const auto &arg : args)
         insert(arg.first, arg.second);
@@ -156,7 +160,7 @@ QJsonObject &QJsonObject::operator =(const QJsonObject &other) noexcept = defaul
     Swaps the object \a other with this. This operation is very fast and never fails.
 */
 
-
+#ifndef QT_NO_VARIANT
 /*!
     Converts the variant map \a map to a QJsonObject.
 
@@ -219,11 +223,12 @@ QVariantHash QJsonObject::toVariantHash() const
 {
     return QCborMap::fromJsonObject(*this).toVariantHash();
 }
+#endif // !QT_NO_VARIANT
 
 /*!
     Returns a list of all keys in this object.
 
-    The list is sorted lexographically.
+    The list is sorted alphabetically.
  */
 QStringList QJsonObject::keys() const
 {
@@ -264,7 +269,7 @@ static qsizetype indexOf(const QExplicitlySharedDataPointer<QCborContainerPrivat
     const auto it = std::lower_bound(
                 begin, end, key,
                 [&](const QJsonPrivate::ConstKeyIterator::value_type &e, const String &key) {
-        return o->stringCompareElement(e.key(), key) < 0;
+        return o->stringCompareElement(e.key(), key, QtCbor::Comparison::ForOrdering) < 0;
     });
 
     *keyExists = (it != end) && o->stringEqualsElement((*it).key(), key);
@@ -612,22 +617,24 @@ bool QJsonObject::containsImpl(T key) const
 }
 
 /*!
-    Returns \c true if \a other is equal to this object.
- */
-bool QJsonObject::operator==(const QJsonObject &other) const
+    \fn bool QJsonObject::operator==(const QJsonObject &lhs, const QJsonObject &rhs)
+
+    Returns \c true if \a lhs object is equal to \a rhs, \c false otherwise.
+*/
+bool comparesEqual(const QJsonObject &lhs, const QJsonObject &rhs)
 {
-    if (o == other.o)
+    if (lhs.o == rhs.o)
         return true;
 
-    if (!o)
-        return !other.o->elements.size();
-    if (!other.o)
-        return !o->elements.size();
-    if (o->elements.size() != other.o->elements.size())
+    if (!lhs.o)
+        return !rhs.o->elements.size();
+    if (!rhs.o)
+        return !lhs.o->elements.size();
+    if (lhs.o->elements.size() != rhs.o->elements.size())
         return false;
 
-    for (qsizetype i = 0, end = o->elements.size(); i < end; ++i) {
-        if (o->valueAt(i) != other.o->valueAt(i))
+    for (qsizetype i = 0, end = lhs.o->elements.size(); i < end; ++i) {
+        if (lhs.o->valueAt(i) != rhs.o->valueAt(i))
             return false;
     }
 
@@ -635,12 +642,10 @@ bool QJsonObject::operator==(const QJsonObject &other) const
 }
 
 /*!
-    Returns \c true if \a other is not equal to this object.
- */
-bool QJsonObject::operator!=(const QJsonObject &other) const
-{
-    return !(*this == other);
-}
+    \fn bool QJsonObject::operator!=(const QJsonObject &lhs, const QJsonObject &rhs)
+
+    Returns \c true if \a lhs object is not equal to \a rhs, \c false otherwise.
+*/
 
 /*!
     Removes the (key, value) pair pointed to by the iterator \a it
@@ -835,6 +840,10 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
 
     \brief The QJsonObject::iterator class provides an STL-style non-const iterator for QJsonObject.
 
+    \compares strong
+    \compareswith strong QJsonObject::const_iterator
+    \endcompareswith
+
     QJsonObject::iterator allows you to iterate over a QJsonObject
     and to modify the value (but not the key) stored under
     a particular key. If you want to iterate over a const QJsonObject, you
@@ -851,7 +860,7 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
     Multiple iterators can be used on the same object. Existing iterators will however
     become dangling once the object gets modified.
 
-    \sa QJsonObject::const_iterator, {JSON Support in Qt}, {JSON Save Game Example}
+    \sa QJsonObject::const_iterator, {JSON Support in Qt}, {Saving and Loading a Game}
 */
 
 /*! \typedef QJsonObject::iterator::difference_type
@@ -968,55 +977,55 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
 */
 
 /*!
-    \fn bool QJsonObject::iterator::operator==(const iterator &other) const
-    \fn bool QJsonObject::iterator::operator==(const const_iterator &other) const
+    \fn bool QJsonObject::iterator::operator==(const iterator &lhs, const iterator &rhs)
+    \fn bool QJsonObject::iterator::operator==(const iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if \a other points to the same item as this
+    Returns \c true if \a lhs points to the same item as \a rhs
     iterator; otherwise returns \c false.
 
     \sa operator!=()
 */
 
 /*!
-    \fn bool QJsonObject::iterator::operator!=(const iterator &other) const
-    \fn bool QJsonObject::iterator::operator!=(const const_iterator &other) const
+    \fn bool QJsonObject::iterator::operator!=(const iterator &lhs, const iterator &rhs)
+    \fn bool QJsonObject::iterator::operator!=(const iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if \a other points to a different item than this
+    Returns \c true if \a lhs points to a different item than \a rhs
     iterator; otherwise returns \c false.
 
     \sa operator==()
 */
 
 /*!
-    \fn bool QJsonObject::iterator::operator<(const iterator& other) const
-    \fn bool QJsonObject::iterator::operator<(const const_iterator& other) const
+    \fn bool QJsonObject::iterator::operator<(const iterator &lhs, const iterator &rhs)
+    \fn bool QJsonObject::iterator::operator<(const iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if the item pointed to by this iterator is less than
-    the item pointed to by the \a other iterator.
+    Returns \c true if the item pointed to by \a lhs iterator is less than
+    the item pointed to by the \a rhs iterator.
 */
 
 /*!
-    \fn bool QJsonObject::iterator::operator<=(const iterator& other) const
-    \fn bool QJsonObject::iterator::operator<=(const const_iterator& other) const
+    \fn bool QJsonObject::iterator::operator<=(const iterator &lhs, const iterator &rhs)
+    \fn bool QJsonObject::iterator::operator<=(const iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if the item pointed to by this iterator is less than
-    or equal to the item pointed to by the \a other iterator.
+    Returns \c true if the item pointed to by \a lhs iterator is less than
+    or equal to the item pointed to by the \a rhs iterator.
 */
 
 /*!
-    \fn bool QJsonObject::iterator::operator>(const iterator& other) const
-    \fn bool QJsonObject::iterator::operator>(const const_iterator& other) const
+    \fn bool QJsonObject::iterator::operator>(const iterator &lhs, const iterator &rhs)
+    \fn bool QJsonObject::iterator::operator>(const iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if the item pointed to by this iterator is greater
-    than the item pointed to by the \a other iterator.
+    Returns \c true if the item pointed to by \a lhs iterator is greater
+    than the item pointed to by the \a rhs iterator.
 */
 
 /*!
-    \fn bool QJsonObject::iterator::operator>=(const iterator& other) const
-    \fn bool QJsonObject::iterator::operator>=(const const_iterator& other) const
+    \fn bool QJsonObject::iterator::operator>=(const iterator &lhs, const iterator &rhs)
+    \fn bool QJsonObject::iterator::operator>=(const iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if the item pointed to by this iterator is greater
-    than or equal to the item pointed to by the \a other iterator.
+    Returns \c true if the item pointed to by \a lhs iterator is greater
+    than or equal to the item pointed to by the \a rhs iterator.
 */
 
 /*! \fn QJsonObject::iterator QJsonObject::iterator::operator++()
@@ -1105,6 +1114,10 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
     \since 5.0
     \brief The QJsonObject::const_iterator class provides an STL-style const iterator for QJsonObject.
 
+    \compares strong
+    \compareswith strong QJsonObject::iterator
+    \endcompareswith
+
     QJsonObject::const_iterator allows you to iterate over a QJsonObject.
     If you want to modify the QJsonObject as you iterate
     over it, you must use QJsonObject::iterator instead. It is generally
@@ -1121,7 +1134,7 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
     Multiple iterators can be used on the same object. Existing iterators
     will however become dangling if the object gets modified.
 
-    \sa QJsonObject::iterator, {JSON Support in Qt}, {JSON Save Game Example}
+    \sa QJsonObject::iterator, {JSON Support in Qt}, {Saving and Loading a Game}
 */
 
 /*! \typedef QJsonObject::const_iterator::difference_type
@@ -1213,50 +1226,48 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
 */
 
 
-/*! \fn bool QJsonObject::const_iterator::operator==(const const_iterator &other) const
-    \fn bool QJsonObject::const_iterator::operator==(const iterator &other) const
+/*! \fn bool QJsonObject::const_iterator::operator==(const const_iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if \a other points to the same item as this
+    Returns \c true if \a lhs points to the same item as \a rhs
     iterator; otherwise returns \c false.
 
     \sa operator!=()
 */
 
-/*! \fn bool QJsonObject::const_iterator::operator!=(const const_iterator &other) const
-    \fn bool QJsonObject::const_iterator::operator!=(const iterator &other) const
+/*! \fn bool QJsonObject::const_iterator::operator!=(const const_iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if \a other points to a different item than this
+    Returns \c true if \a lhs points to a different item than \a rhs
     iterator; otherwise returns \c false.
 
     \sa operator==()
 */
 
 /*!
-    \fn bool QJsonObject::const_iterator::operator<(const const_iterator& other) const
+    \fn bool QJsonObject::const_iterator::operator<(const const_iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if the item pointed to by this iterator is less than
-    the item pointed to by the \a other iterator.
+    Returns \c true if the item pointed to by \a lhs iterator is less than
+    the item pointed to by the \a rhs iterator.
 */
 
 /*!
-    \fn bool QJsonObject::const_iterator::operator<=(const const_iterator& other) const
+    \fn bool QJsonObject::const_iterator::operator<=(const const_iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if the item pointed to by this iterator is less than
-    or equal to the item pointed to by the \a other iterator.
+    Returns \c true if the item pointed to by \a lhs iterator is less than
+    or equal to the item pointed to by the \a rhs iterator.
 */
 
 /*!
-    \fn bool QJsonObject::const_iterator::operator>(const const_iterator& other) const
+    \fn bool QJsonObject::const_iterator::operator>(const const_iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if the item pointed to by this iterator is greater
-    than the item pointed to by the \a other iterator.
+    Returns \c true if the item pointed to by \a lhs iterator is greater
+    than the item pointed to by the \a rhs iterator.
 */
 
 /*!
-    \fn bool QJsonObject::const_iterator::operator>=(const const_iterator& other) const
+    \fn bool QJsonObject::const_iterator::operator>=(const const_iterator &lhs, const const_iterator &rhs)
 
-    Returns \c true if the item pointed to by this iterator is greater
-    than or equal to the item pointed to by the \a other iterator.
+    Returns \c true if the item pointed to by \a lhs iterator is greater
+    than or equal to the item pointed to by the \a rhs iterator.
 */
 
 /*! \fn QJsonObject::const_iterator QJsonObject::const_iterator::operator++()

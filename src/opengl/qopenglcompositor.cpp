@@ -4,7 +4,7 @@
 #include <QtOpenGL/QOpenGLFramebufferObject>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QWindow>
-#include <QtGui/private/qrhi_p.h>
+#include <rhi/qrhi.h>
 #include <qpa/qplatformbackingstore.h>
 
 #include "qopenglcompositor_p.h"
@@ -85,10 +85,23 @@ void QOpenGLCompositor::update()
 QImage QOpenGLCompositor::grab()
 {
     Q_ASSERT(m_context && m_targetWindow);
+    QOpenGLFramebufferObject fbo(m_nativeTargetGeometry.size());
+    grabToFrameBufferObject(&fbo);
+    return fbo.toImage();
+}
+
+bool QOpenGLCompositor::grabToFrameBufferObject(QOpenGLFramebufferObject *fbo, GrabOrientation orientation)
+{
+    Q_ASSERT(fbo);
+    if (fbo->size() != m_nativeTargetGeometry.size()
+        || fbo->format().textureTarget() != GL_TEXTURE_2D)
+        return false;
+
     m_context->makeCurrent(m_targetWindow);
-    QScopedPointer<QOpenGLFramebufferObject> fbo(new QOpenGLFramebufferObject(m_nativeTargetGeometry.size()));
-    renderAll(fbo.data());
-    return fbo->toImage();
+    renderAll(fbo,
+              orientation == Flipped ? QOpenGLTextureBlitter::OriginTopLeft
+                                     : QOpenGLTextureBlitter::OriginBottomLeft);
+    return true;
 }
 
 void QOpenGLCompositor::handleRenderAllRequest()
@@ -98,7 +111,7 @@ void QOpenGLCompositor::handleRenderAllRequest()
     renderAll(0);
 }
 
-void QOpenGLCompositor::renderAll(QOpenGLFramebufferObject *fbo)
+void QOpenGLCompositor::renderAll(QOpenGLFramebufferObject *fbo, QOpenGLTextureBlitter::Origin origin)
 {
     if (fbo)
         fbo->bind();
@@ -115,7 +128,7 @@ void QOpenGLCompositor::renderAll(QOpenGLFramebufferObject *fbo)
         m_windows.at(i)->beginCompositing();
 
     for (int i = 0; i < m_windows.size(); ++i)
-        render(m_windows.at(i));
+        render(m_windows.at(i), origin);
 
     m_blitter.release();
     if (!fbo)
@@ -156,9 +169,10 @@ static inline QRect toBottomLeftRect(const QRect &topLeftRect, int windowHeight)
                  topLeftRect.width(), topLeftRect.height());
 }
 
-static void clippedBlit(const QPlatformTextureList *textures, int idx, const QRect &sourceWindowRect,
-                        const QRect &targetWindowRect,
-                        QOpenGLTextureBlitter *blitter, QMatrix4x4 *rotationMatrix)
+static void clippedBlit(const QPlatformTextureList *textures, int idx,
+                        const QRect &sourceWindowRect, const QRect &targetWindowRect,
+                        QOpenGLTextureBlitter *blitter, QMatrix4x4 *rotationMatrix,
+                        QOpenGLTextureBlitter::Origin sourceOrigin)
 {
     const QRect clipRect = textures->clipRect(idx);
     if (clipRect.isEmpty())
@@ -173,13 +187,13 @@ static void clippedBlit(const QPlatformTextureList *textures, int idx, const QRe
         target = *rotationMatrix * target;
 
     const QMatrix3x3 source = QOpenGLTextureBlitter::sourceTransform(srcRect, rectInWindow.size(),
-                                                                     QOpenGLTextureBlitter::OriginBottomLeft);
+                                                                     sourceOrigin);
 
     const uint textureId = textures->texture(idx)->nativeTexture().object;
     blitter->blit(textureId, target, source);
 }
 
-void QOpenGLCompositor::render(QOpenGLCompositorWindow *window)
+void QOpenGLCompositor::render(QOpenGLCompositorWindow *window, QOpenGLTextureBlitter::Origin origin)
 {
     const QPlatformTextureList *textures = window->textures();
     if (!textures)
@@ -189,6 +203,9 @@ void QOpenGLCompositor::render(QOpenGLCompositorWindow *window)
     float currentOpacity = 1.0f;
     BlendStateBinder blend;
     const QRect sourceWindowRect = window->sourceWindow()->geometry();
+    auto clippedBlitSourceOrigin = origin == QOpenGLTextureBlitter::OriginTopLeft
+            ? QOpenGLTextureBlitter::OriginBottomLeft
+            : QOpenGLTextureBlitter::OriginTopLeft;
     for (int i = 0; i < textures->count(); ++i) {
         const uint textureId = textures->texture(i)->nativeTexture().object;
         const float opacity = window->sourceWindow()->opacity();
@@ -203,7 +220,7 @@ void QOpenGLCompositor::render(QOpenGLCompositorWindow *window)
             QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(textures->geometry(i), targetWindowRect);
             if (m_rotation)
                 target = m_rotationMatrix * target;
-            m_blitter.blit(textureId, target, QOpenGLTextureBlitter::OriginTopLeft);
+            m_blitter.blit(textureId, target, origin);
         } else if (textures->count() == 1) {
             // A regular QWidget window
             const bool translucent = window->sourceWindow()->requestedFormat().alphaBufferSize() > 0;
@@ -211,18 +228,20 @@ void QOpenGLCompositor::render(QOpenGLCompositorWindow *window)
             QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(textures->geometry(i), targetWindowRect);
             if (m_rotation)
                 target = m_rotationMatrix * target;
-            m_blitter.blit(textureId, target, QOpenGLTextureBlitter::OriginTopLeft);
+            m_blitter.blit(textureId, target, origin);
         } else if (!textures->flags(i).testFlag(QPlatformTextureList::StacksOnTop)) {
             // Texture from an FBO belonging to a QOpenGLWidget or QQuickWidget
             blend.set(false);
-            clippedBlit(textures, i, sourceWindowRect, targetWindowRect, &m_blitter, m_rotation ? &m_rotationMatrix : nullptr);
+            clippedBlit(textures, i, sourceWindowRect, targetWindowRect, &m_blitter,
+                        m_rotation ? &m_rotationMatrix : nullptr, clippedBlitSourceOrigin);
         }
     }
 
     for (int i = 0; i < textures->count(); ++i) {
         if (textures->flags(i).testFlag(QPlatformTextureList::StacksOnTop)) {
             blend.set(true);
-            clippedBlit(textures, i, sourceWindowRect, targetWindowRect, &m_blitter, m_rotation ? &m_rotationMatrix : nullptr);
+            clippedBlit(textures, i, sourceWindowRect, targetWindowRect, &m_blitter,
+                        m_rotation ? &m_rotationMatrix : nullptr, clippedBlitSourceOrigin);
         }
     }
 

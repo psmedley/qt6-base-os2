@@ -1,11 +1,13 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtTest/QtTest>
 
 #include <QtCore/private/qduplicatetracker_p.h>
 
 #include <QObject>
+
+#include <string>
 #include <utility>
 
 class tst_QDuplicateTracker : public QObject
@@ -50,6 +52,27 @@ void tst_QDuplicateTracker::hasSeen()
         QVERIFY(!tracker.hasSeen(string3));
         QVERIFY(tracker.hasSeen(string3));
     }
+
+    {
+        QDuplicateTracker<std::string, 2> tracker;
+        std::string string1("string1");
+        std::string string2("string2");
+        std::string string2_2("string2");
+        std::string string3("string3");
+
+        // Move when seen
+        QVERIFY(!tracker.hasSeen(string1));
+        QVERIFY(tracker.hasSeen(std::move(string1)));
+
+        // Move when unseen
+        QVERIFY(!tracker.hasSeen(std::move(string2)));
+        QVERIFY(tracker.hasSeen(string2_2));
+
+        // Past the prealloc amount
+        QVERIFY(!tracker.hasSeen(string3));
+        QVERIFY(tracker.hasSeen(string3));
+    }
+
 }
 
 void tst_QDuplicateTracker::clear()

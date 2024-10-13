@@ -5,9 +5,11 @@ qt_internal_add_module(ExampleIconsPrivate
     CONFIG_MODULE_NAME example_icons
     STATIC
     INTERNAL_MODULE
+    NO_GENERATE_CPP_EXPORTS
 )
 
 set(icons_resource_files
+    index.theme
     16x16/document-new.png
     16x16/document-open.png
     16x16/document-print.png
@@ -165,7 +167,7 @@ set(icons_resource_files
 
 qt_internal_add_resource(ExampleIconsPrivate "example_icons"
     PREFIX
-        "/qt-project.org/examples/icons/"
+        "/qt-project.org/icons/example_icons"
     FILES
         ${icons_resource_files}
 )

@@ -1,5 +1,5 @@
 // Copyright (C) 2009 Stephen Kelly <steveire@gmail.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "dynamictreemodel.h"
 
@@ -307,7 +307,7 @@ void ModelChangeChildrenLayoutsCommand::doCommand()
     // changing any children of that parent. The reason is that we're keeping parent1 and parent2
     // around as QPersistentModelIndex instances, and we query idx.parent() in the loop.
     QModelIndexList persistent = m_model->persistentIndexList();
-    for (const QModelIndex &parent : parents) {
+    for (const QPersistentModelIndex &parent : parents) {
         int idx = persistent.indexOf(parent);
         if (idx != -1)
             persistent.move(idx, 0);

@@ -1,30 +1,60 @@
 # Copyright (C) 2021 The Qt Company Ltd.
 # SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-# A run of cldr2qlocalexml.py will produce output reporting any
-# language, script and territory codes it sees, in data, for which it
-# can find a name (taken always from en.xml) that could potentially be
-# used. There is no point adding a mapping for such a code unless the
-# CLDR's common/main/ contains an XML file for at least one locale
-# that exerciss it.
+"""Assorted enumerations implicated in public API.
 
-# Each *_list reflects the current values of its enums in qlocale.h;
-# if new xml language files are available in CLDR, these languages and
-# territories need to be *appended* to this list (for compatibility
-# between versions).  Include any spaces present in names (scripts
-# shall squish them out for the enum entries) in *_list, but use the
-# squished forms of names in the *_aliases mappings.
+The numberings of these enumerations can only change at major
+versions. When new CLDR data implies adding entries, the new ones must
+go after all existing ones. See also zonedata.py for enumerations
+related to timezones and CLDR, which can more freely be changed
+between versions.
 
-# For a new major version (and only then), we can change the
-# numbering, so re-sort each list into alphabetic order (e.g. using
-# sort -k2); but keep the Any and C entries first. That's why those
-# are offset with a blank line, below. After doing that, regenerate
-# locale data as usual; this will cause a binary-incompatible change.
+A run of cldr2qlocalexml.py will produce output reporting any
+language, script and territory codes it sees, in data, for which it
+can find a name (taken always from en.xml) that could potentially be
+used. There is no point adding a mapping for such a code unless the
+CLDR's common/main/ contains an XML file for at least one locale that
+exercises it (and little point, even then, absent substantial data,
+ignoring draft='unconfirmed' entries).
 
-# Note on "macrolanguage" comments: see "ISO 639 macrolanguage" on
-# Wikipedia. A "macrolanguage" is (loosely-speaking) a group of
-# languages so closely related to one another that they could also be
-# regarded as divergent dialects of the macrolanguage.
+Each *_map reflects the current values of its enums in qlocale.h; if
+new xml language files are available in CLDR, these languages and
+territories need to be *appended* to this list (for compatibility
+between versions). Include any spaces and dashes present in names
+(they'll be squished out for the enum entries) in *_map, but use the
+squished forms of names in the *_aliases mappings. The squishing also
+turns the first letter of each word into a capital so you can safely
+preserve the case of en.xml's name; but omit (or replace with space)
+any punctuation aside from dashes and map any accented letters to
+their un-accented plain ASCII. The two tables, for each enum, have
+the forms:
+* map { Numeric value: ("Proper name", "ISO code") }
+* alias { "OldName": "CurrentName" }
+
+TODO: add support for marking entries as deprecated from a specified
+version. For aliases that merely deprecates the name. Where we have a
+name for which CLDR offers no data, we may also want to deprecate
+entries in the map - although they may be worth keeping for the
+benefit of QLocaleSelector (see QTBUG-112765), if other
+locale-specific resources might have use of them.
+
+For a new major version (and only then), we can change the numbering,
+so re-sort each list into alphabetic order (e.g. using sort -k2); but
+keep the Any and C entries first. That's why those are offset with a
+blank line, below. After doing that, regenerate locale data as usual;
+this will cause a binary-incompatible change.
+
+Note on 'macrolanguage' comments: see QTBUG-107781 and 'ISO 639
+macrolanguage' on Wikipedia. A 'macrolanguage' is (loosely-speaking) a
+group of languages so closely related to one another that they could
+also be regarded as divergent dialects of the macrolanguage.  In some
+cases this may mean a resource (such as translation or text-to-speech
+data) may describe itself as pertaining to the macrolanguage, implying
+its suitability for use in any of the languages within the
+macrolanguage. For example, no_NO might be used for a generic
+Norwegian resource, embracing both nb_NO and nn_NO.
+
+"""
 
 language_map = {
       0: ("AnyLanguage",                 "  "),
@@ -151,7 +181,7 @@ language_map = {
     120: ("Japanese",                    "ja"),
     121: ("Javanese",                    "jv"),
     122: ("Jju",                         "kaj"),
-    123: ("Jola Fonyi",                  "dyo"),
+    123: ("Jola-Fonyi",                  "dyo"),
     124: ("Kabuverdianu",                "kea"),
     125: ("Kabyle",                      "kab"),
     126: ("Kako",                        "kkj"),
@@ -192,7 +222,7 @@ language_map = {
     161: ("Lojban",                      "jbo"),
     162: ("Lower Sorbian",               "dsb"),
     163: ("Low German",                  "nds"),
-    164: ("Luba Katanga",                "lu"),
+    164: ("Luba-Katanga",                "lu"),
     165: ("Lule Sami",                   "smj"),
     166: ("Luo",                         "luo"),
     167: ("Luxembourgish",               "lb"),
@@ -200,7 +230,7 @@ language_map = {
     169: ("Macedonian",                  "mk"),
     170: ("Machame",                     "jmc"),
     171: ("Maithili",                    "mai"),
-    172: ("Makhuwa Meetto",              "mgh"),
+    172: ("Makhuwa-Meetto",              "mgh"),
     173: ("Makonde",                     "kde"),
     174: ("Malagasy",                    "mg"), # macrolanguage
     175: ("Malayalam",                   "ml"),
@@ -372,10 +402,17 @@ language_map = {
     338: ("Ligurian",                    "lij"),
     339: ("Rohingya",                    "rhg"),
     340: ("Torwali",                     "trw"),
+    # added in CLDR v44
+    341: ("Anii",                        "blo"),
+    342: ("Kangri",                      "xnr"),
+    343: ("Venetian",                    "vec"),
+    # added in CLDR v45
+    344: ("Kuvi",                        "kxv"),
 }
 # Don't add languages just because they exist; check CLDR does provide
 # substantial data for locales using it; and check, once added, they
-# don't show up in cldr2qlocalexmo.py's unused listing.
+# don't show up in cldr2qlocalexmo.py's unused listing. Do also check
+# the data's draft status; if it's (nearly) all unconfirmed, leave it.
 
 language_aliases = {
     # Renamings prior to Qt 6.0 (CLDR v37):
@@ -399,7 +436,7 @@ language_aliases = {
     'Navaho': 'Navajo',
     'Oriya': 'Odia',
     'Kirghiz': 'Kyrgyz'
-    }
+}
 
 territory_map = {
       0: ("AnyTerritory",                                 "ZZ"),
@@ -413,7 +450,7 @@ territory_map = {
       7: ("Angola",                                       "AO"),
       8: ("Anguilla",                                     "AI"),
       9: ("Antarctica",                                   "AQ"),
-     10: ("Antigua And Barbuda",                          "AG"),
+     10: ("Antigua and Barbuda",                          "AG"),
      11: ("Argentina",                                    "AR"),
      12: ("Armenia",                                      "AM"),
      13: ("Aruba",                                        "AW"),
@@ -432,7 +469,7 @@ territory_map = {
      26: ("Bermuda",                                      "BM"),
      27: ("Bhutan",                                       "BT"),
      28: ("Bolivia",                                      "BO"),
-     29: ("Bosnia And Herzegovina",                       "BA"),
+     29: ("Bosnia and Herzegovina",                       "BA"),
      30: ("Botswana",                                     "BW"),
      31: ("Bouvet Island",                                "BV"),
      32: ("Brazil",                                       "BR"),
@@ -450,7 +487,7 @@ territory_map = {
      44: ("Caribbean Netherlands",                        "BQ"),
      45: ("Cayman Islands",                               "KY"),
      46: ("Central African Republic",                     "CF"),
-     47: ("Ceuta And Melilla",                            "EA"),
+     47: ("Ceuta and Melilla",                            "EA"),
      48: ("Chad",                                         "TD"),
      49: ("Chile",                                        "CL"),
      50: ("China",                                        "CN"),
@@ -459,8 +496,8 @@ territory_map = {
      53: ("Cocos Islands",                                "CC"),
      54: ("Colombia",                                     "CO"),
      55: ("Comoros",                                      "KM"),
-     56: ("Congo Brazzaville",                            "CG"),
-     57: ("Congo Kinshasa",                               "CD"),
+     56: ("Congo - Brazzaville",                          "CG"),
+     57: ("Congo - Kinshasa",                             "CD"),
      58: ("Cook Islands",                                 "CK"),
      59: ("Costa Rica",                                   "CR"),
      60: ("Croatia",                                      "HR"),
@@ -504,11 +541,11 @@ territory_map = {
      98: ("Guam",                                         "GU"),
      99: ("Guatemala",                                    "GT"),
     100: ("Guernsey",                                     "GG"),
-    101: ("Guinea Bissau",                                "GW"),
+    101: ("Guinea-Bissau",                                "GW"),
     102: ("Guinea",                                       "GN"),
     103: ("Guyana",                                       "GY"),
     104: ("Haiti",                                        "HT"),
-    105: ("Heard And McDonald Islands",                   "HM"),
+    105: ("Heard and McDonald Islands",                   "HM"),
     106: ("Honduras",                                     "HN"),
     107: ("Hong Kong",                                    "HK"),
     108: ("Hungary",                                      "HU"),
@@ -518,12 +555,12 @@ territory_map = {
     112: ("Iran",                                         "IR"),
     113: ("Iraq",                                         "IQ"),
     114: ("Ireland",                                      "IE"),
-    115: ("Isle Of Man",                                  "IM"),
+    115: ("Isle of Man",                                  "IM"),
     116: ("Israel",                                       "IL"),
     117: ("Italy",                                        "IT"),
-      # Officially Côte d’Ivoire, which we'd ned to map to CotedIvoire
-      # or CoteDIvoire, either failing to make the d' separate from
-      # Cote or messing with its case. So stick with Ivory Coast:
+    # Officially Côte d’Ivoire, which we'd need to map to CotedIvoire
+    # or CoteDIvoire, either failing to make the d' separate from Cote
+    # or messing with its case. So stick with Ivory Coast:
     118: ("Ivory Coast",                                  "CI"),
     119: ("Jamaica",                                      "JM"),
     120: ("Japan",                                        "JP"),
@@ -603,14 +640,14 @@ territory_map = {
     194: ("Rwanda",                                       "RW"),
     195: ("Saint Barthelemy",                             "BL"),
     196: ("Saint Helena",                                 "SH"),
-    197: ("Saint Kitts And Nevis",                        "KN"),
+    197: ("Saint Kitts and Nevis",                        "KN"),
     198: ("Saint Lucia",                                  "LC"),
     199: ("Saint Martin",                                 "MF"),
-    200: ("Saint Pierre And Miquelon",                    "PM"),
-    201: ("Saint Vincent And Grenadines",                 "VC"),
+    200: ("Saint Pierre and Miquelon",                    "PM"),
+    201: ("Saint Vincent and Grenadines",                 "VC"),
     202: ("Samoa",                                        "WS"),
     203: ("San Marino",                                   "SM"),
-    204: ("Sao Tome And Principe",                        "ST"),
+    204: ("Sao Tome and Principe",                        "ST"),
     205: ("Saudi Arabia",                                 "SA"),
     206: ("Senegal",                                      "SN"),
     207: ("Serbia",                                       "RS"),
@@ -623,14 +660,14 @@ territory_map = {
     214: ("Solomon Islands",                              "SB"),
     215: ("Somalia",                                      "SO"),
     216: ("South Africa",                                 "ZA"),
-    217: ("South Georgia And South Sandwich Islands",     "GS"),
+    217: ("South Georgia and South Sandwich Islands",     "GS"),
     218: ("South Korea",                                  "KR"),
     219: ("South Sudan",                                  "SS"),
     220: ("Spain",                                        "ES"),
     221: ("Sri Lanka",                                    "LK"),
     222: ("Sudan",                                        "SD"),
     223: ("Suriname",                                     "SR"),
-    224: ("Svalbard And Jan Mayen",                       "SJ"),
+    224: ("Svalbard and Jan Mayen",                       "SJ"),
     225: ("Sweden",                                       "SE"),
     226: ("Switzerland",                                  "CH"),
     227: ("Syria",                                        "SY"),
@@ -642,12 +679,12 @@ territory_map = {
     233: ("Togo",                                         "TG"),
     234: ("Tokelau",                                      "TK"),
     235: ("Tonga",                                        "TO"),
-    236: ("Trinidad And Tobago",                          "TT"),
-    237: ("Tristan Da Cunha",                             "TA"),
+    236: ("Trinidad and Tobago",                          "TT"),
+    237: ("Tristan da Cunha",                             "TA"),
     238: ("Tunisia",                                      "TN"),
     239: ("Turkey",                                       "TR"),
     240: ("Turkmenistan",                                 "TM"),
-    241: ("Turks And Caicos Islands",                     "TC"),
+    241: ("Turks and Caicos Islands",                     "TC"),
     242: ("Tuvalu",                                       "TV"),
     243: ("Uganda",                                       "UG"),
     244: ("Ukraine",                                      "UA"),
@@ -662,9 +699,9 @@ territory_map = {
     253: ("Vatican City",                                 "VA"),
     254: ("Venezuela",                                    "VE"),
     255: ("Vietnam",                                      "VN"),
-    256: ("Wallis And Futuna",                            "WF"),
+    256: ("Wallis and Futuna",                            "WF"),
     257: ("Western Sahara",                               "EH"),
-    258: ("World",                                        "001"),
+    258: ("world",                                        "001"),
     259: ("Yemen",                                        "YE"),
     260: ("Zambia",                                       "ZM"),
     261: ("Zimbabwe",                                     "ZW"),
@@ -734,7 +771,7 @@ script_map = {
      28: ("Deseret",                "Dsrt"),
      29: ("Devanagari",             "Deva"),
      30: ("Duployan",               "Dupl"),
-     31: ("Egyptian Hieroglyphs",   "Egyp"),
+     31: ("Egyptian hieroglyphs",   "Egyp"),
      32: ("Elbasan",                "Elba"),
      33: ("Ethiopic",               "Ethi"),
      34: ("Fraser",                 "Lisu"),
@@ -809,7 +846,7 @@ script_map = {
     103: ("Pahawh Hmong",           "Hmng"),
     104: ("Palmyrene",              "Palm"),
     105: ("Pau Cin Hau",            "Pauc"),
-    106: ("Phags Pa",               "Phag"),
+    106: ("Phags-pa",               "Phag"),
     107: ("Phoenician",             "Phnx"),
     108: ("Pollard Phonetic",       "Plrd"),
     109: ("Psalter Pahlavi",        "Phlp"),
@@ -820,7 +857,7 @@ script_map = {
     114: ("Sharada",                "Shrd"),
     115: ("Shavian",                "Shaw"),
     116: ("Siddham",                "Sidd"),
-    117: ("Sign Writing",           "Sgnw"),
+    117: ("SignWriting",            "Sgnw"), # Oddly, en.xml leaves no space in it.
     118: ("Simplified Han",         "Hans"),
     119: ("Sinhala",                "Sinh"),
     120: ("Sora Sompeng",           "Sora"),

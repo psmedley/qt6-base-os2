@@ -231,10 +231,11 @@ QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QEvdevKeyMapper);
 
 #endif // QT_CONFIG(evdev)
 
-#if defined(Q_OS_UNIX)
+#if QT_CONFIG(wayland)
 
 /*!
     \class QNativeInterface::QWaylandApplication
+    \inheaderfile QGuiApplication
     \since 6.5
     \brief Native interface to a Wayland application.
 
@@ -271,19 +272,28 @@ QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QEvdevKeyMapper);
     \fn wl_seat *QNativeInterface::QWaylandApplication::lastInputSeat() const
     \return the seat on which the last input event happened.
 */
+/*!
+    \fn wl_seat *QNativeInterface::QWaylandApplication::seat() const
+    \return the seat associated with the default input device.
+*/
 
 QT_DEFINE_NATIVE_INTERFACE(QWaylandApplication);
 
 /*!
-    \class QNativeInterface::Private::QWaylandScreen
-    \since 6.5
-    \internal
-    \brief Native interface to QPlatformScreen.
+    \class QNativeInterface::QWaylandScreen
+    \since 6.7
+    \brief Native interface to a screen on Wayland.
+
+    Accessed through QScreen::nativeInterface().
     \inmodule QtGui
     \ingroup native-interfaces
+    \ingroup native-interfaces-qscreen
 */
-
-QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWaylandScreen);
+/*!
+    \fn wl_output *QNativeInterface::QWaylandScreen::output() const
+    \return the underlying wl_output of this QScreen.
+*/
+QT_DEFINE_NATIVE_INTERFACE(QWaylandScreen);
 
 /*!
     \class QNativeInterface::QWaylandWindow
@@ -296,6 +306,6 @@ QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWaylandScreen);
 
 QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWaylandWindow);
 
-#endif // Q_OS_UNIX
+#endif // QT_CONFIG(wayland)
 
 QT_END_NAMESPACE

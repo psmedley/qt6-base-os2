@@ -1,9 +1,13 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qmap.h>
 #include <QTest>
+
 #include <QDebug>
+#include <QScopeGuard>
+
+using namespace Qt::StringLiterals;
 
 QT_WARNING_DISABLE_DEPRECATED
 
@@ -60,6 +64,8 @@ private slots:
     void eraseValidIteratorOnSharedMap();
     void removeElementsInMap();
     void toStdMap();
+
+    void multiMapStoresInReverseInsertionOrder();
 
     // Tests for deprecated APIs.
 #if QT_DEPRECATED_SINCE(6, 0)
@@ -634,16 +640,19 @@ void tst_QMap::operator_eq()
         QMap<int, int> b;
 
         QVERIFY(a == b);
+        QCOMPARE(qHash(a), qHash(b));
         QVERIFY(!(a != b));
 
         a.insert(1,1);
         b.insert(1,1);
         QVERIFY(a == b);
+        QCOMPARE(qHash(a), qHash(b));
         QVERIFY(!(a != b));
 
         a.insert(0,1);
         b.insert(0,1);
         QVERIFY(a == b);
+        QCOMPARE(qHash(a), qHash(b));
         QVERIFY(!(a != b));
 
         // compare for inequality:
@@ -666,6 +675,7 @@ void tst_QMap::operator_eq()
         QMap<QString, QString> b;
 
         QVERIFY(a == b);
+        QCOMPARE(qHash(a), qHash(b));
         QVERIFY(!(a != b));
 
         a.insert("Hello", "World");
@@ -674,6 +684,7 @@ void tst_QMap::operator_eq()
 
         b.insert("Hello", "World");
         QVERIFY(a == b);
+        QCOMPARE(qHash(a), qHash(b));
         QVERIFY(!(a != b));
 
         a.insert("Goodbye", "cruel world");
@@ -690,6 +701,7 @@ void tst_QMap::operator_eq()
         // empty keys and null keys match:
         b.insert(QString(""), QString());
         QVERIFY(a == b);
+        QCOMPARE(qHash(a), qHash(b));
         QVERIFY(!(a != b));
     }
 
@@ -2546,6 +2558,24 @@ void tst_QMap::toStdMap()
     const std::multimap<int, QString> expectedMultiMap {
         {1, "value0"}, {1, "value1"}, {2, "value2"}, {3, "value3"} };
     toStdMapTestMethod<QMultiMap<int, QString>>(expectedMultiMap);
+}
+
+void tst_QMap::multiMapStoresInReverseInsertionOrder()
+{
+    const QString strings[] = {
+        u"zero"_s,
+        u"null"_s,
+        u"nada"_s,
+    };
+    {
+        QMultiMap<int, QString> map;
+        for (const QString &string : strings)
+            map.insert(0, string);
+        auto printOnFailure = qScopeGuard([&] { qDebug() << map; });
+        QVERIFY(std::equal(map.begin(), map.end(),
+                           std::rbegin(strings), std::rend(strings)));
+        printOnFailure.dismiss();
+    }
 }
 
 #if QT_DEPRECATED_SINCE(6, 0)

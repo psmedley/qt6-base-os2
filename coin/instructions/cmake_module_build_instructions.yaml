@@ -74,11 +74,22 @@ instructions:
     variableName: DESTDIR
     variableValue: "{{.InstallRoot}}"
   - !include "{{qt/qtbase}}/call_host_install.yaml"
+  - type: EnvironmentVariable
+    variableName: DESTDIR
+    variableValue: ""
   - type: SignPackage
     enable_if:
-      condition: property
-      property: host.os
-      equals_value: Windows
+      condition: and
+      conditions:
+        - condition: property
+          property: host.os
+          equals_value: Windows
+        - condition: property
+          property: features
+          contains_value: Packaging
+        - condition: property
+          property: host.arch
+          equals_value: X86_64 # Sign only on X86 until Coin has support for arm signing
     directory: "{{.InstallRoot}}/{{.AgentWorkingDir}}"
     maxTimeInSeconds: 1200
     maxTimeBetweenOutput: 1200
@@ -90,5 +101,6 @@ instructions:
   - type: EnvironmentVariable
     variableName: COIN_CONFIG_TYPE
     variableValue: "Host"
+  - !include "{{qt/qtbase}}/cmake_build_standalone_examples_host.yaml"
   - !include "{{qt/qtbase}}/qmake/get_qmake_location_host.yaml"
   - !include "{{qt/qtbase}}/qmake_examples/build_qmake_examples_instructions.yaml"

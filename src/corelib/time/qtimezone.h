@@ -5,6 +5,7 @@
 #ifndef QTIMEZONE_H
 #define QTIMEZONE_H
 
+#include <QtCore/qcompare.h>
 #include <QtCore/qdatetime.h>
 #include <QtCore/qlocale.h>
 #include <QtCore/qswap.h>
@@ -12,7 +13,7 @@
 
 #include <chrono>
 
-#if QT_CONFIG(timezone) && (defined(Q_OS_DARWIN) || defined(Q_QDOC)) && !defined(QT_NO_SYSTEMLOCALE)
+#if QT_CONFIG(timezone) && (defined(Q_OS_DARWIN) || defined(Q_QDOC))
 Q_FORWARD_DECLARE_CF_TYPE(CFTimeZone);
 Q_FORWARD_DECLARE_OBJC_CLASS(NSTimeZone);
 #endif
@@ -48,7 +49,7 @@ class Q_CORE_EXPORT QTimeZone
 #endif
         {
         }
-        friend constexpr bool operator==(const ShortData &lhs, const ShortData &rhs)
+        friend constexpr bool operator==(ShortData lhs, ShortData rhs)
         { return lhs.mode == rhs.mode && lhs.offset == rhs.offset; }
         constexpr Qt::TimeSpec spec() const { return Qt::TimeSpec((mode + 3) & 3); }
     };
@@ -56,7 +57,7 @@ class Q_CORE_EXPORT QTimeZone
     union Data
     {
         Data() noexcept;
-        Data(ShortData &&sd) : s(std::move(sd)) {}
+        Data(ShortData sd) : s(sd) {}
         Data(const Data &other) noexcept;
         Data(Data &&other) noexcept : d(std::exchange(other.d, nullptr)) {}
         Data &operator=(const Data &other) noexcept;
@@ -79,16 +80,16 @@ class Q_CORE_EXPORT QTimeZone
         QTimeZonePrivate *d = nullptr;
         ShortData s;
     };
-    QTimeZone(ShortData &&sd) : d(std::move(sd)) {}
+    QTimeZone(ShortData sd) : d(sd) {}
 
 public:
-    // Sane UTC offsets range from -14 to +14 hours:
-    enum {
-        // No known zone > 12 hrs West of Greenwich (Baker Island, USA)
-        MinUtcOffsetSecs = -14 * 3600,
-        // No known zone > 14 hrs East of Greenwich (Kiritimati, Christmas Island, Kiribati)
-        MaxUtcOffsetSecs = +14 * 3600
-    };
+    // Sane UTC offsets range from -16 to +16 hours:
+    static constexpr int MinUtcOffsetSecs = -16 * 3600;
+    // No known modern zone > 12 hrs West of Greenwich.
+    // Until 1844, Asia/Manila (in The Philippines) was at 15:56 West.
+    static constexpr int MaxUtcOffsetSecs = +16 * 3600;
+    // No known modern zone > 14 hrs East of Greenwich.
+    // Until 1867, America/Metlakatla (in Alaska) was at 15:13:42 East.
 
     enum Initialization { LocalTime, UTC };
 
@@ -114,8 +115,10 @@ public:
     void swap(QTimeZone &other) noexcept
     { d.swap(other.d); }
 
+#if QT_CORE_REMOVED_SINCE(6, 7)
     bool operator==(const QTimeZone &other) const;
     bool operator!=(const QTimeZone &other) const;
+#endif
 
     bool isValid() const;
 
@@ -128,7 +131,7 @@ public:
     }
     static QTimeZone fromSecondsAheadOfUtc(int offset)
     {
-        return fromDurationAheadOfUtc(std::chrono::seconds{offset});;
+        return fromDurationAheadOfUtc(std::chrono::seconds{offset});
     }
     constexpr Qt::TimeSpec timeSpec() const noexcept { return d.s.spec(); }
     constexpr int fixedSecondsAheadOfUtc() const noexcept
@@ -163,6 +166,7 @@ public:
     };
     typedef QList<OffsetData> OffsetDataList;
 
+    bool hasAlternativeName(QByteArrayView alias) const;
     QByteArray id() const;
     QLocale::Territory territory() const;
 #  if QT_DEPRECATED_SINCE(6, 6)
@@ -211,7 +215,7 @@ public:
     static QList<QByteArray> windowsIdToIanaIds(const QByteArray &windowsId,
                                                 QLocale::Territory territory);
 
-#  if (defined(Q_OS_DARWIN) || defined(Q_QDOC)) && !defined(QT_NO_SYSTEMLOCALE)
+#  if defined(Q_OS_DARWIN) || defined(Q_QDOC)
     static QTimeZone fromCFTimeZone(CFTimeZoneRef timeZone);
     CFTimeZoneRef toCFTimeZone() const Q_DECL_CF_RETURNS_RETAINED;
     static QTimeZone fromNSTimeZone(const NSTimeZone *timeZone);
@@ -230,6 +234,9 @@ public:
 #  endif
 #endif // feature timezone
 private:
+    friend Q_CORE_EXPORT bool comparesEqual(const QTimeZone &lhs, const QTimeZone &rhs) noexcept;
+    Q_DECLARE_EQUALITY_COMPARABLE(QTimeZone)
+
 #ifndef QT_NO_DATASTREAM
     friend Q_CORE_EXPORT QDataStream &operator<<(QDataStream &ds, const QTimeZone &tz);
 #endif

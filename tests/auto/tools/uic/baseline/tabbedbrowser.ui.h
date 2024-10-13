@@ -1,7 +1,7 @@
 /*
 
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 */
 
@@ -94,7 +94,7 @@ public:
 
         editFind = new QLineEdit(frameFind);
         editFind->setObjectName("editFind");
-        QSizePolicy sizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        QSizePolicy sizePolicy(QSizePolicy::Policy::Fixed, QSizePolicy::Policy::Fixed);
         sizePolicy.setHorizontalStretch(0);
         sizePolicy.setVerticalStretch(0);
         sizePolicy.setHeightForWidth(editFind->sizePolicy().hasHeightForWidth());
@@ -143,7 +143,7 @@ public:
 
         hboxLayout->addWidget(labelWrapped);
 
-        spacerItem = new QSpacerItem(81, 21, QSizePolicy::Expanding, QSizePolicy::Minimum);
+        spacerItem = new QSpacerItem(81, 21, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
         hboxLayout->addItem(spacerItem);
 

@@ -77,7 +77,8 @@ void DomUI::read(QXmlStreamReader &reader)
                 setElementAuthor(reader.readElementText());
                 continue;
             }
-            if (!tag.compare(u"comment"_s, Qt::CaseInsensitive)) {
+            if (!tag.compare(u"comment"_s, Qt::CaseInsensitive)
+                    || !tag.compare(u"legal"_s, Qt::CaseInsensitive)) {
                 setElementComment(reader.readElementText());
                 continue;
             }
@@ -3125,6 +3126,10 @@ void DomFont::read(QXmlStreamReader &reader)
                 setElementHintingPreference(reader.readElementText());
                 continue;
             }
+            if (!tag.compare(u"fontweight"_s, Qt::CaseInsensitive)) {
+                setElementFontWeight(reader.readElementText());
+                continue;
+            }
             reader.raiseError("Unexpected element "_L1 + tag);
         }
             break;
@@ -3172,6 +3177,9 @@ void DomFont::write(QXmlStreamWriter &writer, const QString &tagName) const
 
     if (m_children & HintingPreference)
         writer.writeTextElement(u"hintingpreference"_s, m_hintingPreference);
+
+    if (m_children & FontWeight)
+        writer.writeTextElement(u"fontweight"_s, m_fontWeight);
 
     writer.writeEndElement();
 }
@@ -3242,6 +3250,12 @@ void DomFont::setElementHintingPreference(const QString &a)
     m_hintingPreference = a;
 }
 
+void DomFont::setElementFontWeight(const QString &a)
+{
+    m_children |= FontWeight;
+    m_fontWeight = a;
+}
+
 void DomFont::clearElementFamily()
 {
     m_children &= ~Family;
@@ -3295,6 +3309,11 @@ void DomFont::clearElementKerning()
 void DomFont::clearElementHintingPreference()
 {
     m_children &= ~HintingPreference;
+}
+
+void DomFont::clearElementFontWeight()
+{
+    m_children &= ~FontWeight;
 }
 
 DomPoint::~DomPoint() = default;

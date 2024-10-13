@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef BASELINETEST_H
 #define BASELINETEST_H
@@ -18,6 +18,7 @@ bool connectToBaselineServer(QByteArray *msg = nullptr);
 bool checkImage(const QImage& img, const char *name, quint16 checksum, QByteArray *msg, bool *error, int manualdatatag = 0);
 bool testImage(const QImage& img, QByteArray *msg, bool *error);
 QTestData &newRow(const char *dataTag, quint16 checksum = 0);
+bool isCurrentItemBlacklisted();
 bool disconnectFromBaselineServer();
 bool shouldAbortIfUnstable();
 }
@@ -58,5 +59,16 @@ do {\
         QSKIP(_msg.constData());\
     }\
 } while (0)
+
+#define QBASELINE_SKIP_IF_BLACKLISTED \
+do {\
+    if (QBaselineTest::isCurrentItemBlacklisted())\
+        QSKIP("Blacklisted on baseline server.");\
+} while (0)
+
+#define QBASELINETEST_MAIN(TestObject) QTEST_MAIN_WRAPPER(TestObject, \
+    QHashSeed::setDeterministicGlobalSeed(); \
+    QBaselineTest::handleCmdLineArgs(&argc, &argv); \
+    QTEST_MAIN_SETUP())
 
 #endif // BASELINETEST_H

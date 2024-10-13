@@ -13,6 +13,14 @@
             << " QT_MAC_WANTS_LAYER/_q_mac_wantsLayer has no effect.";
     }
 
+    // Pick up and persist requested color space from surface format
+    const QSurfaceFormat surfaceFormat = m_platformWindow->format();
+    if (QColorSpace colorSpace = surfaceFormat.colorSpace(); colorSpace.isValid()) {
+        NSData *iccData = colorSpace.iccProfile().toNSData();
+        self.colorSpace = [[[NSColorSpace alloc] initWithICCProfileData:iccData] autorelease];
+    }
+
+    // Trigger creation of the layer
     self.wantsLayer = YES;
 }
 
@@ -26,6 +34,12 @@
 - (BOOL)isFlipped
 {
     return YES;
+}
+
+- (NSColorSpace*)colorSpace
+{
+    // If no explicit color space was set, use the NSWindow's color space
+    return m_colorSpace ? m_colorSpace : self.window.colorSpace;
 }
 
 // ----------------------- Layer setup -----------------------
@@ -61,7 +75,10 @@
         // too late at this point and the QWindow will be non-functional,
         // but we can at least print a warning.
         if ([MTLCreateSystemDefaultDevice() autorelease]) {
-            return [CAMetalLayer layer];
+            static bool allowPresentsWithTransaction =
+                !qEnvironmentVariableIsSet("QT_MTL_NO_TRANSACTION");
+            return allowPresentsWithTransaction ?
+                [QMetalLayer layer] : [CAMetalLayer layer];
         } else {
             qCWarning(lcQpaDrawing) << "Failed to create QWindow::MetalSurface."
                 << "Metal is not supported by any of the GPUs in this system.";
@@ -93,12 +110,7 @@
 
     [super setLayer:layer];
 
-    // When adding a view to a view hierarchy the backing properties will change
-    // which results in updating the contents scale, but in case of switching the
-    // layer on a view that's already in a view hierarchy we need to manually ensure
-    // the scale is up to date.
-    if (self.superview)
-        [self updateLayerContentsScale];
+    [self propagateBackingProperties];
 
     if (self.opaque && lcQpaDrawing().isDebugEnabled()) {
         // If the view claims to be opaque we expect it to fill the entire
@@ -131,18 +143,28 @@
 {
     qCDebug(lcQpaDrawing) << "Backing properties changed for" << self;
 
-    if (self.layer)
-        [self updateLayerContentsScale];
+    [self propagateBackingProperties];
 
     // Ideally we would plumb this situation through QPA in a way that lets
     // clients invalidate their own caches, recreate QBackingStore, etc.
-    // For now we trigger an expose, and let QCocoaBackingStore deal with
+
+    // QPA supports DPR (scale) change notifications. We are not sure
+    // based on this event that it is the scale that has changed (it
+    // could be the color space), however QPA will determine if it has
+    // actually changed.
+    QWindowSystemInterface::handleWindowDevicePixelRatioChanged
+        <QWindowSystemInterface::SynchronousDelivery>(m_platformWindow->window());
+
+    // Trigger an expose, and let QCocoaBackingStore deal with
     // buffer invalidation internally.
     [self setNeedsDisplay:YES];
 }
 
-- (void)updateLayerContentsScale
+- (void)propagateBackingProperties
 {
+    if (!self.layer)
+        return;
+
     // We expect clients to fill the layer with retina aware content,
     // based on the devicePixelRatio of the QWindow, so we set the
     // layer's content scale to match that. By going via devicePixelRatio
@@ -153,6 +175,12 @@
     auto devicePixelRatio = m_platformWindow->devicePixelRatio();
     qCDebug(lcQpaDrawing) << "Updating" << self.layer << "content scale to" << devicePixelRatio;
     self.layer.contentsScale = devicePixelRatio;
+
+    if ([self.layer isKindOfClass:CAMetalLayer.class]) {
+        CAMetalLayer *metalLayer = static_cast<CAMetalLayer *>(self.layer);
+        metalLayer.colorspace = self.colorSpace.CGColorSpace;
+        qCDebug(lcQpaDrawing) << "Set" << metalLayer << "color space to" << metalLayer.colorspace;
+    }
 }
 
 /*
@@ -205,8 +233,39 @@
         return;
     }
 
-    qCDebug(lcQpaDrawing) << "[QNSView displayLayer]" << m_platformWindow->window();
-    m_platformWindow->handleExposeEvent(QRectF::fromCGRect(self.bounds).toRect());
+    const auto handleExposeEvent = [&]{
+        const auto bounds = QRectF::fromCGRect(self.bounds).toRect();
+        qCDebug(lcQpaDrawing) << "[QNSView displayLayer]" << m_platformWindow->window() << bounds;
+        m_platformWindow->handleExposeEvent(bounds);
+    };
+
+    if (auto *qtMetalLayer = qt_objc_cast<QMetalLayer*>(self.layer)) {
+        const bool presentedWithTransaction = qtMetalLayer.presentsWithTransaction;
+        qtMetalLayer.presentsWithTransaction = YES;
+
+        handleExposeEvent();
+
+        // If the expose event resulted in a secondary thread requesting that its
+        // drawable should be presented on the main thread with transaction, do so.
+        if (auto mainThreadPresentation = qtMetalLayer.mainThreadPresentation) {
+            mainThreadPresentation();
+            qtMetalLayer.mainThreadPresentation = nil;
+        }
+
+        qtMetalLayer.presentsWithTransaction = presentedWithTransaction;
+
+        // We're done presenting, but we must wait to unlock the display lock
+        // until the display cycle finishes, as otherwise the render thread may
+        // step in and present before the transaction commits. The display lock
+        // is recursive, so setNeedsDisplay can be safely called in the meantime
+        // without any issue.
+        QMetaObject::invokeMethod(m_platformWindow, [qtMetalLayer]{
+            qCDebug(lcMetalLayer) << "Unlocking" << qtMetalLayer << "after finishing display-cycle";
+            qtMetalLayer.displayLock.unlock();
+        }, Qt::QueuedConnection);
+    } else {
+        handleExposeEvent();
+    }
 }
 
 @end

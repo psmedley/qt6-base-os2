@@ -28,7 +28,8 @@ set_property(CACHE INPUT_libpng PROPERTY STRINGS undefined no qt system)
 
 
 #### Libraries
-qt_set01(X11_SUPPORTED LINUX OR HPUX OR FREEBSD OR NETBSD OR OPENBSD OR SOLARIS OR HURD) # special case
+qt_set01(X11_SUPPORTED LINUX OR HPUX OR FREEBSD OR NETBSD OR OPENBSD OR SOLARIS OR
+    HURD)
 qt_find_package(ATSPI2 PROVIDED_TARGETS PkgConfig::ATSPI2 MODULE_NAME gui QMAKE_LIB atspi)
 qt_find_package(DirectFB PROVIDED_TARGETS PkgConfig::DirectFB MODULE_NAME gui QMAKE_LIB directfb)
 qt_find_package(Libdrm PROVIDED_TARGETS Libdrm::Libdrm MODULE_NAME gui QMAKE_LIB drm)
@@ -47,6 +48,16 @@ qt_add_qmake_lib_dependency(fontconfig freetype)
 qt_find_package(gbm PROVIDED_TARGETS gbm::gbm MODULE_NAME gui QMAKE_LIB gbm)
 qt_find_package(WrapSystemHarfbuzz 2.6.0 PROVIDED_TARGETS WrapSystemHarfbuzz::WrapSystemHarfbuzz MODULE_NAME gui QMAKE_LIB harfbuzz)
 qt_find_package(Libinput PROVIDED_TARGETS Libinput::Libinput MODULE_NAME gui QMAKE_LIB libinput)
+qt_find_package_extend_sbom(TARGETS Libinput::Libinput
+    COPYRIGHTS
+        "Copyright © 2006-2009 Simon Thum"
+        "Copyright © 2008-2012 Kristian Høgsberg"
+        "Copyright © 2010-2012 Intel Corporation"
+        "Copyright © 2010-2011 Benjamin Franzke"
+        "Copyright © 2011-2012 Collabora, Ltd."
+        "Copyright © 2013-2014 Jonas Ådahl"
+        "Copyright © 2013-2015 Red Hat, Inc."
+)
 qt_find_package(WrapSystemJpeg PROVIDED_TARGETS WrapSystemJpeg::WrapSystemJpeg MODULE_NAME gui QMAKE_LIB libjpeg)
 qt_find_package(WrapSystemMd4c PROVIDED_TARGETS WrapSystemMd4c::WrapSystemMd4c MODULE_NAME gui QMAKE_LIB libmd4c)
 qt_find_package(WrapSystemPNG PROVIDED_TARGETS WrapSystemPNG::WrapSystemPNG MODULE_NAME gui QMAKE_LIB libpng)
@@ -57,9 +68,11 @@ qt_find_package(Mtdev PROVIDED_TARGETS PkgConfig::Mtdev MODULE_NAME gui QMAKE_LI
 qt_find_package(WrapOpenGL PROVIDED_TARGETS WrapOpenGL::WrapOpenGL MODULE_NAME gui QMAKE_LIB opengl)
 qt_find_package(GLESv2 PROVIDED_TARGETS GLESv2::GLESv2 MODULE_NAME gui QMAKE_LIB opengl_es2)
 qt_find_package(Tslib PROVIDED_TARGETS PkgConfig::Tslib MODULE_NAME gui QMAKE_LIB tslib)
-qt_find_package(WrapVulkanHeaders PROVIDED_TARGETS WrapVulkanHeaders::WrapVulkanHeaders MODULE_NAME gui QMAKE_LIB vulkan MARK_OPTIONAL) # special case
+qt_find_package(WrapVulkanHeaders PROVIDED_TARGETS WrapVulkanHeaders::WrapVulkanHeaders
+    MODULE_NAME gui QMAKE_LIB vulkan MARK_OPTIONAL)
 if((LINUX) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(Wayland PROVIDED_TARGETS Wayland::Server MODULE_NAME gui QMAKE_LIB wayland_server)
+    qt_find_package(Wayland PROVIDED_TARGETS Wayland::Client MODULE_NAME gui QMAKE_LIB wayland_client)
 endif()
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(X11 PROVIDED_TARGETS X11::X11 MODULE_NAME gui QMAKE_LIB xlib)
@@ -140,6 +153,7 @@ if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
 endif()
 qt_add_qmake_lib_dependency(xrender xlib)
 
+qt_find_package(RenderDoc PROVIDED_TARGETS RenderDoc::RenderDoc)
 
 #### Tests
 
@@ -230,6 +244,7 @@ EGLDeviceEXT device = 0;
 EGLStreamKHR stream = 0;
 EGLOutputLayerEXT layer = 0;
 (void) EGL_DRM_CRTC_EXT;
+(void) EGL_DRM_MASTER_FD_EXT;
     /* END TEST: */
     return 0;
 }
@@ -277,8 +292,8 @@ qt_config_compile_test(egl_viv
     LABEL "i.Mx6 EGL"
     LIBRARIES
         EGL::EGL
-    COMPILE_OPTIONS # special case
-        "-DEGL_API_FB=1" # special case
+    COMPILE_OPTIONS
+        "-DEGL_API_FB=1"
     CODE
 "#include <EGL/egl.h>
 #include <EGL/eglvivante.h>
@@ -348,15 +363,25 @@ qt_config_compile_test(evdev
     CODE
 "#if defined(__FreeBSD__)
 #  include <dev/evdev/input.h>
+#elif defined(__VXWORKS__)
+#include <evdevLib.h>
+typedef EV_DEV_EVENT input_event;
 #else
 #  include <linux/input.h>
 #  include <linux/kd.h>
 #endif
 enum {
+#if defined(__VXWORKS__)
+    e1 = EV_DEV_ABS,
+    e2 = EV_DEV_PTR_ABS_X,
+    e3 = EV_DEV_PTR_ABS_Y,
+    e4 = EV_DEV_PTR_BTN_TOUCH,
+#else
     e1 = ABS_PRESSURE,
     e2 = ABS_X,
     e3 = REL_X,
     e4 = SYN_REPORT,
+#endif
 };
 
 int main(void)
@@ -406,11 +431,9 @@ ioctl(fd, FBIOGET_VSCREENINFO, &vinfo);
 ")
 
 # opengles3
-# special case begin
 if(WASM)
     set(extra_compiler_options "-s FULL_ES3=1")
 endif()
-# special case end
 
 set(test_libs GLESv2::GLESv2)
 if(INTEGRITY AND _qt_igy_gui_libs)
@@ -421,9 +444,7 @@ qt_config_compile_test(opengles3
     LABEL "OpenGL ES 3.0"
     LIBRARIES
         ${test_libs}
-# special case begin
     COMPILE_OPTIONS ${extra_compiler_options}
-# special case end
     CODE
 "#ifdef __APPLE__
 #  include <OpenGLES/ES3/gl.h>
@@ -553,7 +574,6 @@ libinput_event_pointer_get_scroll_value_v120(nullptr, LIBINPUT_POINTER_AXIS_SCRO
 }
 ")
 
-# special case begin
 # directwrite (assumes DirectWrite2)
 qt_config_compile_test(directwrite
     LABEL "WINDOWS directwrite"
@@ -580,7 +600,7 @@ qt_config_compile_test(directwrite3
 int main(int, char **)
 {
     IUnknown *factory = nullptr;
-    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory3),
+    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory6),
                         &factory);
     return 0;
 }
@@ -615,14 +635,27 @@ int main(int, char **)
     return 0;
 }
 ")
-# special case end
+
+qt_config_compile_test(renderdoc
+    LIBRARIES
+        RenderDoc::RenderDoc
+    LABEL "RenderDoc header check"
+    CODE
+"#include <renderdoc_app.h>
+int main(int, char **)
+{
+    if (RENDERDOC_Version::eRENDERDOC_API_Version_1_6_0)
+        return 0;
+    return 0;
+}
+")
 
 
 #### Features
 
 qt_feature("accessibility-atspi-bridge" PUBLIC PRIVATE
     LABEL "ATSPI Bridge"
-    CONDITION QT_FEATURE_accessibility AND QT_FEATURE_xcb AND QT_FEATURE_dbus AND ATSPI2_FOUND
+    CONDITION QT_FEATURE_accessibility AND QT_FEATURE_dbus AND ATSPI2_FOUND
 )
 qt_feature_definition("accessibility-atspi-bridge" "QT_NO_ACCESSIBILITY_ATSPI_BRIDGE" NEGATE VALUE "1")
 qt_feature("directfb" PRIVATE
@@ -633,21 +666,21 @@ qt_feature("directfb" PRIVATE
 )
 qt_feature("directwrite" PRIVATE
     LABEL "DirectWrite"
-    CONDITION TEST_directwrite # special case
+    CONDITION TEST_directwrite
     EMIT_IF WIN32
 )
 qt_feature("directwrite3" PRIVATE
     LABEL "DirectWrite 3"
-    CONDITION QT_FEATURE_directwrite AND TEST_directwrite3 # special case
+    CONDITION QT_FEATURE_directwrite AND TEST_directwrite3
     EMIT_IF WIN32
 )
 qt_feature("direct2d" PRIVATE
     LABEL "Direct 2D"
-    CONDITION WIN32 AND NOT WINRT AND TEST_d2d1 # special case
+    CONDITION WIN32 AND NOT WINRT AND TEST_d2d1
 )
 qt_feature("direct2d1_1" PRIVATE
     LABEL "Direct 2D 1.1"
-    CONDITION QT_FEATURE_direct2d AND TEST_d2d1_1 # special case
+    CONDITION QT_FEATURE_direct2d AND TEST_d2d1_1
 )
 qt_feature("evdev" PRIVATE
     LABEL "evdev"
@@ -669,7 +702,7 @@ qt_feature("system-freetype" PRIVATE
 qt_feature("fontconfig" PUBLIC PRIVATE
     LABEL "Fontconfig"
     AUTODETECT NOT APPLE
-    CONDITION NOT WIN32 AND QT_FEATURE_system_freetype AND Fontconfig_FOUND
+    CONDITION NOT APPLE AND NOT WIN32 AND QT_FEATURE_system_freetype AND Fontconfig_FOUND
 )
 qt_feature_definition("fontconfig" "QT_NO_FONTCONFIG" NEGATE VALUE "1")
 qt_feature("gbm"
@@ -798,6 +831,10 @@ qt_feature("vulkan" PUBLIC
     LABEL "Vulkan"
     CONDITION QT_FEATURE_library AND QT_FEATURE_vkgen AND WrapVulkanHeaders_FOUND
 )
+qt_feature("metal" PUBLIC
+    LABEL "Metal"
+    CONDITION MACOS OR IOS OR VISIONOS
+)
 qt_feature("vkkhrdisplay" PRIVATE
     SECTION "Platform plugins"
     LABEL "VK_KHR_display"
@@ -851,7 +888,7 @@ qt_feature("eglfs_rcar" PRIVATE
 )
 qt_feature("eglfs_viv_wl" PRIVATE
     LABEL "EGLFS i.Mx6 Wayland"
-    CONDITION QT_FEATURE_eglfs_viv AND Wayland_FOUND
+    CONDITION QT_FEATURE_eglfs_viv AND TARGET Wayland::Server
 )
 qt_feature("eglfs_openwfd" PRIVATE
     LABEL "EGLFS OpenWFD"
@@ -876,7 +913,7 @@ qt_feature("jpeg" PRIVATE
     CONDITION QT_FEATURE_imageformatplugin
     DISABLE INPUT_libjpeg STREQUAL 'no'
 )
-qt_feature_definition("jpeg" "QT_NO_IMAGEFORMAT_JPEG" NEGATE)
+qt_feature_definition("jpeg" "QT_NO_IMAGEFORMAT_JPEG" NEGATE VALUE "1")
 qt_feature("system-jpeg" PRIVATE
     LABEL "  Using system libjpeg"
     CONDITION QT_FEATURE_jpeg AND JPEG_FOUND
@@ -999,7 +1036,8 @@ qt_feature("system-textmarkdownreader" PUBLIC
 qt_feature("textmarkdownwriter" PUBLIC
     SECTION "Kernel"
     LABEL "MarkdownWriter"
-    PURPOSE "Provides a Markdown (CommonMark) writer"
+    CONDITION QT_FEATURE_regularexpression
+    PURPOSE "Provides a Markdown (CommonMark and GitHub) writer"
 )
 qt_feature("textodfwriter" PUBLIC
     SECTION "Kernel"
@@ -1204,6 +1242,7 @@ qt_feature("raster-fp" PRIVATE
     SECTION "Painting"
     LABEL "QPainter - floating point raster"
     PURPOSE "Internal painting support for floating point rasterization."
+    CONDITION NOT VXWORKS # QTBUG-115777
 )
 qt_feature("undocommand" PUBLIC
     SECTION "Utilities"
@@ -1224,7 +1263,19 @@ qt_feature("undogroup" PUBLIC
     PURPOSE "Provides the ability to cluster QUndoCommands."
     CONDITION QT_FEATURE_undostack
 )
+qt_feature("graphicsframecapture" PRIVATE
+    SECTION "Utilities"
+    LABEL "QGraphicsFrameCapture"
+    PURPOSE "Provides a way to capture 3D graphics API calls for a rendered frame."
+    CONDITION TEST_renderdoc OR (MACOS OR IOS)
+)
 qt_feature_definition("undogroup" "QT_NO_UNDOGROUP" NEGATE VALUE "1")
+qt_feature("wayland" PUBLIC
+    SECTION "Platform plugins"
+    LABEL "Wayland"
+    CONDITION TARGET Wayland::Client
+)
+
 qt_configure_add_summary_section(NAME "Qt Gui")
 qt_configure_add_summary_entry(ARGS "accessibility")
 qt_configure_add_summary_entry(ARGS "freetype")
@@ -1262,6 +1313,8 @@ qt_configure_add_summary_entry(ARGS "opengles31")
 qt_configure_add_summary_entry(ARGS "opengles32")
 qt_configure_end_summary_section() # end of "OpenGL" section
 qt_configure_add_summary_entry(ARGS "vulkan")
+qt_configure_add_summary_entry(ARGS "metal")
+qt_configure_add_summary_entry(ARGS "graphicsframecapture")
 qt_configure_add_summary_entry(ARGS "sessionmanager")
 qt_configure_end_summary_section() # end of "Qt Gui" section
 qt_configure_add_summary_section(NAME "Features used by QPA backends")
@@ -1316,7 +1369,7 @@ qt_configure_end_summary_section() # end of "GL integrations" section
 qt_configure_end_summary_section() # end of "XCB" section
 qt_configure_add_summary_section(NAME "Windows")
 qt_configure_add_summary_entry(ARGS "direct2d")
-qt_configure_add_summary_entry(ARGS "direct2d1_1") ### special case
+qt_configure_add_summary_entry(ARGS "direct2d1_1")
 qt_configure_add_summary_entry(ARGS "directwrite")
 qt_configure_add_summary_entry(ARGS "directwrite3")
 qt_configure_end_summary_section() # end of "Windows" section
@@ -1339,7 +1392,7 @@ qt_configure_add_report_entry(
 qt_configure_add_report_entry(
     TYPE ERROR
     MESSAGE "The OpenGL functionality tests failed! You might need to modify the OpenGL package search path by setting the OpenGL_DIR CMake variable to the OpenGL library's installation directory."
-    CONDITION QT_FEATURE_gui AND NOT WATCHOS AND ( NOT INPUT_opengl STREQUAL 'no' ) AND NOT QT_FEATURE_opengl_desktop AND NOT QT_FEATURE_opengles2 AND NOT QT_FEATURE_opengl_dynamic
+    CONDITION QT_FEATURE_gui AND NOT WATCHOS AND NOT VISIONOS AND ( NOT INPUT_opengl STREQUAL 'no' ) AND NOT QT_FEATURE_opengl_desktop AND NOT QT_FEATURE_opengles2 AND NOT QT_FEATURE_opengl_dynamic
 )
 qt_configure_add_report_entry(
     TYPE WARNING

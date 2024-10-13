@@ -25,7 +25,7 @@ const char JniIntentClass[] = "android/content/Intent";
 
 QAndroidPlatformFileDialogHelper::QAndroidPlatformFileDialogHelper()
     : QPlatformFileDialogHelper(),
-      m_activity(QtAndroid::activity())
+      m_activity(QtAndroidPrivate::activity())
 {
 }
 
@@ -45,8 +45,8 @@ bool QAndroidPlatformFileDialogHelper::handleActivityResult(jint requestCode, ji
     if (uri.isValid()) {
         takePersistableUriPermission(uri);
         m_selectedFile.append(QUrl(uri.toString()));
-        Q_EMIT fileSelected(m_selectedFile.first());
-        Q_EMIT currentChanged(m_selectedFile.first());
+        Q_EMIT fileSelected(m_selectedFile.constFirst());
+        Q_EMIT currentChanged(m_selectedFile.constFirst());
         Q_EMIT accept();
 
         return true;
@@ -65,7 +65,7 @@ bool QAndroidPlatformFileDialogHelper::handleActivityResult(jint requestCode, ji
             m_selectedFile.append(itemUri.toString());
         }
         Q_EMIT filesSelected(m_selectedFile);
-        Q_EMIT currentChanged(m_selectedFile.first());
+        Q_EMIT currentChanged(m_selectedFile.constFirst());
         Q_EMIT accept();
     }
 
@@ -146,12 +146,15 @@ void QAndroidPlatformFileDialogHelper::setMimeTypes()
 {
     QStringList mimeTypes = options()->mimeTypeFilters();
     const QStringList nameFilters = options()->nameFilters();
-    const QString nameFilter = nameFilters.isEmpty() ? QString() : nameFilters.first();
 
-    if (!nameFilter.isEmpty()) {
+    if (!nameFilters.isEmpty()) {
         QMimeDatabase db;
-        for (const QString &filter : nameFilterExtensions(nameFilter))
-            mimeTypes.append(db.mimeTypeForFile(filter, QMimeDatabase::MatchExtension).name());
+        for (auto filter : nameFilters) {
+            if (!filter.isEmpty()) {
+                for (const QString &filter : nameFilterExtensions(filter))
+                    mimeTypes.append(db.mimeTypeForFile(filter, QMimeDatabase::MatchExtension).name());
+            }
+        }
     }
 
     const QString initialType = mimeTypes.size() == 1 ? mimeTypes.at(0) : "*/*"_L1;

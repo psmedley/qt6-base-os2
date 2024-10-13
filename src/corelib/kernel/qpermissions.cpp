@@ -46,7 +46,6 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
     \code
     void VoiceMemoWidget::onRecordingInitiated()
     {
-    #if QT_CONFIG(permissions)
         QMicrophonePermission microphonePermission;
         switch (qApp->checkPermission(microphonePermission)) {
         case Qt::PermissionStatus::Undetermined:
@@ -57,10 +56,8 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
             m_permissionInstructionsDialog->show();
             return;
         case Qt::PermissionStatus::Granted:
-            break; // Proceed
+            m_microphone->startRecording();
         }
-    #endif
-        m_microphone->startRecording();
     }
     \endcode
 
@@ -76,9 +73,6 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
     why we can not record voice memos at this time (if the permission was denied),
     or proceed to using the microphone (if permission was granted).
 
-    The use of the \c{QT_CONFIG(permissions)} macro ensures that the code
-    will work as before on platforms where permissions are not available.
-
     \note On \macOS and iOS permissions can currently only be requested for
     GUI applications.
 
@@ -91,7 +85,8 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
     \target apple-usage-description
 
     Each permission you request must be accompanied by a so called
-    \e {usage description} string in the application's \c Info.plist
+    \e {usage description} string in the application's
+    \l{Information Property List Files}{\c Info.plist}
     file, describing why the application needs to access the given
     permission. For example:
 
@@ -102,6 +97,10 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
 
     The relevant usage description keys are described in the documentation
     for each permission type.
+
+    To ensure the relevant permission backend is included with your
+    application, please \l{Information Property List Files}
+    {point the build system to your custom \c Info.plist}.
 
     \sa {Information Property List Files}.
 
@@ -138,8 +137,8 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
         \li Request the minimal set of permissions needed. For example, if you only
         need access to the microphone, do \e not request camera permission just in case.
         Use the properties of individual permission types to limit the permission scope
-        even further, for example QContactsPermission::setReadOnly() to request read
-        only access.
+        even further, for example \l{QContactsPermission::setAccessMode()}
+        to request read only access.
 
         \li Request permissions in response to specific actions by the user. For example,
         defer requesting microphone permission until the user presses the button to record
@@ -232,7 +231,7 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
 */
 
 /*!
-    \fn template <typename T, if_permission<T>> QPermission::QPermission(const T &type)
+    \fn template <typename T, QPermission::if_permission<T>> QPermission::QPermission(const T &type)
 
     Constructs a permission from the given \l{typed permission} \a type.
 
@@ -246,7 +245,7 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
 */
 
 /*!
-    \fn template <typename T, if_permission<T>> std::optional<T> QPermission::value() const
+    \fn template <typename T, QPermission::if_permission<T>> std::optional<T> QPermission::value() const
 
     Returns the \l{typed permission} of type \c T, or \c{std::nullopt} if this
     QPermission object doesn't contain one.
@@ -361,15 +360,85 @@ QT_PERMISSION_IMPL_COMMON(QMicrophonePermission)
       \row
         \li Android
         \li \l{android-uses-permission}{\c{uses-permission}}
-        \li \c android.permission.BLUETOOTH
+        \li Up to Android 11 (API Level < 31):
+            \list
+                \li \c android.permission.BLUETOOTH
+                \li \c android.permission.ACCESS_FINE_LOCATION
+            \endlist
+
+            Starting from Android 12 (API Level >= 31):
+            \list
+                \li \c android.permission.BLUETOOTH_ADVERTISE
+                \li \c android.permission.BLUETOOTH_CONNECT
+                \li \c android.permission.BLUETOOTH_SCAN
+                \li \c android.permission.ACCESS_FINE_LOCATION
+            \endlist
     \include permissions.qdocinc end-usage-declarations
+
+    \note Currently on Android the \c android.permission.ACCESS_FINE_LOCATION
+    permission is requested together with Bluetooth permissions. This is
+    required for Bluetooth to work properly, unless the application provides a
+    strong assertion in the application manifest that it does not use Bluetooth
+    to derive a physical location. This permission coupling may change in
+    future.
 
     \include permissions.qdocinc permission-metadata
 */
 
 QT_PERMISSION_IMPL_COMMON(QBluetoothPermission)
-    : u{} // stateless, atm
+    : u{ShortData{CommunicationMode::Default, {}}}
 {}
+
+/*!
+    \enum QBluetoothPermission::CommunicationMode
+    \since 6.6
+
+    This enum is used to control the allowed Bluetooth communication modes.
+
+    \value Access Allow this device to access other Bluetooth devices. This
+           includes scanning for nearby devices and connecting to them.
+    \value Advertise Allow other Bluetooth devices to discover this device.
+    \value Default This configuration is used by default.
+
+    \note The fine-grained permissions are currently supported only on
+    Android 12 and newer. On older Android versions, as well as on Apple
+    operating systems, any mode results in full Bluetooth access.
+
+    \note For now the \c Access mode on Android also requests the
+    \l {QLocationPermission::Precise}{precise location} permission.
+    This permission coupling may change in the future.
+*/
+
+/*!
+    \since 6.6
+
+    Sets the allowed Bluetooth communication modes to \a modes.
+
+    \note A default-constructed instance of \l {QBluetoothPermission::}
+    {CommunicationModes} has no sense, so an attempt to set such a mode will
+    raise a \c {qWarning()} and fall back to using the
+    \l {QBluetoothPermission::}{Default} mode.
+*/
+void QBluetoothPermission::setCommunicationModes(CommunicationModes modes)
+{
+    if (modes == CommunicationModes{}) {
+        qCWarning(lcPermissions, "QBluetoothPermission: trying to set an invalid empty mode. "
+                                 "Falling back to CommunicationMode::Default.");
+        u.data.mode = Default;
+    } else {
+        u.data.mode = static_cast<CommunicationMode>(modes.toInt());
+    }
+}
+
+/*!
+    \since 6.6
+
+    Returns the allowed Bluetooth communication modes.
+*/
+QBluetoothPermission::CommunicationModes QBluetoothPermission::communicationModes() const
+{
+    return u.data.mode;
+}
 
 /*!
     \class QLocationPermission
@@ -601,6 +670,28 @@ QDebug operator<<(QDebug debug, const QPermission &permission)
 #endif
 
 #undef QT_PERMISSION_IMPL_COMMON
+
+#if !defined(Q_OS_DARWIN) && !defined(Q_OS_ANDROID) && !defined(Q_OS_WASM)
+// Default backend for platforms without a permission implementation.
+// Always returns Granted, to match behavior when not using permission APIs
+// https://bugreports.qt.io/browse/QTBUG-90498?focusedCommentId=725085#comment-725085
+namespace QPermissions::Private
+{
+    Qt::PermissionStatus checkPermission(const QPermission &permission)
+    {
+        qCDebug(lcPermissions) << "No permission backend on this platform."
+            << "Optimistically returning Granted for" << permission;
+        return Qt::PermissionStatus::Granted;
+    }
+
+    void requestPermission(const QPermission &permission, const PermissionCallback &callback)
+    {
+        qCDebug(lcPermissions) << "No permission backend on this platform."
+            << "Optimistically returning Granted for" << permission;
+        callback(Qt::PermissionStatus::Granted);
+    }
+}
+#endif
 
 QT_END_NAMESPACE
 

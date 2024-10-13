@@ -51,7 +51,7 @@ public:
         {}
     ~QDialogPrivate();
 
-    virtual void setVisible(bool visible);
+    void setVisible(bool visible) override;
 
     QWindow *transientParentWindow() const;
     bool setNativeDialogVisible(bool visible);
@@ -105,7 +105,7 @@ template <typename T>
 class QAutoPointer {
     QPointer<T> o;
 public:
-    explicit QAutoPointer(T *t) noexcept : o(t) {}
+    Q_NODISCARD_CTOR explicit QAutoPointer(T *t) noexcept : o(t) {}
     ~QAutoPointer() { delete o; }
 
     T *operator->() const noexcept { return get(); }

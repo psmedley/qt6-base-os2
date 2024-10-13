@@ -12,11 +12,10 @@
 #include <qdir.h>
 #include <qdatastream.h>
 #include <qdatetime.h>
-#include <qdiriterator.h>
+#include <qdirlisting.h>
 #include <qurl.h>
 #include <qcryptographichash.h>
 #include <qdebug.h>
-#include <QMultiMap>
 
 #include <memory>
 
@@ -155,15 +154,11 @@ QIODevice *QNetworkDiskCache::prepare(const QNetworkCacheMetaData &metaData)
         return nullptr;
     }
 
-    const auto headers = metaData.rawHeaders();
-    for (const auto &header : headers) {
-        if (header.first.compare("content-length", Qt::CaseInsensitive) == 0) {
-            const qint64 size = header.second.toLongLong();
-            if (size > (maximumCacheSize() * 3)/4)
-                return nullptr;
-            break;
-        }
-    }
+    const auto sizeValue = metaData.headers().value(QHttpHeaders::WellKnownHeader::ContentLength);
+    const qint64 size = sizeValue.toLongLong();
+    if (size > (maximumCacheSize() * 3)/4)
+        return nullptr;
+
     std::unique_ptr<QCacheItem> cacheItem = std::make_unique<QCacheItem>();
     cacheItem->metaData = metaData;
 
@@ -173,11 +168,7 @@ QIODevice *QNetworkDiskCache::prepare(const QNetworkCacheMetaData &metaData)
         device = &(cacheItem->data);
     } else {
         QString fileName = d->cacheFileName(cacheItem->metaData.url());
-        QT_TRY {
-            cacheItem->file = new QSaveFile(fileName, &cacheItem->data);
-        } QT_CATCH(...) {
-            cacheItem->file = nullptr;
-        }
+        cacheItem->file = new(std::nothrow) QSaveFile(fileName, &cacheItem->data);
         if (!cacheItem->file || !cacheItem->file->open(QFileDevice::WriteOnly)) {
             qWarning("QNetworkDiskCache::prepare() unable to open temporary file");
             cacheItem.reset();
@@ -482,37 +473,43 @@ qint64 QNetworkDiskCache::expire()
     // close file handle to prevent "in use" error when QFile::remove() is called
     d->lastItem.reset();
 
-    QDir::Filters filters = QDir::AllDirs | QDir:: Files | QDir::NoDotAndDotDot;
-    QDirIterator it(cacheDirectory(), filters, QDirIterator::Subdirectories);
-
-    QMultiMap<QDateTime, QString> cacheItems;
+    struct CacheItem
+    {
+        std::chrono::milliseconds msecs;
+        QString path;
+        qint64 size = 0;
+    };
+    std::vector<CacheItem> cacheItems;
     qint64 totalSize = 0;
-    while (it.hasNext()) {
-        QFileInfo info = it.nextFileInfo();
-        QString path = info.filePath();
-        QString fileName = info.fileName();
-        if (fileName.endsWith(CACHE_POSTFIX)) {
-            const QDateTime birthTime = info.fileTime(QFile::FileBirthTime);
-            cacheItems.insert(birthTime.isValid() ? birthTime
-                              : info.fileTime(QFile::FileMetadataChangeTime), path);
-            totalSize += info.size();
-        }
+    using F = QDirListing::IteratorFlag;
+    for (const auto &dirEntry : QDirListing(cacheDirectory(), F::FilesOnly | F::Recursive)) {
+        if (!dirEntry.fileName().endsWith(CACHE_POSTFIX))
+            continue;
+
+        const QFileInfo &info = dirEntry.fileInfo();
+        QDateTime fileTime = info.birthTime(QTimeZone::UTC);
+        if (!fileTime.isValid())
+            fileTime = info.metadataChangeTime(QTimeZone::UTC);
+        const std::chrono::milliseconds msecs{fileTime.toMSecsSinceEpoch()};
+        const qint64 size = info.size();
+        cacheItems.push_back(CacheItem{msecs, info.filePath(), size});
+        totalSize += size;
     }
 
+    const qint64 goal = (maximumCacheSize() * 9) / 10;
+    if (totalSize < goal)
+        return totalSize; // Nothing to do
+
+    auto byFileTime = [&](const auto &a, const auto &b) { return a.msecs < b.msecs; };
+    std::sort(cacheItems.begin(), cacheItems.end(), byFileTime);
+
     [[maybe_unused]] int removedFiles = 0; // used under QNETWORKDISKCACHE_DEBUG
-    qint64 goal = (maximumCacheSize() * 9) / 10;
-    QMultiMap<QDateTime, QString>::const_iterator i = cacheItems.constBegin();
-    while (i != cacheItems.constEnd()) {
+    for (const CacheItem &cached : cacheItems) {
+        QFile::remove(cached.path);
+        ++removedFiles;
+        totalSize -= cached.size;
         if (totalSize < goal)
             break;
-        QString name = i.value();
-        QFile file(name);
-
-        qint64 size = file.size();
-        file.remove();
-        totalSize -= size;
-        ++removedFiles;
-        ++i;
     }
 #if defined(QNETWORKDISKCACHE_DEBUG)
     if (removedFiles > 0) {
@@ -575,31 +572,27 @@ QString QNetworkDiskCachePrivate::cacheFileName(const QUrl &url) const
  */
 bool QCacheItem::canCompress() const
 {
-    bool sizeOk = false;
-    bool typeOk = false;
-    const auto headers = metaData.rawHeaders();
-    for (const auto &header : headers) {
-        if (header.first.compare("content-length", Qt::CaseInsensitive) == 0) {
-            qint64 size = header.second.toLongLong();
-            if (size > MAX_COMPRESSION_SIZE)
-                return false;
-            else
-                sizeOk = true;
-        }
+    const auto h = metaData.headers();
 
-        if (header.first.compare("content-type", Qt::CaseInsensitive) == 0) {
-            QByteArray type = header.second;
-            if (type.startsWith("text/")
-                    || (type.startsWith("application/")
-                        && (type.endsWith("javascript") || type.endsWith("ecmascript"))))
-                typeOk = true;
-            else
-                return false;
-        }
-        if (sizeOk && typeOk)
-            return true;
+    const auto sizeValue = h.value(QHttpHeaders::WellKnownHeader::ContentLength);
+    if (sizeValue.empty())
+        return false;
+
+    qint64 size = sizeValue.toLongLong();
+    if (size > MAX_COMPRESSION_SIZE)
+        return false;
+
+    const auto type = h.value(QHttpHeaders::WellKnownHeader::ContentType);
+    if (!type.empty())
+        return false;
+
+    if (!type.startsWith("text/")
+        && !(type.startsWith("application/")
+            && (type.endsWith("javascript") || type.endsWith("ecmascript")))) {
+        return false;
     }
-    return false;
+
+    return true;
 }
 
 enum
@@ -670,7 +663,7 @@ bool QCacheItem::read(QFileDevice *device, bool readData)
     if (!device->fileName().endsWith(expectedFilename))
         return false;
 
-    return metaData.isValid() && !metaData.rawHeaders().isEmpty();
+    return metaData.isValid() && !metaData.headers().isEmpty();
 }
 
 QT_END_NAMESPACE

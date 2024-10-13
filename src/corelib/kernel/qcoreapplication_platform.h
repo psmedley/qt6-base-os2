@@ -32,10 +32,6 @@ typedef _jobject* jobject;
 
 QT_BEGIN_NAMESPACE
 
-#if defined(Q_OS_ANDROID)
-Q_DECLARE_JNI_TYPE(Context, "Landroid/content/Context;")
-#endif
-
 namespace QNativeInterface
 {
 #if defined(Q_OS_ANDROID) || defined(Q_QDOC)
@@ -43,7 +39,7 @@ struct Q_CORE_EXPORT QAndroidApplication
 {
     QT_DECLARE_NATIVE_INTERFACE(QAndroidApplication, 1, QCoreApplication)
 #ifdef Q_QDOC
-    static jobject context();
+    static QJniObject context();
 #else
     static QtJniTypes::Context context();
 #endif

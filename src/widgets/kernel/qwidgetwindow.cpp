@@ -27,9 +27,8 @@ Q_WIDGETS_EXPORT QWidget *qt_button_down = nullptr; // widget got last button-do
 
 // popup control
 QWidget *qt_popup_down = nullptr; // popup that contains the pressed widget
-extern int openPopupCount;
 bool qt_popup_down_closed = false; // qt_popup_down has been closed
-bool qt_replay_popup_mouse_event = false;
+
 extern bool qt_try_modal(QWidget *widget, QEvent::Type type);
 
 class QWidgetWindowPrivate : public QWindowPrivate
@@ -39,21 +38,25 @@ public:
     void setVisible(bool visible) override
     {
         Q_Q(QWidgetWindow);
+        qCDebug(lcWidgetShowHide) << "Setting visibility of" << q->widget()
+               << "to" << visible << "via QWidgetWindowPrivate";
+
         if (QWidget *widget = q->widget()) {
-            // Check if the widget was already hidden, as this indicates it was done
-            // explicitly and not because the parent window in this case made it hidden.
-            // In which case do not automatically show the widget when the parent
-            // window is shown.
-            const bool wasExplicitShowHide = widget->testAttribute(Qt::WA_WState_ExplicitShowHide);
-            const bool wasHidden = widget->testAttribute(Qt::WA_WState_Hidden);
-            QWidgetPrivate::get(widget)->setVisible(visible);
-            if (wasExplicitShowHide) {
-                widget->setAttribute(Qt::WA_WState_ExplicitShowHide, wasExplicitShowHide);
-                widget->setAttribute(Qt::WA_WState_Hidden, wasHidden);
-            }
-        } else {
-            QWindowPrivate::setVisible(visible);
+            // If the widget's visible state is already matching the new QWindow
+            // visible state we assume the widget has already synced up.
+            if (visible != widget->isVisible())
+                QWidgetPrivate::get(widget)->setVisible(visible);
         }
+
+        // If we end up calling QWidgetPrivate::setVisible() above, we will
+        // in most cases recurse back into setNativeWindowVisibility() to
+        // update the QWindow state. But during QWidget::destroy() this is
+        // not the case, as Qt::WA_WState_Created has been unset by the time
+        // we check if we should call hide_helper(). We handle this case, as
+        // well as the cases where we don't call QWidgetPrivate::setVisible(),
+        // by syncing up the QWindow state here if needed.
+        if (q->isVisible() != visible)
+            QWindowPrivate::setVisible(visible);
     }
 
     QWindow *eventReceiver() override {
@@ -71,6 +74,39 @@ public:
         QWidget *widget = q->widget();
         if (widget && widget->focusWidget())
             widget->focusWidget()->clearFocus();
+    }
+
+    void setFocusToTarget(FocusTarget target, Qt::FocusReason reason) override
+    {
+        Q_Q(QWidgetWindow);
+        QWidget *widget = q->widget();
+        if (!widget)
+            return;
+        QWidget *newFocusWidget = nullptr;
+
+        switch (target) {
+        case FocusTarget::First:
+            newFocusWidget = q->getFocusWidget(QWidgetWindow::FirstFocusWidget);
+            break;
+        case FocusTarget::Last:
+            newFocusWidget = q->getFocusWidget(QWidgetWindow::LastFocusWidget);
+            break;
+        case FocusTarget::Next: {
+            QWidget *focusWidget = widget->focusWidget() ? widget->focusWidget() : widget;
+            newFocusWidget = focusWidget->nextInFocusChain() ? focusWidget->nextInFocusChain() : focusWidget;
+            break;
+        }
+        case FocusTarget::Prev: {
+            QWidget *focusWidget = widget->focusWidget() ? widget->focusWidget() : widget;
+            newFocusWidget = focusWidget->previousInFocusChain() ? focusWidget->previousInFocusChain() : focusWidget;
+            break;
+        }
+        default:
+            break;
+        }
+
+        if (newFocusWidget)
+            newFocusWidget->setFocus(reason);
     }
 
     QRectF closestAcceptableGeometry(const QRectF &rect) const override;
@@ -124,8 +160,8 @@ QWidgetWindow::QWidgetWindow(QWidget *widget)
     updateObjectName();
     if (!QCoreApplication::testAttribute(Qt::AA_ForceRasterWidgets)) {
         QSurface::SurfaceType type = QSurface::RasterSurface;
-        q_evaluateRhiConfig(m_widget, nullptr, &type);
-        setSurfaceType(type);
+        if (q_evaluateRhiConfig(m_widget, nullptr, &type))
+            setSurfaceType(type);
     }
 
     connect(widget, &QObject::objectNameChanged, this, &QWidgetWindow::updateObjectName);
@@ -134,6 +170,24 @@ QWidgetWindow::QWidgetWindow(QWidget *widget)
 
 QWidgetWindow::~QWidgetWindow()
 {
+    // destroy while we are still alive
+    destroy();
+
+    if (!m_widget)
+        return;
+
+    QTLWExtra *topData = QWidgetPrivate::get(m_widget)->topData();
+    Q_ASSERT(topData);
+
+    // The QPlaformBackingStore may hold a reference to the window,
+    // so the backingstore needs to be deleted first.
+    topData->repaintManager.reset(nullptr);
+    delete topData->backingStore;
+    topData->backingStore = nullptr;
+    topData->widgetTextures.clear();
+
+    // Too late to do anything beyond this point
+    topData->window = nullptr;
 }
 
 #if QT_CONFIG(accessibility)
@@ -170,6 +224,9 @@ QObject *QWidgetWindow::focusObject() const
 void QWidgetWindow::setNativeWindowVisibility(bool visible)
 {
     Q_D(QWidgetWindow);
+    qCDebug(lcWidgetShowHide) << "Setting visibility of" << this
+        << "to" << visible << "via QWidgetWindow::setNativeWindowVisibility";
+
     // Call base class setVisible() implementation to run the QWindow
     // visibility logic. Don't call QWidgetWindowPrivate::setVisible()
     // since that will recurse back into QWidget code.
@@ -329,6 +386,10 @@ bool QWidgetWindow::event(QEvent *event)
         m_widget->repaint();
         return true;
 
+    case QEvent::DevicePixelRatioChange:
+        handleDevicePixelRatioChange();
+        break;
+
     default:
         break;
     }
@@ -389,7 +450,7 @@ void QWidgetWindow::handleEnterLeaveEvent(QEvent *event)
         }
     } else {
         const QEnterEvent *ee = static_cast<QEnterEvent *>(event);
-        QWidget *child = m_widget->childAt(ee->position().toPoint());
+        QWidget *child = m_widget->childAt(ee->position());
         QWidget *receiver = child ? child : m_widget.data();
         QWidget *leave = nullptr;
         if (QApplicationPrivate::inPopupMode() && receiver == m_widget
@@ -446,16 +507,13 @@ void QWidgetWindow::handleNonClientAreaMouseEvent(QMouseEvent *e)
 
 void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
 {
-    static const QEvent::Type contextMenuTrigger =
-        QGuiApplicationPrivate::platformTheme()->themeHint(QPlatformTheme::ContextMenuOnMouseRelease).toBool() ?
-        QEvent::MouseButtonRelease : QEvent::MouseButtonPress;
     if (QApplicationPrivate::inPopupMode()) {
         QPointer<QWidget> activePopupWidget = QApplication::activePopupWidget();
-        QPoint mapped = event->position().toPoint();
+        QPointF mapped = event->position();
         if (activePopupWidget != m_widget)
-            mapped = activePopupWidget->mapFromGlobal(event->globalPosition().toPoint());
+            mapped = activePopupWidget->mapFromGlobal(event->globalPosition());
         bool releaseAfter = false;
-        QWidget *popupChild  = activePopupWidget->childAt(mapped);
+        QWidget *popupChild = activePopupWidget->childAt(mapped);
 
         if (activePopupWidget != qt_popup_down) {
             qt_button_down = nullptr;
@@ -476,21 +534,18 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
             break; // nothing for mouse move
         }
 
-        int oldOpenPopupCount = openPopupCount;
-
         if (activePopupWidget->isEnabled()) {
             // deliver event
-            qt_replay_popup_mouse_event = false;
             QPointer<QWidget> receiver = activePopupWidget;
-            QPoint widgetPos = mapped;
+            QPointF widgetPos = mapped;
             if (qt_button_down)
                 receiver = qt_button_down;
             else if (popupChild)
                 receiver = popupChild;
             if (receiver != activePopupWidget)
-                widgetPos = receiver->mapFromGlobal(event->globalPosition().toPoint());
+                widgetPos = receiver->mapFromGlobal(event->globalPosition());
 
-            const bool reallyUnderMouse = activePopupWidget->rect().contains(mapped);
+            const bool reallyUnderMouse = activePopupWidget->rect().contains(mapped.toPoint());
             const bool underMouse = activePopupWidget->underMouse();
             if (underMouse != reallyUnderMouse) {
                 if (reallyUnderMouse) {
@@ -532,57 +587,6 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
             }
         }
 
-        if (QApplication::activePopupWidget() != activePopupWidget
-            && qt_replay_popup_mouse_event
-            && QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::ReplayMousePressOutsidePopup).toBool()) {
-            if (m_widget->windowType() != Qt::Popup)
-                qt_button_down = nullptr;
-            if (event->type() == QEvent::MouseButtonPress) {
-                // the popup disappeared, replay the mouse press event
-                QWidget *w = QApplication::widgetAt(event->globalPosition().toPoint());
-                if (w && !QApplicationPrivate::isBlockedByModal(w)) {
-                    // activate window of the widget under mouse pointer
-                    if (!w->isActiveWindow()) {
-                        w->activateWindow();
-                        w->window()->raise();
-                    }
-
-                    if (auto win = qt_widget_private(w)->windowHandle(QWidgetPrivate::WindowHandleMode::Closest)) {
-                        const QRect globalGeometry = win->isTopLevel()
-                            ? win->geometry()
-                            : QRect(win->mapToGlobal(QPoint(0, 0)), win->size());
-                        if (globalGeometry.contains(event->globalPosition().toPoint())) {
-                            // Use postEvent() to ensure the local QEventLoop terminates when called from QMenu::exec()
-                            const QPoint localPos = win->mapFromGlobal(event->globalPosition().toPoint());
-                            QMouseEvent *e = new QMouseEvent(QEvent::MouseButtonPress, localPos, localPos, event->globalPosition().toPoint(),
-                                                             event->button(), event->buttons(), event->modifiers(), event->source());
-                            QCoreApplicationPrivate::setEventSpontaneous(e, true);
-                            e->setTimestamp(event->timestamp());
-                            QCoreApplication::postEvent(win, e);
-                        }
-                    }
-                }
-            }
-            qt_replay_popup_mouse_event = false;
-#ifndef QT_NO_CONTEXTMENU
-        } else if (event->type() == contextMenuTrigger
-                   && event->button() == Qt::RightButton
-                   && (openPopupCount == oldOpenPopupCount)) {
-            QWidget *receiver = activePopupWidget;
-            if (qt_button_down)
-                receiver = qt_button_down;
-            else if (popupChild)
-                receiver = popupChild;
-            const QPoint localPos = receiver->mapFromGlobal(event->globalPosition().toPoint());
-            QContextMenuEvent e(QContextMenuEvent::Mouse, localPos, event->globalPosition().toPoint(), event->modifiers());
-            QApplication::forwardEvent(receiver, &e, event);
-        }
-#else
-            Q_UNUSED(contextMenuTrigger);
-            Q_UNUSED(oldOpenPopupCount);
-        }
-#endif
-
         if (releaseAfter) {
             qt_button_down = nullptr;
             qt_popup_down_closed = false;
@@ -597,8 +601,8 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
         return;
 
     // which child should have it?
-    QWidget *widget = m_widget->childAt(event->position().toPoint());
-    QPoint mapped = event->position().toPoint();
+    QWidget *widget = m_widget->childAt(event->position());
+    QPointF mapped = event->position();
 
     if (!widget)
         widget = m_widget;
@@ -607,10 +611,15 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
     if (event->type() == QEvent::MouseButtonPress && initialPress)
         qt_button_down = widget;
 
-    QWidget *receiver = QApplicationPrivate::pickMouseReceiver(m_widget, event->scenePosition().toPoint(), &mapped, event->type(), event->buttons(),
+    QWidget *receiver = QApplicationPrivate::pickMouseReceiver(m_widget, event->scenePosition(), &mapped, event->type(), event->buttons(),
                                                                qt_button_down, widget);
     if (!receiver)
         return;
+
+    if (d_func()->isPopup() && receiver->window()->windowHandle() != this) {
+        receiver = widget;
+        mapped = event->position().toPoint();
+    }
 
     if ((event->type() != QEvent::MouseButtonPress) || !QMutableSinglePointEvent::from(event)->isDoubleClick()) {
 
@@ -625,9 +634,10 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
         event->setAccepted(translated.isAccepted());
     }
 #ifndef QT_NO_CONTEXTMENU
-    if (event->type() == contextMenuTrigger && event->button() == Qt::RightButton
+    if (event->type() == QGuiApplicationPrivate::contextMenuEventType()
+        && event->button() == Qt::RightButton
         && m_widget->rect().contains(event->position().toPoint())) {
-        QContextMenuEvent e(QContextMenuEvent::Mouse, mapped, event->globalPosition().toPoint(), event->modifiers());
+        QContextMenuEvent e(QContextMenuEvent::Mouse, mapped.toPoint(), event->globalPosition().toPoint(), event->modifiers());
         QGuiApplication::forwardEvent(receiver, &e, event);
         if (e.isAccepted())
             event->accept();
@@ -695,22 +705,32 @@ void QWidgetWindow::updateMargins()
     m_widget->data->fstrut_dirty = false;
 }
 
-static void sendScreenChangeRecursively(QWidget *widget)
+static void sendChangeRecursively(QWidget *widget, QEvent::Type type)
 {
-    QEvent e(QEvent::ScreenChangeInternal);
+    QEvent e(type);
     QCoreApplication::sendEvent(widget, &e);
     QWidgetPrivate *d = QWidgetPrivate::get(widget);
     for (int i = 0; i < d->children.size(); ++i) {
         QWidget *w = qobject_cast<QWidget *>(d->children.at(i));
         if (w)
-            sendScreenChangeRecursively(w);
+            sendChangeRecursively(w, type);
     }
 }
 
 void QWidgetWindow::handleScreenChange()
 {
     // Send an event recursively to the widget and its children.
-    sendScreenChangeRecursively(m_widget);
+    sendChangeRecursively(m_widget, QEvent::ScreenChangeInternal);
+
+    // Invalidate the backing store buffer and repaint immediately.
+    if (screen())
+        repaintWindow();
+}
+
+void QWidgetWindow::handleDevicePixelRatioChange()
+{
+    // Send an event recursively to the widget and its children.
+    sendChangeRecursively(m_widget, QEvent::DevicePixelRatioChange);
 
     // Invalidate the backing store buffer and repaint immediately.
     if (screen())
@@ -793,6 +813,10 @@ void QWidgetWindow::handleResizeEvent(QResizeEvent *event)
 void QWidgetWindow::closeEvent(QCloseEvent *event)
 {
     Q_D(QWidgetWindow);
+    if (qt_popup_down == m_widget) {
+        qt_popup_down = nullptr;
+        qt_popup_down_closed = true;
+    }
     bool accepted = m_widget->d_func()->handleClose(d->inClose ? QWidgetPrivate::CloseWithEvent
                                                                   : QWidgetPrivate::CloseWithSpontaneousEvent);
     event->setAccepted(accepted);
@@ -843,7 +867,7 @@ void QWidgetWindow::handleWheelEvent(QWheelEvent *event)
     }
 
     // which child should have it?
-    QWidget *widget = rootWidget->childAt(pos.toPoint());
+    QWidget *widget = rootWidget->childAt(pos);
 
     if (!widget)
         widget = rootWidget;
@@ -1052,7 +1076,7 @@ void QWidgetWindow::handleTabletEvent(QTabletEvent *event)
     QWidget *widget = qt_tablet_target;
 
     if (!widget) {
-        widget = m_widget->childAt(event->position().toPoint());
+        widget = m_widget->childAt(event->position());
         if (!widget)
             widget = m_widget;
         if (event->type() == QEvent::TabletPress)

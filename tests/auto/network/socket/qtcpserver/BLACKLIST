@@ -1,17 +1,15 @@
 [listenWhileListening:WithSocks5Proxy]
 linux
 windows
-[ipv6Server]
-windows-7sp1
-windows-10 msvc-2017
 [ipv6Server:WithoutProxy]
 windows
 osx
 [serverAddress]
 # QTBUG-103056
 qnx
-windows-7sp1
 windows-10
 
+[qtbug6305]
+macos-12 arm # QTBUG-127568
 [linkLocal]
 macos arm

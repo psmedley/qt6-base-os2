@@ -5,12 +5,14 @@
 #ifndef QMAP_H
 #define QMAP_H
 
+#include <QtCore/qhashfunctions.h>
 #include <QtCore/qiterator.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qrefcount.h>
 #include <QtCore/qpair.h>
 #include <QtCore/qshareddata.h>
 #include <QtCore/qshareddata_impl.h>
+#include <QtCore/qttypetraits.h>
 
 #include <functional>
 #include <initializer_list>
@@ -762,7 +764,7 @@ public:
         return isEmpty();
     }
 
-    QPair<iterator, iterator> equal_range(const Key &akey)
+    std::pair<iterator, iterator> equal_range(const Key &akey)
     {
         const auto copy = d.isShared() ? *this : QMap(); // keep `key` alive across the detach
         detach();
@@ -770,13 +772,38 @@ public:
         return {iterator(result.first), iterator(result.second)};
     }
 
-    QPair<const_iterator, const_iterator> equal_range(const Key &akey) const
+    std::pair<const_iterator, const_iterator> equal_range(const Key &akey) const
     {
         if (!d)
             return {};
         auto result = d->m.equal_range(akey);
         return {const_iterator(result.first), const_iterator(result.second)};
     }
+
+private:
+#ifdef Q_QDOC
+    friend size_t qHash(const QMap &key, size_t seed = 0);
+#else
+# if defined(Q_CC_GHS) || defined (Q_CC_MSVC)
+    // GHS and MSVC tries to intantiate qHash() for the noexcept running into a
+    // non-SFINAE'ed hard error... Create an artificial SFINAE context as a
+    // work-around:
+    template <typename M, std::enable_if_t<std::is_same_v<M, QMap>, bool> = true>
+    friend QtPrivate::QHashMultiReturnType<typename M::key_type, typename M::mapped_type>
+# else
+    using M = QMap;
+    friend size_t
+# endif
+    qHash(const M &key, size_t seed = 0)
+        noexcept(QHashPrivate::noexceptPairHash<typename M::key_type, typename M::mapped_type>())
+    {
+        if (!key.d)
+            return seed;
+        // don't use qHashRange to avoid its compile-time overhead:
+        return std::accumulate(key.d->m.begin(), key.d->m.end(), seed,
+                               QtPrivate::QHashCombine{});
+    }
+#endif // !Q_QDOC
 };
 
 Q_DECLARE_ASSOCIATIVE_ITERATOR(Map)
@@ -787,6 +814,7 @@ qsizetype erase_if(QMap<Key, T> &map, Predicate pred)
 {
     return QtPrivate::associative_erase_if(map, pred);
 }
+
 
 //
 // QMultiMap
@@ -1492,7 +1520,7 @@ public:
     // STL compatibility
     inline bool empty() const { return isEmpty(); }
 
-    QPair<iterator, iterator> equal_range(const Key &akey)
+    std::pair<iterator, iterator> equal_range(const Key &akey)
     {
         const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key` alive across the detach
         detach();
@@ -1500,7 +1528,7 @@ public:
         return {iterator(result.first), iterator(result.second)};
     }
 
-    QPair<const_iterator, const_iterator> equal_range(const Key &akey) const
+    std::pair<const_iterator, const_iterator> equal_range(const Key &akey) const
     {
         if (!d)
             return {};

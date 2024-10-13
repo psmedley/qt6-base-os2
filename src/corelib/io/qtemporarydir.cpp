@@ -4,11 +4,9 @@
 
 #include "qtemporarydir.h"
 
-#ifndef QT_NO_TEMPORARYFILE
+#if QT_CONFIG(temporaryfile)
 
 #include "qdebug.h"
-#include "qdiriterator.h"
-#include "qpair.h"
 #include "qplatformdefs.h"
 #include "qrandom.h"
 #include "private/qtemporaryfile_p.h"
@@ -241,6 +239,14 @@ QString QTemporaryDir::errorString() const
 /*!
    Returns the path to the temporary directory.
    Empty if the QTemporaryDir could not be created.
+
+//! [relative-or-absolute-path]
+   The returned path will be relative or absolulte depending on whether
+   QTemporaryDir was constructed with a relative or absolute path,
+   respectively.
+//! [relative-or-absolute-path]
+
+
 */
 QString QTemporaryDir::path() const
 {
@@ -255,6 +261,8 @@ QString QTemporaryDir::path() const
     Redundant multiple separators or "." and ".." directories in
     \a fileName are not removed (see QDir::cleanPath()). Absolute
     paths are not allowed.
+
+    \include qtemporarydir.cpp relative-or-absolute-path
 */
 QString QTemporaryDir::filePath(const QString &fileName) const
 {
@@ -326,4 +334,4 @@ bool QTemporaryDir::remove()
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_TEMPORARYFILE
+#endif // QT_CONFIG(temporaryfile)

@@ -6,7 +6,6 @@
 
 #include <QtCore/qstring.h>
 #include <QtCore/qstringview.h>
-#include <QtCore/qstring.h>
 
 QT_FORWARD_DECLARE_CLASS(QTextStream)
 
@@ -75,10 +74,10 @@ QTextStream &operator<<(QTextStream &, const closeQtConfig &c);
 
 QString fixClassName(QString className);
 
-const char *toolbarArea(int v);
-const char *sizePolicy(int v);
-const char *dockWidgetArea(int v);
-const char *paletteColorRole(int v);
+QLatin1StringView toolbarArea(int v);
+QLatin1StringView sizePolicy(int v);
+QLatin1StringView dockWidgetArea(int v);
+QLatin1StringView paletteColorRole(int v);
 
 enum class Encoding { Utf8, Unicode };
 

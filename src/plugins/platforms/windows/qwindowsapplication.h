@@ -24,7 +24,6 @@ public:
     bool isWinTabEnabled() const override;
     bool setWinTabEnabled(bool enabled) override;
 
-    bool isDarkMode() const override;
     DarkModeHandling darkModeHandling() const override;
     void setDarkModeHandling(DarkModeHandling handling) override;
 
@@ -43,7 +42,7 @@ public:
     QVariant gpu() const override;
     QVariant gpuList() const override;
 
-    void lightSystemPalette(QPalette &palette) const override;
+    void populateLightSystemPalette(QPalette &palette) const override;
 
 private:
     WindowActivationBehavior m_windowActivationBehavior = DefaultActivateWindow;

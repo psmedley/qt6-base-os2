@@ -217,7 +217,8 @@ QInotifyFileSystemWatcherEngine::QInotifyFileSystemWatcherEngine(int fd, QObject
       notifier(fd, QSocketNotifier::Read, this)
 {
     fcntl(inotifyFd, F_SETFD, FD_CLOEXEC);
-    connect(&notifier, SIGNAL(activated(QSocketDescriptor)), SLOT(readFromInotify()));
+    QObject::connect(&notifier, &QSocketNotifier::activated,
+                     this, &QInotifyFileSystemWatcherEngine::readFromInotify);
 }
 
 QInotifyFileSystemWatcherEngine::~QInotifyFileSystemWatcherEngine()
@@ -334,7 +335,7 @@ void QInotifyFileSystemWatcherEngine::readFromInotify()
         return;
 
     QVarLengthArray<char, 4096> buffer(buffSize);
-    buffSize = read(inotifyFd, buffer.data(), buffSize);
+    buffSize = int(read(inotifyFd, buffer.data(), buffSize));
     char *at = buffer.data();
     char * const end = at + buffSize;
 

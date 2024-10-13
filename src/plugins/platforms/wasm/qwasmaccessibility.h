@@ -4,6 +4,9 @@
 #ifndef QWASMACCESIBILITY_H
 #define QWASMACCESIBILITY_H
 
+#include <QtCore/qtconfigmacros.h>
+#include <QtGui/qtguiglobal.h>
+
 #if QT_CONFIG(accessibility)
 
 #include <QtCore/qhash.h>
@@ -48,6 +51,7 @@ private:
     void setHtmlElementGeometry(emscripten::val element, QRect geometry);
     void setHtmlElementTextName(QAccessibleInterface *iface);
     void setHtmlElementTextNameLE(QAccessibleInterface *iface);
+    void setHtmlElementDescription(QAccessibleInterface *iface);
 
     void handleStaticTextUpdate(QAccessibleEvent *event);
     void handleButtonUpdate(QAccessibleEvent *event);

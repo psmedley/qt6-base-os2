@@ -1,16 +1,17 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // Copyright (C) 2017 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <qcoreapplication.h>
-#include <qstring.h>
-#include <qtemporarydir.h>
-#include <qtemporaryfile.h>
 #include <qfile.h>
 #include <qdatetime.h>
 #include <qdir.h>
 #include <qset.h>
+#include <qstandardpaths.h>
+#include <qstring.h>
+#include <qtemporarydir.h>
+#include <qtemporaryfile.h>
 
 #include <QtTest/private/qtesthelpers_p.h>
 
@@ -63,6 +64,7 @@ private slots:
     void stressTest();
     void rename();
     void renameFdLeak();
+    void moveToTrash();
     void reOpenThroughQFile();
     void keepOpenMode();
     void resetTemplateAfterError();
@@ -73,6 +75,7 @@ private slots:
     void QTBUG_4796_data();
     void QTBUG_4796();
     void guaranteeUnique();
+    void stdfilesystem();
 private:
     QTemporaryDir m_temporaryDir;
     QString m_previousCurrent;
@@ -80,6 +83,9 @@ private:
 
 void tst_QTemporaryFile::initTestCase()
 {
+    QStandardPaths::setTestModeEnabled(true);
+    QDir().mkpath(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
+
     QVERIFY2(m_temporaryDir.isValid(), qPrintable(m_temporaryDir.errorString()));
     m_previousCurrent = QDir::currentPath();
     QVERIFY(QDir::setCurrent(m_temporaryDir.path()));
@@ -248,7 +254,7 @@ void tst_QTemporaryFile::fileName()
     QString absoluteTempPath = QDir(tempPath).absolutePath();
     QTemporaryFile file;
     file.setAutoRemove(true);
-    file.open();
+    QVERIFY(file.open());
     QString fileName = file.fileName();
     QVERIFY2(fileName.contains("/tst_qtemporaryfile."), qPrintable(fileName));
     QVERIFY(QFile::exists(fileName));
@@ -420,7 +426,7 @@ void tst_QTemporaryFile::io()
 
     file.reset();
     QFile compare(file.fileName());
-    compare.open(QIODevice::ReadOnly);
+    QVERIFY(compare.open(QIODevice::ReadOnly));
     QCOMPARE(compare.readAll() , data);
     QCOMPARE(compare.fileTime(QFile::FileModificationTime), mtime);
 }
@@ -454,7 +460,7 @@ void tst_QTemporaryFile::removeAndReOpen()
     QString fileName;
     {
         QTemporaryFile file;
-        file.open();
+        QVERIFY(file.open());
         fileName = file.fileName();     // materializes any unnamed file
         QVERIFY(QFile::exists(fileName));
 
@@ -474,7 +480,7 @@ void tst_QTemporaryFile::removeAndReOpen()
 void tst_QTemporaryFile::removeUnnamed()
 {
     QTemporaryFile file;
-    file.open();
+    QVERIFY(file.open());
 
     // we did not call fileName(), so the file name may not have a name
     QVERIFY(file.remove());
@@ -522,7 +528,8 @@ void tst_QTemporaryFile::openOnRootDrives()
 #endif
     // If it's possible to create a file in the root directory, it
     // must be possible to create a temp file there too.
-    foreach (QFileInfo driveInfo, QDir::drives()) {
+    const auto drives = QDir::drives();
+    for (const QFileInfo &driveInfo : drives) {
         QFile testFile(driveInfo.filePath() + "XXXXXX.txt");
         if (testFile.open(QIODevice::ReadWrite)) {
             testFile.remove();
@@ -585,7 +592,9 @@ void tst_QTemporaryFile::rename()
 void tst_QTemporaryFile::renameFdLeak()
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_ANDROID)
-    const QByteArray sourceFile = QFile::encodeName(QFINDTESTDATA("CMakeLists.txt"));
+    QTemporaryFile file;
+    QVERIFY(file.open());
+    const QByteArray sourceFile = QFile::encodeName(file.fileName());
     QVERIFY(!sourceFile.isEmpty());
     // Test this on Unix only
 
@@ -619,6 +628,55 @@ void tst_QTemporaryFile::renameFdLeak()
     // check if QTemporaryFile closed the file
     QVERIFY(::close(fd) == -1 && errno == EBADF);
 #endif
+}
+
+void tst_QTemporaryFile::moveToTrash()
+{
+#if defined(Q_OS_ANDROID) || defined(Q_OS_WEBOS) || defined(Q_OS_VXWORKS)
+    QSKIP("This platform doesn't implement a trash bin");
+#endif
+#ifdef Q_OS_WIN
+    // QTemporaryFile won't really close the file with close(), so this is
+    // expected to fail with a sharing violation error.
+    constexpr bool expectSuccess = false;
+#else
+    constexpr bool expectSuccess = true;
+#endif
+    const QByteArrayView contents = "Hello, World\n";
+
+    QTemporaryFile f(QDir::homePath() + "/tst_qtemporaryfile.moveToTrash.XXXXXX");
+    QString origFileName;
+    auto cleanup = qScopeGuard([&] {
+        if (!origFileName.isEmpty())
+            QFile::remove(origFileName);
+        if (QString fn = f.fileName(); !fn.isEmpty() && fn != origFileName)
+            QFile::remove(fn);
+    });
+
+    if (!f.open())
+        QSKIP("Failed to create temporary file");
+    f.write(contents.data(), contents.size());
+
+    // we need an actual file name:
+    // 1) so we can delete it in the clean-up guard in case we fail to trash
+    // 2) so that the file exists on Linux in the first place (no sense in
+    //    trashing an unnamed file)
+    origFileName = f.fileName();
+
+    if (expectSuccess) {
+        QVERIFY2(f.moveToTrash(), qPrintable(f.errorString()));
+        QCOMPARE_NE(f.fileName(), origFileName);        // must have changed!
+        QCOMPARE_NE(f.fileName(), QString());
+        QVERIFY(!QFile::exists(origFileName));
+        QVERIFY(QFile::exists(f.fileName()));
+        QCOMPARE(QFileInfo(f.fileName()).size(), contents.size());
+    } else {
+        QVERIFY(!f.moveToTrash());
+        QCOMPARE(f.fileName(), origFileName);           // mustn't have changed!
+        QCOMPARE_NE(f.error(), QFile::NoError);
+        QCOMPARE_NE(f.errorString(), "Unknown error");
+        QVERIFY(QFile::exists(origFileName));
+    }
 }
 
 void tst_QTemporaryFile::reOpenThroughQFile()
@@ -814,7 +872,7 @@ void tst_QTemporaryFile::createNativeFile()
 
     QFile f(filePath);
     if (currentPos != -1) {
-        f.open(QIODevice::ReadOnly);
+        QVERIFY(f.open(QIODevice::ReadOnly));
         f.seek(currentPos);
     }
     QTemporaryFile *tempFile = QTemporaryFile::createNativeFile(f);
@@ -857,7 +915,7 @@ void tst_QTemporaryFile::QTBUG_4796()
     {
         ~CleanOnReturn()
         {
-            Q_FOREACH(QString tempName, tempNames)
+            for (const QString &tempName : std::as_const(tempNames))
                 QFile::remove(tempName);
         }
 
@@ -945,7 +1003,7 @@ void tst_QTemporaryFile::QTBUG_4796()
         }
     }
 
-    Q_FOREACH(QString const &tempName, cleaner.tempNames)
+    for (const QString &tempName : std::as_const(cleaner.tempNames))
         QVERIFY( !QFile::exists(tempName) );
 
     cleaner.reset();
@@ -959,7 +1017,7 @@ void tst_QTemporaryFile::guaranteeUnique()
     // First pass. See which filename QTemporaryFile will try first.
     {
         QTemporaryFile tmpFile("testFile1.XXXXXX");
-        tmpFile.open();
+        QVERIFY(tmpFile.open());
         takenFileName = tmpFile.fileName();
         QVERIFY(QFile::exists(takenFileName));
     }
@@ -979,6 +1037,50 @@ void tst_QTemporaryFile::guaranteeUnique()
     }
 
     QVERIFY(dir.rmdir(takenFileName));
+}
+
+void tst_QTemporaryFile::stdfilesystem()
+{
+#if !QT_CONFIG(cxx17_filesystem)
+    QSKIP("std::filesystem not available");
+#else
+    // ctor
+    {
+        std::filesystem::path testFile("testFile1.XXXXXX");
+        QTemporaryFile file(testFile);
+        QCOMPARE(file.fileTemplate(), QtPrivate::fromFilesystemPath(testFile));
+    }
+    // rename
+    {
+        QTemporaryFile file("testFile1.XXXXXX");
+        QVERIFY(file.open());
+        QByteArray payload = "abc123 I am a string";
+        file.write(payload);
+        QVERIFY(file.rename(std::filesystem::path("./test")));
+        file.close();
+
+        QFile f(u"./test"_s);
+        QVERIFY(f.exists());
+        QVERIFY(f.open(QFile::ReadOnly));
+        QCOMPARE(f.readAll(), payload);
+    }
+    // createNativeFile
+    {
+        std::filesystem::path resource(":/resources/test.txt");
+        std::unique_ptr<QTemporaryFile> tmp(QTemporaryFile::createNativeFile(resource));
+        QVERIFY(tmp);
+        QFile file(resource);
+        QVERIFY(file.open(QFile::ReadOnly));
+        QCOMPARE(tmp->readAll(), file.readAll());
+    }
+    // setFileTemplate
+    {
+        QTemporaryFile file;
+        std::filesystem::path testFile("testFile1.XXXXXX");
+        file.setFileTemplate(testFile);
+        QCOMPARE(file.fileTemplate(), QtPrivate::fromFilesystemPath(testFile));
+    }
+#endif
 }
 
 QTEST_MAIN(tst_QTemporaryFile)

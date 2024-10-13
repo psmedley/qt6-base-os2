@@ -183,8 +183,6 @@ QT_WARNING_POP
         { future = o.future; index = o.index; return *this; }
         inline const T &operator*() const { return future->d.resultReference(index); }
         inline const T *operator->() const { return future->d.resultPointer(index); }
-        inline bool operator!=(const const_iterator &other) const { return index != other.index; }
-        inline bool operator==(const const_iterator &o) const { return !operator!=(o); }
         inline const_iterator &operator++()
         { index = advanceIndex(index, 1); return *this; }
         inline const_iterator &operator--()
@@ -213,6 +211,12 @@ QT_WARNING_POP
         { return const_iterator(k.future, k.advanceIndex(k.index, j)); }
 
     private:
+        friend bool comparesEqual(const const_iterator &lhs, const const_iterator &rhs) noexcept
+        {
+            return lhs.index == rhs.index;
+        }
+        Q_DECLARE_EQUALITY_COMPARABLE(const_iterator)
+
         /*! \internal
 
             Advances the iterator index \a idx \a n steps, waits for the
@@ -521,6 +525,19 @@ template<typename... Futures>
 QFuture<std::variant<std::decay_t<Futures>...>> whenAny(Futures &&... futures);
 
 #endif // Q_QDOC
+
+#if QT_DEPRECATED_SINCE(6, 10)
+#if defined(Q_QDOC)
+static QFuture<void> makeReadyFuture()
+#else
+template<typename T = void>
+QT_DEPRECATED_VERSION_X(6, 10, "Use makeReadyVoidFuture() instead.")
+static QFuture<T> makeReadyFuture()
+#endif
+{
+    return makeReadyVoidFuture();
+}
+#endif // QT_DEPRECATED_SINCE(6, 10)
 
 } // namespace QtFuture
 

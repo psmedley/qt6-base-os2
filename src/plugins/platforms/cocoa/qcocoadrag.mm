@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <AppKit/AppKit.h>
+#include <UniformTypeIdentifiers/UTCoreTypes.h>
 
 #include "qcocoadrag.h"
 #include "qmacclipboard.h"
 #include "qcocoahelpers.h"
 #include <QtGui/private/qcoregraphics_p.h>
 #include <QtGui/qutimimeconverter.h>
-#include <QtCore/qsysinfo.h>
 #include <QtCore/private/qcore_mac_p.h>
 
 #include <vector>
@@ -136,11 +136,6 @@ bool QCocoaDrag::maybeDragMultipleItems()
     Q_ASSERT(m_drag && m_drag->mimeData());
     Q_ASSERT(m_executed_drop_action == Qt::IgnoreAction);
 
-    if (QOperatingSystemVersion::current() < QOperatingSystemVersion::MacOSMojave) {
-        // -dragImage: stopped working in 10.14 first.
-        return false;
-    }
-
     const QMacAutoReleasePool pool;
 
     NSView *view = m_lastView ? m_lastView : m_lastEvent.window.contentView;
@@ -161,8 +156,7 @@ bool QCocoaDrag::maybeDragMultipleItems()
     for (NSPasteboardItem *item in dragBoard.pasteboardItems) {
         bool isUrl = false;
         for (NSPasteboardType type in item.types) {
-            using NSStringRef = NSString *;
-            if ([type isEqualToString:NSStringRef(kUTTypeFileURL)]) {
+            if ([type isEqualToString:UTTypeFileURL.identifier]) {
                 isUrl = true;
                 break;
             }
@@ -244,14 +238,14 @@ QPixmap QCocoaDrag::dragPixmap(QDrag *drag, QPoint &hotSpot) const
         QFontMetrics fm(f);
 
         if (data->hasImage()) {
-            const QImage img = data->imageData().value<QImage>();
+            QImage img = data->imageData().value<QImage>();
             if (!img.isNull()) {
-                pm = QPixmap::fromImage(img).scaledToWidth(dragImageMaxChars *fm.averageCharWidth());
+                pm = QPixmap::fromImage(std::move(img)).scaledToWidth(dragImageMaxChars *fm.averageCharWidth());
             }
         }
 
         if (pm.isNull() && (data->hasText() || data->hasUrls()) ) {
-            QString s = data->hasText() ? data->text() : data->urls().first().toString();
+            QString s = data->hasText() ? data->text() : data->urls().constFirst().toString();
             if (s.length() > dragImageMaxChars)
                 s = s.left(dragImageMaxChars -3) + QChar(0x2026);
             if (!s.isEmpty()) {

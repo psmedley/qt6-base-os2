@@ -1,11 +1,18 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QtTest/private/qpropertytesthelper_p.h>
+
+#ifndef QTEST_THROW_ON_FAIL
+# error This test requires QTEST_THROW_ON_FAIL being active.
+#endif
+
 #include <qabstractproxymodel.h>
 #include <QItemSelection>
 #include <qstandarditemmodel.h>
+
+#include <QtCore/qscopeguard.h>
 
 class tst_QAbstractProxyModel : public QObject
 {
@@ -610,28 +617,30 @@ void tst_QAbstractProxyModel::sourceModelBinding()
     SubQAbstractProxyModel proxy;
     QStandardItemModel model1;
     QStandardItemModel model2;
+    const char *lhs;
+    const char *rhs;
+
+    auto printOnFailure = qScopeGuard([&] {
+            qDebug("Failed %s - %s test", lhs, rhs);
+        });
+    lhs = "model";
+    rhs = "model";
     QTestPrivate::testReadWritePropertyBasics<SubQAbstractProxyModel, QAbstractItemModel *>(
             proxy, &model1, &model2, "sourceModel");
-    if (QTest::currentTestFailed()) {
-        qDebug("Failed model - model test");
-        return;
-    }
 
     proxy.setSourceModel(&model2);
+    lhs = "model";
+    rhs = "nullptr";
     QTestPrivate::testReadWritePropertyBasics<SubQAbstractProxyModel, QAbstractItemModel *>(
             proxy, &model1, nullptr, "sourceModel");
-    if (QTest::currentTestFailed()) {
-        qDebug("Failed model - nullptr test");
-        return;
-    }
 
     proxy.setSourceModel(&model1);
+    lhs = "nullptr";
+    rhs = "model";
     QTestPrivate::testReadWritePropertyBasics<SubQAbstractProxyModel, QAbstractItemModel *>(
             proxy, nullptr, &model2, "sourceModel");
-    if (QTest::currentTestFailed()) {
-        qDebug("Failed nullptr - model test");
-        return;
-    }
+
+    printOnFailure.dismiss();
 }
 
 QTEST_MAIN(tst_QAbstractProxyModel)

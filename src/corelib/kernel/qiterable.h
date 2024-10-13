@@ -19,16 +19,16 @@ namespace QtPrivate {
         QTaggedPointer<Storage, Tag> m_pointer;
 
     public:
-        QConstPreservingPointer(std::nullptr_t) : m_pointer(nullptr, Const) {}
+        Q_NODISCARD_CTOR QConstPreservingPointer(std::nullptr_t) : m_pointer(nullptr, Const) {}
 
-        QConstPreservingPointer(const void *pointer, qsizetype alignment)
+        Q_NODISCARD_CTOR QConstPreservingPointer(const void *pointer, qsizetype alignment)
             : m_pointer(reinterpret_cast<Storage *>(const_cast<void *>(pointer)), Const)
         {
             Q_UNUSED(alignment);
             Q_ASSERT(alignment > qsizetype(alignof(Storage)));
         }
 
-        QConstPreservingPointer(void *pointer, qsizetype alignment)
+        Q_NODISCARD_CTOR QConstPreservingPointer(void *pointer, qsizetype alignment)
             : m_pointer(reinterpret_cast<Storage *>(pointer), Mutable)
         {
             Q_UNUSED(alignment);
@@ -36,20 +36,20 @@ namespace QtPrivate {
         }
 
         template<typename InputType>
-        QConstPreservingPointer(const InputType *pointer)
+        Q_NODISCARD_CTOR QConstPreservingPointer(const InputType *pointer)
             : m_pointer(reinterpret_cast<Storage *>(const_cast<InputType *>(pointer)), Const)
         {
             static_assert(alignof(InputType) >= alignof(Storage));
         }
 
         template<typename InputType>
-        QConstPreservingPointer(InputType *pointer)
+        Q_NODISCARD_CTOR QConstPreservingPointer(InputType *pointer)
             : m_pointer(reinterpret_cast<Storage *>(pointer), Mutable)
         {
             static_assert(alignof(InputType) >= alignof(Storage));
         }
 
-        QConstPreservingPointer() = default;
+        Q_NODISCARD_CTOR QConstPreservingPointer() = default;
 
         const Type *constPointer() const
         {
@@ -71,28 +71,32 @@ public:
     QTaggedIterator(Iterator &&it) : Iterator(std::move(it))
     {
         const QMetaContainer metaContainer = this->metaContainer();
-        if (std::is_base_of_v<std::random_access_iterator_tag, IteratorCategory>
-                && !metaContainer.hasRandomAccessIterator()) {
-            qFatal("You cannot use this iterator as a random access iterator");
-            this->clearIterator();
+        if constexpr (std::is_base_of_v<std::random_access_iterator_tag, IteratorCategory>) {
+            if (!metaContainer.hasRandomAccessIterator()) {
+                qFatal("You cannot use this iterator as a random access iterator");
+                this->clearIterator();
+            }
         }
 
-        if (std::is_base_of_v<std::bidirectional_iterator_tag, IteratorCategory>
-                && !metaContainer.hasBidirectionalIterator()) {
-            qFatal("You cannot use this iterator as a bidirectional iterator");
-            this->clearIterator();
+        if constexpr (std::is_base_of_v<std::bidirectional_iterator_tag, IteratorCategory>) {
+            if (!metaContainer.hasBidirectionalIterator()) {
+                qFatal("You cannot use this iterator as a bidirectional iterator");
+                this->clearIterator();
+            }
         }
 
-        if (std::is_base_of_v<std::forward_iterator_tag, IteratorCategory>
-                && !metaContainer.hasForwardIterator()) {
-            qFatal("You cannot use this iterator as a forward iterator");
-            this->clearIterator();
+        if constexpr (std::is_base_of_v<std::forward_iterator_tag, IteratorCategory>) {
+            if (!metaContainer.hasForwardIterator()) {
+                qFatal("You cannot use this iterator as a forward iterator");
+                this->clearIterator();
+            }
         }
 
-        if (std::is_base_of_v<std::input_iterator_tag, IteratorCategory>
-                && !metaContainer.hasInputIterator()) {
-            qFatal("You cannot use this iterator as an input iterator");
-            this->clearIterator();
+        if constexpr (std::is_base_of_v<std::input_iterator_tag, IteratorCategory>) {
+            if (!metaContainer.hasInputIterator()) {
+                qFatal("You cannot use this iterator as an input iterator");
+                this->clearIterator();
+            }
         }
     }
 

@@ -24,13 +24,14 @@
 #include <qfilesystemwatcher.h>
 #endif
 #include <qabstractfileiconprovider.h>
-#include <qpair.h>
 #include <qstack.h>
 #include <qdatetime.h>
 #include <qdir.h>
 #include <qelapsedtimer.h>
 
 #include <private/qfilesystemengine_p.h>
+
+#include <utility>
 
 QT_REQUIRE_CONFIG(filesystemmodel);
 
@@ -51,7 +52,7 @@ public:
        return mFileInfo == fileInfo.mFileInfo
        && displayType == fileInfo.displayType
        && permissions() == fileInfo.permissions()
-       && lastModified() == fileInfo.lastModified();
+       && lastModified(QTimeZone::UTC) == fileInfo.lastModified(QTimeZone::UTC);
     }
 
 #ifndef QT_NO_FSFILEENGINE
@@ -95,8 +96,8 @@ public:
         return mFileInfo;
     }
 
-    QDateTime lastModified() const {
-        return mFileInfo.lastModified();
+    QDateTime lastModified(const QTimeZone &tz) const {
+        return mFileInfo.lastModified(tz);
     }
 
     qint64 size() const {
@@ -124,7 +125,7 @@ class Q_GUI_EXPORT QFileInfoGatherer : public QThread
 Q_OBJECT
 
 Q_SIGNALS:
-    void updates(const QString &directory, const QList<QPair<QString, QFileInfo>> &updates);
+    void updates(const QString &directory, const QList<std::pair<QString, QFileInfo>> &updates);
     void newListOfFiles(const QString &directory, const QStringList &listOfFiles) const;
     void nameResolved(const QString &fileName, const QString &resolvedName) const;
     void directoryLoaded(const QString &path);
@@ -148,6 +149,8 @@ public:
     QAbstractFileIconProvider *iconProvider() const;
     bool resolveSymlinks() const;
 
+    void requestAbort();
+
 public Q_SLOTS:
     void list(const QString &directoryPath);
     void fetchExtendedInformation(const QString &path, const QStringList &files);
@@ -159,12 +162,15 @@ private Q_SLOTS:
     void driveAdded();
     void driveRemoved();
 
+protected:
+    bool event(QEvent *event) override;
+
 private:
     void run() override;
     // called by run():
     void getFileInfos(const QString &path, const QStringList &files);
     void fetch(const QFileInfo &info, QElapsedTimer &base, bool &firstTime,
-               QList<QPair<QString, QFileInfo>> &updatedFiles, const QString &path);
+               QList<std::pair<QString, QFileInfo>> &updatedFiles, const QString &path);
 
 private:
     void createWatcher();
@@ -175,7 +181,6 @@ private:
     QStack<QString> path;
     QStack<QStringList> files;
     // end protected by mutex
-    QAtomicInt abort;
 
 #if QT_CONFIG(filesystemwatcher)
     QFileSystemWatcher *m_watcher = nullptr;

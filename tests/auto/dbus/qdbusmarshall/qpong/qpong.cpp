@@ -1,9 +1,10 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QCoreApplication>
 #include <QDBusMessage>
 #include <QDBusConnection>
+#include <QLoggingCategory>
 
 static const char serviceName[] = "org.qtproject.autotests.qpong";
 static const char objectPath[] = "/org/qtproject/qpong";
@@ -31,6 +32,9 @@ public slots:
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
+
+    // Silence many warnings from findSlot() about ping() not having the expected argument types
+    QLoggingCategory::setFilterRules("qt.dbus.integration=false");
 
     QDBusConnection con = QDBusConnection::sessionBus();
     if (!con.isConnected())

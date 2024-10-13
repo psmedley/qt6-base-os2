@@ -97,8 +97,6 @@ QT_BEGIN_NAMESPACE
     \sa QToolTip
 */
 
-Q_CORE_EXPORT void qDeleteInEventHandler(QObject *o);
-
 class QWhatsThat : public QWidget
 {
     Q_OBJECT
@@ -464,7 +462,7 @@ QWhatsThisAction::QWhatsThisAction(QObject *parent) : QAction(tr("What's This?")
     setIcon(p);
 #endif
     setCheckable(true);
-    connect(this, SIGNAL(triggered()), this, SLOT(actionTriggered()));
+    connect(this, &QWhatsThisAction::triggered, this, &QWhatsThisAction::actionTriggered);
 #ifndef QT_NO_SHORTCUT
     setShortcut(Qt::ShiftModifier | Qt::Key_F1);
 #endif
@@ -610,7 +608,7 @@ void QWhatsThis::showText(const QPoint &pos, const QString &text, QWidget *w)
 */
 void QWhatsThis::hideText()
 {
-    qDeleteInEventHandler(QWhatsThat::instance);
+    delete QWhatsThat::instance;
 }
 
 /*!

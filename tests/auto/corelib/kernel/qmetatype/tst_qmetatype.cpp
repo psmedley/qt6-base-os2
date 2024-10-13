@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "tst_qmetatype.h"
 
@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <memory>
 #include <vector>
+
+#include <QtCore/qflags.h>
 
 Q_DECLARE_METATYPE(QMetaType::Type)
 Q_DECLARE_METATYPE(QPartialOrdering)
@@ -1218,7 +1220,7 @@ void tst_QMetaType::flagsBinaryCompatibility6_0_data()
     QTest::addColumn<quint32>("flags");
 
     QFile file(QFINDTESTDATA("typeFlags.bin"));
-    file.open(QIODevice::ReadOnly);
+    QVERIFY(file.open(QIODevice::ReadOnly));
     QList<quint32> buffer;
     QDataStream ds(&file);
     ds >> buffer;
@@ -1856,6 +1858,58 @@ void tst_QMetaType::isEnum()
 
     int type6 = ::qMetaTypeId<isEnumTest_Enum1>();
     QVERIFY((QMetaType(type6).flags() & QMetaType::IsEnumeration) == QMetaType::IsEnumeration);
+}
+
+enum E1 : unsigned char {};
+enum E2 : qlonglong {};
+enum class E3 : unsigned short {};
+
+namespace myflags {
+
+    Q_NAMESPACE
+
+    enum  Flag1 : int { A, B };
+    enum  Flag2 : short { X, Y };
+
+    Q_DECLARE_FLAGS(Flags1, myflags::Flag1);
+    Q_FLAG_NS(Flags1)
+    Q_DECLARE_FLAGS(Flags2, myflags::Flag2);
+    Q_FLAG_NS(Flags2)
+
+}
+
+template <typename T>
+using getUnderlyingTypeNormalized = std::conditional_t<
+    std::is_signed_v<std::underlying_type_t<T>>,
+    typename QIntegerForSize<sizeof(T)>::Signed,
+    typename QIntegerForSize<sizeof(T)>::Unsigned
+>;
+
+void tst_QMetaType::underlyingType_data()
+{
+    QTest::addColumn<QMetaType>("source");
+    QTest::addColumn<QMetaType>("underlying");
+
+    QTest::newRow("invalid") << QMetaType() << QMetaType();
+    QTest::newRow("plain") << QMetaType::fromType<isEnumTest_Enum1>()
+                           << QMetaType::fromType<getUnderlyingTypeNormalized<isEnumTest_Enum1>>();
+    QTest::newRow("uchar") << QMetaType::fromType<E1>()
+                           << QMetaType::fromType<getUnderlyingTypeNormalized<E1>>();
+    QTest::newRow("long") << QMetaType::fromType<E2>()
+                          << QMetaType::fromType<getUnderlyingTypeNormalized<E2>>();
+    QTest::newRow("class_ushort") << QMetaType::fromType<E3>()
+                                  << QMetaType::fromType<getUnderlyingTypeNormalized<E3>>();
+    QTest::newRow("flags_int") << QMetaType::fromType<myflags::Flags1>()
+                               << QMetaType::fromType<int>();
+    QTest::newRow("flags_short")  << QMetaType::fromType<myflags::Flags2>()
+                                  << QMetaType::fromType<int>(); // sic, not short!
+}
+
+void tst_QMetaType::underlyingType()
+{
+    QFETCH(QMetaType, source);
+    QFETCH(QMetaType, underlying);
+    QCOMPARE(source.underlyingType(), underlying);
 }
 
 void tst_QMetaType::isRegisteredStaticLess_data()

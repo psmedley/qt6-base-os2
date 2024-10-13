@@ -1,5 +1,5 @@
 // Copyright (C) 2017 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
@@ -14,19 +14,18 @@
 
 #include <algorithm>
 #include <functional>
-#include <vector> // for reference
 #include <iostream>
 #include <list>
+#ifdef __cpp_lib_ranges
+#include <ranges>
+#endif
 #include <set>
 #include <sstream>
 #include <map>
 #include <forward_list>
 #include <unordered_set>
 #include <unordered_map>
-
-#if defined(__cpp_lib_erase_if) && __cpp_lib_erase_if >= 202002L
-#  define STDLIB_HAS_UNIFORM_ERASURE
-#endif
+#include <q20vector.h> // For reference
 
 QT_BEGIN_NAMESPACE
 std::ostream &operator<<(std::ostream &os, const QChar &c)
@@ -333,6 +332,38 @@ private Q_SLOTS:
 
 private:
     template <typename Container>
+    void copesWithValueTypesWithConstMembers_impl();
+
+    struct ConstMember {
+    #ifndef __cpp_aggregate_paren_init // also check that we can emplace aggregates (C++20 only)
+        explicit ConstMember(int n) : n(n) {}
+    #endif
+        const int n;
+
+        friend bool operator==(const ConstMember &lhs, const ConstMember &rhs) noexcept
+        { return lhs.n == rhs.n; }
+        friend bool operator!=(const ConstMember &lhs, const ConstMember &rhs) noexcept
+        { return !(lhs == rhs); }
+    };
+
+private Q_SLOTS:
+    void copesWithValueTypesWithConstMembers_std_vector() { copesWithValueTypesWithConstMembers_impl<std::vector<ConstMember>>(); }
+    void copesWithValueTypesWithConstMembers_QVarLengthArray() { copesWithValueTypesWithConstMembers_impl<QVarLengthArray<ConstMember, 2>>(); }
+
+private:
+    template <typename Container>
+    void assign_impl() const;
+
+private Q_SLOTS:
+    void assign_std_vector() { assign_impl<std::vector<int>>(); };
+    void assign_std_string() { assign_impl<std::string>(); }
+    void assign_QVarLengthArray() { assign_impl<QVarLengthArray<int, 4>>(); };
+    void assign_QList() { assign_impl<QList<int>>(); }
+    void assign_QByteArray() { assign_impl<QByteArray>(); }
+    void assign_QString() { assign_impl<QString>(); }
+
+private:
+    template <typename Container>
     void front_back_impl() const;
 
 private Q_SLOTS:
@@ -368,22 +399,14 @@ private Q_SLOTS:
     void erase_QVarLengthArray() { erase_impl<QVarLengthArray<int>>(); }
     void erase_QString() { erase_impl<QString>(); }
     void erase_QByteArray() { erase_impl<QByteArray>(); }
-    void erase_std_vector() {
-#ifdef STDLIB_HAS_UNIFORM_ERASURE
-        erase_impl<std::vector<int>>();
-#endif
-    }
+    void erase_std_vector() { erase_impl<std::vector<int>>(); }
 
     void erase_if_QList() { erase_if_impl<QList<int>>(); }
     void erase_if_QVarLengthArray() { erase_if_impl<QVarLengthArray<int>>(); }
     void erase_if_QSet() { erase_if_impl<QSet<int>>(); }
     void erase_if_QString() { erase_if_impl<QString>(); }
     void erase_if_QByteArray() { erase_if_impl<QByteArray>(); }
-    void erase_if_std_vector() {
-#ifdef STDLIB_HAS_UNIFORM_ERASURE
-        erase_if_impl<std::vector<int>>();
-#endif
-    }
+    void erase_if_std_vector() { erase_if_impl<std::vector<int>>(); }
     void erase_if_QMap() { erase_if_associative_impl<QMap<int, int>>(); }
     void erase_if_QMultiMap() {erase_if_associative_impl<QMultiMap<int, int>>(); }
     void erase_if_QHash() { erase_if_associative_impl<QHash<int, int>>(); }
@@ -409,6 +432,21 @@ private Q_SLOTS:
     void keyValueRange_QMultiMap() { keyValueRange_impl<QMultiMap<int, int>>(); }
     void keyValueRange_QHash() { keyValueRange_impl<QHash<int, int>>(); }
     void keyValueRange_QMultiHash() { keyValueRange_impl<QMultiHash<int, int>>(); }
+
+private:
+    template <typename Container>
+    void opEqNaN_impl() const;
+
+private Q_SLOTS:
+    void opEqNaN_QList_Float() { opEqNaN_impl<QList<float>>(); }
+    void opEqNaN_QList_Float16() { opEqNaN_impl<QList<qfloat16>>(); }
+    void opEqNaN_QList_Double() { opEqNaN_impl<QList<double>>(); }
+    void opEqNaN_QVarLengthArray_Float() { opEqNaN_impl<QVarLengthArray<float>>(); }
+    void opEqNaN_QVarLengthArray_Float16() { opEqNaN_impl<QVarLengthArray<qfloat16>>(); }
+    void opEqNaN_QVarLengthArray_Double() { opEqNaN_impl<QVarLengthArray<double>>(); }
+    void opEqNaN_QSet_Float() { opEqNaN_impl<QSet<float>>(); }
+    void opEqNaN_QSet_Float16() { opEqNaN_impl<QSet<qfloat16>>(); }
+    void opEqNaN_QSet_Double() { opEqNaN_impl<QSet<double>>(); }
 };
 
 void tst_ContainerApiSymmetry::init()
@@ -702,6 +740,20 @@ void tst_ContainerApiSymmetry::ranged_ctor_associative_impl() const
     QCOMPARE(c3a, reference);
     QCOMPARE(c3b, reference);
     QCOMPARE(c4,  reference);
+
+#ifdef __cpp_lib_ranges
+    {
+        auto view1 = values1 | std::views::transform(std::identity{});
+        Container c5(std::ranges::begin(view1),
+                     std::ranges::end(view1));
+        QCOMPARE(c5, reference);
+
+        auto view2 = values1 | std::views::filter([](auto &&){ return true; });
+        Container c6(std::ranges::begin(view2),
+                     std::ranges::end(view2));
+        QCOMPARE(c6, reference);
+    }
+#endif
 }
 
 template <typename Container>
@@ -744,7 +796,7 @@ void tst_ContainerApiSymmetry::resize_impl() const
     auto c = make<Container>(3);
     QCOMPARE(c.size(), S(3));
     c.resize(4, V(5));
-    QCOMPARE(c.size(), S(4));
+    QCOMPARE(std::size(c), S(4));
     QCOMPARE(c.back(), V(5));
 
     // ctor/resize symmetry:
@@ -760,7 +812,172 @@ void tst_ContainerApiSymmetry::resize_impl() const
     }
 }
 
+template <typename T>
+[[maybe_unused]]
+constexpr bool is_vector_v = false;
+template <typename...Args>
+constexpr bool is_vector_v<std::vector<Args...>> = true;
+
+template <typename Container, typename Value>
+void wrap_resize(Container &c, typename Container::size_type n, const Value &v)
+{
+#ifdef __GLIBCXX__ // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83981
+    if constexpr (is_vector_v<Container>) {
+        while (c.size() < n)
+            c.push_back(v);
+    } else
+#endif
+    {
+        c.resize(n, v);
+    }
+}
+
 template <typename Container>
+void tst_ContainerApiSymmetry::copesWithValueTypesWithConstMembers_impl()
+{
+    // The problem:
+    //
+    //   using V = ConstMember;
+    //   V v{42};
+    //   assert(v.n == 42); // OK
+    //   new (&v) V{24};
+    //   assert(v.n == 24); // UB in C++17: v.n could still be 42 (C++17 [basic.life]/8)
+    //                      // OK in C++20 (C++20 [basic.life]/8)
+    //   assert(std::launder(&v)->n == 24); // OK
+    //   assert(v.n == 24); // _still_ UB!
+    //
+    // Containers:
+    // - must not expose this problem
+    // - must compile in the first place, even though V
+    //   - is not assignable
+    //   - is not default-constructible
+
+    using S = typename Container::size_type;
+    using V = typename Container::value_type;
+
+    Container c;
+    // the following are all functions that by rights should not require the type to be
+    // - default-constructible
+    // - assignable
+    // make sure they work
+    c.reserve(S(5));
+    c.shrink_to_fit();
+    wrap_resize(c, 1, V(42));
+    QCOMPARE(c[0], V(42));
+    wrap_resize(c, 2, V(48));
+    QCOMPARE(c[0], V(42));
+    QCOMPARE(c[1], V(48));
+    c.clear();
+    c.emplace_back(24);
+    QCOMPARE(c.front(), V(24));
+    c.push_back(V(41));
+    QCOMPARE(c.back(), V(41));
+    {
+        const auto v142 = V(142);
+        c.push_back(v142);
+    }
+    QCOMPARE(c.size(), S(3));
+    QCOMPARE(c[0],  V(24));
+    QCOMPARE(c[1],  V(41));
+    QCOMPARE(c[2], V(142));
+}
+
+template <typename Container>
+void tst_ContainerApiSymmetry::assign_impl() const
+{
+#define CHECK(Arr, ComparisonData, Sz_n, Sz_e)               \
+    QCOMPARE(Sz_n, Sz_e);                                    \
+    for (const auto &e : Arr)                                \
+        QCOMPARE(e, ComparisonData)                          \
+    /*end*/
+#define RET_CHECK(...)                                           \
+    do {                                                         \
+        if constexpr (std::is_void_v<decltype( __VA_ARGS__ )>) { \
+            /* e.g. std::vector */                               \
+            __VA_ARGS__ ;                                        \
+        } else {                                                 \
+            /* e.g. std::basic_string */                         \
+            auto &&r = __VA_ARGS__ ;                             \
+            QCOMPARE_EQ(&r, &c);                                 \
+        }                                                        \
+    } while (false)                                              \
+    /* end */
+    using V = typename Container::value_type;
+    using S = typename Container::size_type;
+    auto tData = V(65);
+    {
+        // fill version
+        auto c = make<Container>(4);
+        const S oldCapacity = c.capacity();
+        RET_CHECK(c.assign(4, tData));
+        CHECK(c, tData, c.size(), S(4));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+
+        tData = V(66);
+        c.assign(8, tData); // may reallocate
+        CHECK(c, tData, c.size(), S(8));
+
+        const S grownCapacity = c.capacity();
+        c.assign(0, tData);
+        CHECK(c, tData, c.size(), S(0));
+        QCOMPARE_EQ(c.capacity(), grownCapacity);
+    }
+    {
+        // range version for non input iterator
+        auto c = make<Container>(4);
+        auto iter = make<Container>(1);
+
+        iter.assign(8, tData);
+        RET_CHECK(c.assign(iter.begin(), iter.end())); // may reallocate
+        CHECK(c, tData, c.size(), S(8));
+
+        const S oldCapacity = c.capacity();
+        c.assign(iter.begin(), iter.begin());
+        CHECK(c, tData, c.size(), S(0));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+    }
+    {
+        // range version for input iterator
+        auto c = make<Container>(4);
+        const S oldCapacity = c.capacity();
+
+        std::stringstream ss;
+        ss << tData << ' ' << tData << ' ';
+        RET_CHECK(c.assign(std::istream_iterator<V>{ss}, std::istream_iterator<V>{}));
+        CHECK(c, tData, c.size(), S(2));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+
+        ss.str("");
+        ss.clear();
+        tData = V(66);
+        ss << tData << ' ' << tData << ' ' << tData << ' ' << tData << ' ';
+        c.assign(std::istream_iterator<V>{ss}, std::istream_iterator<V>{});
+        CHECK(c, tData, c.size(), S(4));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+
+        ss.str("");
+        ss.clear();
+        tData = V(67);
+        ss << tData << ' ' << tData << ' ' << tData << ' ' << tData << ' '
+           << tData << ' ' << tData << ' ' << tData << ' ';
+        c.assign(std::istream_iterator<V>{ss}, std::istream_iterator<V>{}); // may reallocate
+        CHECK(c, tData, c.size(), S(7));
+    }
+    {
+        // initializer-list version
+        auto c = make<Container>(4);
+        const S oldCapacity = c.capacity();
+        std::initializer_list<V> list = {tData, tData, tData};
+        RET_CHECK(c.assign(list));
+        CHECK(c, tData, c.size(), S(3));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+    }
+
+#undef RET_CHECK
+#undef CHECK
+}
+
+template<typename Container>
 void tst_ContainerApiSymmetry::front_back_impl() const
 {
     using V = typename Container::value_type;
@@ -793,6 +1010,7 @@ void tst_ContainerApiSymmetry::erase_impl() const
     auto c = make<Container>(7); // {1, 2, 3, 4, 5, 6, 7}
     QCOMPARE(c.size(), S(7));
 
+    using q20::erase; // For std::vector
     auto result = erase(c, V(1));
     QCOMPARE(result, S(1));
     QCOMPARE(c.size(), S(6));
@@ -818,7 +1036,10 @@ void tst_ContainerApiSymmetry::erase_if_impl() const
 
     oldSize = c.size();
     count = 0;
-    auto result = erase_if(c, [&](V i) { ++count; return Conv::toInt(i) % 2 == 0; });
+
+    using q20::erase_if; // For std::vector
+
+    S result = erase_if(c, [&](V i) { ++count; return Conv::toInt(i) % 2 == 0; });
     QCOMPARE(result, S(3));
     QCOMPARE(c.size(), S(4));
     QCOMPARE(count, oldSize);
@@ -1072,6 +1293,17 @@ void tst_ContainerApiSymmetry::keyValueRange_impl() const
     }
     QVERIFY(verify(keys, COUNT));
     QVERIFY(verify(values, COUNT, 2));
+}
+
+template<typename Container>
+void tst_ContainerApiSymmetry::opEqNaN_impl() const
+{
+    using V = typename Container::value_type;
+    static_assert(std::is_floating_point_v<V> || std::is_same_v<V, qfloat16>);
+    const Container lhs {std::numeric_limits<V>::quiet_NaN()};
+    const Container rhs {std::numeric_limits<V>::quiet_NaN()};
+
+    QCOMPARE_NE(lhs, rhs);
 }
 
 QTEST_APPLESS_MAIN(tst_ContainerApiSymmetry)

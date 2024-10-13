@@ -24,6 +24,8 @@ QT_BEGIN_NAMESPACE
   \ingroup network
   \ingroup shared
 
+  \compares equality
+
   It is used to parse the query strings found in URLs like the following:
 
   \image qurl-querystring.png
@@ -123,14 +125,14 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
-    \fn QUrlQuery::QUrlQuery(std::initializer_list<QPair<QString, QString>> list)
+    \fn QUrlQuery::QUrlQuery(std::initializer_list<std::pair<QString, QString>> list)
 
     \since 5.13
 
     Constructs a QUrlQuery object from the \a list of key/value pair.
 */
 
-typedef QList<QPair<QString, QString> > Map;
+typedef QList<std::pair<QString, QString> > Map;
 
 class QUrlQueryPrivate : public QSharedData
 {
@@ -146,7 +148,7 @@ public:
     void setQuery(const QString &query);
 
     void addQueryItem(const QString &key, const QString &value)
-    { itemList.append(qMakePair(recodeFromUser(key), recodeFromUser(value))); }
+    { itemList.append(std::make_pair(recodeFromUser(key), recodeFromUser(value))); }
     int findRecodedKey(const QString &key, int from = 0) const
     {
         for (int i = from; i < itemList.size(); ++i)
@@ -290,17 +292,17 @@ void QUrlQueryPrivate::setQuery(const QString &query)
 
         if (delimiter == pos) {
             // the value delimiter wasn't found, store a null value
-            itemList.append(qMakePair(key, QString()));
+            itemList.append(std::make_pair(key, QString()));
         } else if (delimiter + 1 == pos) {
             // if the delimiter was found but the value is empty, store empty-but-not-null
-            itemList.append(qMakePair(key, QString(0, Qt::Uninitialized)));
+            itemList.append(std::make_pair(key, QString(0, Qt::Uninitialized)));
         } else {
             QString value;
             if (!qt_urlRecode(value, QStringView{delimiter + 1, pos},
                               QUrl::DecodeReserved,
                               prettyDecodedActions))
                 value = QString(delimiter + 1, pos - delimiter - 1);
-            itemList.append(qMakePair(key, value));
+            itemList.append(std::make_pair(key, value));
         }
 
         if (pos != end)
@@ -399,22 +401,25 @@ QUrlQuery::~QUrlQuery()
 }
 
 /*!
-    Returns \c true if this object and the \a other object contain the same
+    \fn bool QUrlQuery::operator==(const QUrlQuery &lhs, const QUrlQuery &rhs)
+
+    Returns \c true if QUrlQuery objects \a lhs and \a rhs contain the same
     contents, in the same order, and use the same query delimiters.
 */
-bool QUrlQuery::operator ==(const QUrlQuery &other) const
-{
-    if (d == other.d)
-        return true;
-    if (d && other.d)
-        // keep in sync with qHash(QUrlQuery):
-        return d->valueDelimiter == other.d->valueDelimiter &&
-                d->pairDelimiter == other.d->pairDelimiter &&
-                d->itemList == other.d->itemList;
 
-    const QUrlQueryPrivate *x = d ? d.data() : other.d.data();
-    return x->valueDelimiter == defaultQueryValueDelimiter() &&
-            x->pairDelimiter == defaultQueryPairDelimiter() &&
+bool comparesEqual(const QUrlQuery &lhs, const QUrlQuery &rhs)
+{
+    if (lhs.d == rhs.d)
+        return true;
+    if (lhs.d && rhs.d)
+        // keep in sync with qHash(QUrlQuery):
+        return lhs.d->valueDelimiter == rhs.d->valueDelimiter &&
+                lhs.d->pairDelimiter == rhs.d->pairDelimiter &&
+                lhs.d->itemList == rhs.d->itemList;
+
+    const QUrlQueryPrivate *x = lhs.d ? lhs.d.data() : rhs.d.data();
+    return x->valueDelimiter == QUrlQuery::defaultQueryValueDelimiter() &&
+            x->pairDelimiter == QUrlQuery::defaultQueryPairDelimiter() &&
             x->itemList.isEmpty();
 }
 
@@ -558,7 +563,7 @@ QString QUrlQuery::query(QUrl::ComponentFormattingOptions encoding) const
     representation of the keys and values of the query string are
     percent encoded when returned in query().
 
-    If \a valueDelimiter is set to '(' and \a pairDelimiter is ')',
+    If \a valueDelimiter is set to ',' and \a pairDelimiter is ';',
     the above query string would instead be represented like this:
 
     \snippet code/src_corelib_io_qurl.cpp 4
@@ -569,7 +574,7 @@ QString QUrlQuery::query(QUrl::ComponentFormattingOptions encoding) const
     \snippet code/src_corelib_io_qurlquery.cpp 0
 
     Use of other characters is not supported and may result in unexpected
-    behaviour. This method does not verify that you passed a valid delimiter.
+    behavior. This method does not verify that you passed a valid delimiter.
 
     \sa queryValueDelimiter(), queryPairDelimiter()
 */
@@ -613,14 +618,14 @@ QChar QUrlQuery::queryPairDelimiter() const
 
     \sa queryItems(), isEmpty()
 */
-void QUrlQuery::setQueryItems(const QList<QPair<QString, QString> > &query)
+void QUrlQuery::setQueryItems(const QList<std::pair<QString, QString> > &query)
 {
     clear();
     if (query.isEmpty())
         return;
 
     QUrlQueryPrivate *dd = d;
-    QList<QPair<QString, QString> >::const_iterator it = query.constBegin(),
+    QList<std::pair<QString, QString> >::const_iterator it = query.constBegin(),
             end = query.constEnd();
     for ( ; it != end; ++it)
         dd->addQueryItem(it->first, it->second);
@@ -634,20 +639,20 @@ void QUrlQuery::setQueryItems(const QList<QPair<QString, QString> > &query)
 
     \sa setQueryItems(), {encoding}{Encoding}
 */
-QList<QPair<QString, QString> > QUrlQuery::queryItems(QUrl::ComponentFormattingOptions encoding) const
+QList<std::pair<QString, QString> > QUrlQuery::queryItems(QUrl::ComponentFormattingOptions encoding) const
 {
     if (!d)
-        return QList<QPair<QString, QString> >();
+        return QList<std::pair<QString, QString> >();
     if (idempotentRecodeToUser(encoding))
         return d->itemList;
 
-    QList<QPair<QString, QString> > result;
+    QList<std::pair<QString, QString> > result;
     Map::const_iterator it = d->itemList.constBegin();
     Map::const_iterator end = d->itemList.constEnd();
     result.reserve(d->itemList.size());
     for ( ; it != end; ++it)
-        result << qMakePair(d->recodeToUser(it->first, encoding),
-                            d->recodeToUser(it->second, encoding));
+        result << std::make_pair(d->recodeToUser(it->first, encoding),
+                                 d->recodeToUser(it->second, encoding));
     return result;
 }
 
@@ -766,7 +771,7 @@ void QUrlQuery::removeAllQueryItems(const QString &key)
     if (d.constData()) {
         auto *p = d.data();
         const QString encodedKey = p->recodeFromUser(key);
-        auto firstEqualsEncodedKey = [&encodedKey](const QPair<QString, QString> &item) {
+        auto firstEqualsEncodedKey = [&encodedKey](const std::pair<QString, QString> &item) {
             return item.first == encodedKey;
         };
         p->itemList.removeIf(firstEqualsEncodedKey);
@@ -810,9 +815,10 @@ void QUrlQuery::removeAllQueryItems(const QString &key)
 */
 
 /*!
-    \fn bool QUrlQuery::operator!=(const QUrlQuery &other) const
+    \fn bool QUrlQuery::operator!=(const QUrlQuery &lhs, const QUrlQuery &rhs)
 
-    Returns \c true if \a other is not equal to this QUrlQuery. Otherwise, returns \c false.
+    Returns \c true if the QUrlQuery object \a rhs is not equal to \a lhs.
+    Otherwise, returns \c false.
 
     \sa operator==()
 */

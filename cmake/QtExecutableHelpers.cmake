@@ -34,6 +34,9 @@ function(qt_internal_add_executable name)
     if(ANDROID)
         _qt_internal_android_executable_finalizer(${name})
     endif()
+    if(WASM)
+        qt_internal_wasm_add_finalizers(${name})
+    endif()
 
     if(arg_QT_APP AND QT_FEATURE_debug_and_release AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19.0")
         set_property(TARGET "${name}"
@@ -146,16 +149,7 @@ function(qt_internal_add_executable name)
         MACOSX_BUNDLE "${arg_GUI}"
     )
 
-    if(WASM)
-        # WASM unconditionally sets DISABLE_EXCEPTION_CATCHING=1
-        qt_internal_set_exceptions_flags("${name}" NO_EXCEPTIONS)
-    else()
-        qt_internal_set_exceptions_flags("${name}" ${arg_EXCEPTIONS})
-    endif()
-
-    if(WASM)
-        qt_internal_wasm_add_finalizers("${name}")
-    endif()
+    qt_internal_set_exceptions_flags("${name}" ${arg_EXCEPTIONS})
 
     # Check if target needs to be excluded from all target. Also affects qt_install.
     # Set by qt_exclude_tool_directories_from_default_target.
@@ -165,7 +159,10 @@ function(qt_internal_add_executable name)
             string(FIND "${CMAKE_CURRENT_SOURCE_DIR}" "${absolute_dir}" dir_starting_pos)
             if(dir_starting_pos EQUAL 0)
                 set(exclude_from_all TRUE)
-                set_target_properties("${name}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+                set_target_properties("${name}" PROPERTIES
+                    EXCLUDE_FROM_ALL TRUE
+                    _qt_internal_excluded_from_default_target TRUE
+                )
                 break()
             endif()
         endforeach()
@@ -182,7 +179,7 @@ function(qt_internal_add_executable name)
             qt_get_install_target_default_args(
                 OUT_VAR install_targets_default_args
                 CMAKE_CONFIG "${cmake_config}"
-                ALL_CMAKE_CONFIGS "${cmake_configs}"
+                ALL_CMAKE_CONFIGS ${cmake_configs}
                 RUNTIME "${arg_INSTALL_DIRECTORY}"
                 LIBRARY "${arg_INSTALL_DIRECTORY}"
                 BUNDLE "${arg_INSTALL_DIRECTORY}")
@@ -213,102 +210,22 @@ function(qt_internal_add_executable name)
         qt_internal_install_pdb_files(${name} "${arg_INSTALL_DIRECTORY}")
     endif()
 
-    # If linking against Gui, make sure to also build the default QPA plugin.
-    # This makes the experience of an initial Qt configuration to build and run one single
-    # test / executable nicer.
-    get_target_property(linked_libs "${name}" LINK_LIBRARIES)
-    if("Qt::Gui" IN_LIST linked_libs AND TARGET qpa_default_plugins)
-        add_dependencies("${name}" qpa_default_plugins)
+    if(QT_GENERATE_SBOM)
+        set(sbom_args "")
+        _qt_internal_forward_function_args(
+            FORWARD_APPEND
+            FORWARD_PREFIX arg
+            FORWARD_OUT_VAR sbom_args
+            FORWARD_OPTIONS
+                ${__qt_internal_sbom_optional_args}
+            FORWARD_SINGLE
+                ${__qt_internal_sbom_single_args}
+            FORWARD_MULTI
+                ${__qt_internal_sbom_multi_args}
+        )
+
+        _qt_internal_extend_sbom(${name} ${sbom_args})
     endif()
-
-    # For static plugins, we need to explicitly link to plugins we want to be
-    # loaded with the executable. User projects get that automatically, but
-    # for tools built as part of Qt, we can't use that mechanism because it
-    # would pollute the targets we export as part of an install and lead to
-    # circular dependencies. The logic here is a simpler equivalent of the
-    # more dynamic logic in QtPlugins.cmake.in, but restricted to only
-    # adding plugins that are provided by the same module as the module
-    # libraries the executable links to.
-    set(libs
-        ${arg_LIBRARIES}
-        ${arg_PUBLIC_LIBRARIES}
-        ${extra_libraries}
-        Qt::PlatformCommonInternal
-    )
-
-    set(deduped_libs "")
-    foreach(lib IN LISTS libs)
-        if(NOT TARGET "${lib}")
-            continue()
-        endif()
-
-        # Normalize module by stripping any leading "Qt::", because properties are set on the
-        # versioned target (either Gui when building the module, or Qt6::Gui when it's
-        # imported).
-        if(lib MATCHES "Qt::([-_A-Za-z0-9]+)")
-            set(new_lib "${QT_CMAKE_EXPORT_NAMESPACE}::${CMAKE_MATCH_1}")
-            if(TARGET "${new_lib}")
-                set(lib "${new_lib}")
-            endif()
-        endif()
-
-        # Unalias the target.
-        get_target_property(aliased_target ${lib} ALIASED_TARGET)
-        if(aliased_target)
-            set(lib ${aliased_target})
-        endif()
-
-        list(APPEND deduped_libs "${lib}")
-    endforeach()
-
-    list(REMOVE_DUPLICATES deduped_libs)
-
-    foreach(lib IN LISTS deduped_libs)
-        string(MAKE_C_IDENTIFIER "${name}_plugin_imports_${lib}" out_file)
-        string(APPEND out_file .cpp)
-
-        # Initialize plugins that are built in the same repository as the Qt module 'lib'.
-        set(class_names_regular
-            "$<GENEX_EVAL:$<TARGET_PROPERTY:${lib},_qt_initial_repo_plugin_class_names>>")
-
-        # Initialize plugins that are built in the current Qt repository, but are associated
-        # with a Qt module from a different repository (qtsvg's QSvgPlugin associated with
-        # qtbase's QtGui).
-        string(MAKE_C_IDENTIFIER "${PROJECT_NAME}" current_project_name)
-        set(prop_prefix "_qt_repo_${current_project_name}")
-        set(class_names_current_project
-            "$<GENEX_EVAL:$<TARGET_PROPERTY:${lib},${prop_prefix}_plugin_class_names>>")
-
-        # Only add separator if first list is not empty, so we don't trigger the file generation
-        # when all lists are empty.
-        set(class_names_separator "$<$<NOT:$<STREQUAL:${class_names_regular},>>:;>" )
-        set(class_names
-            "${class_names_regular}${class_names_separator}${class_names_current_project}")
-
-        set(out_file_path "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
-
-        file(GENERATE OUTPUT "${out_file_path}" CONTENT
-"// This file is auto-generated. Do not edit.
-#include <QtPlugin>
-
-Q_IMPORT_PLUGIN($<JOIN:${class_names},)\nQ_IMPORT_PLUGIN(>)
-"
-            CONDITION "$<NOT:$<STREQUAL:${class_names},>>"
-        )
-
-        # CMake versions earlier than 3.18.0 can't find the generated file for some reason,
-        # failing at generation phase.
-        # Explicitly marking the file as GENERATED fixes the issue.
-        set_source_files_properties("${out_file_path}" PROPERTIES GENERATED TRUE)
-
-        target_sources(${name} PRIVATE
-            "$<$<NOT:$<STREQUAL:${class_names},>>:${out_file_path}>"
-        )
-        target_link_libraries(${name} PRIVATE
-            "$<TARGET_PROPERTY:${lib},_qt_initial_repo_plugins>"
-            "$<TARGET_PROPERTY:${lib},${prop_prefix}_plugins>")
-    endforeach()
-
 endfunction()
 
 # This function compiles the target at configure time the very first time and creates the custom
@@ -390,9 +307,15 @@ function(qt_internal_add_configure_time_executable target)
     if(arg_INSTALL_DIRECTORY)
         set(install_dir "${arg_INSTALL_DIRECTORY}")
     endif()
+
+    set(output_directory_relative "${install_dir}")
     set(output_directory "${QT_BUILD_DIR}/${install_dir}")
+
+    set(target_binary_path_relative
+        "${output_directory_relative}/${configuration_path}${target_binary}")
     set(target_binary_path
         "${output_directory}/${configuration_path}${target_binary}")
+
     get_filename_component(target_binary_path "${target_binary_path}" ABSOLUTE)
 
     if(NOT DEFINED arg_SOURCES)
@@ -422,7 +345,8 @@ function(qt_internal_add_configure_time_executable target)
     )
 
     set(should_build_at_configure_time TRUE)
-    if(EXISTS "${target_binary_path}")
+    if(QT_INTERNAL_HAVE_CONFIGURE_TIME_${target} AND
+        EXISTS "${target_binary_path}" AND EXISTS "${timestamp_file}")
         set(last_ts 0)
         foreach(source IN LISTS sources)
             file(TIMESTAMP "${source}" ts "%s")
@@ -435,6 +359,37 @@ function(qt_internal_add_configure_time_executable target)
         if(${ts} GREATER_EQUAL ${last_ts})
             set(should_build_at_configure_time FALSE)
         endif()
+    endif()
+
+    set(cmake_flags_arg "")
+    if(arg_CMAKE_FLAGS)
+        set(cmake_flags_arg CMAKE_FLAGS "${arg_CMAKE_FLAGS}")
+    endif()
+
+    qt_internal_get_enabled_languages_for_flag_manipulation(enabled_languages)
+    foreach(lang IN LISTS enabled_languages)
+        set(compiler_flags_var "CMAKE_${lang}_FLAGS")
+        list(APPEND cmake_flags_arg "-D${compiler_flags_var}:STRING=${${compiler_flags_var}}")
+        if(arg_CONFIG)
+            set(compiler_flags_var_config "${compiler_flags_var}${config_suffix}")
+            list(APPEND cmake_flags_arg
+                "-D${compiler_flags_var_config}:STRING=${${compiler_flags_var_config}}")
+        endif()
+    endforeach()
+
+    qt_internal_get_target_link_types_for_flag_manipulation(target_link_types)
+    foreach(linker_type IN LISTS target_link_types)
+        set(linker_flags_var "CMAKE_${linker_type}_LINKER_FLAGS")
+        list(APPEND cmake_flags_arg "-D${linker_flags_var}:STRING=${${linker_flags_var}}")
+        if(arg_CONFIG)
+            set(linker_flags_var_config "${linker_flags_var}${config_suffix}")
+            list(APPEND cmake_flags_arg
+                "-D${linker_flags_var_config}:STRING=${${linker_flags_var_config}}")
+        endif()
+    endforeach()
+
+    if(NOT "${QT_INTERNAL_CMAKE_FLAGS_CONFIGURE_TIME_TOOL_${target}}" STREQUAL "${cmake_flags_arg}")
+        set(should_build_at_configure_time TRUE)
     endif()
 
     if(should_build_at_configure_time)
@@ -460,33 +415,11 @@ function(qt_internal_add_configure_time_executable target)
             set(template "${arg_CMAKELISTS_TEMPLATE}")
         endif()
 
-        set(cmake_flags_arg)
-        if(arg_CMAKE_FLAGS)
-            set(cmake_flags_arg CMAKE_FLAGS "${arg_CMAKE_FLAGS}")
-        endif()
         configure_file("${template}" "${target_binary_dir}/CMakeLists.txt" @ONLY)
 
-        qt_internal_get_enabled_languages_for_flag_manipulation(enabled_languages)
-        foreach(lang IN LISTS enabled_languages)
-            set(compiler_flags_var "CMAKE_${lang}_FLAGS")
-            list(APPEND cmake_flags_arg "-D${compiler_flags_var}:STRING=${${compiler_flags_var}}")
-            if(arg_CONFIG)
-                set(compiler_flags_var_config "${compiler_flags_var}${config_suffix}")
-                list(APPEND cmake_flags_arg
-                    "-D${compiler_flags_var_config}:STRING=${${compiler_flags_var_config}}")
-            endif()
-        endforeach()
-
-        qt_internal_get_target_link_types_for_flag_manipulation(target_link_types)
-        foreach(linker_type IN LISTS target_link_types)
-            set(linker_flags_var "CMAKE_${linker_type}_LINKER_FLAGS")
-            list(APPEND cmake_flags_arg "-D${linker_flags_var}:STRING=${${linker_flags_var}}")
-            if(arg_CONFIG)
-                set(linker_flags_var_config "${linker_flags_var}${config_suffix}")
-                list(APPEND cmake_flags_arg
-                    "-D${linker_flags_var_config}:STRING=${${linker_flags_var_config}}")
-            endif()
-        endforeach()
+        if(EXISTS "${target_binary_dir}/CMakeCache.txt")
+            file(REMOVE "${target_binary_dir}/CMakeCache.txt")
+        endif()
 
         try_compile(result
             "${target_binary_dir}"
@@ -496,7 +429,12 @@ function(qt_internal_add_configure_time_executable target)
             OUTPUT_VARIABLE try_compile_output
         )
 
+        set(QT_INTERNAL_CMAKE_FLAGS_CONFIGURE_TIME_TOOL_${target}
+            "${cmake_flags_arg}" CACHE INTERNAL "")
+
         file(WRITE "${timestamp_file}" "")
+        set(QT_INTERNAL_HAVE_CONFIGURE_TIME_${target} ${result} CACHE INTERNAL
+            "Indicates that the configure-time target ${target} was built")
         if(NOT result)
             message(FATAL_ERROR "Unable to build ${target}: ${try_compile_output}")
         endif()
@@ -506,7 +444,9 @@ function(qt_internal_add_configure_time_executable target)
     add_executable(${QT_CMAKE_EXPORT_NAMESPACE}::${target} ALIAS ${target})
     set_target_properties(${target} PROPERTIES
         _qt_internal_configure_time_target TRUE
-        IMPORTED_LOCATION "${target_binary_path}")
+        _qt_internal_configure_time_target_build_location "${target_binary_path_relative}"
+        IMPORTED_LOCATION "${target_binary_path}"
+    )
 
     if(NOT arg_NO_INSTALL)
         set_target_properties(${target} PROPERTIES

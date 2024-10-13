@@ -6,10 +6,6 @@
 
 #include <algorithm>
 
-#if QT_CONFIG(opengl)
-#include <QtOpenGL/QOpenGLWindow>
-#endif
-
 HoverPoints::HoverPoints(QWidget *widget, PointShape shape)
     : QObject(widget),
       m_widget(widget),
@@ -131,6 +127,7 @@ bool HoverPoints::eventFilter(QObject *object, QEvent *event)
             const int id = point.id();
             switch (point.state()) {
             case QEventPoint::Pressed:
+            case QEventPoint::Stationary:
             {
                 // find the point, move it
                 const auto mappedPoints = m_fingerPointMapping.values();
@@ -155,7 +152,7 @@ bool HoverPoints::eventFilter(QObject *object, QEvent *event)
                     }
                 }
                 if (activePoint != -1) {
-                    m_fingerPointMapping.insert(point.id(), activePoint);
+                    m_fingerPointMapping.insert(id, activePoint);
                     movePoint(activePoint, point.position());
                 }
             }
@@ -164,8 +161,10 @@ bool HoverPoints::eventFilter(QObject *object, QEvent *event)
             {
                 // move the point and release
                 const auto it = m_fingerPointMapping.constFind(id);
-                movePoint(it.value(), point.position());
-                m_fingerPointMapping.erase(it);
+                if (it != m_fingerPointMapping.constEnd()) {
+                    movePoint(it.value(), point.position());
+                    m_fingerPointMapping.erase(it);
+                }
             }
             break;
             case QEventPoint::Updated:
@@ -230,17 +229,7 @@ bool HoverPoints::eventFilter(QObject *object, QEvent *event)
 void HoverPoints::paintPoints()
 {
     QPainter p;
-#if QT_CONFIG(opengl)
-    ArthurFrame *af = qobject_cast<ArthurFrame *>(m_widget);
-    if (af && af->usesOpenGL() && af->glWindow()->isValid()) {
-        af->glWindow()->makeCurrent();
-        p.begin(af->glWindow());
-    } else {
-        p.begin(m_widget);
-    }
-#else
     p.begin(m_widget);
-#endif
 
     p.setRenderHint(QPainter::Antialiasing);
 

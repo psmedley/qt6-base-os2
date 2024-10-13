@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
@@ -37,9 +37,7 @@ public:
         , fd_(-1)
         , stream_(0)
     {
-    #if defined(QT_LARGEFILE_SUPPORT) && !defined(Q_OS_MAC) && !defined(Q_OS_QNX)
-        maxSizeBits = 36; // 64 GiB
-    #elif defined(Q_OS_MAC)
+    #if defined(Q_OS_DARWIN)
         // HFS+ does not support sparse files, so we limit file size for the test
         // on Mac OS.
         maxSizeBits = 24; // 16 MiB
@@ -48,6 +46,14 @@ public:
         // This means that files are limited to 2 GB − 1 bytes.
         // Limit max size to 256MB
         maxSizeBits = 28; // 256 MiB
+    #elif defined(Q_OS_VXWORKS)
+        // VxWorks doesn't support sparse files, also, default /tmp directory is a RAM-disk which
+        // limits its capacity.
+        maxSizeBits = 28; // 256 MiB
+    #elif defined (Q_OS_WASM)
+        maxSizeBits = 28; // 256 MiB
+    #elif defined(QT_LARGEFILE_SUPPORT)
+        maxSizeBits = 36; // 64 GiB
     #else
         maxSizeBits = 24; // 16 MiB
     #endif
@@ -491,19 +497,26 @@ void tst_LargeFile::mapFile()
 //Linux: memory-mapping beyond EOF usually succeeds, but depends on the filesystem
 //  32-bit: limited to 44-bit offsets (when sizeof(off_t) == 8)
 //Windows: memory-mapping beyond EOF is not allowed
+//wasm: as for linux
+//VxWorks: memory-mapping beyond EOF is not allowed
 void tst_LargeFile::mapOffsetOverflow()
 {
     enum {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN)
         Succeeds = false,
         MaxOffset = 63
+#elif defined(Q_OS_WASM)
+        Succeeds = true,
+        MaxOffset = sizeof(QT_OFF_T) > 4 ? 43 : 30
+#elif (defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)) && (Q_PROCESSOR_WORDSIZE == 4)
+        Succeeds = true,
+        MaxOffset = sizeof(QT_OFF_T) > 4 ? 43 : 30
+#elif defined(Q_OS_VXWORKS)
+        Succeeds = false,
+        MaxOffset = 8 * sizeof(QT_OFF_T) - 1
 #else
         Succeeds = true,
-#  if (defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)) && Q_PROCESSOR_WORDSIZE == 4
-        MaxOffset = sizeof(QT_OFF_T) > 4 ? 43 : 30
-#  else
         MaxOffset = 8 * sizeof(QT_OFF_T) - 1
-#  endif
 #endif
     };
 

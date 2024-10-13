@@ -7,6 +7,7 @@
 #include <qdatetime.h>
 #include <qdebug.h>
 #include <qlist.h>
+#include <qloggingcategory.h>
 #include <qsqlerror.h>
 #include <qsqlfield.h>
 #include <qsqlindex.h>
@@ -38,23 +39,9 @@ Q_DECLARE_METATYPE(sqlite3_stmt*)
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
+static Q_LOGGING_CATEGORY(lcSqlite, "qt.sql.sqlite")
 
-static QString _q_escapeIdentifier(const QString &identifier, QSqlDriver::IdentifierType type)
-{
-    QString res = identifier;
-    // If it contains [ and ] then we assume it to be escaped properly already as this indicates
-    // the syntax is exactly how it should be
-    if (identifier.contains(u'[') && identifier.contains(u']'))
-        return res;
-    if (!identifier.isEmpty() && !identifier.startsWith(u'"') && !identifier.endsWith(u'"')) {
-        res.replace(u'"', "\"\""_L1);
-        res.prepend(u'"').append(u'"');
-        if (type == QSqlDriver::TableName)
-            res.replace(u'.', "\".\""_L1);
-    }
-    return res;
-}
+using namespace Qt::StringLiterals;
 
 static int qGetColumnType(const QString &tpName)
 {
@@ -114,11 +101,64 @@ class QSQLiteDriverPrivate : public QSqlDriverPrivate
 
 public:
     inline QSQLiteDriverPrivate() : QSqlDriverPrivate(QSqlDriver::SQLite) {}
+    bool isIdentifierEscaped(QStringView identifier) const;
+    QSqlIndex getTableInfo(QSqlQuery &query, const QString &tableName,
+                           bool onlyPIndex = false) const;
+
     sqlite3 *access = nullptr;
     QList<QSQLiteResult *> results;
     QStringList notificationid;
 };
 
+bool QSQLiteDriverPrivate::isIdentifierEscaped(QStringView identifier) const
+{
+    return identifier.size() > 2
+            && ((identifier.startsWith(u'"') && identifier.endsWith(u'"'))
+                || (identifier.startsWith(u'`') && identifier.endsWith(u'`'))
+                || (identifier.startsWith(u'[') && identifier.endsWith(u']')));
+}
+
+QSqlIndex QSQLiteDriverPrivate::getTableInfo(QSqlQuery &query, const QString &tableName,
+                                             bool onlyPIndex) const
+{
+    Q_Q(const QSQLiteDriver);
+    QString schema;
+    QString table = q->escapeIdentifier(tableName, QSqlDriver::TableName);
+    const auto indexOfSeparator = table.indexOf(u'.');
+    if (indexOfSeparator > -1) {
+        auto leftName = QStringView{table}.first(indexOfSeparator);
+        auto rightName = QStringView{table}.sliced(indexOfSeparator + 1);
+        if (isIdentifierEscaped(leftName) && isIdentifierEscaped(rightName)) {
+            schema = leftName.toString() + u'.';
+            table = rightName.toString();
+        }
+    }
+
+    query.exec("PRAGMA "_L1 + schema + "table_info ("_L1 + table + u')');
+    QSqlIndex ind;
+    while (query.next()) {
+        bool isPk = query.value(5).toInt();
+        if (onlyPIndex && !isPk)
+            continue;
+        QString typeName = query.value(2).toString().toLower();
+        QString defVal = query.value(4).toString();
+        if (!defVal.isEmpty() && defVal.at(0) == u'\'') {
+            const int end = defVal.lastIndexOf(u'\'');
+            if (end > 0)
+                defVal = defVal.mid(1, end - 1);
+        }
+
+        QSqlField fld(query.value(1).toString(), QMetaType(qGetColumnType(typeName)), tableName);
+        if (isPk && (typeName == "integer"_L1))
+            // INTEGER PRIMARY KEY fields are auto-generated in sqlite
+            // INT PRIMARY KEY is not the same as INTEGER PRIMARY KEY!
+            fld.setAutoValue(true);
+        fld.setRequired(query.value(3).toInt() != 0);
+        fld.setDefaultValue(defVal);
+        ind.append(fld);
+    }
+    return ind;
+}
 
 class QSQLiteResultPrivate : public QSqlCachedResultPrivate
 {
@@ -210,7 +250,6 @@ void QSQLiteResultPrivate::initColumns(bool emptyResultset)
         }
 
         QSqlField fld(colName, QMetaType(fieldType), tableName);
-        fld.setSqlType(stp);
         rInf.append(fld);
     }
 }
@@ -625,6 +664,30 @@ static void _q_regexp_cleanup(void *cache)
 }
 #endif
 
+static void _q_lower(sqlite3_context* context, int argc, sqlite3_value** argv)
+{
+    if (Q_UNLIKELY(argc != 1)) {
+        sqlite3_result_text(context, nullptr, 0, nullptr);
+        return;
+    }
+    const QString lower = QString::fromUtf8(
+        reinterpret_cast<const char*>(sqlite3_value_text(argv[0]))).toLower();
+    const QByteArray ba = lower.toUtf8();
+    sqlite3_result_text(context, ba.data(), ba.size(), SQLITE_TRANSIENT);
+}
+
+static void _q_upper(sqlite3_context* context, int argc, sqlite3_value** argv)
+{
+    if (Q_UNLIKELY(argc != 1)) {
+        sqlite3_result_text(context, nullptr, 0, nullptr);
+        return;
+    }
+    const QString upper = QString::fromUtf8(
+        reinterpret_cast<const char*>(sqlite3_value_text(argv[0]))).toUpper();
+    const QByteArray ba = upper.toUtf8();
+    sqlite3_result_text(context, ba.data(), ba.size(), SQLITE_TRANSIENT);
+}
+
 QSQLiteDriver::QSQLiteDriver(QObject * parent)
     : QSqlDriver(*new QSQLiteDriverPrivate, parent)
 {
@@ -691,13 +754,16 @@ bool QSQLiteDriver::open(const QString & db, const QString &, const QString &, c
     bool openReadOnlyOption = false;
     bool openUriOption = false;
     bool useExtendedResultCodes = true;
+    bool useQtVfs = false;
+    bool useQtCaseFolding = false;
+    bool openNoFollow = false;
 #if QT_CONFIG(regularexpression)
     static const auto regexpConnectOption = "QSQLITE_ENABLE_REGEXP"_L1;
     bool defineRegexp = false;
     int regexpCacheSize = 25;
 #endif
 
-    const auto opts = QStringView{conOpts}.split(u';');
+    const auto opts = QStringView{conOpts}.split(u';', Qt::SkipEmptyParts);
     for (auto option : opts) {
         option = option.trimmed();
         if (option.startsWith("QSQLITE_BUSY_TIMEOUT"_L1)) {
@@ -708,6 +774,8 @@ bool QSQLiteDriver::open(const QString & db, const QString &, const QString &, c
                 if (ok)
                     timeOut = nt;
             }
+        } else if (option == "QSQLITE_USE_QT_VFS"_L1) {
+            useQtVfs = true;
         } else if (option == "QSQLITE_OPEN_READONLY"_L1) {
             openReadOnlyOption = true;
         } else if (option == "QSQLITE_OPEN_URI"_L1) {
@@ -716,6 +784,10 @@ bool QSQLiteDriver::open(const QString & db, const QString &, const QString &, c
             sharedCache = true;
         } else if (option == "QSQLITE_NO_USE_EXTENDED_RESULT_CODES"_L1) {
             useExtendedResultCodes = false;
+        } else if (option == "QSQLITE_ENABLE_NON_ASCII_CASE_FOLDING"_L1) {
+            useQtCaseFolding = true;
+        } else if (option == "QSQLITE_OPEN_NOFOLLOW"_L1) {
+            openNoFollow = true;
         }
 #if QT_CONFIG(regularexpression)
         else if (option.startsWith(regexpConnectOption)) {
@@ -733,16 +805,25 @@ bool QSQLiteDriver::open(const QString & db, const QString &, const QString &, c
             }
         }
 #endif
+        else
+            qCWarning(lcSqlite, "Unsupported option '%ls'", qUtf16Printable(option.toString()));
     }
 
     int openMode = (openReadOnlyOption ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE));
     openMode |= (sharedCache ? SQLITE_OPEN_SHAREDCACHE : SQLITE_OPEN_PRIVATECACHE);
     if (openUriOption)
         openMode |= SQLITE_OPEN_URI;
+    if (openNoFollow) {
+#if defined(SQLITE_OPEN_NOFOLLOW)
+        openMode |= SQLITE_OPEN_NOFOLLOW;
+#else
+        qCWarning(lcSqlite, "SQLITE_OPEN_NOFOLLOW not supported with the SQLite version %s", sqlite3_libversion());
+#endif
+    }
 
     openMode |= SQLITE_OPEN_NOMUTEX;
 
-    const int res = sqlite3_open_v2(db.toUtf8().constData(), &d->access, openMode, nullptr);
+    const int res = sqlite3_open_v2(db.toUtf8().constData(), &d->access, openMode, useQtVfs ? "QtVFS" : nullptr);
 
     if (res == SQLITE_OK) {
         sqlite3_busy_timeout(d->access, timeOut);
@@ -757,6 +838,12 @@ bool QSQLiteDriver::open(const QString & db, const QString &, const QString &, c
                                        nullptr, &_q_regexp_cleanup);
         }
 #endif
+        if (useQtCaseFolding) {
+            sqlite3_create_function_v2(d->access, "lower", 1, SQLITE_UTF8, nullptr,
+                                       &_q_lower, nullptr, nullptr, nullptr);
+            sqlite3_create_function_v2(d->access, "upper", 1, SQLITE_UTF8, nullptr,
+                                       &_q_upper, nullptr, nullptr, nullptr);
+        }
         return true;
     } else {
         setLastError(qMakeError(d->access, tr("Error opening database"),
@@ -877,79 +964,26 @@ QStringList QSQLiteDriver::tables(QSql::TableType type) const
     return res;
 }
 
-static QSqlIndex qGetTableInfo(QSqlQuery &q, const QString &tableName, bool onlyPIndex = false)
+QSqlIndex QSQLiteDriver::primaryIndex(const QString &tablename) const
 {
-    QString schema;
-    QString table(tableName);
-    const qsizetype indexOfSeparator = tableName.indexOf(u'.');
-    if (indexOfSeparator > -1) {
-        const qsizetype indexOfCloseBracket = tableName.indexOf(u']');
-        if (indexOfCloseBracket != tableName.size() - 1) {
-            // Handles a case like databaseName.tableName
-            schema = tableName.left(indexOfSeparator + 1);
-            table = tableName.mid(indexOfSeparator + 1);
-        } else {
-            const qsizetype indexOfOpenBracket = tableName.lastIndexOf(u'[', indexOfCloseBracket);
-            if (indexOfOpenBracket > 0) {
-                // Handles a case like databaseName.[tableName]
-                schema = tableName.left(indexOfOpenBracket);
-                table = tableName.mid(indexOfOpenBracket);
-            }
-        }
-    }
-    q.exec("PRAGMA "_L1 + schema + "table_info ("_L1 +
-           _q_escapeIdentifier(table, QSqlDriver::TableName) + u')');
-    QSqlIndex ind;
-    while (q.next()) {
-        bool isPk = q.value(5).toInt();
-        if (onlyPIndex && !isPk)
-            continue;
-        QString typeName = q.value(2).toString().toLower();
-        QString defVal = q.value(4).toString();
-        if (!defVal.isEmpty() && defVal.at(0) == u'\'') {
-            const int end = defVal.lastIndexOf(u'\'');
-            if (end > 0)
-                defVal = defVal.mid(1, end - 1);
-        }
-
-        QSqlField fld(q.value(1).toString(), QMetaType(qGetColumnType(typeName)), tableName);
-        if (isPk && (typeName == "integer"_L1))
-            // INTEGER PRIMARY KEY fields are auto-generated in sqlite
-            // INT PRIMARY KEY is not the same as INTEGER PRIMARY KEY!
-            fld.setAutoValue(true);
-        fld.setRequired(q.value(3).toInt() != 0);
-        fld.setDefaultValue(defVal);
-        ind.append(fld);
-    }
-    return ind;
-}
-
-QSqlIndex QSQLiteDriver::primaryIndex(const QString &tblname) const
-{
+    Q_D(const QSQLiteDriver);
     if (!isOpen())
         return QSqlIndex();
 
-    QString table = tblname;
-    if (isIdentifierEscaped(table, QSqlDriver::TableName))
-        table = stripDelimiters(table, QSqlDriver::TableName);
-
     QSqlQuery q(createResult());
     q.setForwardOnly(true);
-    return qGetTableInfo(q, table, true);
+    return d->getTableInfo(q, tablename, true);
 }
 
-QSqlRecord QSQLiteDriver::record(const QString &tbl) const
+QSqlRecord QSQLiteDriver::record(const QString &tablename) const
 {
+    Q_D(const QSQLiteDriver);
     if (!isOpen())
         return QSqlRecord();
 
-    QString table = tbl;
-    if (isIdentifierEscaped(table, QSqlDriver::TableName))
-        table = stripDelimiters(table, QSqlDriver::TableName);
-
     QSqlQuery q(createResult());
     q.setForwardOnly(true);
-    return qGetTableInfo(q, table);
+    return d->getTableInfo(q, tablename);
 }
 
 QVariant QSQLiteDriver::handle() const
@@ -960,7 +994,52 @@ QVariant QSQLiteDriver::handle() const
 
 QString QSQLiteDriver::escapeIdentifier(const QString &identifier, IdentifierType type) const
 {
-    return _q_escapeIdentifier(identifier, type);
+    Q_D(const QSQLiteDriver);
+    if (identifier.isEmpty() || isIdentifierEscaped(identifier, type))
+        return identifier;
+
+    const auto indexOfSeparator = identifier.indexOf(u'.');
+    if (indexOfSeparator > -1) {
+        auto leftName = QStringView{identifier}.first(indexOfSeparator);
+        auto rightName = QStringView{identifier}.sliced(indexOfSeparator + 1);
+        const QStringView leftEnclose = d->isIdentifierEscaped(leftName) ? u"" : u"\"";
+        const QStringView rightEnclose = d->isIdentifierEscaped(rightName) ? u"" : u"\"";
+        if (leftEnclose.isEmpty() || rightEnclose.isEmpty())
+            return (leftEnclose + leftName + leftEnclose + u'.' + rightEnclose + rightName
+                    + rightEnclose);
+    }
+    return u'"' + identifier + u'"';
+}
+
+bool QSQLiteDriver::isIdentifierEscaped(const QString &identifier, IdentifierType type) const
+{
+    Q_D(const QSQLiteDriver);
+    Q_UNUSED(type);
+    return d->isIdentifierEscaped(QStringView{identifier});
+}
+
+QString QSQLiteDriver::stripDelimiters(const QString &identifier, IdentifierType type) const
+{
+    Q_D(const QSQLiteDriver);
+    const auto indexOfSeparator = identifier.indexOf(u'.');
+    if (indexOfSeparator > -1) {
+        auto leftName = QStringView{identifier}.first(indexOfSeparator);
+        auto rightName = QStringView{identifier}.sliced(indexOfSeparator + 1);
+        const auto leftEscaped = d->isIdentifierEscaped(leftName);
+        const auto rightEscaped = d->isIdentifierEscaped(rightName);
+        if (leftEscaped || rightEscaped) {
+            if (leftEscaped)
+                leftName = leftName.sliced(1).chopped(1);
+            if (rightEscaped)
+                rightName = rightName.sliced(1).chopped(1);
+            return leftName + u'.' + rightName;
+        }
+    }
+
+    if (isIdentifierEscaped(identifier, type))
+        return identifier.mid(1, identifier.size() - 2);
+
+    return identifier;
 }
 
 static void handle_sqlite_callback(void *qobj,int aoperation, char const *adbname, char const *atablename,
@@ -979,12 +1058,13 @@ bool QSQLiteDriver::subscribeToNotification(const QString &name)
 {
     Q_D(QSQLiteDriver);
     if (!isOpen()) {
-        qWarning("Database not open.");
+        qCWarning(lcSqlite, "QSQLiteDriver::subscribeToNotification: Database not open.");
         return false;
     }
 
     if (d->notificationid.contains(name)) {
-        qWarning("Already subscribing to '%s'.", qPrintable(name));
+        qCWarning(lcSqlite, "QSQLiteDriver::subscribeToNotification: Already subscribing to '%ls'.",
+                  qUtf16Printable(name));
         return false;
     }
 
@@ -1000,12 +1080,13 @@ bool QSQLiteDriver::unsubscribeFromNotification(const QString &name)
 {
     Q_D(QSQLiteDriver);
     if (!isOpen()) {
-        qWarning("Database not open.");
+        qCWarning(lcSqlite, "QSQLiteDriver::unsubscribeFromNotification: Database not open.");
         return false;
     }
 
     if (!d->notificationid.contains(name)) {
-        qWarning("Not subscribed to '%s'.", qPrintable(name));
+        qCWarning(lcSqlite, "QSQLiteDriver::unsubscribeFromNotification: Not subscribed to '%ls'.",
+                  qUtf16Printable(name));
         return false;
     }
 

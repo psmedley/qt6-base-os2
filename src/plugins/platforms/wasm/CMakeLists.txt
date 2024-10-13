@@ -7,9 +7,8 @@
 
 qt_internal_add_plugin(QWasmIntegrationPlugin
     OUTPUT_NAME qwasm
-    DEFAULT_IF ${QT_QPA_DEFAULT_PLATFORM} MATCHES wasm
+    DEFAULT_IF "wasm" IN_LIST QT_QPA_PLATFORMS
     PLUGIN_TYPE platforms
-    STATIC
     SOURCES
         main.cpp
         qwasmaccessibility.cpp qwasmaccessibility.h
@@ -29,13 +28,14 @@ qt_internal_add_plugin(QWasmIntegrationPlugin
         qwasmplatform.cpp qwasmplatform.h
         qwasmscreen.cpp qwasmscreen.h
         qwasmservices.cpp qwasmservices.h
-        qwasmstring.cpp qwasmstring.h
         qwasmtheme.cpp qwasmtheme.h
         qwasmwindow.cpp qwasmwindow.h
         qwasmwindowclientarea.cpp qwasmwindowclientarea.h
+        qwasmwindowtreenode.cpp qwasmwindowtreenode.h
         qwasmwindownonclientarea.cpp qwasmwindownonclientarea.h
         qwasminputcontext.cpp qwasminputcontext.h
         qwasmwindowstack.cpp qwasmwindowstack.h
+        qwasmdrag.cpp qwasmdrag.h
     DEFINES
         QT_EGL_NO_X11
         QT_NO_FOREACH
@@ -44,11 +44,13 @@ qt_internal_add_plugin(QWasmIntegrationPlugin
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
+    ATTRIBUTION_FILE_DIR_PATHS
+        ../../../3rdparty/wasm
+    QT_LICENSE_ID QT_COMMERCIAL_OR_GPL3
 )
 
 # Resources:
 set(wasmfonts_resource_files
-    "${QtBase_SOURCE_DIR}/src/3rdparty/wasm/Vera.ttf"
     "${QtBase_SOURCE_DIR}/src/3rdparty/wasm/DejaVuSans.ttf"
     "${QtBase_SOURCE_DIR}/src/3rdparty/wasm/DejaVuSansMono.ttf"
 )

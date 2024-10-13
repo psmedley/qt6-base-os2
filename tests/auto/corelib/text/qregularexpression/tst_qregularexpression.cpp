@@ -1,8 +1,9 @@
 // Copyright (C) 2015 Giuseppe D'Angelo <dangelog@gmail.com>.
 // Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
+#include <QtTest/private/qcomparisontesthelper_p.h>
 #include <qstring.h>
 #include <qlist.h>
 #include <qstringlist.h>
@@ -14,6 +15,10 @@
 
 #include <iostream>
 #include <optional>
+
+#ifndef QTEST_THROW_ON_FAIL
+# error This test requires QTEST_THROW_ON_FAIL being active.
+#endif
 
 Q_DECLARE_METATYPE(QRegularExpression::PatternOptions)
 Q_DECLARE_METATYPE(QRegularExpression::MatchType)
@@ -27,6 +32,7 @@ public:
     static void initMain();
 
 private slots:
+    void compareCompiles();
     void defaultConstructors();
     void moveSemantics();
     void moveSemanticsMatch();
@@ -290,11 +296,7 @@ void consistencyCheck(const QRegularExpressionMatchIterator &iterator)
             QRegularExpressionMatch peeked = i.peekNext();
             QRegularExpressionMatch match = i.next();
             consistencyCheck(peeked);
-            if (QTest::currentTestFailed())
-                return;
             consistencyCheck(match);
-            if (QTest::currentTestFailed())
-                return;
             QVERIFY(match.isValid());
             QVERIFY(match.hasMatch() || match.hasPartialMatch());
             QCOMPARE(i.regularExpression(), match.regularExpression());
@@ -460,6 +462,11 @@ void tst_QRegularExpression::initMain()
     }
 }
 
+void tst_QRegularExpression::compareCompiles()
+{
+    QTestPrivate::testEqualityOperatorsCompile<QRegularExpression>();
+}
+
 void tst_QRegularExpression::defaultConstructors()
 {
     QRegularExpression re;
@@ -537,8 +544,6 @@ void tst_QRegularExpression::moveSemanticsMatch()
     QCOMPARE(match2.capturedStart(), 3);
     QCOMPARE(match2.capturedEnd(), 7);
     consistencyCheck(match2);
-    if (QTest::currentTestFailed())
-        return;
 
     QRegularExpressionMatch match3 = re.match("test1");
     QCOMPARE(match3.hasMatch(), true);
@@ -551,8 +556,6 @@ void tst_QRegularExpression::moveSemanticsMatch()
     QCOMPARE(match1.capturedStart(), 0);
     QCOMPARE(match1.capturedEnd(), 4);
     consistencyCheck(match1);
-    if (QTest::currentTestFailed())
-        return;
 
     // here match3 is in the moved-from state, so destructor call for moved-from
     // object is also checked
@@ -564,30 +567,26 @@ void tst_QRegularExpression::moveSemanticsMatchIterator()
     QRegularExpressionMatchIterator it1 = re.globalMatch("some test");
     QVERIFY(it1.isValid());
     QVERIFY(it1.hasNext());
-    QCOMPARE(it1.regularExpression(), re);
+    QT_TEST_EQUALITY_OPS(it1.regularExpression(), re, true);
 
     QRegularExpressionMatchIterator it2(std::move(it1));
     QVERIFY(it2.isValid());
     QVERIFY(it2.hasNext());
-    QCOMPARE(it2.regularExpression(), re);
+    QT_TEST_EQUALITY_OPS(it2.regularExpression(), re, true);
     consistencyCheck(it2);
-    if (QTest::currentTestFailed())
-        return;
 
     QRegularExpression re2("test");
     QRegularExpressionMatchIterator it3 = re2.globalMatch("123test456");
     QVERIFY(it3.isValid());
     QVERIFY(it3.hasNext());
-    QCOMPARE(it3.regularExpression(), re2);
+    QT_TEST_EQUALITY_OPS(it3.regularExpression(), re2, true);
 
     // check that (move)assigning to the moved-from object is ok
     it1 = std::move(it3);
     QVERIFY(it1.isValid());
     QVERIFY(it1.hasNext());
-    QCOMPARE(it1.regularExpression(), re2);
+    QT_TEST_EQUALITY_OPS(it1.regularExpression(), re2, true);
     consistencyCheck(it1);
-    if (QTest::currentTestFailed())
-        return;
 
     // here it3 is in the moved-from state, so destructor call for moved-from
     // object is also checked
@@ -1680,38 +1679,23 @@ void tst_QRegularExpression::serialize()
 
 static void verifyEquality(const QRegularExpression &re1, const QRegularExpression &re2)
 {
-    QVERIFY(re1 == re2);
-    QVERIFY(re2 == re1);
+    QT_TEST_EQUALITY_OPS(re1, re2, true);
     QCOMPARE(qHash(re1), qHash(re2));
-    QVERIFY(!(re1 != re2));
-    QVERIFY(!(re2 != re1));
 
     QRegularExpression re3(re1);
 
-    QVERIFY(re1 == re3);
-    QVERIFY(re3 == re1);
     QCOMPARE(qHash(re1), qHash(re3));
-    QVERIFY(!(re1 != re3));
-    QVERIFY(!(re3 != re1));
+    QT_TEST_EQUALITY_OPS(re1, re3, true);
 
-    QVERIFY(re2 == re3);
-    QVERIFY(re3 == re2);
     QCOMPARE(qHash(re2), qHash(re3));
-    QVERIFY(!(re2 != re3));
-    QVERIFY(!(re3 != re2));
+    QT_TEST_EQUALITY_OPS(re2, re3, true);
 
     re3 = re2;
-    QVERIFY(re1 == re3);
-    QVERIFY(re3 == re1);
     QCOMPARE(qHash(re1), qHash(re3));
-    QVERIFY(!(re1 != re3));
-    QVERIFY(!(re3 != re1));
+    QT_TEST_EQUALITY_OPS(re1, re3, true);
 
-    QVERIFY(re2 == re3);
-    QVERIFY(re3 == re2);
     QCOMPARE(qHash(re2), qHash(re3));
-    QVERIFY(!(re2 != re3));
-    QVERIFY(!(re3 != re2));
+    QT_TEST_EQUALITY_OPS(re2, re3, true);
 }
 
 void tst_QRegularExpression::operatoreq_data()
@@ -1874,12 +1858,14 @@ void tst_QRegularExpression::captureNamesNul()
     QString captureName("name");
     QCOMPARE(m.captured(captureName), "456");
     QCOMPARE(m.captured(QStringView(captureName)), "456");
+    QCOMPARE(m.captured(QAnyStringView(captureName)), "456");
     QCOMPARE(m.captured(qToStringViewIgnoringNull(captureName)), "456");
     QCOMPARE(m.captured(u"name"), "456");
 
     captureName = "anotherName";
     QCOMPARE(m.captured(captureName), "789");
     QCOMPARE(m.captured(QStringView(captureName)), "789");
+    QCOMPARE(m.captured(QAnyStringView(captureName)), "789");
     QCOMPARE(m.captured(qToStringViewIgnoringNull(captureName)), "789");
     QCOMPARE(m.captured(u"anotherName"), "789");
 }
@@ -2389,6 +2375,10 @@ void tst_QRegularExpression::threadSafety_data()
 
 void tst_QRegularExpression::threadSafety()
 {
+#if defined(Q_OS_WASM)
+    QSKIP("This test misbehaves on WASM. Investigation needed (QTBUG-110067)");
+#endif
+
     QFETCH(QString, pattern);
     QFETCH(QString, subject);
 
@@ -2446,54 +2436,103 @@ void tst_QRegularExpression::wildcard_data()
 {
     QTest::addColumn<QString>("pattern");
     QTest::addColumn<QString>("string");
-    QTest::addColumn<qsizetype>("foundIndex");
+    QTest::addColumn<bool>("matchesPathGlob");
+    QTest::addColumn<bool>("matchesNonPathGlob");
+    QTest::addColumn<bool>("anchored");
 
-    auto addRow = [](const char *pattern, const char *string, qsizetype foundIndex) {
-        QTest::addRow("%s@%s", pattern, string) << pattern << string << foundIndex;
+    auto addRow = [](const char *pattern, const char *string, bool matchesPathGlob, bool matchesNonPathGlob, bool anchored = true) {
+        QTest::addRow("%s@%s", pattern, string) << pattern << string << matchesPathGlob << matchesNonPathGlob << anchored;
     };
 
-    addRow("*.html", "test.html", 0);
-    addRow("*.html", "test.htm", -1);
-    addRow("*bar*", "foobarbaz", 0);
-    addRow("*", "Qt Rocks!", 0);
-    addRow("*.h", "test.cpp", -1);
-    addRow("*.???l", "test.html", 0);
-    addRow("*?", "test.html", 0);
-    addRow("*?ml", "test.html", 0);
-    addRow("*[*]", "test.html", -1);
-    addRow("*[?]","test.html", -1);
-    addRow("*[?]ml","test.h?ml", 0);
-    addRow("*[[]ml","test.h[ml", 0);
-    addRow("*[]]ml","test.h]ml", 0);
-    addRow("*.h[a-z]ml", "test.html", 0);
-    addRow("*.h[A-Z]ml", "test.html", -1);
-    addRow("*.h[A-Z]ml", "test.hTml", 0);
-    addRow("*.h[!A-Z]ml", "test.hTml", -1);
-    addRow("*.h[!A-Z]ml", "test.html", 0);
-    addRow("*.h[!T]ml", "test.hTml", -1);
-    addRow("*.h[!T]ml", "test.html", 0);
-    addRow("*.h[!T]m[!L]", "test.htmL", -1);
-    addRow("*.h[!T]m[!L]", "test.html", 0);
-    addRow("*.h[][!]ml", "test.h]ml", 0);
-    addRow("*.h[][!]ml", "test.h[ml", 0);
-    addRow("*.h[][!]ml", "test.h!ml", 0);
+    addRow("*.html", "test.html", true, true);
+    addRow("*.html", "test.htm", false, false);
+    addRow("*bar*", "foobarbaz", true, true);
+    addRow("*", "Qt Rocks!", true, true);
+    addRow("*.h", "test.cpp", false, false);
+    addRow("*.???l", "test.html", true, true);
+    addRow("*?", "test.html", true, true);
+    addRow("*?ml", "test.html", true, true);
+    addRow("*[*]", "test.html", false, false);
+    addRow("*[?]","test.html", false, false);
+    addRow("*[?]ml","test.h?ml", true, true);
+    addRow("*[[]ml","test.h[ml", true, true);
+    addRow("*[]]ml","test.h]ml", true, true);
+    addRow("*.h[a-z]ml", "test.html", true, true);
+    addRow("*.h[A-Z]ml", "test.html", false, false);
+    addRow("*.h[A-Z]ml", "test.hTml", true, true);
+    addRow("*.h[!A-Z]ml", "test.hTml", false, false);
+    addRow("*.h[!A-Z]ml", "test.html", true, true);
+    addRow("*.h[!T]ml", "test.hTml", false, false);
+    addRow("*.h[!T]ml", "test.html", true, true);
+    addRow("*.h[!T]m[!L]", "test.htmL", false, false);
+    addRow("*.h[!T]m[!L]", "test.html", true, true);
+    addRow("*.h[][!]ml", "test.h]ml", true, true);
+    addRow("*.h[][!]ml", "test.h[ml", true, true);
+    addRow("*.h[][!]ml", "test.h!ml", true, true);
 
-    addRow("foo/*/bar", "foo/baz/bar", 0);
-    addRow("foo/(*)/bar", "foo/baz/bar", -1);
-    addRow("foo/(*)/bar", "foo/(baz)/bar", 0);
-    addRow("foo/?/bar", "foo/Q/bar", 0);
-    addRow("foo/?/bar", "foo/Qt/bar", -1);
-    addRow("foo/(?)/bar", "foo/Q/bar", -1);
-    addRow("foo/(?)/bar", "foo/(Q)/bar", 0);
+    addRow("foo/*/bar", "foo/baz/bar", true, true);
+    addRow("foo/*/bar", "foo/fie/baz/bar", false, true);
+    addRow("foo?bar", "foo/bar", false, true);
+    addRow("foo/(*)/bar", "foo/baz/bar", false, false);
+    addRow("foo/(*)/bar", "foo/(baz)/bar", true, true);
+    addRow("foo/?/bar", "foo/Q/bar", true, true);
+    addRow("foo/?/bar", "foo/Qt/bar", false, false);
+    addRow("foo/(?)/bar", "foo/Q/bar", false, false);
+    addRow("foo/(?)/bar", "foo/(Q)/bar", true, true);
+
+    addRow("foo*bar", "foo/fie/baz/bar", false, true);
+    addRow("foo*bar", "foo bar", true, true);
+    addRow("foo*bar", "foo\tbar", true, true);
+    addRow("foo*bar", "foo\nbar", true, true);
+    addRow("foo*bar", "foo\r\nbar", true, true);
+
+    addRow("foo**********bar", "foo/fie/baz/bar", false, true);
+    addRow("foo**********bar", "foo bar bar test bar bar bar", true, true);
+    addRow("foo**********bar", "foo\tbar", true, true);
+    addRow("foo**********bar", "foo\nbar", true, true);
+    addRow("foo**********bar", "foo\r\nbar", true, true);
+
+    addRow("foo**********bar", "foo/fie/baz/baz", false, false);
+    addRow("foo**********bar", "foo bar bar test bar bar baz", false, false);
+    addRow("foo**********bar", "foo\tbaz", false, false);
+    addRow("foo**********bar", "foo\nbaz", false, false);
+    addRow("foo**********bar", "foo\r\nbaz", false, false);
+
+    addRow("foo*****x*****bar", "foo/fie/bax/bar", false, true);
+    addRow("foo*****x*****bar", "foo bar bax test bar bar bar", true, true);
+    addRow("foo*****x*****bar", "foo\tbar foo\tbax foo\tbar foo\tbar", true, true);
+    addRow("foo*****x*****bar", "foo\nx\nbar", true, true);
+    addRow("foo*****x*****bar", "foo\r\nxbar", true, true);
+
+    addRow("foo*****x*****bar", "foo/fie/baz/bar", false, false);
+    addRow("foo*****x*****bar", "foo bar baz test bar bar bar", false, false);
+    addRow("foo*****x*****bar", "foo\tbar foo\tbar foo\tbar foo\tbar", false, false);
+    addRow("foo*****x*****bar", "foo\nbar", false, false);
+    addRow("foo*****x*****bar", "foo\r\nbar", false, false);
+
+    // different anchor modes
+    addRow("foo", "afoob", false, false, true);
+    addRow("foo", "afoob", true, true, false);
+
+    addRow("fie*bar", "foo/fie/baz/bar", false, false, true);
+    addRow("fie*bar", "foo/fie/baz/bar", false, true, false);
 
 #ifdef Q_OS_WIN
-    addRow("foo\\*\\bar", "foo\\baz\\bar", 0);
-    addRow("foo\\(*)\\bar", "foo\\baz\\bar", -1);
-    addRow("foo\\(*)\\bar", "foo\\(baz)\\bar", 0);
-    addRow("foo\\?\\bar", "foo\\Q\\bar", 0);
-    addRow("foo\\?\\bar", "foo\\Qt\\bar", -1);
-    addRow("foo\\(?)\\bar", "foo\\Q\\bar", -1);
-    addRow("foo\\(?)\\bar", "foo\\(Q)\\bar", 0);
+    addRow("foo\\*\\bar", "foo\\baz\\bar", true, true);
+    addRow("foo\\*\\bar", "foo/baz/bar", true, false);
+    addRow("foo\\*\\bar", "foo/baz\\bar", true, false);
+    addRow("foo\\*\\bar", "foo\\fie\\baz\\bar", false, true);
+    addRow("foo\\*\\bar", "foo/fie/baz/bar", false, false);
+    addRow("foo/*/bar", "foo\\baz\\bar", true, false);
+    addRow("foo/*/bar", "foo/baz/bar", true, true);
+    addRow("foo/*/bar", "foo\\fie\\baz\\bar", false, false);
+    addRow("foo/*/bar", "foo/fie/baz/bar", false, true);
+    addRow("foo\\(*)\\bar", "foo\\baz\\bar", false, false);
+    addRow("foo\\(*)\\bar", "foo\\(baz)\\bar", true, true);
+    addRow("foo\\?\\bar", "foo\\Q\\bar", true, true);
+    addRow("foo\\?\\bar", "foo\\Qt\\bar", false, false);
+    addRow("foo\\(?)\\bar", "foo\\Q\\bar", false, false);
+    addRow("foo\\(?)\\bar", "foo\\(Q)\\bar", true, true);
 #endif
 }
 
@@ -2501,12 +2540,22 @@ void tst_QRegularExpression::wildcard()
 {
     QFETCH(QString, pattern);
     QFETCH(QString, string);
-    QFETCH(qsizetype, foundIndex);
+    QFETCH(bool, matchesPathGlob);
+    QFETCH(bool, matchesNonPathGlob);
+    QFETCH(bool, anchored);
 
-    QRegularExpression re(QRegularExpression::wildcardToRegularExpression(pattern));
-    QRegularExpressionMatch match = re.match(string);
+    QRegularExpression::WildcardConversionOptions options = {};
+    if (!anchored)
+        options |= QRegularExpression::UnanchoredWildcardConversion;
 
-    QCOMPARE(match.capturedStart(), foundIndex);
+    {
+        QRegularExpression re(QRegularExpression::wildcardToRegularExpression(pattern, options));
+        QCOMPARE(string.contains(re), matchesPathGlob);
+    }
+    {
+        QRegularExpression re(QRegularExpression::wildcardToRegularExpression(pattern, options | QRegularExpression::NonPathWildcardConversion));
+        QCOMPARE(string.contains(re), matchesNonPathGlob);
+    }
 }
 
 void tst_QRegularExpression::testInvalidWildcard_data()

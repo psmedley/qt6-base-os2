@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -11,7 +11,9 @@
 #include <private/qhighdpiscaling_p.h>
 #include <private/qwidget_p.h>
 #include <private/qwidgetrepaintmanager_p.h>
+#include <qpa/qplatformintegration.h>
 #include <qpa/qplatformbackingstore.h>
+#include <private/qguiapplication_p.h>
 
 //#define MANUAL_DEBUG
 
@@ -75,8 +77,11 @@ public:
         const auto type = event->type();
         if (type == QEvent::WindowActivate || type == QEvent::WindowDeactivate)
             return true;
+        if (type == QEvent::UpdateRequest)
+            ++updateRequests;
         return QWidget::event(event);
     }
+    int updateRequests = 0;
 
 protected:
     void paintEvent(QPaintEvent *event) override
@@ -254,6 +259,9 @@ private slots:
     void opaqueChildren();
     void staticContents();
     void scroll();
+    void paintOnScreenUpdates();
+    void evaluateRhi();
+
 #if defined(QT_BUILD_INTERNAL)
     void scrollWithOverlap();
     void overlappedRegion();
@@ -429,16 +437,26 @@ void tst_QWidgetRepaintManager::opaqueChildren()
 */
 void tst_QWidgetRepaintManager::staticContents()
 {
+    const auto *integration = QGuiApplicationPrivate::platformIntegration();
+    if (!integration->hasCapability(QPlatformIntegration::BackingStoreStaticContents))
+        QSKIP("Platform does not support static backingstore content");
+
     TestWidget widget;
     widget.setAttribute(Qt::WA_StaticContents);
     widget.initialShow();
 
-    const QSize oldSize = widget.size();
-
-    widget.resize(widget.width() + 10, widget.height());
-
+    // Trigger resize via QWindow (similar to QWSI code path)
+    QVERIFY(widget.windowHandle());
+    QSize oldSize = widget.size();
+    widget.windowHandle()->resize(widget.width(), widget.height() + 10);
     QVERIFY(widget.waitForPainted());
-    QEXPECT_FAIL("", "This should just repaint the newly exposed region", Continue);
+    QCOMPARE(widget.takePaintedRegions(), QRegion(0, oldSize.width(), widget.width(), 10));
+
+    // Trigger resize via QWidget
+    oldSize = widget.size();
+    widget.resize(widget.width() + 10, widget.height());
+    QVERIFY(widget.waitForPainted());
+    QEXPECT_FAIL("", "QWidgetPrivate::setGeometry_sys wrongly triggers full update", Continue);
     QCOMPARE(widget.takePaintedRegions(), QRegion(oldSize.width(), 0, 10, widget.height()));
 }
 
@@ -479,6 +497,306 @@ void tst_QWidgetRepaintManager::scroll()
     QCOMPARE(widget.takePaintedRegions(), QRegion());
 }
 
+class PaintOnScreenWidget : public TestWidget
+{
+public:
+    using TestWidget::TestWidget;
+
+    // Explicit override to prevent noPaintOnScreen on Windows
+    QPaintEngine *paintEngine() const override
+    {
+        return nullptr;
+    }
+};
+
+void tst_QWidgetRepaintManager::paintOnScreenUpdates()
+{
+    {
+        TestWidget topLevel;
+        topLevel.setObjectName("TopLevel");
+        topLevel.resize(500, 500);
+        TestWidget renderToTextureWidget(&topLevel);
+        renderToTextureWidget.setObjectName("RenderToTexture");
+        renderToTextureWidget.setGeometry(0, 0, 200, 200);
+        QWidgetPrivate::get(&renderToTextureWidget)->setRenderToTexture();
+
+        PaintOnScreenWidget paintOnScreenWidget(&topLevel);
+        paintOnScreenWidget.setObjectName("PaintOnScreen");
+        paintOnScreenWidget.setGeometry(200, 200, 300, 300);
+
+        topLevel.initialShow();
+
+        // Updating before toggling WA_PaintOnScreen should work fine
+        paintOnScreenWidget.update();
+        paintOnScreenWidget.waitForPainted();
+        QVERIFY(paintOnScreenWidget.waitForPainted());
+
+#ifdef Q_OS_ANDROID
+        QEXPECT_FAIL("", "This test fails on Android", Abort);
+#endif
+        QCOMPARE(paintOnScreenWidget.takePaintedRegions(), paintOnScreenWidget.rect());
+
+        renderToTextureWidget.update();
+        QVERIFY(renderToTextureWidget.waitForPainted());
+        QCOMPARE(renderToTextureWidget.takePaintedRegions(), renderToTextureWidget.rect());
+
+        // Then toggle WA_PaintOnScreen
+        paintOnScreenWidget.setAttribute(Qt::WA_PaintOnScreen);
+
+        // The render-to-texture widget updates fine
+        renderToTextureWidget.update();
+        QVERIFY(renderToTextureWidget.waitForPainted());
+        QCOMPARE(renderToTextureWidget.takePaintedRegions(), renderToTextureWidget.rect());
+
+        // Updating the paint-on-screen texture widget will not result
+        // in a paint event, but should result in an update request.
+        paintOnScreenWidget.updateRequests = 0;
+        paintOnScreenWidget.update();
+        QVERIFY(QTest::qWaitFor([&]{ return paintOnScreenWidget.updateRequests > 0; }));
+
+        // And should not prevent the render-to-texture widget from receiving updates
+        renderToTextureWidget.update();
+        QVERIFY(renderToTextureWidget.waitForPainted());
+        QCOMPARE(renderToTextureWidget.takePaintedRegions(), renderToTextureWidget.rect());
+    }
+
+    {
+        TestWidget paintOnScreenTopLevel;
+        paintOnScreenTopLevel.setObjectName("PaintOnScreenTopLevel");
+        paintOnScreenTopLevel.setAttribute(Qt::WA_PaintOnScreen);
+
+        paintOnScreenTopLevel.initialShow();
+
+        paintOnScreenTopLevel.updateRequests = 0;
+        paintOnScreenTopLevel.update();
+        QVERIFY(QTest::qWaitFor([&]{ return paintOnScreenTopLevel.updateRequests > 0; }));
+
+        // Turn off paint on screen and make it a render-to-texture widget.
+        // This will lead us into a QWidgetRepaintManager::markDirty() code
+        // path that checks updateRequestSent, which is still set from the
+        // update above since paint-on-screen handling doesn't reset it.
+        paintOnScreenTopLevel.setAttribute(Qt::WA_PaintOnScreen, false);
+        QWidgetPrivate::get(&paintOnScreenTopLevel)->setRenderToTexture();
+        paintOnScreenTopLevel.update();
+        QVERIFY(QTest::qWaitFor([&]{ return paintOnScreenTopLevel.updateRequests > 1; }));
+    }
+}
+
+class RhiWidgetPrivate : public QWidgetPrivate
+{
+public:
+    RhiWidgetPrivate(const QPlatformBackingStoreRhiConfig &config)
+        : config(config)
+    {
+    }
+
+    QPlatformBackingStoreRhiConfig rhiConfig() const override
+    {
+        return config;
+    }
+
+    QPlatformBackingStoreRhiConfig config = QPlatformBackingStoreRhiConfig::Null;
+};
+
+class RhiWidget : public QWidget
+{
+public:
+    RhiWidget(const QPlatformBackingStoreRhiConfig &config = QPlatformBackingStoreRhiConfig::Null, QWidget *parent = nullptr)
+        : QWidget(*new RhiWidgetPrivate(config), parent, {})
+    {
+    }
+};
+
+void tst_QWidgetRepaintManager::evaluateRhi()
+{
+    const auto *integration = QGuiApplicationPrivate::platformIntegration();
+    if (!integration->hasCapability(QPlatformIntegration::RhiBasedRendering))
+        QSKIP("Platform does not support RHI based rendering");
+
+    // We need full control over whether widgets are native or not
+    const bool nativeSiblingsOriginal = qApp->testAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+    qApp->setAttribute(Qt::AA_DontCreateNativeWidgetSiblings, true);
+    auto nativeSiblingGuard = qScopeGuard([&]{
+        qApp->setAttribute(Qt::AA_DontCreateNativeWidgetSiblings, nativeSiblingsOriginal);
+    });
+
+    auto defaultSurfaceType = QSurface::RasterSurface;
+    bool usesRhiBackingStore = false;
+
+    {
+        // Plain QWidget doesn't enable RHI
+        QWidget regularWidget;
+        regularWidget.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&regularWidget));
+        QVERIFY(!QWidgetPrivate::get(&regularWidget)->usesRhiFlush);
+
+        // The platform might use a non-raster surface type if it uses
+        // an RHI backingstore by default (e.g. Android, iOS, QNX).
+        defaultSurfaceType = regularWidget.windowHandle()->surfaceType();
+
+        // Record whether the platform uses an RHI backingstore,
+        // so we can opt out of some tests further down.
+        if (defaultSurfaceType != QSurface::RasterSurface)
+            usesRhiBackingStore = QWidgetPrivate::get(&regularWidget)->rhi();
+        else
+            QVERIFY(!QWidgetPrivate::get(&regularWidget)->rhi());
+    }
+
+    {
+        // But a top level RHI widget does
+        RhiWidget rhiWidget;
+        rhiWidget.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&rhiWidget));
+        QVERIFY(QWidgetPrivate::get(&rhiWidget)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&rhiWidget)->rhi());
+    }
+
+#if QT_CONFIG(opengl)
+    {
+        // Non-native child RHI widget enables RHI for top level regular widget
+        QWidget topLevel;
+        RhiWidget rhiWidget(QPlatformBackingStoreRhiConfig::OpenGL, &topLevel);
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+        QCOMPARE(topLevel.windowHandle()->surfaceType(), QSurface::OpenGLSurface);
+        QVERIFY(QWidgetPrivate::get(&topLevel)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&topLevel)->rhi());
+        // Only the native widget that actually flushes will report usesRhiFlush
+        QVERIFY(!QWidgetPrivate::get(&rhiWidget)->usesRhiFlush);
+        // But it should have an RHI it can use
+        QVERIFY(QWidgetPrivate::get(&rhiWidget)->rhi());
+    }
+
+    {
+        // Native child RHI widget does not enable RHI for top level
+        QWidget topLevel;
+        RhiWidget nativeRhiWidget(QPlatformBackingStoreRhiConfig::OpenGL, &topLevel);
+        nativeRhiWidget.setAttribute(Qt::WA_NativeWindow);
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+        QCOMPARE(nativeRhiWidget.windowHandle()->surfaceType(), QSurface::OpenGLSurface);
+        QVERIFY(QWidgetPrivate::get(&nativeRhiWidget)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&nativeRhiWidget)->rhi());
+        QCOMPARE(topLevel.windowHandle()->surfaceType(), defaultSurfaceType);
+        QVERIFY(!QWidgetPrivate::get(&topLevel)->usesRhiFlush);
+
+        if (!usesRhiBackingStore)
+            QVERIFY(!QWidgetPrivate::get(&topLevel)->rhi());
+    }
+
+    {
+        // Non-native RHI child of native child enables RHI for native child,
+        // but not top level.
+        QWidget topLevel;
+        QWidget nativeChild(&topLevel);
+        nativeChild.setAttribute(Qt::WA_NativeWindow);
+        RhiWidget rhiWidget(QPlatformBackingStoreRhiConfig::OpenGL, &nativeChild);
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+
+        QCOMPARE(nativeChild.windowHandle()->surfaceType(), QSurface::OpenGLSurface);
+        QVERIFY(QWidgetPrivate::get(&nativeChild)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&nativeChild)->rhi());
+        QVERIFY(!QWidgetPrivate::get(&rhiWidget)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&rhiWidget)->rhi());
+        QCOMPARE(topLevel.windowHandle()->surfaceType(), defaultSurfaceType);
+        QVERIFY(!QWidgetPrivate::get(&topLevel)->usesRhiFlush);
+        if (!usesRhiBackingStore)
+            QVERIFY(!QWidgetPrivate::get(&topLevel)->rhi());
+    }
+
+    {
+        // Native child RHI widget does not prevent RHI for top level
+        // if non-native RHI child widget is also present.
+        QWidget topLevel;
+        RhiWidget rhiWidget(QPlatformBackingStoreRhiConfig::OpenGL, &topLevel);
+        RhiWidget nativeRhiWidget(QPlatformBackingStoreRhiConfig::OpenGL, &topLevel);
+        nativeRhiWidget.setAttribute(Qt::WA_NativeWindow);
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+
+        QCOMPARE(nativeRhiWidget.windowHandle()->surfaceType(), QSurface::OpenGLSurface);
+        QVERIFY(QWidgetPrivate::get(&nativeRhiWidget)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&nativeRhiWidget)->rhi());
+        QVERIFY(!QWidgetPrivate::get(&rhiWidget)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&rhiWidget)->rhi());
+        QCOMPARE(topLevel.windowHandle()->surfaceType(), QSurface::OpenGLSurface);
+        QVERIFY(QWidgetPrivate::get(&topLevel)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&topLevel)->rhi());
+    }
+
+    {
+        // Reparenting into a window that already matches the required
+        // surface type should still mark the parent as flushing with RHI.
+        QWidget topLevel;
+
+        RhiWidget rhiWidget(QPlatformBackingStoreRhiConfig::Null);
+        rhiWidget.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&rhiWidget));
+        QVERIFY(QWidgetPrivate::get(&rhiWidget)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&rhiWidget)->rhi());
+
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+        rhiWidget.setParent(&topLevel);
+        QVERIFY(QWidgetPrivate::get(&topLevel)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&topLevel)->rhi());
+    }
+
+    {
+        // Non-native RHI child of native child enables RHI for native child,
+        // but does not prevent top level from flushing with RHI.
+        QWidget topLevel;
+        QWidget nativeChild(&topLevel);
+        nativeChild.setAttribute(Qt::WA_NativeWindow);
+        RhiWidget rhiGranchild(QPlatformBackingStoreRhiConfig::OpenGL, &nativeChild);
+        RhiWidget rhiChild(QPlatformBackingStoreRhiConfig::OpenGL, &topLevel);
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+
+        QCOMPARE(nativeChild.windowHandle()->surfaceType(), QSurface::OpenGLSurface);
+        QVERIFY(QWidgetPrivate::get(&nativeChild)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&nativeChild)->rhi());
+        QVERIFY(!QWidgetPrivate::get(&rhiGranchild)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&rhiGranchild)->rhi());
+        QCOMPARE(topLevel.windowHandle()->surfaceType(), QSurface::OpenGLSurface);
+        QVERIFY(QWidgetPrivate::get(&topLevel)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&topLevel)->rhi());
+        QVERIFY(!QWidgetPrivate::get(&rhiChild)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&rhiChild)->rhi());
+    }
+
+#if QT_CONFIG(metal)
+    QRhiMetalInitParams metalParams;
+    if (QRhi::probe(QRhi::Metal, &metalParams)) {
+        // Native RHI childen allows mixing RHI backends
+        QWidget topLevel;
+        RhiWidget openglWidget(QPlatformBackingStoreRhiConfig::OpenGL, &topLevel);
+        openglWidget.setAttribute(Qt::WA_NativeWindow);
+        RhiWidget metalWidget(QPlatformBackingStoreRhiConfig::Metal, &topLevel);
+        metalWidget.setAttribute(Qt::WA_NativeWindow);
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+
+        QCOMPARE(topLevel.windowHandle()->surfaceType(), defaultSurfaceType);
+        QVERIFY(!QWidgetPrivate::get(&topLevel)->usesRhiFlush);
+        if (!usesRhiBackingStore)
+            QVERIFY(!QWidgetPrivate::get(&topLevel)->rhi());
+
+        QCOMPARE(openglWidget.windowHandle()->surfaceType(), QSurface::OpenGLSurface);
+        QVERIFY(QWidgetPrivate::get(&openglWidget)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&openglWidget)->rhi());
+
+        QCOMPARE(metalWidget.windowHandle()->surfaceType(), QSurface::MetalSurface);
+        QVERIFY(QWidgetPrivate::get(&metalWidget)->usesRhiFlush);
+        QVERIFY(QWidgetPrivate::get(&metalWidget)->rhi());
+
+        QVERIFY(QWidgetPrivate::get(&openglWidget)->rhi() != QWidgetPrivate::get(&metalWidget)->rhi());
+    }
+#endif // QT_CONFIG(metal)
+
+#endif // QT_CONFIG(opengl)
+}
 
 #if defined(QT_BUILD_INTERNAL)
 
@@ -499,6 +817,8 @@ void tst_QWidgetRepaintManager::scrollWithOverlap()
             : QWidget(parent, Qt::WindowStaysOnTopHint)
         {
             m_scrollArea = new QScrollArea(this);
+            m_scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+            m_scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
             QWidget *w = new QWidget;
             w->setPalette(QPalette(Qt::gray));
             w->setAutoFillBackground(true);

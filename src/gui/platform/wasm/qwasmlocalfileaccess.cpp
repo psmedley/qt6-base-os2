@@ -141,7 +141,7 @@ QStringList makeFilterList(const std::string &qtAcceptList)
     auto filter = QString::fromStdString(qtAcceptList); 
     if (filter.isEmpty())
         return QStringList();
-    auto sep = QStringLiteral(";;");
+    QString sep(";;");
     if (!filter.contains(sep) && filter.contains(u'\n'))
         sep = u'\n';
 
@@ -277,9 +277,10 @@ void saveFile(const char *content, size_t size, const std::string &fileNameHint)
         return;
     }
 
+    QByteArray data(content, size);
     FileDialog::showSave(fileNameHint, {
         .thenFunc = [=](emscripten::val result) {
-            saveDataToFileInChunks(result, QByteArray(content, size));
+            saveDataToFileInChunks(result, data);
         },
     });
 }

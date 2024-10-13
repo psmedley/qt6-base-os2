@@ -21,6 +21,9 @@ QT_BEGIN_NAMESPACE
 QGtk3Storage::QGtk3Storage()
 {
     m_interface.reset(new QGtk3Interface(this));
+#if QT_CONFIG(dbus)
+    m_portalInterface.reset(new QGtk3PortalInterface(this));
+#endif
     populateMap();
 }
 
@@ -70,6 +73,31 @@ QBrush QGtk3Storage::brush(const Source &source, const BrushMap &map) const
                    (c.blue() + source.rec.deltaBlue));
         b.setColor(c);
         return b;
+    }
+
+    case SourceType::Mixed: {
+        // check the mixing source to be valid and be a Gtk source
+        constexpr auto check_source = [](const Source &source) -> bool
+        {
+            return source.isValid() && (source.sourceType == SourceType::Gtk);
+        };
+
+        const Source source1 = brush(TargetBrush(source.mix.sourceGroup,
+                                                 source.mix.colorRole1), map);
+        if (!check_source(source1))
+            return QBrush();
+
+        const Source source2 = brush(TargetBrush(source.mix.sourceGroup,
+                                                 source.mix.colorRole2), map);
+        if (!check_source(source2))
+            return QBrush();
+
+        const QBrush brush2 = brush(source2, map);
+        // the output brush is a copy of the brush from the first source
+        QBrush brush1 = brush(source1, map);
+        // only color is mixed
+        brush1.setColor(MixSources::mixColors(brush1.color(), brush2.color()));
+        return brush1;
     }
 
     case SourceType::Fixed:
@@ -273,7 +301,6 @@ void QGtk3Storage::clear()
  */
 void QGtk3Storage::handleThemeChange()
 {
-    clear();
     populateMap();
     QWindowSystemInterface::handleThemeChange();
 }
@@ -331,21 +358,32 @@ void QGtk3Storage::populateMap()
     static QString m_themeName;
 
     // Distiguish initialization, theme change or call without theme change
+    Qt::ColorScheme newColorScheme = Qt::ColorScheme::Unknown;
     const QString newThemeName = themeName();
-    if (m_themeName == newThemeName)
+
+#if QT_CONFIG(dbus)
+    // Prefer color scheme we get from xdg-desktop-portal as this is what GNOME
+    // relies on these days
+    newColorScheme = m_portalInterface->colorScheme();
+#endif
+
+    if (newColorScheme == Qt::ColorScheme::Unknown) {
+        // Derive color scheme from theme name
+        newColorScheme = newThemeName.contains("dark"_L1, Qt::CaseInsensitive)
+                    ? Qt::ColorScheme::Dark : m_interface->colorSchemeByColors();
+    }
+
+    if (m_themeName == newThemeName && m_colorScheme == newColorScheme)
         return;
 
     clear();
 
-    // Derive color scheme from theme name
-    m_colorScheme = newThemeName.contains("dark"_L1, Qt::CaseInsensitive)
-                   ? Qt::ColorScheme::Dark : m_interface->colorSchemeByColors();
-
     if (m_themeName.isEmpty()) {
-        qCDebug(lcQGtk3Interface) << "GTK theme initialized:" << newThemeName << m_colorScheme;
+        qCDebug(lcQGtk3Interface) << "GTK theme initialized:" << newThemeName << newColorScheme;
     } else {
-        qCDebug(lcQGtk3Interface) << "GTK theme changed to:" << newThemeName << m_colorScheme;
+        qCDebug(lcQGtk3Interface) << "GTK theme changed to:" << newThemeName << newColorScheme;
     }
+    m_colorScheme = newColorScheme;
     m_themeName = newThemeName;
 
     // create standard mapping or load from Json file?
@@ -400,6 +438,7 @@ const QGtk3Storage::PaletteMap QGtk3Storage::savePalettes() const
                 break;
             case SourceType::Fixed:
             case SourceType::Modified:
+            case SourceType::Mixed:
             case SourceType::Invalid:
                 break;
             }
@@ -524,90 +563,152 @@ void QGtk3Storage::createMapping()
 
 
     // System palette
-    // background color and calculate derivates
-    GTK(Default, Background, INSENSITIVE);
-    ADD(Normal, Window);
-    ADD(Normal, Button);
-    ADD(Normal, Base);
-    ADD(Inactive, Base);
-    ADD(Inactive, Window);
-    LIGHTER(Normal, Window, 125);
-    ADD(Normal, Light);
-    LIGHTER(Normal, Window, 70);
-    ADD(Normal, Shadow);
-    LIGHTER(Normal, Window, 80);
-    ADD(Normal, Dark);
-    GTK(button, Foreground, ACTIVE);
-    ADD(Inactive, WindowText);
-    LIGHTER(Normal, WindowText, 50);
-    ADD(Disabled, Text);
-    ADD(Disabled, WindowText);
-    ADD(Inactive, ButtonText);
-    GTK(button, Text, NORMAL);
-    ADD(Disabled, ButtonText);
-    // special background colors
-    GTK(Default, Background, SELECTED);
-    ADD(Disabled, Highlight);
-    ADD(Normal, Highlight);
-    GTK(entry, Foreground, SELECTED);
-    ADD(Normal, HighlightedText);
-    GTK(entry, Background, ACTIVE);
-    ADD(Inactive, HighlightedText);
-    // text color and friends
-    GTK(entry, Text, NORMAL);
-    ADD(Normal, ButtonText);
-    ADD(Normal, WindowText);
-    ADD(Disabled, WindowText);
-    ADD(Disabled, HighlightedText);
-    GTK(Default, Text, NORMAL);
-    ADD(Normal, Text);
-    ADD(Normal, WindowText);
-    ADD(Inactive, Text);
-    ADD(Normal, HighlightedText);
-    LIGHTER(Normal, Base, 93);
-    ADD(All, AlternateBase);
-    GTK(Default, Foreground, NORMAL);
-    ADD(All, ToolTipText);
-    MODIFY(Normal, Text, 100, 100, 100);
-    ADD(All, PlaceholderText, Light);
-    MODIFY(Normal, Text, -100, -100, -100);
-    ADD(All, PlaceholderText, Dark);
-    SAVE(SystemPalette);
-    CLEAR;
+    {
+        // background color and calculate derivates
+        GTK(Default, Background, INSENSITIVE);
+        ADD(All, Window);
+        ADD(All, Button);
+        ADD(All, Base);
+        LIGHTER(Normal, Window, 125);
+        ADD(Normal, Light);
+        ADD(Inactive, Light);
+        LIGHTER(Normal, Window, 70);
+        ADD(Normal, Shadow);
+        LIGHTER(Normal, Window, 80);
+        ADD(Normal, Dark);
+        ADD(Inactive, Dark)
 
-    // Checkbox and Radio Button
-    GTK(button, Text, ACTIVE);
-    ADD(Normal, Base, Dark);
-    GTK(Default, Background, NORMAL);
-    ADD(All, Base);
-    GTK(button, Text, NORMAL);
-    ADD(Normal, Base, Light);
-    SAVE(CheckBoxPalette);
-    SAVE(RadioButtonPalette);
-    CLEAR;
+        GTK(button, Foreground, ACTIVE);
+        ADD(Inactive, WindowText);
 
-    // ComboBox, GroupBox, Frame
-    GTK(combo_box, Text, NORMAL);
-    ADD(Normal, ButtonText, Dark);
-    ADD(Normal, Text, Dark);
-    GTK(combo_box, Text, ACTIVE);
-    ADD(Normal, ButtonText, Light);
-    ADD(Normal, Text, Light);
-    SAVE(ComboBoxPalette);
-    SAVE(GroupBoxPalette);
-    CLEAR;
+        auto ADD_MIX = [&map](QPalette::ColorGroup targetGroup,
+                              QPalette::ColorRole targetRole,
+                              QPalette::ColorGroup sourceGroup,
+                              QPalette::ColorRole role1,
+                              QPalette::ColorRole role2)
+        {
+            const Source source{sourceGroup, role1, role2};
+            map.insert(TargetBrush(targetGroup, targetRole), source);
+        };
+        ADD_MIX(QPalette::Disabled, QPalette::Text,
+                QPalette::Normal, QPalette::Base, QPalette::Text);
+        ADD_MIX(QPalette::Disabled, QPalette::WindowText,
+                QPalette::Normal, QPalette::Window, QPalette::WindowText);
+        ADD_MIX(QPalette::Disabled, QPalette::ButtonText,
+                QPalette::Normal, QPalette::Button, QPalette::ButtonText);
 
-    // Menu bar
-    GTK(Default, Text, ACTIVE);
-    ADD(Normal, ButtonText);
-    SAVE(MenuPalette);
-    CLEAR;
+        GTK(button, Text, NORMAL);
+        ADD(Inactive, ButtonText);
 
-    // LineEdit
-    GTK(Default, Background, NORMAL);
-    ADD(All, Base);
-    SAVE(TextLineEditPalette);
-    CLEAR;
+        // special background colors
+        GTK(Default, Background, SELECTED);
+        ADD(Disabled, Highlight);
+        ADD(Normal, Highlight);
+        ADD(Inactive, Highlight);
+
+        GTK(entry, Foreground, SELECTED);
+        ADD(Normal, HighlightedText);
+        ADD(Inactive, HighlightedText);
+
+        // text color and friends
+        GTK(entry, Text, NORMAL);
+        ADD(Normal, ButtonText);
+        ADD(Normal, WindowText);
+        ADD(Disabled, HighlightedText);
+
+        GTK(Default, Text, NORMAL);
+        ADD(Normal, Text);
+        ADD(Inactive, Text);
+        ADD(Normal, HighlightedText);
+        LIGHTER(Normal, Base, 93);
+        ADD(All, AlternateBase);
+
+        GTK(Default, Foreground, NORMAL);
+        MODIFY(Normal, Text, 100, 100, 100);
+        ADD(All, PlaceholderText, Light);
+        MODIFY(Normal, Text, -100, -100, -100);
+        ADD(All, PlaceholderText, Dark);
+
+        // Light, midlight, dark, mid, shadow colors
+        LIGHTER(Normal, Button, 125);
+        ADD(All, Light)
+        LIGHTER(Normal, Button, 113);
+        ADD(All, Midlight)
+        LIGHTER(Normal, Button, 113);
+        ADD(All, Mid)
+        LIGHTER(Normal, Button, 87);
+        ADD(All, Dark)
+        LIGHTER(Normal, Button, 5);
+        ADD(All, Shadow)
+
+        SAVE(SystemPalette);
+        CLEAR;
+    }
+
+    // Label and TabBar Palette
+    {
+        GTK(entry, Text, NORMAL);
+        ADD(Normal, WindowText);
+        ADD(Inactive, WindowText);
+
+        SAVE(LabelPalette);
+        SAVE(TabBarPalette);
+        CLEAR;
+    }
+
+    // Checkbox and RadioButton Palette
+    {
+        GTK(button, Text, ACTIVE);
+        ADD(Normal, Base, Dark);
+        ADD(Inactive, WindowText, Dark);
+
+        GTK(Default, Foreground, NORMAL);
+        ADD(All, Text);
+
+        GTK(Default, Background, NORMAL);
+        ADD(All, Base);
+
+        GTK(button, Text, NORMAL);
+        ADD(Normal, Base, Light);
+        ADD(Inactive, WindowText, Light);
+
+        SAVE(CheckBoxPalette);
+        SAVE(RadioButtonPalette);
+        CLEAR;
+    }
+
+    // ComboBox, GroupBox & Frame Palette
+    {
+        GTK(combo_box, Text, NORMAL);
+        ADD(Normal, ButtonText, Dark);
+        ADD(Normal, Text, Dark);
+        ADD(Inactive, WindowText, Dark);
+
+        GTK(combo_box, Text, ACTIVE);
+        ADD(Normal, ButtonText, Light);
+        ADD(Normal, Text, Light);
+        ADD(Inactive, WindowText, Light);
+
+        SAVE(ComboBoxPalette);
+        SAVE(GroupBoxPalette);
+        CLEAR;
+    }
+
+    // MenuBar Palette
+    {
+        GTK(Default, Text, ACTIVE);
+        ADD(Normal, ButtonText);
+        SAVE(MenuPalette);
+        CLEAR;
+    }
+
+    // LineEdit Palette
+    {
+        GTK(Default, Background, NORMAL);
+        ADD(All, Base);
+        SAVE(TextLineEditPalette);
+        CLEAR;
+    }
 
 #undef GTK
 #undef REC

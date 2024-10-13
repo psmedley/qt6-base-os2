@@ -529,14 +529,15 @@ bool QImageReaderPrivate::initHandler()
         int currentExtension = 0;
 
         QString fileName = file->fileName();
+        bool fileIsOpen;
 
         do {
             file->setFileName(fileName + u'.'
                     + QLatin1StringView(extensions.at(currentExtension++).constData()));
-            file->open(QIODevice::ReadOnly);
-        } while (!file->isOpen() && currentExtension < extensions.size());
+            fileIsOpen = file->open(QIODevice::ReadOnly);
+        } while (!fileIsOpen && currentExtension < extensions.size());
 
-        if (!device->isOpen()) {
+        if (!fileIsOpen) {
             imageReaderError = QImageReader::FileNotFoundError;
             errorString = QImageReader::tr("File not found");
             file->setFileName(fileName); // restore the old file name
@@ -558,7 +559,7 @@ bool QImageReaderPrivate::initHandler()
 */
 void QImageReaderPrivate::getText()
 {
-    if (text.isEmpty() && initHandler() && handler->supportsOption(QImageIOHandler::Description))
+    if (text.isEmpty() && q->supportsOption(QImageIOHandler::Description))
         text = qt_getImageTextFromDescription(handler->option(QImageIOHandler::Description).toString());
 }
 
@@ -799,8 +800,6 @@ QString QImageReader::fileName() const
 }
 
 /*!
-    \since 4.2
-
     Sets the quality setting of the image format to \a quality.
 
     Some image formats, in particular lossy ones, entail a tradeoff between a)
@@ -824,8 +823,6 @@ void QImageReader::setQuality(int quality)
 }
 
 /*!
-    \since 4.2
-
     Returns the quality setting of the image format.
 
     \sa setQuality()
@@ -848,18 +845,13 @@ int QImageReader::quality() const
 */
 QSize QImageReader::size() const
 {
-    if (!d->initHandler())
-        return QSize();
-
-    if (d->handler->supportsOption(QImageIOHandler::Size))
+    if (supportsOption(QImageIOHandler::Size))
         return d->handler->option(QImageIOHandler::Size).toSize();
 
     return QSize();
 }
 
 /*!
-    \since 4.5
-
     Returns the format of the image, without actually reading the image
     contents. The format describes the image format \l QImageReader::read()
     returns, not the format of the actual image.
@@ -871,18 +863,13 @@ QSize QImageReader::size() const
 */
 QImage::Format QImageReader::imageFormat() const
 {
-    if (!d->initHandler())
-        return QImage::Format_Invalid;
-
-    if (d->handler->supportsOption(QImageIOHandler::ImageFormat))
+    if (supportsOption(QImageIOHandler::ImageFormat))
         return (QImage::Format)d->handler->option(QImageIOHandler::ImageFormat).toInt();
 
     return QImage::Format_Invalid;
 }
 
 /*!
-    \since 4.1
-
     Returns the text keys for this image. You can use
     these keys with text() to list the image text for
     a certain key.
@@ -899,8 +886,6 @@ QStringList QImageReader::textKeys() const
 }
 
 /*!
-    \since 4.1
-
     Returns the image text associated with \a key.
 
     Support for this option is implemented through
@@ -946,6 +931,10 @@ QRect QImageReader::clipRect() const
     support scaling), QImageReader will use QImage::scale() with
     Qt::SmoothScaling.
 
+    If only one dimension is set in \a size, the other one will be
+    computed from the image's \l {size()} {natural size} so as to
+    maintain the aspect ratio.
+
     \sa scaledSize(), setClipRect(), setScaledClipRect()
 */
 void QImageReader::setScaledSize(const QSize &size)
@@ -986,8 +975,6 @@ QRect QImageReader::scaledClipRect() const
 }
 
 /*!
-    \since 4.1
-
     Sets the background color to \a color.
     Image formats that support this operation are expected to
     initialize the background to \a color before reading an image.
@@ -996,15 +983,11 @@ QRect QImageReader::scaledClipRect() const
 */
 void QImageReader::setBackgroundColor(const QColor &color)
 {
-    if (!d->initHandler())
-        return;
-    if (d->handler->supportsOption(QImageIOHandler::BackgroundColor))
+    if (supportsOption(QImageIOHandler::BackgroundColor))
         d->handler->setOption(QImageIOHandler::BackgroundColor, color);
 }
 
 /*!
-    \since 4.1
-
     Returns the background color that's used when reading an image.
     If the image format does not support setting the background color
     an invalid color is returned.
@@ -1013,16 +996,12 @@ void QImageReader::setBackgroundColor(const QColor &color)
 */
 QColor QImageReader::backgroundColor() const
 {
-    if (!d->initHandler())
-        return QColor();
-    if (d->handler->supportsOption(QImageIOHandler::BackgroundColor))
+    if (supportsOption(QImageIOHandler::BackgroundColor))
         return qvariant_cast<QColor>(d->handler->option(QImageIOHandler::BackgroundColor));
     return QColor();
 }
 
 /*!
-    \since 4.1
-
     Returns \c true if the image format supports animation;
     otherwise, false is returned.
 
@@ -1030,9 +1009,7 @@ QColor QImageReader::backgroundColor() const
 */
 bool QImageReader::supportsAnimation() const
 {
-    if (!d->initHandler())
-        return false;
-    if (d->handler->supportsOption(QImageIOHandler::Animation))
+    if (supportsOption(QImageIOHandler::Animation))
         return d->handler->option(QImageIOHandler::Animation).toBool();
     return false;
 }
@@ -1044,10 +1021,7 @@ bool QImageReader::supportsAnimation() const
 */
 QByteArray QImageReader::subType() const
 {
-    if (!d->initHandler())
-        return QByteArray();
-
-    if (d->handler->supportsOption(QImageIOHandler::SubType))
+    if (supportsOption(QImageIOHandler::SubType))
         return d->handler->option(QImageIOHandler::SubType).toByteArray();
     return QByteArray();
 }
@@ -1059,10 +1033,7 @@ QByteArray QImageReader::subType() const
 */
 QList<QByteArray> QImageReader::supportedSubTypes() const
 {
-    if (!d->initHandler())
-        return QList<QByteArray>();
-
-    if (d->handler->supportsOption(QImageIOHandler::SupportedSubTypes))
+    if (supportsOption(QImageIOHandler::SupportedSubTypes))
         return qvariant_cast<QList<QByteArray> >(d->handler->option(QImageIOHandler::SupportedSubTypes));
     return QList<QByteArray>();
 }
@@ -1078,7 +1049,7 @@ QList<QByteArray> QImageReader::supportedSubTypes() const
 QImageIOHandler::Transformations QImageReader::transformation() const
 {
     int option = QImageIOHandler::TransformationNone;
-    if (d->initHandler() && d->handler->supportsOption(QImageIOHandler::ImageTransformation))
+    if (supportsOption(QImageIOHandler::ImageTransformation))
         option = d->handler->option(QImageIOHandler::ImageTransformation).toInt();
     return QImageIOHandler::Transformations(option);
 }
@@ -1196,20 +1167,39 @@ bool QImageReader::read(QImage *image)
     if (!d->initHandler())
         return false;
 
-    // set the handler specific options.
-    if (d->handler->supportsOption(QImageIOHandler::ScaledSize) && d->scaledSize.isValid()) {
-        if ((d->handler->supportsOption(QImageIOHandler::ClipRect) && !d->clipRect.isNull())
-            || d->clipRect.isNull()) {
-            // Only enable the ScaledSize option if there is no clip rect, or
-            // if the handler also supports ClipRect.
-            d->handler->setOption(QImageIOHandler::ScaledSize, d->scaledSize);
+    QSize scaledSize = d->scaledSize;
+    if ((scaledSize.width() <= 0 && scaledSize.height() > 0) ||
+        (scaledSize.height() <= 0 && scaledSize.width() > 0)) {
+        // if only one dimension is given, let's try to calculate the second one
+        // based on the original image size and maintaining the aspect ratio
+        if (const QSize originalSize = size(); !originalSize.isEmpty()) {
+            if (scaledSize.width() <= 0) {
+                const auto ratio = qreal(scaledSize.height()) / originalSize.height();
+                scaledSize.setWidth(qRound(originalSize.width() * ratio));
+            } else {
+                const auto ratio = qreal(scaledSize.width()) / originalSize.width();
+                scaledSize.setHeight(qRound(originalSize.height() * ratio));
+            }
         }
     }
-    if (d->handler->supportsOption(QImageIOHandler::ClipRect) && !d->clipRect.isNull())
+
+    const bool supportScaledSize = supportsOption(QImageIOHandler::ScaledSize) && scaledSize.isValid();
+    const bool supportClipRect = supportsOption(QImageIOHandler::ClipRect) && !d->clipRect.isNull();
+    const bool supportScaledClipRect = supportsOption(QImageIOHandler::ScaledClipRect) && !d->scaledClipRect.isNull();
+
+    // set the handler specific options.
+    if (supportScaledSize) {
+        if (supportClipRect || d->clipRect.isNull()) {
+            // Only enable the ScaledSize option if there is no clip rect, or
+            // if the handler also supports ClipRect.
+            d->handler->setOption(QImageIOHandler::ScaledSize, scaledSize);
+        }
+    }
+    if (supportClipRect)
         d->handler->setOption(QImageIOHandler::ClipRect, d->clipRect);
-    if (d->handler->supportsOption(QImageIOHandler::ScaledClipRect) && !d->scaledClipRect.isNull())
+    if (supportScaledClipRect)
         d->handler->setOption(QImageIOHandler::ScaledClipRect, d->scaledClipRect);
-    if (d->handler->supportsOption(QImageIOHandler::Quality))
+    if (supportsOption(QImageIOHandler::Quality))
         d->handler->setOption(QImageIOHandler::Quality, d->quality);
 
     // read the image
@@ -1230,9 +1220,9 @@ bool QImageReader::read(QImage *image)
 
     // provide default implementations for any unsupported image
     // options
-    if (d->handler->supportsOption(QImageIOHandler::ClipRect) && !d->clipRect.isNull()) {
-        if (d->handler->supportsOption(QImageIOHandler::ScaledSize) && d->scaledSize.isValid()) {
-            if (d->handler->supportsOption(QImageIOHandler::ScaledClipRect) && !d->scaledClipRect.isNull()) {
+    if (supportClipRect) {
+        if (supportScaledSize) {
+            if (supportScaledClipRect) {
                 // all features are supported by the handler; nothing to do.
             } else {
                 // the image is already scaled, so apply scaled clipping.
@@ -1240,12 +1230,12 @@ bool QImageReader::read(QImage *image)
                     *image = image->copy(d->scaledClipRect);
             }
         } else {
-            if (d->handler->supportsOption(QImageIOHandler::ScaledClipRect) && !d->scaledClipRect.isNull()) {
+            if (supportScaledClipRect) {
                 // supports scaled clipping but not scaling, most
                 // likely a broken handler.
             } else {
-                if (d->scaledSize.isValid()) {
-                    *image = image->scaled(d->scaledSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+                if (scaledSize.isValid()) {
+                    *image = image->scaled(scaledSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
                 }
                 if (d->scaledClipRect.isValid()) {
                     *image = image->copy(d->scaledClipRect);
@@ -1253,8 +1243,8 @@ bool QImageReader::read(QImage *image)
             }
         }
     } else {
-        if (d->handler->supportsOption(QImageIOHandler::ScaledSize) && d->scaledSize.isValid() && d->clipRect.isNull()) {
-            if (d->handler->supportsOption(QImageIOHandler::ScaledClipRect) && !d->scaledClipRect.isNull()) {
+        if (supportScaledSize && d->clipRect.isNull()) {
+            if (supportScaledClipRect) {
                 // nothing to do (ClipRect is ignored!)
             } else {
                 // provide all workarounds.
@@ -1263,7 +1253,7 @@ bool QImageReader::read(QImage *image)
                 }
             }
         } else {
-            if (d->handler->supportsOption(QImageIOHandler::ScaledClipRect) && !d->scaledClipRect.isNull()) {
+            if (supportScaledClipRect) {
                 // this makes no sense; a handler that supports
                 // ScaledClipRect but not ScaledSize is broken, and we
                 // can't work around it.
@@ -1271,8 +1261,8 @@ bool QImageReader::read(QImage *image)
                 // provide all workarounds.
                 if (d->clipRect.isValid())
                     *image = image->copy(d->clipRect);
-                if (d->scaledSize.isValid())
-                    *image = image->scaled(d->scaledSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+                if (scaledSize.isValid())
+                    *image = image->scaled(scaledSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
                 if (d->scaledClipRect.isValid())
                     *image = image->copy(d->scaledClipRect);
             }
@@ -1426,8 +1416,6 @@ QString QImageReader::errorString() const
 }
 
 /*!
-    \since 4.2
-
     Returns \c true if the reader supports \a option; otherwise returns
     false.
 

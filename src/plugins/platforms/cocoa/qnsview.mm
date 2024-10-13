@@ -5,6 +5,7 @@
 
 #include <AppKit/AppKit.h>
 #include <MetalKit/MetalKit.h>
+#include <UniformTypeIdentifiers/UTCoreTypes.h>
 
 #include "qnsview.h"
 #include "qcocoawindow.h"
@@ -20,7 +21,6 @@
 #include <QtCore/QDebug>
 #include <QtCore/QPointer>
 #include <QtCore/QSet>
-#include <QtCore/qsysinfo.h>
 #include <QtCore/private/qcore_mac_p.h>
 #include <QtGui/QAccessible>
 #include <QtGui/QImage>
@@ -35,13 +35,9 @@
 #endif
 #include "qcocoaintegration.h"
 #include <QtGui/private/qmacmimeregistry_p.h>
+#include <QtGui/private/qmetallayer_p.h>
 
-// Private interface
-@interface QNSView ()
-- (BOOL)isTransparentForUserInput;
-@property (assign) NSView* previousSuperview;
-@property (assign) NSWindow* previousWindow;
-@end
+#include <QuartzCore/CATransaction.h>
 
 @interface QNSView (Drawing) <CALayerDelegate>
 - (void)initDrawing;
@@ -86,6 +82,23 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
 @property (readonly) QObject* focusObject;
 @end
 
+@interface QNSView (ServicesMenu) <NSServicesMenuRequestor>
+@end
+
+@interface QT_MANGLE_NAMESPACE(QNSViewMenuHelper) : NSObject
+- (instancetype)initWithView:(QNSView *)theView;
+@end
+QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMenuHelper);
+
+// Private interface
+@interface QNSView ()
+- (BOOL)isTransparentForUserInput;
+@property (assign) NSView* previousSuperview;
+@property (assign) NSWindow* previousWindow;
+@property (retain) QNSViewMenuHelper* menuHelper;
+@property (nonatomic, retain) NSColorSpace *colorSpace;
+@end
+
 @implementation QNSView {
     QPointer<QCocoaWindow> m_platformWindow;
 
@@ -112,6 +125,8 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
     QPointer<QObject> m_composingFocusObject;
     NSDraggingContext m_lastSeenContext;
 }
+
+@synthesize colorSpace = m_colorSpace;
 
 - (instancetype)initWithCocoaWindow:(QCocoaWindow *)platformWindow
 {
@@ -140,6 +155,8 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
         m_sendKeyEvent = false;
         m_currentlyInterpretedKeyEvent = nil;
         m_lastSeenContext = NSDraggingContextWithinApplication;
+
+        self.menuHelper = [[[QNSViewMenuHelper alloc] initWithView:self] autorelease];
     }
     return self;
 }
@@ -265,15 +282,29 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
     return focusWindow;
 }
 
+/*
+    Invoked when the view is hidden, either directly,
+    or in response to an ancestor being hidden.
+*/
 - (void)viewDidHide
 {
+    qCDebug(lcQpaWindow) << "Did hide" << self;
+
     if (!m_platformWindow->isExposed())
         return;
 
     m_platformWindow->handleExposeEvent(QRegion());
+}
 
-    // Note: setNeedsDisplay is automatically called for
-    // viewDidUnhide so no reason to override it here.
+/*
+    Invoked when the view is unhidden, either directly,
+    or in response to an ancestor being unhidden.
+*/
+- (void)viewDidUnhide
+{
+     qCDebug(lcQpaWindow) << "Did unhide" << self;
+
+     [self setNeedsDisplay:YES];
 }
 
 - (BOOL)isTransparentForUserInput
@@ -306,7 +337,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
         // QWindow activation from QCocoaWindow::windowDidBecomeKey instead. The only
         // exception is if the window can never become key, in which case we naturally
         // cannot wait for that to happen.
-        QWindowSystemInterface::handleWindowActivated<QWindowSystemInterface::SynchronousDelivery>(
+        QWindowSystemInterface::handleFocusWindowChanged<QWindowSystemInterface::SynchronousDelivery>(
             [self topLevelWindow], Qt::ActiveWindowFocusReason);
     }
 

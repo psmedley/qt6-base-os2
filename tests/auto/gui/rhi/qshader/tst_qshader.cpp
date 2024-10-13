@@ -1,12 +1,12 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QFile>
 #include <QBuffer>
 
-#include <QtGui/private/qshaderdescription_p_p.h>
-#include <QtGui/private/qshader_p_p.h>
+#include <private/qshaderdescription_p.h>
+#include <private/qshader_p.h>
 
 class tst_QShader : public QObject
 {

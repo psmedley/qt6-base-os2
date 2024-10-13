@@ -172,7 +172,7 @@ bool QCommandLinkButtonPrivate::usingVistaStyle() const
     //### This is a hack to detect if we are indeed running Vista style themed and not in classic
     // When we add api to query for this, we should change this implementation to use it.
     return q->property("_qt_usingVistaStyle").toBool()
-        && q->style()->pixelMetric(QStyle::PM_ButtonShiftHorizontal, nullptr) == 0;
+        && q->style()->pixelMetric(QStyle::PM_ButtonShiftHorizontal, nullptr, q) == 0;
 }
 
 void QCommandLinkButtonPrivate::init()
@@ -189,7 +189,7 @@ void QCommandLinkButtonPrivate::init()
     q->setIconSize(QSize(20, 20));
     QStyleOptionButton opt;
     q->initStyleOption(&opt);
-    q->setIcon(q->style()->standardIcon(QStyle::SP_CommandLink, &opt));
+    q->setIcon(q->style()->standardIcon(QStyle::SP_CommandLink, &opt, q));
 }
 
 // Calculates the height of the description text based on widget width
@@ -325,9 +325,9 @@ void QCommandLinkButton::paintEvent(QPaintEvent *)
     QSize pixmapSize = icon().actualSize(iconSize());
 
     const int vOffset = isDown()
-        ? style()->pixelMetric(QStyle::PM_ButtonShiftVertical, &option) : 0;
+        ? style()->pixelMetric(QStyle::PM_ButtonShiftVertical, &option, this) : 0;
     const int hOffset = isDown()
-        ? style()->pixelMetric(QStyle::PM_ButtonShiftHorizontal, &option) : 0;
+        ? style()->pixelMetric(QStyle::PM_ButtonShiftHorizontal, &option, this) : 0;
 
     //Draw icon
     p.drawControl(QStyle::CE_PushButton, option);

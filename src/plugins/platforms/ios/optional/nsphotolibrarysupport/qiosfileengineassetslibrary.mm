@@ -12,6 +12,7 @@
 #include <QtCore/qset.h>
 #include <QtCore/qthreadstorage.h>
 #include <QtCore/qfileselector.h>
+#include <QtCore/qpointer.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -257,8 +258,8 @@ public:
     QIOSAssetEnumerator *m_enumerator;
 
     QIOSFileEngineIteratorAssetsLibrary(
-            QDir::Filters filters, const QStringList &nameFilters)
-        : QAbstractFileEngineIterator(filters, nameFilters)
+            const QString &path, QDirListing::IteratorFlags filters, const QStringList &nameFilters)
+        : QAbstractFileEngineIterator(path, filters, nameFilters)
         , m_enumerator(new QIOSAssetEnumerator([[[ALAssetsLibrary alloc] init] autorelease], ALAssetsGroupAll))
     {
     }
@@ -269,8 +270,11 @@ public:
         g_iteratorCurrentUrl.setLocalData(QString());
     }
 
-    QString next() override
+    bool advance() override
     {
+        if (!m_enumerator->hasNext())
+            return false;
+
         // Cache the URL that we are about to return, since QDir will immediately create a
         // new file engine on the file and ask if it exists. Unless we do this, we end up
         // creating a new ALAsset just to verify its existence, which will be especially
@@ -278,12 +282,7 @@ public:
         ALAsset *asset = m_enumerator->next();
         QString url = QUrl::fromNSURL([asset valueForProperty:ALAssetPropertyAssetURL]).toString();
         g_iteratorCurrentUrl.setLocalData(url);
-        return url;
-    }
-
-    bool hasNext() const override
-    {
-        return m_enumerator->hasNext();
+        return true;
     }
 
     QString currentFileName() const override
@@ -439,15 +438,11 @@ void QIOSFileEngineAssetsLibrary::setFileName(const QString &file)
 
 #ifndef QT_NO_FILESYSTEMITERATOR
 
-QAbstractFileEngine::Iterator *QIOSFileEngineAssetsLibrary::beginEntryList(
-        QDir::Filters filters, const QStringList &filterNames)
+QAbstractFileEngine::IteratorUniquePtr
+QIOSFileEngineAssetsLibrary::beginEntryList(
+    const QString &path, QDirListing::IteratorFlags filters, const QStringList &filterNames)
 {
-    return new QIOSFileEngineIteratorAssetsLibrary(filters, filterNames);
-}
-
-QAbstractFileEngine::Iterator *QIOSFileEngineAssetsLibrary::endEntryList()
-{
-    return 0;
+    return std::make_unique<QIOSFileEngineIteratorAssetsLibrary>(path, filters, filterNames);
 }
 
 QT_END_NAMESPACE

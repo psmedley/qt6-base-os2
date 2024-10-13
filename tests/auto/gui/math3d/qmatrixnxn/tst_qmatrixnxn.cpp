@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QtCore/qmath.h>
@@ -2343,7 +2343,7 @@ void tst_QMatrixNxN::rotate4x4()
     ROTATE4(2.0f, 3.0f, 0.0f, 1.0f, p1x, p1y, p1z, p1w);
     p1x /= p1w;
     p1y /= p1w;
-    p1z /= p1w;
+    Q_UNUSED(p1z);
 
     QVector3D v1(2.0f, 3.0f, -4.0f);
     QVector3D v2 = m1.map(v1);

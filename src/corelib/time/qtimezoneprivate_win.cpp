@@ -186,22 +186,24 @@ bool isSameRule(const QWinTimeZonePrivate::QWinTransitionRule &last,
 
 QList<QByteArray> availableWindowsIds()
 {
-    // TODO Consider caching results in a global static, very unlikely to change.
-    QList<QByteArray> list;
-    QWinRegistryKey key(HKEY_LOCAL_MACHINE, tzRegPath);
-    if (key.isValid()) {
-        DWORD idCount = 0;
-        if (RegQueryInfoKey(key, 0, 0, 0, &idCount, 0, 0, 0, 0, 0, 0, 0) == ERROR_SUCCESS
-            && idCount > 0) {
-            for (DWORD i = 0; i < idCount; ++i) {
-                DWORD maxLen = MAX_KEY_LENGTH;
-                TCHAR buffer[MAX_KEY_LENGTH];
-                if (RegEnumKeyEx(key, i, buffer, &maxLen, 0, 0, 0, 0) == ERROR_SUCCESS)
-                    list.append(QString::fromWCharArray(buffer).toUtf8());
+    static const QList<QByteArray> cache = [] {
+        QList<QByteArray> list;
+        QWinRegistryKey key(HKEY_LOCAL_MACHINE, tzRegPath);
+        if (key.isValid()) {
+            DWORD idCount = 0;
+            if (RegQueryInfoKey(key, 0, 0, 0, &idCount, 0, 0, 0, 0, 0, 0, 0) == ERROR_SUCCESS
+                && idCount > 0) {
+                for (DWORD i = 0; i < idCount; ++i) {
+                    DWORD maxLen = MAX_KEY_LENGTH;
+                    TCHAR buffer[MAX_KEY_LENGTH];
+                    if (RegEnumKeyEx(key, i, buffer, &maxLen, 0, 0, 0, 0) == ERROR_SUCCESS)
+                        list.append(QString::fromWCharArray(buffer).toUtf8());
+                }
             }
         }
-    }
-    return list;
+        return list;
+    }();
+    return cache;
 }
 
 QByteArray windowsSystemZoneId()
@@ -690,7 +692,7 @@ QTimeZonePrivate::Data QWinTimeZonePrivate::data(qint64 forMSecsSinceEpoch) cons
         // Fell off start of rule, try previous rule.
     }
     // We don't have relevant data :-(
-    return invalidData();
+    return {};
 }
 
 bool QWinTimeZonePrivate::hasTransitions() const
@@ -772,13 +774,13 @@ QTimeZonePrivate::Data QWinTimeZonePrivate::nextTransition(qint64 afterMSecsSinc
         }
     }
     // Apparently no transition after the given time:
-    return invalidData();
+    return {};
 }
 
 QTimeZonePrivate::Data QWinTimeZonePrivate::previousTransition(qint64 beforeMSecsSinceEpoch) const
 {
     if (beforeMSecsSinceEpoch <= minMSecs())
-        return invalidData();
+        return {};
 
     int year = msecsToDate(beforeMSecsSinceEpoch).year();
     for (int ruleIndex = ruleIndexForYear(m_tranRules, year);
@@ -828,7 +830,7 @@ QTimeZonePrivate::Data QWinTimeZonePrivate::previousTransition(qint64 beforeMSec
         }
     }
     // Apparently no transition before the given time:
-    return invalidData();
+    return {};
 }
 
 QByteArray QWinTimeZonePrivate::systemTimeZoneId() const
@@ -847,13 +849,16 @@ QByteArray QWinTimeZonePrivate::systemTimeZoneId() const
 
 QList<QByteArray> QWinTimeZonePrivate::availableTimeZoneIds() const
 {
-    QList<QByteArray> result;
-    const auto winIds = availableWindowsIds();
-    for (const QByteArray &winId : winIds)
-        result += windowsIdToIanaIds(winId);
-    std::sort(result.begin(), result.end());
-    result.erase(std::unique(result.begin(), result.end()), result.end());
-    return result;
+    static const QList<QByteArray> cache = [] {
+        QList<QByteArray> result;
+        const auto winIds = availableWindowsIds();
+        for (const QByteArray &winId : winIds)
+            result += windowsIdToIanaIds(winId);
+        std::sort(result.begin(), result.end());
+        result.erase(std::unique(result.begin(), result.end()), result.end());
+        return result;
+    }();
+    return cache;
 }
 
 QTimeZonePrivate::Data QWinTimeZonePrivate::ruleToData(const QWinTransitionRule &rule,
@@ -861,7 +866,7 @@ QTimeZonePrivate::Data QWinTimeZonePrivate::ruleToData(const QWinTransitionRule 
                                                        QTimeZone::TimeType type,
                                                        bool fakeDst) const
 {
-    Data tran = invalidData();
+    Data tran;
     tran.atMSecsSinceEpoch = atMSecsSinceEpoch;
     tran.standardTimeOffset = rule.standardTimeBias * -60;
     if (fakeDst) {

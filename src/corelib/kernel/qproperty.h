@@ -7,6 +7,7 @@
 #include <QtCore/qglobal.h>
 #include <QtCore/qshareddata.h>
 #include <QtCore/qstring.h>
+#include <QtCore/qttypetraits.h>
 #include <QtCore/qbindingstorage.h>
 
 #include <type_traits>
@@ -52,6 +53,17 @@ namespace Qt {
 Q_CORE_EXPORT void beginPropertyUpdateGroup();
 Q_CORE_EXPORT void endPropertyUpdateGroup();
 }
+
+class QScopedPropertyUpdateGroup
+{
+    Q_DISABLE_COPY_MOVE(QScopedPropertyUpdateGroup)
+public:
+    Q_NODISCARD_CTOR
+    QScopedPropertyUpdateGroup()
+    { Qt::beginPropertyUpdateGroup(); }
+    ~QScopedPropertyUpdateGroup() noexcept(false)
+    { Qt::endPropertyUpdateGroup(); }
+};
 
 template <typename T>
 class QPropertyData : public QUntypedPropertyData
@@ -217,7 +229,9 @@ public:
         ObserverNotifiesBinding, // observer was installed to notify bindings that obsverved property changed
         ObserverNotifiesChangeHandler, // observer is a change handler, which runs on every change
         ObserverIsPlaceholder,  // the observer before this one is currently evaluated in QPropertyObserver::notifyObservers.
-        ObserverIsAlias
+#if QT_DEPRECATED_SINCE(6, 6)
+        ObserverIsAlias QT_DEPRECATED_VERSION_X_6_6("Use QProperty and add a binding to the target.")
+#endif
     };
 protected:
     using ChangeHandler = void (*)(QPropertyObserver*, QUntypedPropertyData *);
@@ -250,14 +264,17 @@ public:
     QPropertyObserver &operator=(QPropertyObserver &&other) noexcept;
     ~QPropertyObserver();
 
-    template<typename Property, typename = typename Property::InheritsQUntypedPropertyData>
+    template <typename Property, QtPrivate::IsUntypedPropertyData<Property> = true>
     void setSource(const Property &property)
     { setSource(property.bindingData()); }
     void setSource(const QtPrivate::QPropertyBindingData &property);
 
 protected:
     QPropertyObserver(ChangeHandler changeHandler);
+#if QT_DEPRECATED_SINCE(6, 6)
+    QT_DEPRECATED_VERSION_X_6_6("This constructor was only meant for internal use. Use QProperty and add a binding to the target.")
     QPropertyObserver(QUntypedPropertyData *aliasedPropertyPtr);
+#endif
 
     QUntypedPropertyData *aliasedProperty() const
     {
@@ -272,10 +289,11 @@ private:
 };
 
 template <typename Functor>
-class [[nodiscard]] QPropertyChangeHandler : public QPropertyObserver
+class QPropertyChangeHandler : public QPropertyObserver
 {
     Functor m_handler;
 public:
+    Q_NODISCARD_CTOR
     QPropertyChangeHandler(Functor handler)
         : QPropertyObserver([](QPropertyObserver *self, QUntypedPropertyData *) {
               auto This = static_cast<QPropertyChangeHandler<Functor>*>(self);
@@ -285,7 +303,8 @@ public:
     {
     }
 
-    template<typename Property, typename = typename Property::InheritsQUntypedPropertyData>
+    template <typename Property, QtPrivate::IsUntypedPropertyData<Property> = true>
+    Q_NODISCARD_CTOR
     QPropertyChangeHandler(const Property &property, Functor handler)
         : QPropertyObserver([](QPropertyObserver *self, QUntypedPropertyData *) {
               auto This = static_cast<QPropertyChangeHandler<Functor>*>(self);
@@ -297,12 +316,14 @@ public:
     }
 };
 
-class [[nodiscard]] QPropertyNotifier : public QPropertyObserver
+class QPropertyNotifier : public QPropertyObserver
 {
     std::function<void()> m_handler;
 public:
+    Q_NODISCARD_CTOR
     QPropertyNotifier() = default;
     template<typename Functor>
+    Q_NODISCARD_CTOR
     QPropertyNotifier(Functor handler)
         : QPropertyObserver([](QPropertyObserver *self, QUntypedPropertyData *) {
             auto This = static_cast<QPropertyNotifier *>(self);
@@ -312,7 +333,9 @@ public:
     {
     }
 
-    template<typename Functor, typename Property, typename = typename Property::InheritsQUntypedPropertyData>
+    template <typename Functor, typename Property,
+              QtPrivate::IsUntypedPropertyData<Property> = true>
+    Q_NODISCARD_CTOR
     QPropertyNotifier(const Property &property, Functor handler)
         : QPropertyObserver([](QPropertyObserver *self, QUntypedPropertyData *) {
             auto This = static_cast<QPropertyNotifier *>(self);
@@ -867,13 +890,16 @@ public:
     }
 };
 
+#if QT_DEPRECATED_SINCE(6, 6)
 template<typename T>
-class QPropertyAlias : public QPropertyObserver
+class QT_DEPRECATED_VERSION_X_6_6("Class was only meant for internal use, use a QProperty and add a binding to the target")
+QPropertyAlias : public QPropertyObserver
 {
     Q_DISABLE_COPY_MOVE(QPropertyAlias)
     const QtPrivate::QBindableInterface *iface = nullptr;
 
 public:
+    QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
     QPropertyAlias(QProperty<T> *property)
         : QPropertyObserver(property),
           iface(&QtPrivate::QBindableInterfaceForProperty<QProperty<T>>::iface)
@@ -882,7 +908,7 @@ public:
             iface->setObserver(aliasedProperty(), this);
     }
 
-    template<typename Property, typename = typename Property::InheritsQUntypedPropertyData>
+    template <typename Property, QtPrivate::IsUntypedPropertyData<Property> = true>
     QPropertyAlias(Property *property)
         : QPropertyObserver(property),
           iface(&QtPrivate::QBindableInterfaceForProperty<Property>::iface)
@@ -989,7 +1015,9 @@ public:
     {
         return aliasedProperty() != nullptr;
     }
+    QT_WARNING_POP
 };
+#endif // QT_DEPRECATED_SINCE(6, 6)
 
 template<typename Class, typename T, auto Offset, auto Signal = nullptr>
 class QObjectBindableProperty : public QPropertyData<T>

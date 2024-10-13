@@ -130,8 +130,8 @@
     newlineEvent.key = isEnter ? Qt::Key_Enter : Qt::Key_Return;
     newlineEvent.text = isEnter ? QLatin1Char(kEnterCharCode)
                                 : QLatin1Char(kReturnCharCode);
-    newlineEvent.nativeVirtualKey = isEnter ? kVK_ANSI_KeypadEnter
-                                            : kVK_Return;
+    newlineEvent.nativeVirtualKey = isEnter ? quint32(kVK_ANSI_KeypadEnter)
+                                            : quint32(kVK_Return);
 
     qCDebug(lcQpaKeys) << "Inserting newline via" << newlineEvent;
     newlineEvent.sendWindowSystemEvent(m_platformWindow->window());
@@ -505,6 +505,32 @@
     return NSNotFound;
 }
 
+/*
+    Returns the window level of the text input.
+
+    This allows the input method to place its input panel
+    above the text input.
+*/
+- (NSInteger)windowLevel
+{
+    // The default level assumed by input methods is NSFloatingWindowLevel,
+    // but our NSWindow level could be higher than that for many reasons,
+    // including being set via QWindow::setFlags() or directly on the
+    // NSWindow, or because we're embedded into a native view hierarchy.
+    // Return the actual window level to account for this.
+    auto level = m_platformWindow ? m_platformWindow->nativeWindow().level
+                                  : NSNormalWindowLevel;
+
+    // The logic above only covers our own window though. In some cases,
+    // such as when a completer is active, the text input has a lower
+    // window level than another window that's also visible, and we don't
+    // want the input panel to be sandwiched between these two windows.
+    // Account for this by explicitly using NSPopUpMenuWindowLevel as
+    // the minimum window level, which corresponds to the highest level
+    // one can get via QWindow::setFlags(), except for Qt::ToolTip.
+    return qMax(level, NSPopUpMenuWindowLevel);
+}
+
 // ------------- Helper functions -------------
 
 /*
@@ -572,3 +598,65 @@
 }
 
 @end
+
+@implementation QNSView (ServicesMenu)
+
+// Support for reading and writing from service menu pasteboards, which is also
+// how the writing tools interact with custom NSView. Note that we only support
+// plain text, which means that a rich text selection will lose all its styling
+// when fed through a service that changes the text. To support rich text we
+// need IM plumbing that operates on QMimeData.
+
+- (id)validRequestorForSendType:(NSPasteboardType)sendType returnType:(NSPasteboardType)returnType
+{
+    bool canWriteToPasteboard = [&]{
+        if (![sendType isEqualToString:NSPasteboardTypeString])
+            return false;
+        if (auto queryResult = queryInputMethod(self.focusObject, Qt::ImCurrentSelection)) {
+            auto selectedText = queryResult.value(Qt::ImCurrentSelection).toString();
+            if (!selectedText.isEmpty())
+                return true;
+        }
+        return false;
+    }();
+
+    bool canReadFromPastboard = [returnType isEqualToString:NSPasteboardTypeString];
+
+    if ((sendType && !canWriteToPasteboard) || (returnType && !canReadFromPastboard)) {
+        return [super validRequestorForSendType:sendType returnType:returnType];
+    } else {
+        qCDebug(lcQpaServices) << "Accepting service interaction for send" << sendType << "and receive" << returnType;
+        return self;
+    }
+}
+
+- (BOOL)writeSelectionToPasteboard:(NSPasteboard *)pasteboard types:(NSArray<NSPasteboardType> *)types
+{
+    if ([types containsObject:NSPasteboardTypeString]
+        // Check for the deprecated NSStringPboardType as well, as even if we
+        // claim to only support NSPasteboardTypeString, we get callbacks for
+        // the deprecated type.
+        || QT_IGNORE_DEPRECATIONS([types containsObject:NSStringPboardType])) {
+        if (auto queryResult = queryInputMethod(self.focusObject, Qt::ImCurrentSelection)) {
+            auto selectedText = queryResult.value(Qt::ImCurrentSelection).toString();
+            qCDebug(lcQpaServices) << "Writing" << selectedText << "to service pasteboard" << pasteboard.name;
+            return [pasteboard writeObjects:@[ selectedText.toNSString() ]];
+        }
+    }
+    return NO;
+}
+
+- (BOOL)readSelectionFromPasteboard:(NSPasteboard *)pasteboard
+{
+    NSString *insertedString = [pasteboard stringForType:NSPasteboardTypeString];
+    if (!insertedString)
+        return NO;
+
+    qCDebug(lcQpaServices) << "Reading" << insertedString << "from service pasteboard" << pasteboard.name;
+    [self insertText:insertedString replacementRange:{NSNotFound, 0}];
+    return YES;
+}
+
+@end
+
+

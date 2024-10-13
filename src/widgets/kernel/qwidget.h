@@ -432,6 +432,7 @@ public:
     void setFocusPolicy(Qt::FocusPolicy policy);
     bool hasFocus() const;
     static void setTabOrder(QWidget *, QWidget *);
+    static void setTabOrder(std::initializer_list<QWidget *> widgets);
     void setFocusProxy(QWidget *);
     QWidget *focusProxy() const;
     Qt::ContextMenuPolicy contextMenuPolicy() const;
@@ -623,6 +624,7 @@ public:
     static QWidget *find(WId);
     inline QWidget *childAt(int x, int y) const;
     QWidget *childAt(const QPoint &p) const;
+    QWidget *childAt(const QPointF &p) const;
 
     void setAttribute(Qt::WidgetAttribute, bool on = true);
     inline bool testAttribute(Qt::WidgetAttribute) const;
@@ -795,7 +797,7 @@ template <> inline const QWidget *qobject_cast<const QWidget*>(const QObject *o)
 #endif // !Q_QDOC
 
 inline QWidget *QWidget::childAt(int ax, int ay) const
-{ return childAt(QPoint(ax, ay)); }
+{ return childAt(QPointF(ax, ay)); }
 
 inline Qt::WindowType QWidget::windowType() const
 { return static_cast<Qt::WindowType>((data->window_flags & Qt::WindowType_Mask).toInt()); }
@@ -912,7 +914,6 @@ inline bool QWidget::testAttribute(Qt::WidgetAttribute attribute) const
         return data->widget_attributes & (1<<attribute);
     return testAttribute_helper(attribute);
 }
-
 
 #define QWIDGETSIZE_MAX ((1<<24)-1)
 

@@ -1,9 +1,9 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "hellowindow.h"
 #include <QFile>
-#include <QtGui/private/qshader_p.h>
+#include <rhi/qshader.h>
 
 static float vertexData[] = {
     // Y up (note clipSpaceCorrMatrix in m_proj), CCW

@@ -39,9 +39,11 @@ using namespace Qt::StringLiterals;
 
     \ingroup tools
     \ingroup shared
+    \ingroup string-processing
 
     \keyword regular expression
 
+    \compares equality
     Regular expressions, or \e{regexps}, are a very powerful tool to handle
     strings and texts. This is useful in many contexts, e.g.,
 
@@ -81,8 +83,6 @@ using namespace Qt::StringLiterals;
     documentation} and the \l{http://perldoc.perl.org/perlretut.html} {Perl's
     regular expression tutorial}.
     \endlist
-
-    \tableofcontents
 
     \section1 Introduction
 
@@ -445,6 +445,7 @@ using namespace Qt::StringLiterals;
 
     \ingroup tools
     \ingroup shared
+    \ingroup string-processing
 
     \keyword regular expression match
 
@@ -497,6 +498,7 @@ using namespace Qt::StringLiterals;
 
     \ingroup tools
     \ingroup shared
+    \ingroup string-processing
 
     \keyword regular expression iterator
 
@@ -721,7 +723,7 @@ struct QRegularExpressionPrivate : QSharedData
                  CheckSubjectStringOption checkSubjectStringOption = CheckSubjectString,
                  const QRegularExpressionMatchPrivate *previous = nullptr) const;
 
-    int captureIndexForName(QStringView name) const;
+    int captureIndexForName(QAnyStringView name) const;
 
     // sizeof(QSharedData) == 4, so start our members with an enum
     QRegularExpression::PatternOptions patternOptions;
@@ -1013,7 +1015,7 @@ void QRegularExpressionPrivate::optimizePattern()
     Returns the capturing group number for the given name. Duplicated names for
     capturing groups are not supported.
 */
-int QRegularExpressionPrivate::captureIndexForName(QStringView name) const
+int QRegularExpressionPrivate::captureIndexForName(QAnyStringView name) const
 {
     Q_ASSERT(!name.isEmpty());
 
@@ -1104,7 +1106,7 @@ void QRegularExpressionPrivate::doMatch(QRegularExpressionMatchPrivate *priv,
                                         const QRegularExpressionMatchPrivate *previous) const
 {
     Q_ASSERT(priv);
-    Q_ASSUME(priv != previous);
+    Q_ASSERT(priv != previous);
 
     const qsizetype subjectLength = priv->subject.size();
 
@@ -1508,7 +1510,7 @@ QStringList QRegularExpression::namedCaptureGroups() const
                 reinterpret_cast<const char16_t *>(namedCapturingTable) + namedCapturingTableEntrySize * i;
 
         const int index = *currentNamedCapturingTableRow;
-        result[index] = QString::fromUtf16(currentNamedCapturingTableRow + 1);
+        result[index] = QStringView(currentNamedCapturingTableRow + 1).toString();
     }
 
     return result;
@@ -1734,18 +1736,20 @@ void QRegularExpression::optimize() const
 }
 
 /*!
-    Returns \c true if the regular expression is equal to \a re, or false
+    \fn bool QRegularExpression::operator==(const QRegularExpression &lhs, const QRegularExpression &rhs) noexcept
+
+    Returns \c true if the \a lhs regular expression is equal to the \a rhs, or false
     otherwise. Two QRegularExpression objects are equal if they have
     the same pattern string and the same pattern options.
 
     \sa operator!=()
 */
-bool QRegularExpression::operator==(const QRegularExpression &re) const
+bool comparesEqual(const QRegularExpression &lhs,
+                   const QRegularExpression &rhs) noexcept
 {
-    return (d == re.d) ||
-           (d->pattern == re.d->pattern && d->patternOptions == re.d->patternOptions);
+    return (lhs.d == rhs.d) ||
+            (lhs.d->pattern == rhs.d->pattern && lhs.d->patternOptions == rhs.d->patternOptions);
 }
-
 /*!
     \fn QRegularExpression & QRegularExpression::operator=(QRegularExpression && re)
 
@@ -1758,9 +1762,9 @@ bool QRegularExpression::operator==(const QRegularExpression &re) const
 */
 
 /*!
-    \fn bool QRegularExpression::operator!=(const QRegularExpression &re) const
+    \fn bool QRegularExpression::operator!=(const QRegularExpression &lhs, const QRegularExpression &rhs) noexcept
 
-    Returns \c true if the regular expression is different from \a re, or
+    Returns \c true if the \a lhs regular expression is different from the \a rhs, or
     false otherwise.
 
     \sa operator==()
@@ -1856,22 +1860,30 @@ QString QRegularExpression::escape(QStringView str)
     \value UnanchoredWildcardConversion
         The conversion will not anchor the pattern. This allows for partial string matches of
         wildcard expressions.
+
+    \value [since 6.6] NonPathWildcardConversion
+        The conversion will \e{not} interpret the pattern as filepath globbing.
+
+    \sa QRegularExpression::wildcardToRegularExpression
 */
 
 /*!
     \since 5.15
 
     Returns a regular expression representation of the given glob \a pattern.
-    The transformation is targeting file path globbing, which means in particular
-    that path separators receive special treatment. This implies that it is not
-    just a basic translation from "*" to ".*".
+
+    There are two transformations possible, one that targets file path
+    globbing, and another one which is more generic.
+
+    By default, the transformation is targeting file path globbing,
+    which means in particular that path separators receive special
+    treatment. This implies that it is not just a basic translation
+    from "*" to ".*" and similar.
 
     \snippet code/src_corelib_text_qregularexpression.cpp 31
 
-    By default, the returned regular expression is fully anchored. In other
-    words, there is no need of calling anchoredPattern() again on the
-    result. To get a regular expression that is not anchored, pass
-    UnanchoredWildcardConversion as the conversion \a options.
+    The more generic globbing transformation is available by passing
+    \c NonPathWildcardConversion in the conversion \a options.
 
     This implementation follows closely the definition
     of wildcard for glob patterns:
@@ -1880,10 +1892,12 @@ QString QRegularExpression::escape(QStringView str)
          \li Any character represents itself apart from those mentioned
          below. Thus \b{c} matches the character \e c.
     \row \li \b{?}
-         \li Matches any single character. It is the same as
-         \b{.} in full regexps.
+         \li Matches any single character, except for a path separator
+         (in case file path globbing has been selected). It is the
+         same as b{.} in full regexps.
     \row \li \b{*}
-         \li Matches zero or more of any characters. It is the
+         \li Matches zero or more of any characters, except for path
+         separators (in case file path globbing has been selected). It is the
          same as \b{.*} in full regexps.
     \row \li \b{[abc]}
          \li Matches one character given in the bracket.
@@ -1897,15 +1911,21 @@ QString QRegularExpression::escape(QStringView str)
          bracket. It is the same as \b{[^a-c]} in full regexp.
     \endtable
 
-    \note The backslash (\\) character is \e not an escape char in this context.
-    In order to match one of the special characters, place it in square brackets
-    (for example, \c{[?]}).
+    \note For historical reasons, a backslash (\\) character is \e not
+    an escape char in this context. In order to match one of the
+    special characters, place it in square brackets (for example,
+    \c{[?]}).
 
     More information about the implementation can be found in:
     \list
     \li \l {https://en.wikipedia.org/wiki/Glob_(programming)} {The Wikipedia Glob article}
     \li \c {man 7 glob}
     \endlist
+
+    By default, the returned regular expression is fully anchored. In other
+    words, there is no need of calling anchoredPattern() again on the
+    result. To get a regular expression that is not anchored, pass
+    UnanchoredWildcardConversion in the conversion \a options.
 
     \sa escape()
 */
@@ -1917,29 +1937,54 @@ QString QRegularExpression::wildcardToRegularExpression(QStringView pattern, Wil
     qsizetype i = 0;
     const QChar *wc = pattern.data();
 
+    struct GlobSettings {
+        char16_t nativePathSeparator;
+        QStringView starEscape;
+        QStringView questionMarkEscape;
+    };
+
+    const GlobSettings settings = [options]() {
+        if (options.testFlag(NonPathWildcardConversion)) {
+            // using [\d\D] to mean "match everything";
+            // dot doesn't match newlines, unless in /s mode
+            return GlobSettings{ u'\0', u"[\\d\\D]*", u"[\\d\\D]" };
+        } else {
 #ifdef Q_OS_WIN
-    const char16_t nativePathSeparator = u'\\';
-    const auto starEscape = "[^/\\\\]*"_L1;
-    const auto questionMarkEscape = "[^/\\\\]"_L1;
+            return GlobSettings{ u'\\', u"[^/\\\\]*", u"[^/\\\\]" };
 #else
-    const char16_t nativePathSeparator = u'/';
-    const auto starEscape = "[^/]*"_L1;
-    const auto questionMarkEscape = "[^/]"_L1;
+            return GlobSettings{ u'/', u"[^/]*", u"[^/]" };
 #endif
+        }
+    }();
 
     while (i < wclen) {
         const QChar c = wc[i++];
         switch (c.unicode()) {
         case '*':
-            rx += starEscape;
+            rx += settings.starEscape;
+            // Coalesce sequences of *
+            while (i < wclen && wc[i] == u'*')
+                ++i;
             break;
         case '?':
-            rx += questionMarkEscape;
+            rx += settings.questionMarkEscape;
             break;
+        // When not using filepath globbing: \ is escaped, / is itself
+        // When using filepath globbing:
+        // * Unix: \ gets escaped. / is itself
+        // * Windows: \ and / can match each other -- they become [/\\] in regexp
         case '\\':
 #ifdef Q_OS_WIN
+            if (options.testFlag(NonPathWildcardConversion))
+                rx += u"\\\\";
+            else
+                rx += u"[/\\\\]";
+            break;
         case '/':
-            rx += "[/\\\\]"_L1;
+            if (options.testFlag(NonPathWildcardConversion))
+                rx += u'/';
+            else
+                rx += u"[/\\\\]";
             break;
 #endif
         case '$':
@@ -1967,11 +2012,13 @@ QString QRegularExpression::wildcardToRegularExpression(QStringView pattern, Wil
                     rx += wc[i++];
 
                 while (i < wclen && wc[i] != u']') {
-                    // The '/' appearing in a character class invalidates the
-                    // regular expression parsing. It also concerns '\\' on
-                    // Windows OS types.
-                    if (wc[i] == u'/' || wc[i] == nativePathSeparator)
-                        return rx;
+                    if (!options.testFlag(NonPathWildcardConversion)) {
+                        // The '/' appearing in a character class invalidates the
+                        // regular expression parsing. It also concerns '\\' on
+                        // Windows OS types.
+                        if (wc[i] == u'/' || wc[i] == settings.nativePathSeparator)
+                            return rx;
+                    }
                     if (wc[i] == u'\\')
                         rx += u'\\';
                     rx += wc[i++];
@@ -2177,8 +2224,7 @@ int QRegularExpressionMatch::lastCapturedIndex() const
 }
 
 /*!
-    \fn bool QRegularExpressionMatch::hasCaptured(const QString &name) const
-    \fn bool QRegularExpressionMatch::hasCaptured(QStringView name) const
+    \fn bool QRegularExpressionMatch::hasCaptured(QAnyStringView name) const
     \since 6.3
 
     Returns true if the capturing group named \a name captured something
@@ -2195,9 +2241,12 @@ int QRegularExpressionMatch::lastCapturedIndex() const
     Similarly, a capturing group may capture a substring of length 0;
     this function will return \c{true} for such a capturing group.
 
+    \note In Qt versions prior to 6.8, this function took QString or
+    QStringView, not QAnyStringView.
+
     \sa captured(), hasMatch()
 */
-bool QRegularExpressionMatch::hasCaptured(QStringView name) const
+bool QRegularExpressionMatch::hasCaptured(QAnyStringView name) const
 {
     const int nth = d->regularExpression.d->captureIndexForName(name);
     return hasCaptured(nth);
@@ -2277,17 +2326,6 @@ QStringView QRegularExpressionMatch::capturedView(int nth) const
     return d->subject.mid(start, capturedLength(nth));
 }
 
-/*! \fn QString QRegularExpressionMatch::captured(const QString &name) const
-
-    Returns the substring captured by the capturing group named \a name.
-
-    If the named capturing group \a name did not capture a string, or if
-    there is no capturing group named \a name, returns a null QString.
-
-    \sa capturedView(), capturedStart(), capturedEnd(), capturedLength(),
-    QString::isNull()
-*/
-
 /*!
     \since 5.10
 
@@ -2296,10 +2334,13 @@ QStringView QRegularExpressionMatch::capturedView(int nth) const
     If the named capturing group \a name did not capture a string, or if
     there is no capturing group named \a name, returns a null QString.
 
+    \note In Qt versions prior to 6.8, this function took QString or
+    QStringView, not QAnyStringView.
+
     \sa capturedView(), capturedStart(), capturedEnd(), capturedLength(),
     QString::isNull()
 */
-QString QRegularExpressionMatch::captured(QStringView name) const
+QString QRegularExpressionMatch::captured(QAnyStringView name) const
 {
     if (name.isEmpty()) {
         qWarning("QRegularExpressionMatch::captured: empty capturing group name passed");
@@ -2318,10 +2359,13 @@ QString QRegularExpressionMatch::captured(QStringView name) const
     If the named capturing group \a name did not capture a string, or if
     there is no capturing group named \a name, returns a null QStringView.
 
+    \note In Qt versions prior to 6.8, this function took QString or
+    QStringView, not QAnyStringView.
+
     \sa captured(), capturedStart(), capturedEnd(), capturedLength(),
     QStringView::isNull()
 */
-QStringView QRegularExpressionMatch::capturedView(QStringView name) const
+QStringView QRegularExpressionMatch::capturedView(QAnyStringView name) const
 {
     if (name.isEmpty()) {
         qWarning("QRegularExpressionMatch::capturedView: empty capturing group name passed");
@@ -2393,37 +2437,6 @@ qsizetype QRegularExpressionMatch::capturedEnd(int nth) const
     return d->capturedOffsets.at(nth * 2 + 1);
 }
 
-/*! \fn qsizetype QRegularExpressionMatch::capturedStart(const QString &name) const
-
-    Returns the offset inside the subject string corresponding to the starting
-    position of the substring captured by the capturing group named \a name.
-    If the capturing group named \a name did not capture a string or doesn't
-    exist, returns -1.
-
-    \sa capturedEnd(), capturedLength(), captured()
-*/
-
-/*! \fn qsizetype QRegularExpressionMatch::capturedLength(const QString &name) const
-
-    Returns the length of the substring captured by the capturing group named
-    \a name.
-
-    \note This function returns 0 if the capturing group named \a name did not
-    capture a string or doesn't exist.
-
-    \sa capturedStart(), capturedEnd(), captured()
-*/
-
-/*! \fn qsizetype QRegularExpressionMatch::capturedEnd(const QString &name) const
-
-    Returns the offset inside the subject string immediately after the ending
-    position of the substring captured by the capturing group named \a name. If
-    the capturing group named \a name did not capture a string or doesn't
-    exist, returns -1.
-
-    \sa capturedStart(), capturedLength(), captured()
-*/
-
 /*!
     \since 5.10
 
@@ -2432,9 +2445,12 @@ qsizetype QRegularExpressionMatch::capturedEnd(int nth) const
     If the capturing group named \a name did not capture a string or doesn't
     exist, returns -1.
 
+    \note In Qt versions prior to 6.8, this function took QString or
+    QStringView, not QAnyStringView.
+
     \sa capturedEnd(), capturedLength(), captured()
 */
-qsizetype QRegularExpressionMatch::capturedStart(QStringView name) const
+qsizetype QRegularExpressionMatch::capturedStart(QAnyStringView name) const
 {
     if (name.isEmpty()) {
         qWarning("QRegularExpressionMatch::capturedStart: empty capturing group name passed");
@@ -2455,9 +2471,12 @@ qsizetype QRegularExpressionMatch::capturedStart(QStringView name) const
     \note This function returns 0 if the capturing group named \a name did not
     capture a string or doesn't exist.
 
+    \note In Qt versions prior to 6.8, this function took QString or
+    QStringView, not QAnyStringView.
+
     \sa capturedStart(), capturedEnd(), captured()
 */
-qsizetype QRegularExpressionMatch::capturedLength(QStringView name) const
+qsizetype QRegularExpressionMatch::capturedLength(QAnyStringView name) const
 {
     if (name.isEmpty()) {
         qWarning("QRegularExpressionMatch::capturedLength: empty capturing group name passed");
@@ -2477,9 +2496,12 @@ qsizetype QRegularExpressionMatch::capturedLength(QStringView name) const
     the capturing group named \a name did not capture a string or doesn't
     exist, returns -1.
 
+    \note In Qt versions prior to 6.8, this function took QString or
+    QStringView, not QAnyStringView.
+
     \sa capturedStart(), capturedLength(), captured()
 */
-qsizetype QRegularExpressionMatch::capturedEnd(QStringView name) const
+qsizetype QRegularExpressionMatch::capturedEnd(QAnyStringView name) const
 {
     if (name.isEmpty()) {
         qWarning("QRegularExpressionMatch::capturedEnd: empty capturing group name passed");
@@ -3060,7 +3082,8 @@ static const char *pcreCompileErrorCodes[] =
     QT_TRANSLATE_NOOP("QRegularExpression", "heap limit exceeded"),
     QT_TRANSLATE_NOOP("QRegularExpression", "invalid syntax"),
     QT_TRANSLATE_NOOP("QRegularExpression", "internal error - duplicate substitution match"),
-    QT_TRANSLATE_NOOP("QRegularExpression", "PCRE2_MATCH_INVALID_UTF is not supported for DFA matching")
+    QT_TRANSLATE_NOOP("QRegularExpression", "PCRE2_MATCH_INVALID_UTF is not supported for DFA matching"),
+    QT_TRANSLATE_NOOP("QRegularExpression", "INTERNAL ERROR: invalid substring offset")
 };
 #endif // #if 0
 

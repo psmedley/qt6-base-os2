@@ -16,6 +16,7 @@
 //
 
 #include <QtNetwork/private/qtnetworkglobal_p.h>
+#include <QtNetwork/qhttpheaders.h>
 
 #include <QByteArray>
 #include <QList>
@@ -43,7 +44,7 @@ static constexpr int MAX_TOTAL_HEADER_SIZE = 256 * 1024;
 
 }
 
-class Q_NETWORK_PRIVATE_EXPORT QHttpHeaderParser
+class Q_NETWORK_EXPORT QHttpHeaderParser
 {
 public:
     QHttpHeaderParser();
@@ -52,7 +53,8 @@ public:
     bool parseHeaders(QByteArrayView headers);
     bool parseStatus(QByteArrayView status);
 
-    const QList<QPair<QByteArray, QByteArray> >& headers() const;
+    const QHttpHeaders& headers() const &;
+    QHttpHeaders headers() &&;
     void setStatusCode(int code);
     int getStatusCode() const;
     int getMajorVersion() const;
@@ -62,15 +64,15 @@ public:
     QString getReasonPhrase() const;
     void setReasonPhrase(const QString &reason);
 
-    QByteArray firstHeaderField(const QByteArray &name,
+    QByteArray firstHeaderField(QByteArrayView name,
                                 const QByteArray &defaultValue = QByteArray()) const;
-    QByteArray combinedHeaderValue(const QByteArray &name,
+    QByteArray combinedHeaderValue(QByteArrayView name,
                                    const QByteArray &defaultValue = QByteArray()) const;
-    QList<QByteArray> headerFieldValues(const QByteArray &name) const;
+    QList<QByteArray> headerFieldValues(QByteArrayView name) const;
     void setHeaderField(const QByteArray &name, const QByteArray &data);
     void prependHeaderField(const QByteArray &name, const QByteArray &data);
     void appendHeaderField(const QByteArray &name, const QByteArray &data);
-    void removeHeaderField(const QByteArray &name);
+    void removeHeaderField(QByteArrayView name);
     void clearHeaders();
 
     void setMaxHeaderFieldSize(qsizetype size) { maxFieldSize = size; }
@@ -83,7 +85,7 @@ public:
     qsizetype maxHeaderFields() const { return maxFieldCount; }
 
 private:
-    QList<QPair<QByteArray, QByteArray> > fields;
+    QHttpHeaders fields;
     QString reasonPhrase;
     int statusCode;
     int majorVersion;

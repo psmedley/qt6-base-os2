@@ -1,9 +1,11 @@
 // Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QTestEventLoop>
 #include <QtCore/QTimer>
+
+using namespace std::chrono_literals;
 
 // Tests for QTestEventLoop (and some QTRY_* details)
 class tst_EventLoop: public QObject
@@ -51,7 +53,7 @@ void tst_EventLoop::cleanup()
     {
         DeferredFlag flag;
         auto &loop = QTestEventLoop::instance();
-        loop.enterLoopMSecs(100);
+        loop.enterLoop(100ms);
         QVERIFY2(loop.timeout(), "QTestEventLoop exited prematurely in cleanup()");
         QVERIFY(flag);
     }
@@ -81,7 +83,7 @@ void tst_EventLoop::pass()
     {
         DeferredFlag flag;
         auto &loop = QTestEventLoop::instance();
-        loop.enterLoopMSecs(100);
+        loop.enterLoop(100ms);
         QVERIFY(loop.timeout());
         QVERIFY(flag);
     }
@@ -92,10 +94,10 @@ void tst_EventLoop::pass()
     DeferredFlag flag;
     QTestEventLoop loop(this);
     QVERIFY(!flag);
-    loop.enterLoopMSecs(1);
+    loop.enterLoop(1ms);
     QVERIFY(loop.timeout());
     QVERIFY(!flag);
-    loop.enterLoopMSecs(100);
+    loop.enterLoop(100ms);
     QVERIFY(loop.timeout());
     QVERIFY(flag);
 }

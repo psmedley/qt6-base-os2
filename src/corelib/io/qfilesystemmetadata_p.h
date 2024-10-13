@@ -179,17 +179,21 @@ public:
 
     qint64 size() const                     { return size_; }
 
-    QFile::Permissions permissions() const;
+    inline QFile::Permissions permissions() const;
 
     QDateTime accessTime() const;
     QDateTime birthTime() const;
     QDateTime metadataChangeTime() const;
     QDateTime modificationTime() const;
 
-    QDateTime fileTime(QAbstractFileEngine::FileTime time) const;
+    QDateTime fileTime(QFile::FileTime time) const;
     uint userId() const;
     uint groupId() const;
     uint ownerId(QAbstractFileEngine::FileOwner owner) const;
+
+    bool isReadable() const   { return permissions().testAnyFlags(QFile::ReadUser); }
+    bool isWritable() const   { return permissions().testAnyFlags(QFile::WriteUser); }
+    bool isExecutable() const { return permissions().testAnyFlags(QFile::ExeUser); }
 
 #ifdef Q_OS_UNIXLIKE
     void fillFromStatxBuf(const struct statx &statBuffer);
@@ -281,19 +285,19 @@ inline uint QFileSystemMetaData::ownerId(QAbstractFileEngine::FileOwner owner) c
 #endif
 
 #if defined(Q_OS_UNIX) || defined (Q_OS_DOSLIKE)
-inline QDateTime QFileSystemMetaData::fileTime(QAbstractFileEngine::FileTime time) const
+inline QDateTime QFileSystemMetaData::fileTime(QFile::FileTime time) const
 {
     switch (time) {
-    case QAbstractFileEngine::ModificationTime:
+    case QFile::FileModificationTime:
         return modificationTime();
 
-    case QAbstractFileEngine::AccessTime:
+    case QFile::FileAccessTime:
         return accessTime();
 
-    case QAbstractFileEngine::BirthTime:
+    case QFile::FileBirthTime:
         return birthTime();
 
-    case QAbstractFileEngine::MetadataChangeTime:
+    case QFile::FileMetadataChangeTime:
         return metadataChangeTime();
     }
 

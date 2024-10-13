@@ -89,14 +89,20 @@ QOpenGLContext *QNativeInterface::QWGLContext::fromNative(HGLRC context, HWND wi
 QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWindowsApplication);
 
 /*!
-    \class QNativeInterface::Private::QWindowsScreen
-    \since 6.5
-    \internal
-    \brief Native interface to QScreen, to be retrieved from QPlatformIntegration.
+    \class QNativeInterface::QWindowsScreen
+    \since 6.7
+    \brief Native interface to a screen.
+
+    Accessed through QScreen::nativeInterface().
     \inmodule QtGui
     \ingroup native-interfaces
+    \ingroup native-interfaces-qscreen
 */
-QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWindowsScreen);
+/*!
+ * \fn HWMONITOR QNativeInterface::QWindowsScreen::handle() const;
+ * \return The underlying HWMONITOR of the screen.
+ */
+QT_DEFINE_NATIVE_INTERFACE(QWindowsScreen);
 /*!
     \enum QNativeInterface::Private::QWindowsApplication::TouchWindowTouchType
 
@@ -175,15 +181,7 @@ QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWindowsScreen);
     \value DarkModeStyle        The Windows Vista style will be turned off and
                                 a simple dark style will be used.
 
-    \sa isDarkMode(), setDarkModeHandling()
-*/
-
-/*!
-    \fn bool QNativeInterface::Private::QWindowsApplication::isDarkMode() const = 0
-    \internal
-
-    Returns \c true if Windows 10 is configured to use dark mode for
-    applications.
+    \sa setDarkModeHandling()
 */
 
 /*!

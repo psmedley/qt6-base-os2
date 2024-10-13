@@ -752,6 +752,53 @@ QNetworkProxy QNetworkProxy::applicationProxy()
 }
 
 /*!
+    \since 6.8
+
+    Returns headers that are set in this network request.
+
+    If the proxy is not of type HttpProxy or HttpCachingProxy,
+    default constructed QHttpHeaders is returned.
+
+    \sa setHeaders()
+*/
+QHttpHeaders QNetworkProxy::headers() const
+{
+    if (d->type != HttpProxy && d->type != HttpCachingProxy)
+        return {};
+    return d->headers.headers();
+}
+
+/*!
+    \since 6.8
+
+    Sets \a newHeaders as headers in this network request, overriding
+    any previously set headers.
+
+    If some headers correspond to the known headers, the values will
+    be parsed and the corresponding parsed form will also be set.
+
+    If the proxy is not of type HttpProxy or HttpCachingProxy this has no
+    effect.
+
+    \sa headers(), QNetworkRequest::KnownHeaders
+*/
+void QNetworkProxy::setHeaders(QHttpHeaders &&newHeaders)
+{
+    if (d->type == HttpProxy || d->type == HttpCachingProxy)
+        d->headers.setHeaders(std::move(newHeaders));
+}
+
+/*!
+    \overload
+    \since 6.8
+*/
+void QNetworkProxy::setHeaders(const QHttpHeaders &newHeaders)
+{
+    if (d->type == HttpProxy || d->type == HttpCachingProxy)
+        d->headers.setHeaders(newHeaders);
+}
+
+/*!
     \since 5.0
     Returns the value of the known network header \a header if it is
     in use for this proxy. If it is not present, returns QVariant()
@@ -795,7 +842,7 @@ bool QNetworkProxy::hasRawHeader(const QByteArray &headerName) const
 {
     if (d->type != HttpProxy && d->type != HttpCachingProxy)
         return false;
-    return d->headers.findRawHeader(headerName) != d->headers.rawHeaders.constEnd();
+    return d->headers.headers().contains(headerName);
 }
 
 /*!
@@ -814,11 +861,7 @@ QByteArray QNetworkProxy::rawHeader(const QByteArray &headerName) const
 {
     if (d->type != HttpProxy && d->type != HttpCachingProxy)
         return QByteArray();
-    QNetworkHeadersPrivate::RawHeadersList::ConstIterator it =
-        d->headers.findRawHeader(headerName);
-    if (it != d->headers.rawHeaders.constEnd())
-        return it->second;
-    return QByteArray();
+    return d->headers.rawHeader(headerName);
 }
 
 /*!
@@ -1466,7 +1509,7 @@ void QNetworkProxyFactory::setApplicationProxyFactory(QNetworkProxyFactory *fact
     Internet Explorer's settings and use them.
 
     On \macos, this function will obtain the proxy settings using the
-    SystemConfiguration framework from Apple. It will apply the FTP,
+    CFNetwork framework from Apple. It will apply the FTP,
     HTTP and HTTPS proxy configurations for queries that contain the
     protocol tag "ftp", "http" and "https", respectively. If the SOCKS
     proxy is enabled in that configuration, this function will use the
@@ -1489,9 +1532,6 @@ void QNetworkProxyFactory::setApplicationProxyFactory(QNetworkProxyFactory *fact
     listed here.
 
     \list
-    \li On \macos, this function will ignore the Proxy Auto Configuration
-    settings, since it cannot execute the associated ECMAScript code.
-
     \li On Windows platforms, this function may take several seconds to
     execute depending on the configuration of the user's system.
     \endlist

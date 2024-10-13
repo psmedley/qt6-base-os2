@@ -63,35 +63,6 @@ void clearVariant(VARIANT *variant)
     variant->punkVal = nullptr;
 }
 
-void setVariantI4(int value, VARIANT *variant)
-{
-    variant->vt = VT_I4;
-    variant->lVal = value;
-}
-
-void setVariantBool(bool value, VARIANT *variant)
-{
-    variant->vt = VT_BOOL;
-    variant->boolVal = value ? -1 : 0;
-}
-
-void setVariantDouble(double value, VARIANT *variant)
-{
-    variant->vt = VT_R8;
-    variant->dblVal = value;
-}
-
-BSTR bStrFromQString(const QString &value)
-{
-    return SysAllocString(reinterpret_cast<const wchar_t *>(value.utf16()));
-}
-
-void setVariantString(const QString &value, VARIANT *variant)
-{
-    variant->vt = VT_BSTR;
-    variant->bstrVal = bStrFromQString(value);
-}
-
 // Scales a rect to native coordinates, according to high dpi settings.
 void rectToNativeUiaRect(const QRect &rect, const QWindow *w, UiaRect *uiaRect)
 {
@@ -176,6 +147,9 @@ long roleToControlTypeId(QAccessible::Role role)
         {QAccessible::PageTabList, UIA_TabControlTypeId},
         {QAccessible::Clock, UIA_CustomControlTypeId},
         {QAccessible::Splitter, UIA_CustomControlTypeId},
+        {QAccessible::Paragraph, UIA_TextControlTypeId},
+        {QAccessible::WebDocument, UIA_DocumentControlTypeId},
+        {QAccessible::Heading, UIA_TextControlTypeId},
     };
 
     return mapping.value(role, UIA_CustomControlTypeId);

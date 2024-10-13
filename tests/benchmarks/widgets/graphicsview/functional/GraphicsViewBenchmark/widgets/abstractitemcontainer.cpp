@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #include <QDebug>
 #include <QGraphicsLayout>
 
@@ -211,7 +211,7 @@ bool AbstractItemContainer::itemVisibleInView(AbstractViewItem* item, const QRec
 
 void AbstractItemContainer::updateItemBuffer()
 {
-    if (!m_itemView || (m_itemView && !m_itemView->boundingRect().isValid()))
+    if (!m_itemView || !m_itemView->boundingRect().isValid())
         return;
 
     int maxCount = maxItemCountInItemBuffer();

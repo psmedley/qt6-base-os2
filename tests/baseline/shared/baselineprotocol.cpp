@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #include "baselineprotocol.h"
 #include <QLibraryInfo>
 #include <QImage>
@@ -261,18 +261,21 @@ bool BaselineProtocol::disconnect()
 }
 
 
-bool BaselineProtocol::connect(const QString &testCase, bool *dryrun, const PlatformInfo& clientInfo)
+bool BaselineProtocol::connect(const QString &testCase, bool *dryrun, const PlatformInfo &clientInfo, const QString &server)
 {
     errMsg.clear();
-    QByteArray serverName(qgetenv("QT_LANCELOT_SERVER"));
-    if (serverName.isNull())
-        serverName = "lancelot.test.qt-project.org";
+    QString serverName = server;
+    if (serverName.isEmpty()) {
+        serverName = qEnvironmentVariable("QT_LANCELOT_SERVER");
+        if (serverName.isEmpty())
+            serverName = QStringLiteral("lancelot.test.qt-project.org");
+    }
 
     socket.connectToHost(serverName, ServerPort);
     if (!socket.waitForConnected(Timeout)) {
-        QThread::msleep(3000);  // Wait a bit and try again, the server might just be restarting
+        QThread::sleep(std::chrono::seconds{3});  // Wait a bit and try again, the server might just be restarting
         if (!socket.waitForConnected(Timeout)) {
-            errMsg += QLS("TCP connectToHost failed. Host:") + QLS(serverName) + QLS(" port:") + QString::number(ServerPort);
+            errMsg += QLS("TCP connectToHost failed. Host:") + serverName + QLS(" port:") + QString::number(ServerPort);
             return false;
         }
     }

@@ -6,7 +6,7 @@
     \title JSON Support in Qt
     \ingroup qt-basic-concepts
     \brief An overview of JSON support in Qt.
-
+    \ingroup explanations-dataprocessingandio
     \ingroup frameworks-technologies
 
     \keyword JSON
@@ -20,8 +20,6 @@
 
     More details about the JSON data format can be found at \l{http://json.org}{json.org}
     and in \l {RFC 4627}.
-
-    \tableofcontents
 
     \section1 Overview
 
@@ -73,8 +71,7 @@
     A valid JSON document is either an array or an object, so a document always starts
     with a square or curly bracket.
 
-    \sa {JSON Save Game Example}
-
+    \sa {Saving and Loading a Game}
 
     \section1 The JSON Classes
 
@@ -82,5 +79,4 @@
     \l{Implicit Sharing}{implicitly shared classes}.
 
     JSON support in Qt consists of these classes:
-
 */

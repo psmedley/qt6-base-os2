@@ -111,22 +111,18 @@ public:
             const_cast<QArgumentType *>(this)->_name = QMetaType(_type).name();
         return _name;
     }
-    bool operator==(const QArgumentType &other) const
-    {
-        if (_type && other._type)
-            return _type == other._type;
-        else
-            return name() == other.name();
-    }
-    bool operator!=(const QArgumentType &other) const
-    {
-        if (_type && other._type)
-            return _type != other._type;
-        else
-            return name() != other.name();
-    }
 
 private:
+    friend bool comparesEqual(const QArgumentType &lhs,
+                              const QArgumentType &rhs)
+    {
+        if (lhs._type && rhs._type)
+            return lhs._type == rhs._type;
+        else
+            return lhs.name() == rhs.name();
+    }
+    Q_DECLARE_EQUALITY_COMPARABLE_NON_NOEXCEPT(QArgumentType)
+
     int _type;
     QByteArray _name;
 };
@@ -175,7 +171,8 @@ struct QMetaObjectPrivate
     // revision 10 is Qt 6.2: The metatype of the metaobject is stored in the metatypes array
     //                        and metamethods store a flag stating whether they are const
     // revision 11 is Qt 6.5: The metatype for void is stored in the metatypes array
-    enum { OutputRevision = 11 }; // Used by moc, qmetaobjectbuilder and qdbus
+    // revision 12 is Qt 6.6: It adds the metatype for enums
+    enum { OutputRevision = 12 }; // Used by moc, qmetaobjectbuilder and qdbus
     enum { IntsPerMethod = QMetaMethod::Data::Size };
     enum { IntsPerEnum = QMetaEnum::Data::Size };
     enum { IntsPerProperty = QMetaProperty::Data::Size };
@@ -211,6 +208,11 @@ struct QMetaObjectPrivate
                              int argc, const QArgumentType *types);
     static int indexOfConstructor(const QMetaObject *m, const QByteArray &name,
                                   int argc, const QArgumentType *types);
+
+    enum class Which { Name, Alias };
+    static int indexOfEnumerator(const QMetaObject *m, QByteArrayView name, Which which);
+    static int indexOfEnumerator(const QMetaObject *m, QByteArrayView name);
+
     Q_CORE_EXPORT static QMetaMethod signal(const QMetaObject *m, int signal_index);
     static inline int signalOffset(const QMetaObject *m)
     {

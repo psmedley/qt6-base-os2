@@ -35,21 +35,20 @@ class QTextCursor;
 
 namespace Qt
 {
+#if QT_GUI_REMOVED_SINCE(6, 7)
     Q_GUI_EXPORT bool mightBeRichText(const QString&);
+#endif
+    Q_GUI_EXPORT bool mightBeRichText(QAnyStringView);
     Q_GUI_EXPORT QString convertFromPlainText(const QString &plain, WhiteSpaceMode mode = WhiteSpacePre);
 }
 
 class Q_GUI_EXPORT QAbstractUndoItem
 {
 public:
-    virtual ~QAbstractUndoItem() = 0;
+    virtual ~QAbstractUndoItem();
     virtual void undo() = 0;
     virtual void redo() = 0;
 };
-
-inline QAbstractUndoItem::~QAbstractUndoItem()
-{
-}
 
 class QTextDocumentPrivate;
 
@@ -102,7 +101,8 @@ public:
     enum MetaInformation {
         DocumentTitle,
         DocumentUrl,
-        CssMedia
+        CssMedia,
+        FrontMatter,
     };
     void setMetaInformation(MetaInformation info, const QString &);
     QString metaInformation(MetaInformation info) const;
@@ -116,7 +116,7 @@ public:
     enum MarkdownFeature {
         MarkdownNoHTML = 0x0020 | 0x0040,
         MarkdownDialectCommonMark = 0,
-        MarkdownDialectGitHub = 0x0004 | 0x0008 | 0x0400 | 0x0100 | 0x0200 | 0x0800 | 0x4000
+        MarkdownDialectGitHub = 0x0004 | 0x0008 | 0x0400 | 0x0100 | 0x0200 | 0x0800 | 0x4000 | 0x100000
     };
     Q_DECLARE_FLAGS(MarkdownFeatures, MarkdownFeature)
     Q_FLAG(MarkdownFeatures)

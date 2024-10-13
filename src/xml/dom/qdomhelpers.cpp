@@ -3,7 +3,7 @@
 
 #include <QtXml/qtxmlglobal.h>
 
-#ifndef QT_NO_DOM
+#if QT_CONFIG(dom)
 
 #include "qdomhelpers_p.h"
 #include "qdom_p.h"
@@ -266,8 +266,7 @@ bool QDomParser::parseProlog()
                     value += u" standalone='yes'"_s;
                 } else {
                     // Add the standalone attribute only if it was specified
-                    QXmlStreamReaderPrivate *priv = QXmlStreamReaderPrivate::get(reader);
-                    if (priv->hasStandalone)
+                    if (reader->hasStandaloneDeclaration())
                         value += u" standalone='no'"_s;
                 }
 
@@ -443,4 +442,4 @@ bool QDomParser::parseMarkupDecl()
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_DOM
+#endif // feature dom

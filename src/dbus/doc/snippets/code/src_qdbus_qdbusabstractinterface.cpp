@@ -47,12 +47,22 @@ else
 void Abstract_DBus_Interface::asyncCall()
 {
 //! [1]
-QString value = retrieveValue();
-QDBusPendingCall pcall = interface->asyncCall("Process"_L1, value);
+QDBusPendingCall pcall = interface->asyncCall("GetAPIVersion"_L1);
+auto watcher = new QDBusPendingCallWatcher(pcall, this);
 
-QDBusPendingCallWatcher *watcher = new QDBusPendingCallWatcher(pcall);
+QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                 [&](QDBusPendingCallWatcher *w) {
+    QString value = retrieveValue();
+    QDBusPendingReply<int> reply(*w);
+    QDBusPendingCall pcall;
+    if (reply.argumentAt<0>() >= 14)
+        pcall = interface->asyncCall("ProcessWorkUnicode"_L1, value);
+    else
+        pcall = interface->asyncCall("ProcessWork"_L1, "UTF-8"_L1, value.toUtf8());
 
-QObject::connect(watcher, SIGNAL(finished(QDBusPendingCallWatcher*)),
-                this, SLOT(callFinishedSlot(QDBusPendingCallWatcher*)));
+    w = new QDBusPendingCallWatcher(pcall);
+    QObject::connect(w,  &QDBusPendingCallWatcher::finished, this,
+                     &Abstract_DBus_Interface::callFinishedSlot);
+});
 //! [1]
 }

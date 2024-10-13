@@ -1,11 +1,37 @@
 # Copyright (C) 2022 The Qt Company Ltd.
-# SPDX-License-Identifier: BSD-3-Clause
+# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
-#! [qt_wrap_cpp]
+#! [qt_wrap_cpp_1]
 set(SOURCES myapp.cpp main.cpp)
 qt_wrap_cpp(SOURCES myapp.h)
 qt_add_executable(myapp ${SOURCES})
-#! [qt_wrap_cpp]
+#! [qt_wrap_cpp_1]
+
+#! [qt_wrap_cpp_2]
+set(SOURCES myapp.cpp main.cpp)
+qt_wrap_cpp(SOURCES myapp.h
+            TARGET myapp
+            OPTIONS
+            "$<$<CONFIG:Debug>:-DMY_OPTION_FOR_DEBUG>"
+            "-DDEFINE_CMDLINE_SIGNAL=void cmdlineSignal(const QMap<int, int> &i)"
+            "$<$<CONFIG:Debug>:-DDEFINE_CMDLINE_SIGNAL_IN_GENEX=void cmdlineSignal(const QMap<int$<COMMA> int$<ANGLE-R> &i)>")
+qt_add_executable(myapp ${SOURCES})
+#! [qt_wrap_cpp_2]
+
+#! [qt_wrap_cpp_3]
+set(SOURCES myapp.cpp main.cpp)
+qt_wrap_cpp(SOURCES myapp.h
+            TARGET myapp)
+qt_add_executable(myapp ${SOURCES})
+target_compile_definitions(myapp PRIVATE "$<$<CONFIG:Debug>:MY_OPTION_FOR_DEBUG>"
+                                         "DEFINE_CMDLINE_SIGNAL=void cmdlineSignal(const QMap<int, int> &i)"
+                                         "$<$<BOOL:TRUE>:DEFINE_CMDLINE_SIGNAL_IN_GENEX=void cmdlineSignal(const QMap<int$<COMMA> int$<ANGLE-R> &i)>")
+#! [qt_wrap_cpp_3]
+
+#! [qt_wrap_cpp_4]
+qt_add_executable(myapp myapp.cpp main.cpp)
+qt_wrap_cpp(myapp myapp.cpp)
+#! [qt_wrap_cpp_4]
 
 #! [qt_add_resources]
 set(SOURCES main.cpp)
@@ -78,3 +104,11 @@ add_subdirectory(mylib)
 
 qt_finalize_project()
 #! [qt_finalize_project_manual]
+
+#! [AUTOGEN_BETTER_GRAPH_MULTI_CONFIG_1]
+set(CMAKE_AUTOGEN_BETTER_GRAPH_MULTI_CONFIG ON)
+#! [AUTOGEN_BETTER_GRAPH_MULTI_CONFIG_1]
+
+#! [AUTOGEN_BETTER_GRAPH_MULTI_CONFIG_2]
+set_target_properties(app PROPERTIES AUTOGEN_BETTER_GRAPH_MULTI_CONFIG ON)
+#! [AUTOGEN_BETTER_GRAPH_MULTI_CONFIG_2]

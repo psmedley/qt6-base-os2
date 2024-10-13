@@ -9,7 +9,6 @@
 #include "qfile.h"
 #include "qstringlist.h"
 #include "qdir.h"
-#include "private/qbytearray_p.h"
 #include "private/qtools_p.h"
 
 #include <algorithm>
@@ -45,6 +44,7 @@ static void debugBinaryString(const char *input, qint64 maxlen)
 
 #define Q_VOID
 
+Q_DECL_COLD_FUNCTION
 static void checkWarnMessage(const QIODevice *device, const char *function, const char *what)
 {
 #ifndef QT_NO_WARNING_OUTPUT
@@ -88,9 +88,9 @@ static void checkWarnMessage(const QIODevice *device, const char *function, cons
 
 #define CHECK_MAXBYTEARRAYSIZE(function) \
     do { \
-        if (maxSize >= MaxByteArraySize) { \
+        if (maxSize >= QByteArray::maxSize()) { \
             checkWarnMessage(this, #function, "maxSize argument exceeds QByteArray size limit"); \
-            maxSize = MaxByteArraySize - 1; \
+            maxSize = QByteArray::maxSize() - 1; \
         } \
     } while (0)
 
@@ -1242,7 +1242,7 @@ QByteArray QIODevice::readAll()
                                                       : d->buffer.size());
         qint64 readResult;
         do {
-            if (readBytes + readChunkSize >= MaxByteArraySize) {
+            if (readBytes + readChunkSize >= QByteArray::maxSize()) {
                 // If resize would fail, don't read more, return what we have.
                 break;
             }
@@ -1256,8 +1256,8 @@ QByteArray QIODevice::readAll()
     } else {
         // Read it all in one go.
         readBytes -= d->pos;
-        if (readBytes >= MaxByteArraySize)
-            readBytes = MaxByteArraySize;
+        if (readBytes >= QByteArray::maxSize())
+            readBytes = QByteArray::maxSize();
         result.resize(readBytes);
         readBytes = d->read(result.data(), readBytes);
     }
@@ -1448,7 +1448,7 @@ QByteArray QIODevice::readLine(qint64 maxSize)
     qint64 readBytes = 0;
     if (maxSize == 0) {
         // Size is unknown, read incrementally.
-        maxSize = MaxByteArraySize - 1;
+        maxSize = QByteArray::maxSize() - 1;
 
         // The first iteration needs to leave an extra byte for the terminating null
         result.resize(1);
@@ -1500,7 +1500,7 @@ qint64 QIODevice::readLineData(char *data, qint64 maxSize)
     Q_D(QIODevice);
     qint64 readSoFar = 0;
     char c;
-    int lastReadReturn = 0;
+    qint64 lastReadReturn = 0;
     d->baseReadLineDataCalled = true;
 
     while (readSoFar < maxSize && (lastReadReturn = read(&c, 1)) == 1) {

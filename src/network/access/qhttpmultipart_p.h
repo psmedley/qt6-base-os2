@@ -16,9 +16,14 @@
 //
 
 #include <QtNetwork/private/qtnetworkglobal_p.h>
+#include <QtNetwork/qhttpmultipart.h>
+
 #include "QtCore/qshareddata.h"
 #include "qnetworkrequest_p.h" // for deriving QHttpPartPrivate from QNetworkHeadersPrivate
+#include "qhttpheadershelper_p.h"
+
 #include "private/qobject_p.h"
+#include <QtCore/qiodevice.h>
 
 #ifndef Q_OS_WASM
 QT_REQUIRE_CONFIG(http);
@@ -47,8 +52,10 @@ public:
 
     inline bool operator==(const QHttpPartPrivate &other) const
     {
-        return rawHeaders == other.rawHeaders && body == other.body &&
-                bodyDevice == other.bodyDevice && readPointer == other.readPointer;
+        return QHttpHeadersHelper::compareStrict(httpHeaders, other.httpHeaders)
+               && body == other.body
+               && bodyDevice == other.bodyDevice
+               && readPointer == other.readPointer;
     }
 
     void setBodyDevice(QIODevice *device) {
@@ -89,8 +96,7 @@ public:
             QIODevice(), multiPart(parentMultiPart), readPointer(0), deviceSize(-1) {
     }
 
-    ~QHttpMultiPartIODevice() {
-    }
+    ~QHttpMultiPartIODevice() override;
 
     virtual bool atEnd() const override {
         return readPointer == size();
@@ -125,15 +131,17 @@ public:
 
 
 
-class QHttpMultiPartPrivate: public QObjectPrivate
+class Q_AUTOTEST_EXPORT QHttpMultiPartPrivate: public QObjectPrivate
 {
 public:
 
     QHttpMultiPartPrivate();
+    ~QHttpMultiPartPrivate() override;
 
-    ~QHttpMultiPartPrivate()
+    static QHttpMultiPartPrivate *get(QHttpMultiPart *message) { return message->d_func(); }
+    static const QHttpMultiPartPrivate *get(const QHttpMultiPart *message)
     {
-        delete device;
+        return message->d_func();
     }
 
     QList<QHttpPart> parts;

@@ -243,12 +243,15 @@ public:
                             qsizetype &lineStart, qsizetype &lineLen,
                             qsizetype &equalsPos);
 
+protected:
+    const QList<QConfFile *> &getConfFiles() const { return confFiles; }
+
 private:
     void initFormat();
     virtual void initAccess();
     void syncConfFile(QConfFile *confFile);
     bool writeIniFile(QIODevice &device, const ParsedSettingsMap &map);
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
     bool readPlistFile(const QByteArray &data, ParsedSettingsMap *map) const;
     bool writePlistFile(QIODevice &file, const ParsedSettingsMap &map) const;
 #endif

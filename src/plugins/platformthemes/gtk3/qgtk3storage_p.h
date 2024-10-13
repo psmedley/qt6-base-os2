@@ -16,6 +16,9 @@
 //
 
 #include "qgtk3interface_p.h"
+#if QT_CONFIG(dbus)
+#include "qgtk3portalinterface_p.h"
+#endif
 
 #include <QtCore/QJsonDocument>
 #include <QtCore/QCache>
@@ -38,6 +41,7 @@ public:
         Gtk,
         Fixed,
         Modified,
+        Mixed,
         Invalid
     };
     Q_ENUM(SourceType)
@@ -77,6 +81,27 @@ public:
         }
     };
 
+    // Mixed source: Populate a brush by mixing two brushes.
+    // Useful for creating disabled color by mixing,
+    // for example the background and foreground colors.
+    struct MixSources {
+        QPalette::ColorGroup sourceGroup; // source group of the mixing color roles
+        QPalette::ColorRole colorRole1;
+        QPalette::ColorRole colorRole2;
+        QDebug operator<<(QDebug dbg)
+        {
+            return dbg << "QGtkStorage::MixSources(sourceGroup=" << sourceGroup
+                       << ", colorRole1=" << colorRole1
+                       << ", colorRole2=" << colorRole2 << ")";
+        }
+        static inline QColor mixColors(const QColor &color1, const QColor &color2)
+        {
+            return QColor{ (color1.red() + color2.red()) / 2,
+                           (color1.green() + color2.green()) / 2,
+                           (color1.blue() + color2.blue()) / 2 };
+        }
+    };
+
     // Fixed source: Populate a brush with fixed values rather than reading GTK
     struct FixedSource  {
         QBrush fixedBrush;
@@ -92,6 +117,7 @@ public:
         Gtk3Source gtk3;
         RecursiveSource rec;
         FixedSource fix;
+        MixSources mix;
 
         // GTK constructor
         Source(QGtk3Interface::QGtkWidget wtype, QGtk3Interface::QGtkColorSource csource,
@@ -115,7 +141,7 @@ public:
             rec.lighter = p_lighter;
         }
 
-        // Recursive ocnstructor for color modification
+        // Recursive constructor for color modification
         Source(QPalette::ColorGroup group, QPalette::ColorRole role,
                Qt::ColorScheme scheme, int p_red, int p_green, int p_blue)
                : sourceType(SourceType::Modified)
@@ -140,6 +166,16 @@ public:
             rec.deltaRed = p_red;
             rec.deltaGreen = p_green;
             rec.deltaBlue = p_blue;
+        }
+
+        // Mixed constructor for color modification
+        Source(QPalette::ColorGroup sourceGroup,
+               QPalette::ColorRole role1, QPalette::ColorRole role2)
+            : sourceType(SourceType::Mixed)
+        {
+            mix.sourceGroup = sourceGroup;
+            mix.colorRole1 = role1;
+            mix.colorRole2 = role2;
         }
 
         // Fixed Source constructor
@@ -205,7 +241,9 @@ private:
     PaletteMap m_palettes;
 
     std::unique_ptr<QGtk3Interface> m_interface;
-
+#if QT_CONFIG(dbus)
+    std::unique_ptr<QGtk3PortalInterface> m_portalInterface;
+#endif
 
     Qt::ColorScheme m_colorScheme = Qt::ColorScheme::Unknown;
 

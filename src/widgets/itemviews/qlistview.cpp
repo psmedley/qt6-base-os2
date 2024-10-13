@@ -352,7 +352,7 @@ int QListView::spacing() const
 /*!
     \property QListView::batchSize
     \brief the number of items laid out in each batch if \l layoutMode is
-    set to \l Batched
+    set to \l Batched.
 
     The default value is 100.
 
@@ -755,7 +755,10 @@ void QListView::mouseMoveEvent(QMouseEvent *e)
         && d->selectionMode != NoSelection) {
         QRect rect(d->pressedPosition, e->position().toPoint() + QPoint(horizontalOffset(), verticalOffset()));
         rect = rect.normalized();
-        d->viewport->update(d->mapToViewport(rect.united(d->elasticBand)));
+        const int margin = 2 * style()->pixelMetric(QStyle::PM_DefaultFrameWidth);
+        const QRect viewPortRect = rect.united(d->elasticBand)
+                                       .adjusted(-margin, -margin, margin, margin);
+        d->viewport->update(d->mapToViewport(viewPortRect));
         d->elasticBand = rect;
     }
 }
@@ -769,7 +772,9 @@ void QListView::mouseReleaseEvent(QMouseEvent *e)
     QAbstractItemView::mouseReleaseEvent(e);
     // #### move this implementation into a dynamic class
     if (d->showElasticBand && d->elasticBand.isValid()) {
-        d->viewport->update(d->mapToViewport(d->elasticBand));
+        const int margin = 2 * style()->pixelMetric(QStyle::PM_DefaultFrameWidth);
+        const QRect viewPortRect = d->elasticBand.adjusted(-margin, -margin, margin, margin);
+        d->viewport->update(d->mapToViewport(viewPortRect));
         d->elasticBand = QRect();
     }
 }
@@ -913,9 +918,10 @@ void QListView::dropEvent(QDropEvent *event)
                     // only generate a move when not same row or behind itself
                     if (r != pIndex.row() && r != pIndex.row() + 1) {
                         // try to move (preserves selection)
-                        dataMoved |= model()->moveRow(QModelIndex(), pIndex.row(), QModelIndex(), r);
-                        if (!dataMoved) // can't move - abort and let QAbstractItemView handle this
-                            break;
+                        const bool moved = model()->moveRow(QModelIndex(), pIndex.row(), QModelIndex(), r);
+                        if (!moved)
+                            continue; // maybe it'll work for other rows
+                        dataMoved = true; // success
                     } else {
                         // move onto itself is blocked, don't delete anything
                         dataMoved = true;
@@ -1797,7 +1803,7 @@ void QListViewPrivate::prepareItemsLayout()
     if (q->style()->styleHint(QStyle::SH_ScrollView_FrameOnlyAroundContents)) {
         QStyleOption option;
         option.initFrom(q);
-        frameAroundContents = q->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, &option) * 2;
+        frameAroundContents = q->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, &option, q) * 2;
     }
 
     // maximumViewportSize() already takes scrollbar into account if policy is
@@ -3408,7 +3414,7 @@ void QListView::currentChanged(const QModelIndex &current, const QModelIndex &pr
     QAbstractItemView::currentChanged(current, previous);
 #if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
-        if (current.isValid()) {
+        if (current.isValid() && hasFocus()) {
             int entry = visualIndex(current);
             QAccessibleEvent event(this, QAccessible::Focus);
             event.setChild(entry);

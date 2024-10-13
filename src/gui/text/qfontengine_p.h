@@ -29,13 +29,6 @@ class QFontEngineGlyphCache;
 
 struct QGlyphLayout;
 
-#define MAKE_TAG(ch1, ch2, ch3, ch4) (\
-    (((quint32)(ch1)) << 24) | \
-    (((quint32)(ch2)) << 16) | \
-    (((quint32)(ch3)) << 8) | \
-    ((quint32)(ch4)) \
-   )
-
 // ### this only used in getPointInOutline(), refactor it and then remove these magic numbers
 enum HB_Compat_Error {
     Err_Ok                           = 0x0000,
@@ -83,7 +76,8 @@ public:
 
     enum ShaperFlag {
         DesignMetrics = 0x0002,
-        GlyphIndicesOnly = 0x0004
+        GlyphIndicesOnly = 0x0004,
+        FullStringFallback = 0x008
     };
     Q_DECLARE_FLAGS(ShaperFlags, ShaperFlag)
 
@@ -127,11 +121,13 @@ public:
     virtual bool getSfntTableData(uint tag, uchar *buffer, uint *length) const;
 
     struct FaceId {
-        FaceId() : index(0), encoding(0) {}
+        FaceId() : index(0), instanceIndex(-1), encoding(0) {}
         QByteArray filename;
         QByteArray uuid;
         int index;
+        int instanceIndex;
         int encoding;
+        QMap<QFont::Tag, float> variableAxes;
     };
     virtual FaceId faceId() const { return FaceId(); }
     enum SynthesizedFlags {
@@ -152,11 +148,22 @@ public:
         return subPixelPositionFor(QFixedPoint(x, 0)).x;
     }
 
+    bool preferTypoLineMetrics() const;
+    bool isColorFont() const { return glyphFormat == Format_ARGB; }
+    static bool isIgnorableChar(char32_t ucs4)
+    {
+        return ucs4 == QChar::LineSeparator
+               || ucs4 == QChar::LineFeed
+               || ucs4 == QChar::CarriageReturn
+               || ucs4 == QChar::ParagraphSeparator
+               || QChar::category(ucs4) == QChar::Other_Control;
+    }
+
     virtual QFixed emSquareSize() const { return ascent(); }
 
     /* returns 0 as glyph index for non existent glyphs */
     virtual glyph_t glyphIndex(uint ucs4) const = 0;
-    virtual bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const = 0;
+    virtual int stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const = 0;
     virtual void recalcAdvances(QGlyphLayout *, ShaperFlags) const {}
     virtual void doKerning(QGlyphLayout *, ShaperFlags) const;
 
@@ -370,13 +377,18 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QFontEngine::ShaperFlags)
 
 inline bool operator ==(const QFontEngine::FaceId &f1, const QFontEngine::FaceId &f2)
 {
-    return f1.index == f2.index && f1.encoding == f2.encoding && f1.filename == f2.filename && f1.uuid == f2.uuid;
+    return f1.index == f2.index
+            && f1.encoding == f2.encoding
+            && f1.filename == f2.filename
+            && f1.uuid == f2.uuid
+            && f1.instanceIndex == f2.instanceIndex
+            && f1.variableAxes == f2.variableAxes;
 }
 
 inline size_t qHash(const QFontEngine::FaceId &f, size_t seed = 0)
     noexcept(noexcept(qHash(f.filename)))
 {
-    return qHashMulti(seed, f.filename, f.uuid, f.index, f.encoding);
+    return qHashMulti(seed, f.filename, f.uuid, f.index, f.instanceIndex, f.encoding, f.variableAxes.keys(), f.variableAxes.values());
 }
 
 
@@ -391,7 +403,7 @@ public:
     ~QFontEngineBox();
 
     virtual glyph_t glyphIndex(uint ucs4) const override;
-    virtual bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const override;
+    virtual int stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const override;
     virtual void recalcAdvances(QGlyphLayout *, ShaperFlags) const override;
 
     void draw(QPaintEngine *p, qreal x, qreal y, const QTextItemInt &si);
@@ -429,7 +441,7 @@ public:
     ~QFontEngineMulti();
 
     virtual glyph_t glyphIndex(uint ucs4) const override;
-    virtual bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const override;
+    virtual int stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const override;
 
     virtual glyph_metrics_t boundingBox(const QGlyphLayout &glyphs) override;
     virtual glyph_metrics_t boundingBox(glyph_t glyph) override;

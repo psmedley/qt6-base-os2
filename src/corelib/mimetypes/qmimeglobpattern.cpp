@@ -58,7 +58,7 @@ void QMimeGlobMatchResult::addMatch(const QString &mimeType, int weight, const Q
     }
 }
 
-QMimeGlobPattern::PatternType QMimeGlobPattern::detectPatternType(const QString &pattern) const
+QMimeGlobPattern::PatternType QMimeGlobPattern::detectPatternType(QStringView pattern) const
 {
     const qsizetype patternLength = pattern.size();
     if (!patternLength)
@@ -163,7 +163,7 @@ bool QMimeGlobPattern::matchFileName(const QString &inputFileName) const
     return false;
 }
 
-static bool isSimplePattern(const QString &pattern)
+static bool isSimplePattern(QStringView pattern)
 {
    // starts with "*.", has no other '*'
    return pattern.lastIndexOf(u'*') == 0
@@ -175,7 +175,7 @@ static bool isSimplePattern(const QString &pattern)
       ;
 }
 
-static bool isFastPattern(const QString &pattern)
+static bool isFastPattern(QStringView pattern)
 {
    // starts with "*.", has no other '*' and no other '.'
    return pattern.lastIndexOf(u'*') == 0
@@ -220,11 +220,11 @@ void QMimeAllGlobPatterns::removeMimeType(const QString &mimeType)
     m_lowWeightGlobs.removeMimeType(mimeType);
 }
 
-void QMimeGlobPatternList::match(QMimeGlobMatchResult &result,
-                                 const QString &fileName) const
+void QMimeGlobPatternList::match(QMimeGlobMatchResult &result, const QString &fileName,
+                                 const AddMatchFilterFunc &filterFunc) const
 {
     for (const QMimeGlobPattern &glob : *this) {
-        if (glob.matchFileName(fileName)) {
+        if (glob.matchFileName(fileName) && filterFunc(glob.mimeType())) {
             const QString pattern = glob.pattern();
             const qsizetype suffixLen = isSimplePattern(pattern) ? pattern.size() - strlen("*.") : 0;
             result.addMatch(glob.mimeType(), glob.weight(), pattern, suffixLen);
@@ -232,10 +232,11 @@ void QMimeGlobPatternList::match(QMimeGlobMatchResult &result,
     }
 }
 
-void QMimeAllGlobPatterns::matchingGlobs(const QString &fileName, QMimeGlobMatchResult &result) const
+void QMimeAllGlobPatterns::matchingGlobs(const QString &fileName, QMimeGlobMatchResult &result,
+                                         const AddMatchFilterFunc &filterFunc) const
 {
     // First try the high weight matches (>50), if any.
-    m_highWeightGlobs.match(result, fileName);
+    m_highWeightGlobs.match(result, fileName, filterFunc);
 
     // Now use the "fast patterns" dict, for simple *.foo patterns with weight 50
     // (which is most of them, so this optimization is definitely worth it)
@@ -247,14 +248,17 @@ void QMimeAllGlobPatterns::matchingGlobs(const QString &fileName, QMimeGlobMatch
 
         const QStringList matchingMimeTypes = m_fastPatterns.value(simpleExtension);
         const QString simplePattern = "*."_L1 + simpleExtension;
-        for (const QString &mime : matchingMimeTypes)
-            result.addMatch(mime, 50, simplePattern, simpleExtension.size());
+        for (const QString &mime : matchingMimeTypes) {
+            if (filterFunc(mime)) {
+                result.addMatch(mime, 50, simplePattern, simpleExtension.size());
+            }
+        }
         // Can't return yet; *.tar.bz2 has to win over *.bz2, so we need the low-weight mimetypes anyway,
         // at least those with weight 50.
     }
 
     // Finally, try the low weight matches (<=50)
-    m_lowWeightGlobs.match(result, fileName);
+    m_lowWeightGlobs.match(result, fileName, filterFunc);
 }
 
 void QMimeAllGlobPatterns::clear()

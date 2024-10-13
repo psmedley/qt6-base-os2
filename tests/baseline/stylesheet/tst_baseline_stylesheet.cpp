@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qbaselinetest.h>
 #include <qwidgetbaselinetest.h>
@@ -26,6 +26,9 @@ private slots:
 
     void tst_QTreeView_data();
     void tst_QTreeView();
+
+    void tst_QHeaderView_data();
+    void tst_QHeaderView();
 
 private:
     QDir styleSheetDir;
@@ -63,7 +66,7 @@ void tst_Stylesheet::loadTestFiles()
     for (const auto &qssFile : qssFiles) {
         QFileInfo fileInfo(qssFile);
         QFile file(qssFile);
-        file.open(QFile::ReadOnly);
+        QVERIFY(file.open(QFile::ReadOnly));
         QString styleSheet = QString::fromUtf8(file.readAll());
         QBaselineTest::newRow(fileInfo.baseName().toUtf8()) << styleSheet;
     }
@@ -205,17 +208,22 @@ void tst_Stylesheet::tst_QTreeView()
     QBASELINE_CHECK_DEFERRED(takeSnapshot(), "itemSelected");
 }
 
-#define main _realmain
-QTEST_MAIN(tst_Stylesheet)
-#undef main
-
-int main(int argc, char *argv[])
+void tst_Stylesheet::tst_QHeaderView_data()
 {
-    // Avoid rendering variations caused by QHash randomization
-    QHashSeed::setDeterministicGlobalSeed();
-
-    QBaselineTest::handleCmdLineArgs(&argc, &argv);
-    return _realmain(argc, argv);
+    loadTestFiles();
 }
+
+void tst_Stylesheet::tst_QHeaderView()
+{
+    QHBoxLayout *layout = new QHBoxLayout;
+    QTableWidget *tw = new QTableWidget(10, 10);
+    tw->setCurrentCell(1, 1);
+    layout->addWidget(tw);
+    testWindow()->setLayout(layout);
+    makeVisible();
+    QBASELINE_TEST(takeSnapshot());
+}
+
+QBASELINETEST_MAIN(tst_Stylesheet)
 
 #include "tst_baseline_stylesheet.moc"

@@ -4,7 +4,6 @@
 #include "qwasmscreen.h"
 
 #include "qwasmcompositor.h"
-#include "qwasmstring.h"
 #include "qwasmcssstyle.h"
 #include "qwasmintegration.h"
 #include "qwasmkeytranslator.h"
@@ -29,6 +28,7 @@ const char *QWasmScreen::m_canvasResizeObserverCallbackContextPropertyName =
 
 QWasmScreen::QWasmScreen(const emscripten::val &containerOrCanvas)
     : m_container(containerOrCanvas),
+      m_intermediateContainer(emscripten::val::undefined()),
       m_shadowContainer(emscripten::val::undefined()),
       m_compositor(new QWasmCompositor(this)),
       m_deadKeySupport(std::make_unique<QWasmDeadKeySupport>())
@@ -44,9 +44,20 @@ QWasmScreen::QWasmScreen(const emscripten::val &containerOrCanvas)
         m_container["parentNode"].call<void>("replaceChild", container, m_container);
         m_container = container;
     }
+
+    // Create an intermediate container which we can remove during cleanup in ~QWasmScreen().
+    // This is required due to the attachShadow() call below; there is no corresponding
+    // "detachShadow()" API to return the container to its previous state.
+    m_intermediateContainer = document.call<emscripten::val>("createElement", emscripten::val("div"));
+    m_intermediateContainer.set("id", std::string("qt-shadow-container"));
+    emscripten::val intermediateContainerStyle = m_intermediateContainer["style"];
+    intermediateContainerStyle.set("width", std::string("100%"));
+    intermediateContainerStyle.set("height", std::string("100%"));
+    m_container.call<void>("appendChild", m_intermediateContainer);
+
     auto shadowOptions = emscripten::val::object();
     shadowOptions.set("mode", "open");
-    auto shadow = m_container.call<emscripten::val>("attachShadow", shadowOptions);
+    auto shadow = m_intermediateContainer.call<emscripten::val>("attachShadow", shadowOptions);
 
     m_shadowContainer = document.call<emscripten::val>("createElement", emscripten::val("div"));
 
@@ -81,12 +92,24 @@ QWasmScreen::QWasmScreen(const emscripten::val &containerOrCanvas)
             QPointingDevice::Capability::Position | QPointingDevice::Capability::Area
                     | QPointingDevice::Capability::NormalizedPosition,
             10, 0);
+    m_tabletDevice = std::make_unique<QPointingDevice>(
+            "stylus", 2, QInputDevice::DeviceType::Stylus,
+            QPointingDevice::PointerType::Pen,
+            QPointingDevice::Capability::Position | QPointingDevice::Capability::Pressure
+                | QPointingDevice::Capability::NormalizedPosition
+                | QInputDevice::Capability::MouseEmulation
+                | QInputDevice::Capability::Hover | QInputDevice::Capability::Rotation
+                | QInputDevice::Capability::XTilt | QInputDevice::Capability::YTilt
+                | QInputDevice::Capability::TangentialPressure,
+            0, 0);
 
     QWindowSystemInterface::registerInputDevice(m_touchDevice.get());
 }
 
 QWasmScreen::~QWasmScreen()
 {
+    m_intermediateContainer.call<void>("remove");
+
     emscripten::val::module_property("specialHTMLTargets")
             .set(eventTargetId().toStdString(), emscripten::val::undefined());
 
@@ -96,7 +119,6 @@ QWasmScreen::~QWasmScreen()
 
 void QWasmScreen::deleteScreen()
 {
-    m_compositor->onScreenDeleting();
     // Deletes |this|!
     QWindowSystemInterface::handleScreenRemoved(this);
 }
@@ -184,7 +206,7 @@ qreal QWasmScreen::devicePixelRatio() const
 
 QString QWasmScreen::name() const
 {
-    return QWasmString::toQString(m_shadowContainer["id"]);
+    return QString::fromEcmaString(m_shadowContainer["id"]);
 }
 
 QPlatformCursor *QWasmScreen::cursor() const
@@ -201,12 +223,18 @@ void QWasmScreen::resizeMaximizedWindows()
 
 QWindow *QWasmScreen::topWindow() const
 {
-    return m_compositor->keyWindow();
+    return activeChild() ? activeChild()->window() : nullptr;
 }
 
 QWindow *QWasmScreen::topLevelAt(const QPoint &p) const
 {
-    return m_compositor->windowAt(p);
+    const auto found =
+            std::find_if(childStack().begin(), childStack().end(), [&p](const QWasmWindow *window) {
+                const QRect geometry = window->windowFrameGeometry();
+
+                return window->isVisible() && geometry.contains(p);
+            });
+    return found != childStack().end() ? (*found)->window() : nullptr;
 }
 
 QPointF QWasmScreen::mapFromLocal(const QPointF &p) const
@@ -232,6 +260,22 @@ void QWasmScreen::setGeometry(const QRect &rect)
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry(),
                                                        availableGeometry());
     resizeMaximizedWindows();
+}
+
+void QWasmScreen::onSubtreeChanged(QWasmWindowTreeNodeChangeType changeType,
+                                   QWasmWindowTreeNode *parent, QWasmWindow *child)
+{
+    Q_UNUSED(parent);
+
+    QWindow *window = child->window();
+    const bool isMaxFull = (window->windowState() & Qt::WindowMaximized) ||
+                           (window->windowState() & Qt::WindowFullScreen);
+    if (changeType == QWasmWindowTreeNodeChangeType::NodeInsertion && parent == this
+        && childStack().size() == 1 && isMaxFull) {
+        window->setFlag(Qt::WindowStaysOnBottomHint);
+    }
+    QWasmWindowTreeNode::onSubtreeChanged(changeType, parent, child);
+    m_compositor->onWindowTreeChanged(changeType, child);
 }
 
 void QWasmScreen::updateQScreenAndCanvasRenderSize()
@@ -262,7 +306,6 @@ void QWasmScreen::updateQScreenAndCanvasRenderSize()
     };
 
     setGeometry(QRect(getElementBodyPosition(m_shadowContainer), cssSize.toSize()));
-    m_compositor->requestUpdateAllWindows();
 }
 
 void QWasmScreen::canvasResizeObserverCallback(emscripten::val entries, emscripten::val)
@@ -306,6 +349,33 @@ void QWasmScreen::installCanvasResizeObserver()
                           emscripten::val(intptr_t(this)));
 
     resizeObserver.call<void>("observe", m_shadowContainer);
+}
+
+emscripten::val QWasmScreen::containerElement()
+{
+    return m_shadowContainer;
+}
+
+QWasmWindowTreeNode *QWasmScreen::parentNode()
+{
+    return nullptr;
+}
+
+QList<QWasmWindow *> QWasmScreen::allWindows()
+{
+    QList<QWasmWindow *> windows;
+    for (auto *child : childStack()) {
+        const QWindowList list = child->window()->findChildren<QWindow *>(Qt::FindChildrenRecursively);
+        for (auto child : list) {
+            auto handle = child->handle();
+            if (handle) {
+                auto wnd = static_cast<QWasmWindow *>(handle);
+                windows.push_back(wnd);
+            }
+        }
+        windows.push_back(child);
+    }
+    return windows;
 }
 
 QT_END_NAMESPACE

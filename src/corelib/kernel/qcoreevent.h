@@ -77,7 +77,7 @@ public:
         Hide = 18,                              // widget is hidden
         Close = 19,                             // request to close widget
         Quit = 20,                              // request to quit application
-        ParentChange = 21,                      // widget has been reparented
+        ParentChange = 21,                      // object has been reparented
         ParentAboutToChange = 131,              // sent just before the parent change is done
         ThreadChange = 22,                      // object has changed threads
         WindowActivate = 24,                    // window was activated
@@ -284,6 +284,13 @@ public:
         // GraphicsSceneLeave = 220,
         WindowAboutToChangeInternal = 221,      // internal for QQuickWidget and texture-based widgets
 
+        DevicePixelRatioChange = 222,
+
+        ChildWindowAdded = 223,
+        ChildWindowRemoved = 224,
+        ParentWindowAboutToChange = 225,
+        ParentWindowChange = 226,
+
         // 512 reserved for Qt Jambi's MetaCall event
         // 513 reserved for Qt Jambi's DeleteOnMainThread event
 
@@ -312,11 +319,11 @@ public:
     virtual QEvent *clone() const;
 
 protected:
-    struct InputEventTag { explicit InputEventTag() = default; };
+    QT_DEFINE_TAG_STRUCT(InputEventTag);
     QEvent(Type type, InputEventTag) : QEvent(type) { m_inputEvent = true; }
-    struct PointerEventTag { explicit PointerEventTag() = default; };
+    QT_DEFINE_TAG_STRUCT(PointerEventTag);
     QEvent(Type type, PointerEventTag) : QEvent(type, InputEventTag{}) { m_pointerEvent = true; }
-    struct SinglePointEventTag { explicit SinglePointEventTag() = default; };
+    QT_DEFINE_TAG_STRUCT(SinglePointEventTag);
     QEvent(Type type, SinglePointEventTag) : QEvent(type, PointerEventTag{}) { m_singlePointEvent = true; }
     quint16 t;
 
@@ -347,6 +354,8 @@ private:
     friend class QApplication;
     friend class QGraphicsScenePrivate;
     // from QtTest:
+    // QtWebEngine event handling requires forwarding events as spontaneous.
+    // Impersonated QSpontaneKeyEvent in QtWebEngine to handle such cases.
     friend class QSpontaneKeyEvent;
     // needs this:
     Q_ALWAYS_INLINE
@@ -358,10 +367,13 @@ class Q_CORE_EXPORT QTimerEvent : public QEvent
     Q_DECL_EVENT_COMMON(QTimerEvent)
 public:
     explicit QTimerEvent(int timerId);
-    int timerId() const { return id; }
+    explicit QTimerEvent(Qt::TimerId timerId);
+
+    int timerId() const { return qToUnderlying(id()); }
+    Qt::TimerId id() const { return m_id; }
 
 protected:
-    int id;
+    Qt::TimerId m_id;
 };
 
 class QObject;
@@ -391,18 +403,6 @@ public:
 
 private:
     QByteArray n;
-};
-
-class Q_CORE_EXPORT QDeferredDeleteEvent : public QEvent
-{
-    Q_DECL_EVENT_COMMON(QDeferredDeleteEvent)
-public:
-    explicit QDeferredDeleteEvent();
-    int loopLevel() const { return level; }
-
-private:
-    int level;
-    friend class QCoreApplication;
 };
 
 QT_END_NAMESPACE

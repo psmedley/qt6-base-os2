@@ -7,11 +7,12 @@
 
 qt_internal_add_executable(verbose1
     NO_INSTALL
+    EXCEPTIONS
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     SOURCES
         ../counting/tst_counting.cpp
     DEFINES
-        TESTLIB_VERBOSITY_ARG=-v1 # special case remove quotes
+        TESTLIB_VERBOSITY_ARG=-v1
     LIBRARIES
         Qt::Test
 )

@@ -39,9 +39,9 @@ class QDebug;
 // QCocoaWindow
 //
 // QCocoaWindow is an NSView (not an NSWindow!) in the sense
-// that it relies on a NSView for all event handling and
-// graphics output and does not require a NSWindow, except for
-// for the window-related functions like setWindowTitle.
+// that it relies on an NSView for all event handling and
+// graphics output and does not require an NSWindow, except for
+// the window-related functions like setWindowTitle.
 //
 // As a consequence of this it is possible to embed the QCocoaWindow
 // in an NSView hierarchy by getting a pointer to the "backing"
@@ -79,6 +79,8 @@ public:
     QRect geometry() const override;
     QRect normalGeometry() const override;
     void setCocoaGeometry(const QRect &rect);
+
+    QMargins safeAreaMargins() const override;
 
     void setVisible(bool visible) override;
     void setWindowFlags(Qt::WindowFlags flags) override;
@@ -122,6 +124,7 @@ public:
 
     Q_NOTIFICATION_HANDLER(NSWindowDidMoveNotification) void windowDidMove();
     Q_NOTIFICATION_HANDLER(NSWindowDidResizeNotification) void windowDidResize();
+    Q_NOTIFICATION_HANDLER(NSWindowWillStartLiveResizeNotification) void windowWillStartLiveResize();
     Q_NOTIFICATION_HANDLER(NSWindowDidEndLiveResizeNotification) void windowDidEndLiveResize();
     Q_NOTIFICATION_HANDLER(NSWindowDidBecomeKeyNotification) void windowDidBecomeKey();
     Q_NOTIFICATION_HANDLER(NSWindowDidResignKeyNotification) void windowDidResignKey();
@@ -186,6 +189,8 @@ public:
     Q_DECLARE_FLAGS(RecreationReasons, RecreationReason)
     Q_FLAG(RecreationReasons)
 
+    bool inLiveResize() const override;
+
 protected:
     void recreateWindowIfNeeded();
     QCocoaNSWindow *createNSWindow(bool shouldBePanel);
@@ -232,6 +237,7 @@ public: // for QNSView
     bool m_inSetVisible = false;
     bool m_inSetGeometry = false;
     bool m_inSetStyleMask = false;
+    bool m_inLiveResize = false;
 
     QCocoaMenuBar *m_menubar = nullptr;
 
@@ -240,6 +246,8 @@ public: // for QNSView
     QRect m_normalGeometry;
     int m_registerTouchCount = 0;
     bool m_resizableTransientParent = false;
+
+    QMargins m_lastReportedSafeAreaMargins;
 
     static const int NoAlertRequest;
     NSInteger m_alertRequest = NoAlertRequest;

@@ -28,6 +28,7 @@
 #include "private/qdatetimeparser_p.h"
 
 #include "qdebug.h"
+#include <QtCore/qpointer.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -49,7 +50,7 @@ public:
     void emitSignals(EmitPolicy ep, const QVariant &old) override;
     QString textFromValue(const QVariant &f) const override;
     QVariant valueFromText(const QString &f) const override;
-    void _q_editorCursorPositionChanged(int oldpos, int newpos) override;
+    void editorCursorPositionChanged(int oldpos, int newpos) override;
     void interpret(EmitPolicy ep) override;
     void clearCache() const override;
     QStyle::SubControl newHoverControl(const QPoint &pos) override;
@@ -60,13 +61,13 @@ public:
 
     // Override QDateTimeParser:
     QString displayText() const override { return edit->text(); }
-    QDateTime getMinimum() const override;
-    QDateTime getMaximum() const override;
+    QDateTime getMinimum(const QTimeZone &zone) const override;
+    QDateTime getMaximum(const QTimeZone &zone) const override;
     QLocale locale() const override { return q_func()->locale(); }
     int cursorPosition() const override { return edit ? edit->cursorPosition() : -1; }
 
     int absoluteIndex(QDateTimeEdit::Section s, int index) const;
-    int absoluteIndex(const SectionNode &s) const;
+    int absoluteIndex(SectionNode s) const;
     QDateTime stepBy(int index, int steps, bool test = false) const;
     int sectionAt(int pos) const;
     int closestSection(int index, bool forward) const;

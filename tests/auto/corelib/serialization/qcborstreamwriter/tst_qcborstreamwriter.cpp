@@ -1,9 +1,13 @@
 // Copyright (C) 2018 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QCborStreamWriter>
 #include <QBuffer>
+
+#ifndef QTEST_THROW_ON_FAIL
+# error This test requires QTEST_THROW_ON_FAIL being active.
+#endif
 
 class tst_QCborStreamWriter : public QObject
 {
@@ -29,7 +33,7 @@ private Q_SLOTS:
 
 // Get the data from TinyCBOR (see src/3rdparty/tinycbor/tests/encoder/data.cpp)
 typedef quint64 CborTag;
-#include "data.cpp"
+#include "encoder/data.cpp"
 
 void encodeVariant(QCborStreamWriter &writer, const QVariant &v)
 {
@@ -247,18 +251,10 @@ void tst_QCborStreamWriter::arrays()
     QFETCH(QByteArray, output);
 
     compare(make_list(input), "\x81" + output);
-    if (QTest::currentTestFailed())
-        return;
-
     compare(make_list(input, input), "\x82" + output + output);
-    if (QTest::currentTestFailed())
-        return;
 
     // nested lists
     compare(make_list(make_list(input)), "\x81\x81" + output);
-    if (QTest::currentTestFailed())
-        return;
-
     compare(make_list(make_list(input), make_list(input)), "\x82\x81" + output + "\x81" + output);
 }
 
@@ -268,9 +264,6 @@ void tst_QCborStreamWriter::maps()
     QFETCH(QByteArray, output);
 
     compare(make_map({{1, input}}), "\xa1\1" + output);
-    if (QTest::currentTestFailed())
-        return;
-
     compare(make_map({{1, input}, {input, 24}}), "\xa2\1" + output + output + "\x18\x18");
 }
 

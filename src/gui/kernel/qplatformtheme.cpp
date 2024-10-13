@@ -325,7 +325,7 @@ const QKeyBinding QPlatformThemePrivate::keyBindings[] = {
     {QKeySequence::InsertLineSeparator,     0,          Qt::SHIFT | Qt::Key_Enter,              KB_All},
     {QKeySequence::InsertLineSeparator,     0,          Qt::SHIFT | Qt::Key_Return,             KB_All},
     {QKeySequence::InsertLineSeparator,     0,          Qt::META | Qt::Key_O,                   KB_Mac},
-    {QKeySequence::SaveAs,                  0,          Qt::CTRL | Qt::SHIFT | Qt::Key_S,       KB_Gnome | KB_Mac},
+    {QKeySequence::SaveAs,                  0,          Qt::CTRL | Qt::SHIFT | Qt::Key_S,       KB_All},
     {QKeySequence::Preferences,             0,          Qt::CTRL | Qt::Key_Comma,               KB_Mac},
     {QKeySequence::Quit,                    0,          Qt::CTRL | Qt::Key_Q,                   KB_X11 | KB_Gnome | KB_KDE | KB_Mac},
     {QKeySequence::FullScreen,              1,          Qt::META | Qt::CTRL | Qt::Key_F,        KB_Mac},
@@ -335,6 +335,7 @@ const QKeyBinding QPlatformThemePrivate::keyBindings[] = {
     {QKeySequence::FullScreen,              1,          Qt::Key_F11,                            KB_Win | KB_KDE},
     {QKeySequence::Deselect,                0,          Qt::CTRL | Qt::SHIFT | Qt::Key_A,       KB_X11},
     {QKeySequence::DeleteCompleteLine,      0,          Qt::CTRL | Qt::Key_U,                   KB_X11},
+    {QKeySequence::Backspace,               1,          Qt::Key_Backspace,                      KB_Mac},
     {QKeySequence::Backspace,               0,          Qt::META | Qt::Key_H,                   KB_Mac},
     {QKeySequence::Cancel,                  0,          Qt::Key_Escape,                         KB_All},
     {QKeySequence::Cancel,                  0,          Qt::CTRL | Qt::Key_Period,              KB_Mac}
@@ -374,6 +375,7 @@ Q_GUI_EXPORT QPalette qt_fusionPalette()
     const QColor button = backGround;
     const QColor shadow = dark.darker(135);
     const QColor disabledShadow = shadow.lighter(150);
+    const QColor disabledHighlight(145, 145, 145);
     QColor placeholder = text;
     placeholder.setAlpha(128);
 
@@ -392,7 +394,11 @@ Q_GUI_EXPORT QPalette qt_fusionPalette()
 
     fusionPalette.setBrush(QPalette::Active, QPalette::Highlight, highlight);
     fusionPalette.setBrush(QPalette::Inactive, QPalette::Highlight, highlight);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Highlight, QColor(145, 145, 145));
+    fusionPalette.setBrush(QPalette::Disabled, QPalette::Highlight, disabledHighlight);
+
+    fusionPalette.setBrush(QPalette::Active, QPalette::Accent, highlight);
+    fusionPalette.setBrush(QPalette::Inactive, QPalette::Accent, highlight);
+    fusionPalette.setBrush(QPalette::Disabled, QPalette::Accent, disabledHighlight);
 
     fusionPalette.setBrush(QPalette::PlaceholderText, placeholder);
 
@@ -439,6 +445,11 @@ QPlatformDialogHelper *QPlatformTheme::createPlatformDialogHelper(DialogType typ
 Qt::ColorScheme QPlatformTheme::colorScheme() const
 {
     return Qt::ColorScheme::Unknown;
+}
+
+void QPlatformTheme::requestColorScheme(Qt::ColorScheme scheme)
+{
+    Q_UNUSED(scheme);
 }
 
 const QPalette *QPlatformTheme::palette(Palette type) const
@@ -525,6 +536,8 @@ QVariant QPlatformTheme::themeHint(ThemeHint hint) const
         return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::FlickMaximumVelocity);
     case QPlatformTheme::FlickDeceleration:
         return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::FlickDeceleration);
+    case QPlatformTheme::UnderlineShortcut:
+        return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::UnderlineShortcut);
     default:
         return QPlatformTheme::defaultThemeHint(hint);
     }
@@ -630,14 +643,21 @@ QVariant QPlatformTheme::defaultThemeHint(ThemeHint hint)
     case FlickMaximumVelocity:
         return QVariant(2500);
     case FlickDeceleration:
-        return QVariant(5000);
+        return QVariant(1500);
     case MenuBarFocusOnAltPressRelease:
         return false;
     case MouseCursorTheme:
         return QVariant(QString());
     case MouseCursorSize:
         return QVariant(QSize(16, 16));
+    case UnderlineShortcut:
+        return true;
+    case ShowIconsInMenus:
+        return true;
+    case PreferFileIconFromTheme:
+        return false;
     }
+
     return QVariant();
 }
 
@@ -820,28 +840,23 @@ QString QPlatformTheme::removeMnemonics(const QString &original)
     };
     QString returnText(original.size(), u'\0');
     int finalDest = 0;
-    int currPos = 0;
-    int l = original.size();
-    while (l) {
-        if (original.at(currPos) == u'&') {
-            ++currPos;
-            --l;
-            if (l == 0)
+    QStringView text(original);
+    while (!text.isEmpty()) {
+        if (text.startsWith(u'&')) {
+            text = text.sliced(1);
+            if (text.isEmpty())
                 break;
-        } else if (l >= 4 && mnemonicInParentheses(QStringView{original}.sliced(currPos, 4))) {
-            // Also strip any leading space before the mnemonic:
-            int n = 0;
-            while (finalDest > n && returnText.at(finalDest - n - 1).isSpace())
-                ++n;
-            finalDest -= n;
-            currPos += 4;
-            l -= 4;
+        } else if (text.size() >= 4 && mnemonicInParentheses(text.first(4))) {
+            // Advance over the matched mnemonic:
+            text = text.sliced(4);
+            // Also strip any leading space before it:
+            while (finalDest > 0 && returnText.at(finalDest - 1).isSpace())
+                --finalDest;
             continue;
         }
-        returnText[finalDest] = original.at(currPos);
-        ++currPos;
+        returnText[finalDest] = text.front();
+        text = text.sliced(1);
         ++finalDest;
-        --l;
     }
     returnText.truncate(finalDest);
     return returnText;

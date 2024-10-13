@@ -32,7 +32,7 @@ public:
 #if QT_CONFIG(settings)
     static QSettings *configuration();
     static void reload();
-    static const QString *qtconfManualPath;
+    static void setQtconfManualPath(const QString *qtconfManualPath);
 #endif
 
     struct LocationInfo
@@ -50,6 +50,7 @@ public:
     };
 
     static QString path(QLibraryInfo::LibraryPath p, UsageMode usageMode = RegularUsage);
+    static QList<QString> paths(QLibraryInfo::LibraryPath p, UsageMode usageMode = RegularUsage);
 };
 
 QT_END_NAMESPACE

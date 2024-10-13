@@ -26,19 +26,17 @@ protected:
 };
 
 // TorrentViewDelegate is used to draw the progress bars.
-class TorrentViewDelegate : public QItemDelegate
+class TorrentViewDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
 public:
-    inline TorrentViewDelegate(MainWindow *mainWindow) : QItemDelegate(mainWindow) {}
+    inline TorrentViewDelegate(MainWindow *mainWindow) : QStyledItemDelegate(mainWindow) {}
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
                const QModelIndex &index ) const override
     {
-        const TorrentClient *client = qobject_cast<MainWindow *>(parent())->clientForRow(index.row());
-
-        if (!client || index.column() != 2) {
-            QItemDelegate::paint(painter, option, index);
+        if (index.column() != 2) {
+            QStyledItemDelegate::paint(painter, option, index);
             return;
         }
 
@@ -55,7 +53,7 @@ public:
         progressBarOption.textVisible = true;
 
         // Set the progress and text values of the style option.
-        int progress = client->progress();
+        int progress = qobject_cast<MainWindow *>(parent())->clientForRow(index.row())->progress();
         progressBarOption.progress = progress < 0 ? 0 : progress;
         progressBarOption.text = QString::asprintf("%d%%", progressBarOption.progress);
 
@@ -82,19 +80,19 @@ MainWindow::MainWindow(QWidget *parent)
     setCentralWidget(torrentView);
 
     // Set header resize modes and initial section sizes
-    QFontMetrics fm = fontMetrics();
+    const QFontMetrics fm = torrentView->fontMetrics();
     QHeaderView *header = torrentView->header();
     header->resizeSection(0, fm.horizontalAdvance("typical-name-for-a-torrent.torrent"));
-    header->resizeSection(1, fm.horizontalAdvance(headers.at(1) + "  "));
-    header->resizeSection(2, fm.horizontalAdvance(headers.at(2) + "  "));
-    header->resizeSection(3, qMax(fm.horizontalAdvance(headers.at(3) + "  "), fm.horizontalAdvance(" 1234.0 KB/s ")));
-    header->resizeSection(4, qMax(fm.horizontalAdvance(headers.at(4) + "  "), fm.horizontalAdvance(" 1234.0 KB/s ")));
-    header->resizeSection(5, qMax(fm.horizontalAdvance(headers.at(5) + "  "), fm.horizontalAdvance(tr("Downloading") + "  ")));
+    header->resizeSection(1, fm.horizontalAdvance(headers.at(1) + "    "));
+    header->resizeSection(2, fm.horizontalAdvance(headers.at(2) + "    "));
+    header->resizeSection(3, qMax(fm.horizontalAdvance(headers.at(3) + "    "), fm.horizontalAdvance(" 1234.0 KB/s ")));
+    header->resizeSection(4, qMax(fm.horizontalAdvance(headers.at(4) + "    "), fm.horizontalAdvance(" 1234.0 KB/s ")));
+    header->resizeSection(5, qMax(fm.horizontalAdvance(headers.at(5) + "    "), fm.horizontalAdvance(tr("Downloading") + "  ")));
 
     // Create common actions
-    QAction *newTorrentAction = new QAction(QIcon(":/icons/bottom.png"), tr("Add &new torrent"), this);
-    pauseTorrentAction = new QAction(QIcon(":/icons/player_pause.png"), tr("&Pause torrent"), this);
-    removeTorrentAction = new QAction(QIcon(":/icons/player_stop.png"), tr("&Remove torrent"), this);
+    QAction *newTorrentAction = new QAction(QIcon(":/icons/bottom.svg"), tr("Add &new torrent"), this);
+    pauseTorrentAction = new QAction(QIcon(":/icons/player_pause.svg"), tr("&Pause torrent"), this);
+    removeTorrentAction = new QAction(QIcon(":/icons/player_stop.svg"), tr("&Remove torrent"), this);
 
     // File menu
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
@@ -102,12 +100,12 @@ MainWindow::MainWindow(QWidget *parent)
     fileMenu->addAction(pauseTorrentAction);
     fileMenu->addAction(removeTorrentAction);
     fileMenu->addSeparator();
-    fileMenu->addAction(QIcon(":/icons/exit.png"), tr("E&xit"), this, &MainWindow::close);
+    fileMenu->addAction(QIcon(":/icons/exit.svg"), tr("E&xit"), this, &MainWindow::close);
 
     // Help menu
     QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
-    helpMenu->addAction(tr("&About"), this, &MainWindow::about);
-    helpMenu->addAction(tr("About &Qt"), qApp, QApplication::aboutQt);
+    helpMenu->addAction(QIcon(":/icons/about.svg"), tr("&About"), this, &MainWindow::about);
+    helpMenu->addAction(QIcon(":/icons/about.svg"), tr("About &Qt"), qApp, QApplication::aboutQt);
 
     // Top toolbar
     QToolBar *topBar = new QToolBar(tr("Tools"));
@@ -117,8 +115,8 @@ MainWindow::MainWindow(QWidget *parent)
     topBar->addAction(removeTorrentAction);
     topBar->addAction(pauseTorrentAction);
     topBar->addSeparator();
-    downActionTool = topBar->addAction(QIcon(tr(":/icons/1downarrow.png")), tr("Move down"));
-    upActionTool = topBar->addAction(QIcon(tr(":/icons/1uparrow.png")), tr("Move up"));
+    downActionTool = topBar->addAction(QIcon(tr(":/icons/1downarrow.svg")), tr("Move down"));
+    upActionTool = topBar->addAction(QIcon(tr(":/icons/1uparrow.svg")), tr("Move up"));
 
     // Bottom toolbar
     QToolBar *bottomBar = new QToolBar(tr("Rate control"));
@@ -185,7 +183,7 @@ QSize MainWindow::sizeHint() const
 const TorrentClient *MainWindow::clientForRow(int row) const
 {
     // Return the client at the given row.
-    return row >= 0 && row < jobs.count() ? jobs.at(row).client : nullptr;
+    return jobs.at(row).client;
 }
 
 int MainWindow::rowOfClient(TorrentClient *client) const
@@ -464,10 +462,10 @@ void MainWindow::setActionsEnabled()
     pauseTorrentAction->setEnabled(item && pauseEnabled);
 
     if (client && client->state() == TorrentClient::Paused) {
-        pauseTorrentAction->setIcon(QIcon(":/icons/player_play.png"));
+        pauseTorrentAction->setIcon(QIcon(":/icons/player_play.svg"));
         pauseTorrentAction->setText(tr("Resume torrent"));
     } else {
-        pauseTorrentAction->setIcon(QIcon(":/icons/player_pause.png"));
+        pauseTorrentAction->setIcon(QIcon(":/icons/player_pause.svg"));
         pauseTorrentAction->setText(tr("Pause torrent"));
     }
 
@@ -481,12 +479,8 @@ void MainWindow::updateDownloadRate(int bytesPerSecond)
     // Update the download rate.
     TorrentClient *client = qobject_cast<TorrentClient *>(sender());
     int row = rowOfClient(client);
-    QTreeWidgetItem *item = row >= 0 ? torrentView->topLevelItem(row) : nullptr;
-    if (!item)
-        return;
-
     const QString num = QString::asprintf("%.1f KB/s", bytesPerSecond / 1024.0);
-    item->setText(3, num);
+    torrentView->topLevelItem(row)->setText(3, num);
 
     if (!saveChanges) {
         saveChanges = true;
@@ -499,12 +493,8 @@ void MainWindow::updateUploadRate(int bytesPerSecond)
     // Update the upload rate.
     TorrentClient *client = qobject_cast<TorrentClient *>(sender());
     int row = rowOfClient(client);
-    QTreeWidgetItem *item = row >= 0 ? torrentView->topLevelItem(row) : nullptr;
-    if (!item)
-        return;
-
     const QString num = QString::asprintf("%.1f KB/s", bytesPerSecond / 1024.0);
-    item->setText(4, num);
+    torrentView->topLevelItem(row)->setText(4, num);
 
     if (!saveChanges) {
         saveChanges = true;
@@ -585,7 +575,10 @@ void MainWindow::setDownloadLimit(int value)
 void MainWindow::about()
 {
     QLabel *icon = new QLabel;
-    icon->setPixmap(QPixmap(":/icons/peertopeer.png"));
+    QImage img(":/icons/peertopeer.svg");
+    QPixmap pm;
+    pm.convertFromImage(img);
+    icon->setPixmap(pm);
 
     QLabel *text = new QLabel;
     text->setWordWrap(true);

@@ -282,8 +282,7 @@ void QBuffer::setData(const char *data, qsizetype size)
         qWarning("QBuffer::setData: Buffer is open");
         return;
     }
-    d->buf->replace(qsizetype(0), d->buf->size(), // ### QByteArray lacks assign(ptr, n)
-                    data, size);
+    d->buf->assign(data, data + size);
 }
 
 /*!
@@ -401,7 +400,7 @@ qint64 QBuffer::writeData(const char *data, qint64 len)
 
     if (required > quint64(d->buf->size())) { // capacity exceeded
         // The following must hold, since qsizetype covers half the virtual address space:
-        Q_ASSUME(required <= quint64((std::numeric_limits<qsizetype>::max)()));
+        Q_ASSERT(required <= quint64((std::numeric_limits<qsizetype>::max)()));
         d->buf->resize(qsizetype(required));
         if (quint64(d->buf->size()) != required) { // could not resize
             qWarning("QBuffer::writeData: Memory allocation error");

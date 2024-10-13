@@ -1,5 +1,5 @@
 // Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QBuffer>
@@ -29,6 +29,7 @@ class tst_QTextMarkdownImporter : public QObject
     Q_OBJECT
 
 private slots:
+    void paragraphs();
     void headingBulletsContinuations();
     void thematicBreaks();
     void lists_data();
@@ -43,6 +44,10 @@ private slots:
     void pathological();
     void fencedCodeBlocks_data();
     void fencedCodeBlocks();
+    void frontMatter_data();
+    void frontMatter();
+    void toRawText_data();
+    void toRawText();
 
 private:
     bool isMainFontFixed();
@@ -76,6 +81,43 @@ bool tst_QTextMarkdownImporter::isMainFontFixed()
     return ret;
 }
 
+void tst_QTextMarkdownImporter::paragraphs()
+{
+    QFile f(QFINDTESTDATA("data/paragraphs.md"));
+    QVERIFY(f.open(QFile::ReadOnly | QIODevice::Text));
+    QString md = QString::fromUtf8(f.readAll());
+    f.close();
+
+    int lineSeparatorCount = 0;
+    QTextDocument doc;
+    QTextMarkdownImporter(&doc, QTextMarkdownImporter::DialectGitHub).import(md);
+    QTextFrame::iterator iterator = doc.rootFrame()->begin();
+    int i = 0;
+    while (!iterator.atEnd()) {
+        QTextBlock block = iterator.currentBlock();
+        int lineSeparatorPos = block.text().indexOf(QChar::LineSeparator);
+        qCDebug(lcTests) << i << block.text();
+        while (lineSeparatorPos > 0) {
+            ++lineSeparatorCount;
+            qCDebug(lcTests) << "    LineSeparator @" << lineSeparatorPos;
+            lineSeparatorPos = block.text().indexOf(QChar::LineSeparator, lineSeparatorPos + 1);
+        }
+        ++iterator;
+        ++i;
+    }
+    QCOMPARE(doc.blockCount(), 3);
+    QCOMPARE(lineSeparatorCount, 2);
+
+#ifdef DEBUG_WRITE_HTML
+    {
+        QFile out("/tmp/paragraphs.html");
+        out.open(QFile::WriteOnly);
+        out.write(doc.toHtml().toLatin1());
+        out.close();
+    }
+#endif
+}
+
 void tst_QTextMarkdownImporter::headingBulletsContinuations()
 {
     const QStringList expectedBlocks = QStringList() <<
@@ -101,7 +143,7 @@ void tst_QTextMarkdownImporter::headingBulletsContinuations()
     f.close();
 
     QTextDocument doc;
-    QTextMarkdownImporter(QTextMarkdownImporter::DialectGitHub).import(&doc, md);
+    QTextMarkdownImporter(&doc, QTextMarkdownImporter::DialectGitHub).import(md);
     QTextFrame::iterator iterator = doc.rootFrame()->begin();
     QTextFrame *currentFrame = iterator.currentFrame();
     QStringList::const_iterator expectedIt = expectedBlocks.constBegin();
@@ -149,7 +191,7 @@ void tst_QTextMarkdownImporter::thematicBreaks()
     f.close();
 
     QTextDocument doc;
-    QTextMarkdownImporter(QTextMarkdownImporter::DialectGitHub).import(&doc, md);
+    QTextMarkdownImporter(&doc, QTextMarkdownImporter::DialectGitHub).import(md);
     QTextFrame::iterator iterator = doc.rootFrame()->begin();
     QTextFrame *currentFrame = iterator.currentFrame();
     int i = 0;
@@ -182,36 +224,58 @@ void tst_QTextMarkdownImporter::thematicBreaks()
 void tst_QTextMarkdownImporter::lists_data()
 {
     QTest::addColumn<QString>("input");
+    QTest::addColumn<int>("skipToCheckStart");
+    QTest::addColumn<int>("expectedListStart");
     QTest::addColumn<int>("expectedItemCount");
     QTest::addColumn<bool>("expectedEmptyItems");
     QTest::addColumn<QString>("rewrite");
 
     // Some of these cases show odd behavior, which is subject to change
     // as the importer and the writer are tweaked to fix bugs over time.
-    QTest::newRow("dot newline") << ".\n" << 0 << true << ".\n\n";
-    QTest::newRow("number dot newline") << "1.\n" << 1 << true << "1.  \n";
-    QTest::newRow("star newline") << "*\n" << 1 << true << "* \n";
-    QTest::newRow("hyphen newline") << "-\n" << 1 << true << "- \n";
-    QTest::newRow("hyphen space newline") << "- \n" << 1 << true << "- \n";
-    QTest::newRow("hyphen space letter newline") << "- a\n" << 1 << false << "- a\n";
+    QTest::newRow("dot newline") << ".\n" << 0 << 1 << 0 << true << ".\n\n";
+    QTest::newRow("number dot newline") << "1.\n" << 0 << 1 << 1 << true << "1.  \n";
+    QTest::newRow("number offset start") << "2. text\n" << 0 << 2 << 1 << false << "2.  text\n";
+    QTest::newRow("second list offset start")
+            << "1. text\n\nintervening paragraph\n\n4. second list item"
+            << 2 << 4 << 2 << false
+            << "1.  text\n\nintervening paragraph\n\n4.  second list item\n";
+    QTest::newRow("list continuation offset start")
+            << "3. text\n\n   next paragraph in item 1\n10. second list item"
+            << 2 << 3 << 2 << false
+            << "3.  text\n\n    next paragraph in item 1\n\n4.  second list item\n";
+    QTest::newRow("nested list offset start")
+            << "1. text\n\n    0. indented list item\n\n4. second item in first list"
+            << 1 << 0 << 3 << false
+            << "1.  text\n    0.  indented list item\n2.  second item in first list\n";
+    QTest::newRow("offset start after nested list")
+            << "1. text\n\n    0. indented list item\n\n4. second item in first list"
+            << 2 << 1 << 3 << false
+            << "1.  text\n    0.  indented list item\n2.  second item in first list\n";
+    QTest::newRow("star newline") << "*\n" << 0 << 1 << 1 << true << "* \n";
+    QTest::newRow("hyphen newline") << "-\n" << 0 << 1 << 1 << true << "- \n";
+    QTest::newRow("hyphen space newline") << "- \n" << 0 << 1 << 1 << true << "- \n";
+    QTest::newRow("hyphen space letter newline") << "- a\n" << 0 << 1 << 1 << false << "- a\n";
     QTest::newRow("hyphen nbsp newline") <<
-        QString::fromUtf8("-\u00A0\n") << 0 << true << "-\u00A0\n\n";
-    QTest::newRow("nested empty lists") << "*\n  *\n  *\n" << 1 << true << "  * \n";
-    QTest::newRow("list nested in empty list") << "-\n  * a\n" << 2 << false << "- \n  * a\n";
+        QString::fromUtf8("-\u00A0\n") << 0 << 1 << 0 << true << "\\-\u00A0\n\n";
+    QTest::newRow("nested empty lists") << "*\n  *\n  *\n" << 0 << 1 << 1 << true << "  * \n";
+    QTest::newRow("list nested in empty list") << "-\n  * a\n" << 0 << 1 << 2 << false << "- \n  * a\n";
     QTest::newRow("lists nested in empty lists")
-            << "-\n  * a\n  * b\n- c\n  *\n    + d\n" << 5 << false
+            << "-\n  * a\n  * b\n- c\n  *\n    + d\n" << 0 << 1 << 5 << false
             << "- \n  * a\n  * b\n- c *\n  + d\n";
     QTest::newRow("numeric lists nested in empty lists")
-            << "- \n    1.  a\n    2.  b\n- c\n  1.\n       + d\n" << 4 << false
+            << "- \n    1.  a\n    2.  b\n- c\n  1.\n       + d\n" << 0 << 1 << 4 << false
             << "- \n    1.  a\n    2.  b\n- c 1. + d\n";
     QTest::newRow("styled spans in list items")
-            << "1.  normal text\n2.  **bold** text\n3.  `code` in the item\n4.  *italic* text\n5.  _underlined_ text\n" << 5 << false
+            << "1.  normal text\n2.  **bold** text\n3.  `code` in the item\n4.  *italic* text\n5.  _underlined_ text\n"
+            << 0 << 1 << 5 << false
             << "1.  normal text\n2.  **bold** text\n3.  `code` in the item\n4.  *italic* text\n5.  _underlined_ text\n";
 }
 
 void tst_QTextMarkdownImporter::lists()
 {
     QFETCH(QString, input);
+    QFETCH(int, skipToCheckStart);
+    QFETCH(int, expectedListStart);
     QFETCH(int, expectedItemCount);
     QFETCH(bool, expectedEmptyItems);
     QFETCH(QString, rewrite);
@@ -227,6 +291,8 @@ void tst_QTextMarkdownImporter::lists()
         out.close();
     }
 #endif
+    qCDebug(lcTests) << " original:" << input;
+    qCDebug(lcTests) << "rewritten:" << doc.toMarkdown();
 
     QTextFrame::iterator iterator = doc.rootFrame()->begin();
     QTextFrame *currentFrame = iterator.currentFrame();
@@ -239,10 +305,12 @@ void tst_QTextMarkdownImporter::lists()
         QCOMPARE(iterator.currentFrame(), currentFrame);
         // Check whether the block is text or a horizontal rule
         QTextBlock block = iterator.currentBlock();
+        QTextListFormat listFmt;
         if (block.textList()) {
             ++itemCount;
             if (!block.text().isEmpty())
                 emptyItems = false;
+            listFmt = block.textList()->format();
         }
         qCDebug(lcTests, "%d %s%s", i,
                 (block.textList() ? "<li>" : "<p>"), qPrintable(block.text()));
@@ -261,6 +329,11 @@ void tst_QTextMarkdownImporter::lists()
         QCOMPARE(listItemFmt.fontItalic(), false);
         QCOMPARE(listItemFmt.fontUnderline(), false);
         QCOMPARE(listItemFmt.fontFixedPitch(), false);
+        if (i == skipToCheckStart) {
+            qCDebug(lcTests) << "skipped to list item" << i << block.text()
+                             << "start" << listFmt.start() << "expected" << expectedListStart;
+            QCOMPARE(listFmt.start(), expectedListStart);
+        }
         ++iterator;
         ++i;
     }
@@ -392,7 +465,7 @@ void tst_QTextMarkdownImporter::avoidBlankLineAtBeginning() // QTBUG-81060
     QFETCH(int, expectedNumberOfParagraphs);
 
     QTextDocument doc;
-    QTextMarkdownImporter(QTextMarkdownImporter::DialectGitHub).import(&doc, input);
+    QTextMarkdownImporter(&doc, QTextMarkdownImporter::DialectGitHub).import(input);
     QTextFrame::iterator iterator = doc.rootFrame()->begin();
     int i = 0;
     while (!iterator.atEnd()) {
@@ -437,7 +510,7 @@ void tst_QTextMarkdownImporter::fragmentsAndProperties()
     QFETCH(int, expectedNumberOfFragments);
 
     QTextDocument doc;
-    QTextMarkdownImporter(QTextMarkdownImporter::DialectGitHub).import(&doc, input);
+    QTextMarkdownImporter(&doc, QTextMarkdownImporter::DialectGitHub).import(input);
 #ifdef DEBUG_WRITE_HTML
     {
         QFile out("/tmp/" + QLatin1String(QTest::currentDataTag()) + ".html");
@@ -505,6 +578,10 @@ void tst_QTextMarkdownImporter::fencedCodeBlocks_data()
             << "```pseudocode\nprint('hello world\\n')\n```\n"
             << 1 << 0 << "pseudocode" << "`"
             << "```pseudocode\nprint('hello world\\n')\n```\n\n";
+    QTest::newRow("backtick fence with punctuated language")
+            << "```html+js\n<html><head><script>function hi() { console.log('\\\"hello world') }</script></head>blah</html>\n```\n"
+            << 1 << 0 << "html+js" << "`"
+            << "```html+js\n<html><head><script>function hi() { console.log('\\\"hello world') }</script></head>blah</html>\n```\n\n";
     QTest::newRow("tilde fence with language")
             << "~~~pseudocode\nprint('hello world\\n')\n~~~\n"
             << 1 << 0 << "pseudocode" << "~"
@@ -562,6 +639,136 @@ void tst_QTextMarkdownImporter::fencedCodeBlocks()
     if (doc.toMarkdown() != rewrite && isMainFontFixed())
         QEXPECT_FAIL("", "fixed-pitch main font (QTBUG-103484)", Continue);
     QCOMPARE(doc.toMarkdown(), rewrite);
+}
+
+void tst_QTextMarkdownImporter::frontMatter_data()
+{
+    QTest::addColumn<QString>("inputFile");
+    QTest::addColumn<int>("expectedBlockCount");
+
+    QTest::newRow("yaml + markdown") << QFINDTESTDATA("data/yaml.md") << 1;
+    QTest::newRow("yaml only") << QFINDTESTDATA("data/yaml-only.md") << 0;
+}
+
+void tst_QTextMarkdownImporter::frontMatter()
+{
+    QFETCH(QString, inputFile);
+    QFETCH(int, expectedBlockCount);
+
+    QFile f(inputFile);
+    QVERIFY(f.open(QFile::ReadOnly | QIODevice::Text));
+    QString md = QString::fromUtf8(f.readAll());
+    f.close();
+    const int yamlBegin = md.indexOf("name:");
+    const int yamlEnd = md.indexOf("---", yamlBegin);
+    const QString yaml = md.sliced(yamlBegin, yamlEnd - yamlBegin);
+
+    QTextDocument doc;
+    QTextMarkdownImporter(&doc, QTextMarkdownImporter::DialectGitHub).import(md);
+    int blockCount = 0;
+    for (QTextFrame::iterator iterator = doc.rootFrame()->begin(); !iterator.atEnd(); ++iterator) {
+        // Check whether the block is text or a horizontal rule
+        if (!iterator.currentBlock().text().isEmpty())
+            ++blockCount;
+    }
+    QCOMPARE(blockCount, expectedBlockCount); // yaml is not part of the markdown text
+    QCOMPARE(doc.metaInformation(QTextDocument::FrontMatter), yaml); // without fences
+}
+
+void tst_QTextMarkdownImporter::toRawText_data()
+{
+    QTest::addColumn<QString>("input");
+    QTest::addColumn<QString>("expectedRawText");
+
+    // tests to verify that fixing QTBUG-122083 is safe
+    // https://spec.commonmark.org/0.31.2/#example-12
+    QTest::newRow("punctuation backslash escapes") <<
+            R"(\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~)" <<
+            R"(!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~)";
+    // https://spec.commonmark.org/0.31.2/#example-13
+    QTest::newRow("literal backslashes") <<
+            QString(uR"(\→\A\a\ \3\φ\«)") <<
+            QString(uR"(\→\A\a\ \3\φ\«)");
+    // https://spec.commonmark.org/0.31.2/#example-14
+    QTest::newRow("escape to avoid em") <<
+            R"(\*not emphasized*)" <<
+            R"(*not emphasized*)";
+    QTest::newRow("escape to avoid html") <<
+            R"(\<br/> not a tag)" <<
+            R"(<br/> not a tag)";
+    QTest::newRow("escape to avoid link") <<
+            R"(\[not a link](/foo))" <<
+            R"([not a link](/foo))";
+    QTest::newRow("escape to avoid mono") <<
+            R"(\`not code`)" <<
+            R"(`not code`)";
+    QTest::newRow("escape to avoid num list") <<
+            R"(1\. not a list)" <<
+            R"(1. not a list)";
+    QTest::newRow("escape to avoid list") <<
+            R"(\* not a list)" <<
+            R"(* not a list)";
+    QTest::newRow("escape to avoid heading") <<
+            R"(\# not a heading)" <<
+            R"(# not a heading)";
+    QTest::newRow("escape to avoid reflink") <<
+            R"(\[foo]: /url "not a reference")" <<
+            R"([foo]: /url "not a reference")";
+    QTest::newRow("escape to avoid entity") <<
+            R"(\&ouml; not a character entity)" <<
+            R"(&ouml; not a character entity)";
+    // https://spec.commonmark.org/0.31.2/#example-15
+    QTest::newRow("escape backslash only") <<
+            R"(\\*emphasis*)" <<
+            R"(\emphasis)";
+    // https://spec.commonmark.org/0.31.2/#example-16
+    QTest::newRow("backslash line break") <<
+            "foo\\\nbar" <<
+            "foo\u2029bar";
+    // https://spec.commonmark.org/0.31.2/#example-17
+    QTest::newRow("backslash in mono span") <<
+            R"(`` \[\` ``)" <<
+            R"(\[\`)";
+    // https://spec.commonmark.org/0.31.2/#example-18
+    QTest::newRow("backslash in indented code") <<
+            R"(    \[\])" <<
+            R"(\[\])";
+    // https://spec.commonmark.org/0.31.2/#example-19
+    QTest::newRow("backslash in fenced code") <<
+            "~~~\n\\[\\]\n~~~" <<
+            R"(\[\])";
+    // https://spec.commonmark.org/0.31.2/#example-20
+    QTest::newRow("backslash in autolink") <<
+            R"(<https://example.com?find=\*>)" <<
+            R"(https://example.com?find=\*)";
+    // https://spec.commonmark.org/0.31.2/#example-21
+    QTest::newRow("backslash in autolink") <<
+            "<a href=\"/bar\\/)\"" <<
+            "<a href=\"/bar/)\"";
+    // https://spec.commonmark.org/0.31.2/#example-22
+    QTest::newRow("escapes in link") <<
+            R"([foo](/bar\* "ti\*tle"))" <<
+            R"(foo)";
+    // https://spec.commonmark.org/0.31.2/#example-24
+    QTest::newRow("backslash in code lang") <<
+            "```\nfoo\\+bar\nfoo\n```" <<
+            "foo\\+bar\u2029foo";
+    // end of tests to verify that fixing QTBUG-122083 is safe
+    // (it's ok to add unrelated markdown-to-rawtext cases later)
+}
+
+void tst_QTextMarkdownImporter::toRawText()
+{
+    QFETCH(QString, input);
+    QFETCH(QString, expectedRawText);
+
+    QTextDocument doc;
+    doc.setMarkdown(input);
+
+    // These are testing md4c more than Qt, so any change may be an md4c bug, or a fix
+    QCOMPARE(doc.toRawText(), expectedRawText);
+    if (doc.blockCount() == 1)
+        QCOMPARE(doc.firstBlock().text(), expectedRawText);
 }
 
 QTEST_MAIN(tst_QTextMarkdownImporter)

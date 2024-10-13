@@ -67,12 +67,50 @@ macro(qt_collect_third_party_deps target)
                     set(package_optional_components "")
                 endif()
 
+                get_target_property(package_components_id ${dep} _qt_package_components_id)
+                if(package_components_id)
+                    list(APPEND third_party_deps_package_components_ids ${package_components_id})
+                endif()
+
                 list(APPEND third_party_deps
                     "${package_name}\;${package_is_optional}\;${package_version}\;${package_components}\;${package_optional_components}")
             endif()
         endif()
     endforeach()
 endmacro()
+
+# Collect provided targets for the given list of package component ids.
+#
+# ${target} is merely used as a key infix to avoid name clashes in the Dependencies.cmake files.
+# package_component_ids is a list of '${package_name}-${components}-${optional_components}' keys
+# that are sanitized not to contain spaces or semicolons.
+#
+# The output is a list of variable assignments to add to the dependencies file.
+# Each variable assignment is the list of provided targets for a given package component id.
+#
+# We use these extra assignments instead of adding the info to the existing 'third_party_deps' list
+# to make the information more readable. That list already has 5 items per package, making it
+# quite hard to read.
+function(qt_internal_collect_third_party_dep_packages_info
+        target
+        package_components_ids
+        out_packages_info)
+
+    # There might be multiple calls to find the same package, so remove the duplicates.
+    list(REMOVE_DUPLICATES package_components_ids)
+
+    set(packages_info "")
+
+    foreach(package_key IN LISTS package_components_ids)
+        get_cmake_property(provided_targets _qt_find_package_${package_key}_provided_targets)
+        if(provided_targets)
+            set(key "__qt_${target}_third_party_package_${package_key}_provided_targets")
+            string(APPEND packages_info "set(${key} \"${provided_targets}\")\n")
+        endif()
+    endforeach()
+
+    set(${out_packages_info} "${packages_info}" PARENT_SCOPE)
+endfunction()
 
 # Filter the dependency targets to collect unique set of the dependencies.
 # non-Private and Private targets are treated as the single object in this context
@@ -149,6 +187,7 @@ function(qt_internal_create_module_depends_file target)
     # ModuleDependencies.cmake.
     set(third_party_deps "")
     set(third_party_deps_seen "")
+    set(third_party_deps_package_components_ids "")
 
     # Used for collecting Qt tool dependencies that should be find_package()'d in
     # ModuleToolsDependencies.cmake.
@@ -216,6 +255,14 @@ function(qt_internal_create_module_depends_file target)
     endforeach()
 
     qt_collect_third_party_deps(${target})
+    qt_internal_collect_third_party_dep_packages_info(${target}
+        "${third_party_deps_package_components_ids}"
+        packages_info)
+
+    set(third_party_deps_extra_info "")
+    if(packages_info)
+        string(APPEND third_party_deps_extra_info "${packages_info}")
+    endif()
 
     # Add dependency to the main ModuleTool package to ModuleDependencies file.
     if(${target} IN_LIST QT_KNOWN_MODULES_WITH_TOOLS)
@@ -353,10 +400,22 @@ function(qt_internal_create_qt6_dependencies_file)
     unset(depends)
     unset(optional_public_depends)
 
+    set(third_party_deps "")
+    set(third_party_deps_seen "")
+    set(third_party_deps_package_components_ids "")
+
     # We need to collect third party deps that are set on the public Platform target,
     # like Threads::Threads.
     # This mimics find_package part of the CONFIG += thread assignment in mkspecs/features/qt.prf.
     qt_collect_third_party_deps(${actual_target})
+    qt_internal_collect_third_party_dep_packages_info("${INSTALL_CMAKE_NAMESPACE}"
+        "${third_party_deps_package_components_ids}"
+        packages_info)
+
+    set(third_party_deps_extra_info "")
+    if(packages_info)
+        string(APPEND third_party_deps_extra_info "${packages_info}")
+    endif()
 
     # For Threads we also need to write an extra variable assignment.
     set(third_party_extra "")
@@ -446,7 +505,33 @@ function(qt_internal_create_plugins_auto_inclusion_files)
 # TODO: Find a better way to deal with this, perhaps by using find_package() instead of include
 # for the Qml PluginConfig.cmake files.
 
-file(GLOB __qt_qml_plugins_config_file_list \"\${CMAKE_CURRENT_LIST_DIR}/QmlPlugins/${INSTALL_CMAKE_NAMESPACE}*Config.cmake\")
+# Distributions should probably change this default.
+if(NOT DEFINED QT_SKIP_AUTO_QML_PLUGIN_INCLUSION)
+    set(QT_SKIP_AUTO_QML_PLUGIN_INCLUSION OFF)
+endif()
+
+set(__qt_qml_plugins_config_file_list \"\")
+set(__qt_qml_plugins_glob_prefixes \"\${CMAKE_CURRENT_LIST_DIR}\")
+
+# Allow passing additional prefixes where we will glob for PluginConfig.cmake files.
+if(QT_ADDITIONAL_QML_PLUGIN_GLOB_PREFIXES)
+    foreach(__qt_qml_plugin_glob_prefix IN LISTS QT_ADDITIONAL_QML_PLUGIN_GLOB_PREFIXES)
+        if(__qt_qml_plugin_glob_prefix)
+            list(APPEND __qt_qml_plugins_glob_prefixes \"\${__qt_qml_plugin_glob_prefix}\")
+        endif()
+    endforeach()
+endif()
+
+list(REMOVE_DUPLICATES __qt_qml_plugins_glob_prefixes)
+
+foreach(__qt_qml_plugin_glob_prefix IN LISTS __qt_qml_plugins_glob_prefixes)
+    file(GLOB __qt_qml_plugins_glob_config_file_list
+        \"\${__qt_qml_plugin_glob_prefix}/QmlPlugins/${INSTALL_CMAKE_NAMESPACE}*Config.cmake\")
+    if(__qt_qml_plugins_glob_config_file_list)
+        list(APPEND __qt_qml_plugins_config_file_list \${__qt_qml_plugins_glob_config_file_list})
+    endif()
+endforeach()
+
 if (__qt_qml_plugins_config_file_list AND NOT QT_SKIP_AUTO_QML_PLUGIN_INCLUSION)
     # First round of inclusions ensure all qml plugin targets are brought into scope.
     foreach(__qt_qml_plugin_config_file \${__qt_qml_plugins_config_file_list})
@@ -472,8 +557,8 @@ if (__qt_qml_plugins_config_file_list AND NOT QT_SKIP_AUTO_QML_PLUGIN_INCLUSION)
 endif()")
         endif()
 
-        get_target_property(qt_plugins "${QT_MODULE}" QT_PLUGINS)
-        if(qt_plugins OR QT_MODULE_PLUGIN_INCLUDES)
+        get_target_property(module_plugin_types "${QT_MODULE}" MODULE_PLUGIN_TYPES)
+        if(module_plugin_types OR QT_MODULE_PLUGIN_INCLUDES)
             list(APPEND modules_with_plugins "${QT_MODULE}")
             configure_file(
                 "${QT_CMAKE_DIR}/QtPlugins.cmake.in"
@@ -498,7 +583,7 @@ function(qt_generate_install_prefixes out_var)
     set(vars INSTALL_BINDIR INSTALL_INCLUDEDIR INSTALL_LIBDIR INSTALL_MKSPECSDIR INSTALL_ARCHDATADIR
         INSTALL_PLUGINSDIR INSTALL_LIBEXECDIR INSTALL_QMLDIR INSTALL_DATADIR INSTALL_DOCDIR
         INSTALL_TRANSLATIONSDIR INSTALL_SYSCONFDIR INSTALL_EXAMPLESDIR INSTALL_TESTSDIR
-        INSTALL_DESCRIPTIONSDIR)
+        INSTALL_DESCRIPTIONSDIR INSTALL_SBOMDIR)
 
     foreach(var ${vars})
         get_property(docstring CACHE "${var}" PROPERTY HELPSTRING)
@@ -551,9 +636,8 @@ function(qt_generate_build_internals_extra_cmake_code)
         if(CMAKE_BUILD_TYPE)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
                 "
+# Used by qt_internal_set_cmake_build_type.
 set(__qt_internal_initial_qt_cmake_build_type \"${CMAKE_BUILD_TYPE}\")
-qt_internal_force_set_cmake_build_type_conditionally(
-    \"\${__qt_internal_initial_qt_cmake_build_type}\")
 ")
         endif()
         if(CMAKE_CONFIGURATION_TYPES)
@@ -574,17 +658,6 @@ qt_internal_force_set_cmake_build_type_conditionally(
         if(QT_MULTI_CONFIG_FIRST_CONFIG)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
                 "\nset(QT_MULTI_CONFIG_FIRST_CONFIG \"${QT_MULTI_CONFIG_FIRST_CONFIG}\")\n")
-        endif()
-        # When building standalone tests against a multi-config Qt, we want to choose the first
-        # configuration, rather than use CMake's default value.
-        # In the case of Windows, we definitely don't it to default to Debug, because that causes
-        # issues in the CI.
-        if(multi_config_specific)
-            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS "
-if(QT_BUILD_STANDALONE_TESTS)
-    qt_internal_force_set_cmake_build_type_conditionally(
-        \"\${QT_MULTI_CONFIG_FIRST_CONFIG}\")
-endif()\n")
         endif()
 
         if(CMAKE_CROSS_CONFIGS)
@@ -616,9 +689,9 @@ endif()\n")
                 "set(QT_IS_MACOS_UNIVERSAL \"${QT_IS_MACOS_UNIVERSAL}\" CACHE BOOL \"\")\n")
         endif()
 
-        if(DEFINED QT_UIKIT_SDK)
+        if(DEFINED QT_APPLE_SDK)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
-                "set(QT_UIKIT_SDK \"${QT_UIKIT_SDK}\" CACHE BOOL \"\")\n")
+                "set(QT_APPLE_SDK \"${QT_APPLE_SDK}\" CACHE BOOL \"\")\n")
         endif()
 
         if(QT_FORCE_FIND_TOOLS)
@@ -639,11 +712,17 @@ endif()\n")
         endif()
 
         # Save the default qpa platform.
-        # Used by qtwayland/src/plugins/platforms/qwayland-generic/CMakeLists.txt. Otherwise
-        # the DEFAULT_IF condition is evaluated incorrectly.
         if(DEFINED QT_QPA_DEFAULT_PLATFORM)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
                 "set(QT_QPA_DEFAULT_PLATFORM \"${QT_QPA_DEFAULT_PLATFORM}\" CACHE STRING \"\")\n")
+        endif()
+
+        # Save the list of default qpa platforms.
+        # Used by qtwayland/src/plugins/platforms/qwayland-generic/CMakeLists.txt. Otherwise
+        # the DEFAULT_IF condition is evaluated incorrectly.
+        if(DEFINED QT_QPA_PLATFORMS)
+            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
+                "set(QT_QPA_PLATFORMS \"${QT_QPA_PLATFORMS}\" CACHE STRING \"\")\n")
         endif()
 
         # Save minimum and policy-related CMake versions to ensure the same minimum is
@@ -713,17 +792,6 @@ endif()\n")
 
         string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS "${install_prefix_content}")
 
-        # The top-level check needs to happen inside QtBuildInternals, because it's possible
-        # to configure a top-level build with a few repos and then configure another repo
-        # using qt-configure-module in a separate build dir, where QT_SUPERBUILD will not
-        # be set anymore.
-        string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
-            "
-if(DEFINED QT_REPO_MODULE_VERSION AND NOT DEFINED QT_REPO_DEPENDENCIES AND NOT QT_SUPERBUILD)
-    qt_internal_read_repo_dependencies(QT_REPO_DEPENDENCIES \"$\{PROJECT_SOURCE_DIR}\")
-endif()
-")
-
         if(DEFINED OpenGL_GL_PREFERENCE)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
                 "
@@ -734,9 +802,21 @@ set(OpenGL_GL_PREFERENCE \"${OpenGL_GL_PREFERENCE}\" CACHE STRING \"\")
 
         string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
             "
-set(QT_COPYRIGHT_YEAR \"${QT_COPYRIGHT_YEAR}\" CACHE STRING \"\")
 set(QT_COPYRIGHT \"${QT_COPYRIGHT}\" CACHE STRING \"\")
 ")
+
+        # Add the apple version requirements to the BuildInternals extra code, so the info is
+        # available when configuring a standalone test.
+        # Otherwise when QtSetup is included after a
+        #   find_package(Qt6BuildInternals REQUIRED COMPONENTS STANDALONE_TEST)
+        # call, Qt6ConfigExtras.cmake is not included yet, the requirements are not available and
+        # _qt_internal_check_apple_sdk_and_xcode_versions() would fail.
+        _qt_internal_export_apple_sdk_and_xcode_version_requirements(apple_requirements)
+        if(apple_requirements)
+            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS "
+${apple_requirements}
+")
+        endif()
 
         qt_compute_relative_path_from_cmake_config_dir_to_prefix()
         configure_file(
@@ -804,7 +884,7 @@ function(qt_internal_create_config_file_for_standalone_tests)
 
     # Create a Config file that calls find_package on the modules that were built as part
     # of the current repo. This is used for standalone tests.
-    qt_internal_get_standalone_tests_config_file_name(tests_config_file_name)
+    qt_internal_get_standalone_parts_config_file_name(tests_config_file_name)
 
     # Standalone tests Config files should follow the main versioning scheme.
     qt_internal_get_package_version_of_target(Platform main_qt_package_version)
@@ -848,8 +928,15 @@ function(qt_internal_generate_user_facing_tools_info)
         if(NOT filename)
             set(filename ${target})
         endif()
+        set(linkname ${filename})
+        if(APPLE)
+            get_target_property(is_macos_bundle ${target} MACOSX_BUNDLE )
+            if(is_macos_bundle)
+                set(filename "${filename}.app/Contents/MacOS/${filename}")
+            endif()
+        endif()
         qt_path_join(tool_target_path "${CMAKE_INSTALL_PREFIX}" "${INSTALL_BINDIR}" "${filename}")
-        qt_path_join(tool_link_path "${INSTALL_PUBLICBINDIR}" "${filename}${PROJECT_VERSION_MAJOR}")
+        qt_path_join(tool_link_path "${INSTALL_PUBLICBINDIR}" "${linkname}${PROJECT_VERSION_MAJOR}")
         list(APPEND lines "${tool_target_path} ${tool_link_path}")
     endforeach()
     string(REPLACE ";" "\n" content "${lines}")

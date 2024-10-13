@@ -7,9 +7,11 @@
 #include <private/qcborcommon_p.h>
 
 #include <private/qnumeric_p.h>
+#include <private/qstringconverter_p.h>
 #include <qbuffer.h>
 #include <qdebug.h>
 #include <qstack.h>
+#include <qvarlengtharray.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -174,8 +176,8 @@ Q_DECLARE_TYPEINFO(CborEncoder, Q_PRIMITIVE_TYPE);
    \endlist
 
    \sa QCborStreamReader, QCborValue, QXmlStreamWriter
-       {Parsing and displaying CBOR data}, {Convert Example},
-       {JSON Save Game Example}
+       {Parsing and displaying CBOR data}, {Serialization Converter},
+       {Saving and Loading a Game}
  */
 
 class QCborStreamWriterPrivate
@@ -439,8 +441,10 @@ void QCborStreamWriter::append(QLatin1StringView str)
         // it is plain US-ASCII
         appendTextString(str.latin1(), str.size());
     } else {
-        // non-ASCII, so we need a pass-through UTF-16
-        append(QString(str));
+        // non-ASCII, convert:
+        QVarLengthArray<char> utf8(str.size() * 2); // each L1 char gives at most two U8 units
+        const qsizetype written = QUtf8::convertFromLatin1(utf8.data(), str) - utf8.data();
+        appendTextString(utf8.data(), written);
     }
 }
 
@@ -727,7 +731,8 @@ void QCborStreamWriter::startArray()
    seem to allow up to 2\sup{64}-1 elements in the array. However, both
    QCborStreamWriter and QCborStreamReader are currently limited to 2\sup{32}-2
    items on 32-bit systems and 2\sup{64}-2 items on 64-bit ones. Also note that
-   QCborArray is currently limited to 2\sup{27} elements in any platform.
+   QCborArray is currently limited to 2\sup{27} elements on 32-bit platforms and
+   2\sup{59} elements on 64-bit ones.
 
    \sa startArray(), endArray(), startMap(), QCborStreamReader::isArray(),
    QCborStreamReader::isLengthKnown()
@@ -800,7 +805,8 @@ void QCborStreamWriter::startMap()
    seem to allow up to 2\sup{64}-1 pairs in the map. However, both
    QCborStreamWriter and QCborStreamReader are currently limited to 2\sup{31}-1
    items on 32-bit systems and 2\sup{63}-1 items on 64-bit ones. Also note that
-   QCborMap is currently limited to 2\sup{26} elements in any platform.
+   QCborMap is currently limited to 2\sup{26} elements on 32-bit platforms and
+   2\sup{58} on 64-bit ones.
 
    \sa startMap(), endMap(), startArray(), QCborStreamReader::isMap(),
        QCborStreamReader::isLengthKnown()

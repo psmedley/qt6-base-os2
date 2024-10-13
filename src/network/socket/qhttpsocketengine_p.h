@@ -16,10 +16,12 @@
 //
 
 #include <QtNetwork/private/qtnetworkglobal_p.h>
-#include "private/qabstractsocketengine_p.h"
+
+#include <QtNetwork/qnetworkproxy.h>
+
 #include "qabstractsocket.h"
-#include "qnetworkproxy.h"
 #include "private/qauthenticator_p.h"
+#include "private/qabstractsocketengine_p.h"
 
 QT_REQUIRE_CONFIG(http);
 
@@ -90,11 +92,16 @@ public:
     int option(SocketOption option) const override;
     bool setOption(SocketOption option, int value) override;
 
-    bool waitForRead(int msecs = 30000, bool *timedOut = nullptr) override;
-    bool waitForWrite(int msecs = 30000, bool *timedOut = nullptr) override;
+    bool waitForRead(QDeadlineTimer deadline = QDeadlineTimer{DefaultTimeout},
+                     bool *timedOut = nullptr) override;
+    bool waitForWrite(QDeadlineTimer deadline = QDeadlineTimer{DefaultTimeout},
+                      bool *timedOut = nullptr) override;
     bool waitForReadOrWrite(bool *readyToRead, bool *readyToWrite,
                             bool checkRead, bool checkWrite,
-                            int msecs = 30000, bool *timedOut = nullptr) override;
+                            QDeadlineTimer deadline = QDeadlineTimer{DefaultTimeout},
+                            bool *timedOut = nullptr) override;
+
+    void waitForProtocolHandshake(QDeadlineTimer deadline) const;
 
     bool isReadNotificationEnabled() const override;
     void setReadNotificationEnabled(bool enable) override;

@@ -15,7 +15,7 @@ qt_internal_add_module(DBus
         qdbusargument.cpp qdbusargument.h qdbusargument_p.h
         qdbusconnection.cpp qdbusconnection.h qdbusconnection_p.h
         qdbusconnectioninterface.cpp qdbusconnectioninterface.h
-        qdbusconnectionmanager_p.h
+        qdbusconnectionmanager.cpp qdbusconnectionmanager_p.h
         qdbuscontext.cpp qdbuscontext.h qdbuscontext_p.h
         qdbuserror.cpp qdbuserror.h
         qdbusextratypes.cpp qdbusextratypes.h
@@ -40,20 +40,25 @@ qt_internal_add_module(DBus
         qdbusxmlgenerator.cpp
         qdbusxmlparser.cpp qdbusxmlparser_p.h
         qtdbusglobal.h qtdbusglobal_p.h
+    NO_UNITY_BUILD_SOURCES
+        qdbusconnectionmanager.cpp # qt_windows.h clashing with "interface"
     DEFINES
         DBUS_API_SUBJECT_TO_CHANGE
+        QT_NO_CONTEXTLESS_CONNECT
         QT_NO_FOREACH
+        QT_NO_QPAIR
+        QT_USE_NODISCARD_FILE_OPEN
     LIBRARIES
         Qt::CorePrivate
     PUBLIC_LIBRARIES
         Qt::Core
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
-    GENERATE_CPP_EXPORTS
 )
 
+# This file is included by qdbusargument.cpp
 set_source_files_properties(qdbusmarshaller.cpp
-    PROPERTIES HEADER_FILE_ONLY ON)  # special case: This file is included by qdbusargument.cpp
+    PROPERTIES HEADER_FILE_ONLY ON)
 
 ## Scopes:
 #####################################################################

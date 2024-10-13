@@ -22,14 +22,10 @@
 
 QT_BEGIN_NAMESPACE
 
-static int cachedRelaySlotMethodIndex = 0;
-
 int QDBusAdaptorConnector::relaySlotMethodIndex()
 {
-    if (cachedRelaySlotMethodIndex == 0) {
-        cachedRelaySlotMethodIndex = staticMetaObject.indexOfMethod("relaySlot()");
-        Q_ASSERT(cachedRelaySlotMethodIndex != 0); // 0 should be deleteLater() or destroyed()
-    }
+    static const int cachedRelaySlotMethodIndex = staticMetaObject.indexOfMethod("relaySlot()");
+    Q_ASSERT(cachedRelaySlotMethodIndex != 0); // 0 should be deleteLater() or destroyed()
     return cachedRelaySlotMethodIndex;
 }
 
@@ -37,11 +33,9 @@ QDBusAdaptorConnector *qDBusFindAdaptorConnector(QObject *obj)
 {
     if (!obj)
         return nullptr;
-    const QObjectList &children = obj->children();
-    QObjectList::ConstIterator it = children.constBegin();
-    QObjectList::ConstIterator end = children.constEnd();
-    for ( ; it != end; ++it) {
-        QDBusAdaptorConnector *connector = qobject_cast<QDBusAdaptorConnector *>(*it);
+
+    for (QObject *child : std::as_const(obj->children())) {
+        QDBusAdaptorConnector *connector = qobject_cast<QDBusAdaptorConnector *>(child);
         if (connector) {
             connector->polish();
             return connector;
@@ -110,10 +104,13 @@ void QDBusAbstractAdaptorPrivate::saveIntrospectionXml(QDBusAbstractAdaptor *ada
 QDBusAbstractAdaptor::QDBusAbstractAdaptor(QObject* obj)
     : QObject(*new QDBusAbstractAdaptorPrivate, obj)
 {
+
+    Q_ASSERT_X(obj, Q_FUNC_INFO, "Expected non-null parent");
+
     QDBusAdaptorConnector *connector = qDBusCreateAdaptorConnector(obj);
 
     connector->waitingForPolish = true;
-    QMetaObject::invokeMethod(connector, "polish", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(connector, &QDBusAdaptorConnector::polish, Qt::QueuedConnection);
 }
 
 /*!
@@ -227,11 +224,8 @@ void QDBusAdaptorConnector::polish()
         return;                 // avoid working multiple times if multiple adaptors were added
 
     waitingForPolish = false;
-    const QObjectList &objs = parent()->children();
-    QObjectList::ConstIterator it = objs.constBegin();
-    QObjectList::ConstIterator end = objs.constEnd();
-    for ( ; it != end; ++it) {
-        QDBusAbstractAdaptor *adaptor = qobject_cast<QDBusAbstractAdaptor *>(*it);
+    for (QObject *child : std::as_const(parent()->children())) {
+        QDBusAbstractAdaptor *adaptor = qobject_cast<QDBusAbstractAdaptor *>(child);
         if (adaptor)
             addAdaptor(adaptor);
     }

@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtCore/qglobal.h>
 
@@ -16,9 +16,15 @@
 #include <QtCore/QStringBuilder>
 #include <QtTest/QTest>
 
+#include <QtCore/q20iterator.h>
+
 #define LITERAL "some literal"
 
-void runScenario(); // Defined in stringbuilder.cpp #included below.
+namespace {
+#define P +
+#include "../qstringbuilder1/stringbuilder.cpp"
+#undef P
+} // namespace
 
 class tst_QStringBuilder2 : public QObject
 {
@@ -27,10 +33,6 @@ class tst_QStringBuilder2 : public QObject
 private slots:
     void scenario() { runScenario(); }
 };
-
-#define P +
-#include "../qstringbuilder1/stringbuilder.cpp"
-#undef P
 
 #include "tst_qstringbuilder2.moc"
 

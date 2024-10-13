@@ -79,8 +79,7 @@ bool QXcbMime::mimeDataForAtom(QXcbConnection *connection, xcb_atom_t a, QMimeDa
         if (atomName == "text/uri-list"_L1
             && connection->atomName(a) == "text/x-moz-url") {
             const QString mozUri = QLatin1StringView(data->split('\n').constFirst()) + u'\n';
-            *data = QByteArray(reinterpret_cast<const char *>(mozUri.data()),
-                               mozUri.size() * 2);
+            data->assign({reinterpret_cast<const char *>(mozUri.data()), mozUri.size() * 2});
         } else if (atomName == "application/x-color"_L1)
             *dataFormat = 16;
         ret = true;
@@ -156,7 +155,7 @@ QVariant QXcbMime::mimeConvertToFormat(QXcbConnection *connection, xcb_atom_t a,
         const quint8 byte1 = data.at(1);
         if ((byte0 == 0xff && byte1 == 0xfe) || (byte0 == 0xfe && byte1 == 0xff)
             || (byte0 != 0 && byte1 == 0) || (byte0 == 0 && byte1 != 0)) {
-            const QString str = QString::fromUtf16(
+            const QStringView str(
                   reinterpret_cast<const char16_t *>(data.constData()), data.size() / 2);
             if (!str.isNull()) {
                 if (format == "text/uri-list"_L1) {
@@ -175,7 +174,7 @@ QVariant QXcbMime::mimeConvertToFormat(QXcbConnection *connection, xcb_atom_t a,
                         return list.constFirst();
                     return list;
                 } else {
-                    return str;
+                    return str.toString();
                 }
             }
         }

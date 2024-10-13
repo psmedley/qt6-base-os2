@@ -516,6 +516,7 @@ DH *q_PEM_read_bio_DHparams(BIO *a, DH **b, pem_password_cb *c, void *d);
 
 BIGNUM *q_BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret);
 #define q_SSL_CTX_set_tmp_dh(ctx, dh) q_SSL_CTX_ctrl((ctx), SSL_CTRL_SET_TMP_DH, 0, (char *)dh)
+#define q_SSL_CTX_set_dh_auto(ctx, onoff) q_SSL_CTX_ctrl(ctx,SSL_CTRL_SET_DH_AUTO,onoff,NULL)
 
 #ifndef OPENSSL_NO_EC
 // EC Diffie-Hellman support
@@ -666,6 +667,7 @@ void *q_CRYPTO_malloc(size_t num, const char *file, int line);
 #define q_OPENSSL_malloc(num) q_CRYPTO_malloc(num, "", 0)
 void q_CRYPTO_free(void *str, const char *file, int line);
 # define q_OPENSSL_free(addr) q_CRYPTO_free(addr, "", 0)
+int q_CRYPTO_memcmp(const void * in_a, const void * in_b, size_t len);
 
 void q_SSL_set_info_callback(SSL *ssl, void (*cb) (const SSL *ssl, int type, int val));
 const char *q_SSL_alert_type_string(int value);

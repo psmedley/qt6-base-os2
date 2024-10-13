@@ -18,7 +18,9 @@
 #include <QtCore/private/qglobal_p.h>
 #include "QtCore/qfile.h"
 #include "QtCore/qdir.h"
+#include "QtCore/qdirlisting.h"
 
+#include <memory>
 #include <optional>
 
 #ifdef open
@@ -73,18 +75,14 @@ public:
         CanonicalPathName,
         BundleName,
         JunctionName,
+        RawLinkPath,
         NFileNames  // Must be last.
     };
     enum FileOwner {
         OwnerUser,
         OwnerGroup
     };
-    enum FileTime {
-        AccessTime,
-        BirthTime,
-        MetadataChangeTime,
-        ModificationTime
-    };
+
 
     virtual ~QAbstractFileEngine();
 
@@ -109,14 +107,16 @@ public:
     virtual bool caseSensitive() const;
     virtual bool isRelativePath() const;
     virtual QStringList entryList(QDir::Filters filters, const QStringList &filterNames) const;
+    virtual QStringList entryList(QDirListing::IteratorFlags filters,
+                                  const QStringList &filterNames) const;
     virtual FileFlags fileFlags(FileFlags type=FileInfoAll) const;
     virtual bool setPermissions(uint perms);
     virtual QByteArray id() const;
     virtual QString fileName(FileName file=DefaultName) const;
     virtual uint ownerId(FileOwner) const;
     virtual QString owner(FileOwner) const;
-    virtual bool setFileTime(const QDateTime &newDate, FileTime time);
-    virtual QDateTime fileTime(FileTime time) const;
+    virtual bool setFileTime(const QDateTime &newDate, QFile::FileTime time);
+    virtual QDateTime fileTime(QFile::FileTime time) const;
     virtual void setFileName(const QString &file);
     virtual int handle() const;
     virtual bool cloneTo(QAbstractFileEngine *target);
@@ -125,8 +125,15 @@ public:
     bool unmap(uchar *ptr);
 
     typedef QAbstractFileEngineIterator Iterator;
-    virtual Iterator *beginEntryList(QDir::Filters filters, const QStringList &filterNames);
-    virtual Iterator *endEntryList();
+    using IteratorUniquePtr = std::unique_ptr<Iterator>;
+
+    virtual IteratorUniquePtr
+    beginEntryList(const QString &path, QDir::Filters filters, const QStringList &filterNames);
+    virtual IteratorUniquePtr endEntryList() { return {}; }
+
+    virtual IteratorUniquePtr
+    beginEntryList(const QString &path, QDirListing::IteratorFlags filters,
+                   const QStringList &filterNames);
 
     virtual qint64 read(char *data, qint64 maxlen);
     virtual qint64 readLine(char *data, qint64 maxlen);
@@ -147,26 +154,33 @@ public:
     {};
 
     class MapExtensionOption : public ExtensionOption {
+        Q_DISABLE_COPY_MOVE(MapExtensionOption)
     public:
         qint64 offset;
         qint64 size;
         QFile::MemoryMapFlags flags;
+        constexpr MapExtensionOption(qint64 off, qint64 sz, QFile::MemoryMapFlags f)
+            : offset(off), size(sz), flags(f) {}
     };
     class MapExtensionReturn : public ExtensionReturn {
+        Q_DISABLE_COPY_MOVE(MapExtensionReturn)
     public:
-        uchar *address;
+        MapExtensionReturn() = default;
+        uchar *address = nullptr;
     };
 
     class UnMapExtensionOption : public ExtensionOption {
+        Q_DISABLE_COPY_MOVE(UnMapExtensionOption)
     public:
-        uchar *address;
+        uchar *address = nullptr;
+        constexpr UnMapExtensionOption(uchar *p) : address(p) {}
     };
 
     virtual bool extension(Extension extension, const ExtensionOption *option = nullptr, ExtensionReturn *output = nullptr);
     virtual bool supportsExtension(Extension extension) const;
 
     // Factory
-    static QAbstractFileEngine *create(const QString &fileName);
+    static std::unique_ptr<QAbstractFileEngine> create(const QString &fileName);
 
 protected:
     void setError(QFile::FileError error, const QString &str);
@@ -184,21 +198,23 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QAbstractFileEngine::FileFlags)
 
 class Q_CORE_EXPORT QAbstractFileEngineHandler
 {
+    Q_DISABLE_COPY_MOVE(QAbstractFileEngineHandler)
 public:
     QAbstractFileEngineHandler();
     virtual ~QAbstractFileEngineHandler();
-    virtual QAbstractFileEngine *create(const QString &fileName) const = 0;
+    virtual std::unique_ptr<QAbstractFileEngine> create(const QString &fileName) const = 0;
 };
 
-class QAbstractFileEngineIteratorPrivate;
 class Q_CORE_EXPORT QAbstractFileEngineIterator
 {
 public:
-    QAbstractFileEngineIterator(QDir::Filters filters, const QStringList &nameFilters);
+    QAbstractFileEngineIterator(const QString &path, QDir::Filters filters,
+                                const QStringList &nameFilters);
+    QAbstractFileEngineIterator(const QString &path, QDirListing::IteratorFlags filters,
+                                const QStringList &nameFilters);
     virtual ~QAbstractFileEngineIterator();
 
-    virtual QString next() = 0;
-    virtual bool hasNext() const = 0;
+    virtual bool advance() = 0;
 
     QString path() const;
     QStringList nameFilters() const;
@@ -209,16 +225,18 @@ public:
     virtual QString currentFilePath() const;
 
 protected:
-    enum EntryInfoType {
-    };
-    virtual QVariant entryInfo(EntryInfoType type) const;
+    mutable QFileInfo m_fileInfo;
 
 private:
     Q_DISABLE_COPY_MOVE(QAbstractFileEngineIterator)
     friend class QDirIterator;
     friend class QDirIteratorPrivate;
-    void setPath(const QString &path);
-    QScopedPointer<QAbstractFileEngineIteratorPrivate> d;
+    friend class QDirListingPrivate;
+
+    QDir::Filters m_filters;
+    QDirListing::IteratorFlags m_listingFilters;
+    QStringList m_nameFilters;
+    QString m_path;
 };
 
 class QAbstractFileEnginePrivate
@@ -237,7 +255,7 @@ public:
     Q_DECLARE_PUBLIC(QAbstractFileEngine)
 };
 
-QAbstractFileEngine *qt_custom_file_engine_handler_create(const QString &path);
+std::unique_ptr<QAbstractFileEngine> qt_custom_file_engine_handler_create(const QString &path);
 
 QT_END_NAMESPACE
 

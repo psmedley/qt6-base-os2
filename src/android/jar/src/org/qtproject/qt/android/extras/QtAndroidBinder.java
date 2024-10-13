@@ -6,14 +6,17 @@ package org.qtproject.qt.android.extras;
 import android.os.Binder;
 import android.os.Parcel;
 
-public class QtAndroidBinder extends Binder
+import org.qtproject.qt.android.UsedFromNativeCode;
+
+class QtAndroidBinder extends Binder
 {
-    public QtAndroidBinder(long id)
+    @UsedFromNativeCode
+    QtAndroidBinder(long id)
     {
         m_id = id;
     }
 
-    public void setId(long id)
+    void setId(long id)
     {
         synchronized(this)
         {

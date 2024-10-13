@@ -46,13 +46,11 @@ function(qt_internal_set_warnings_are_errors_flags target target_scope)
         endif()
 
         if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0.0")
+            # Ditto
+            list(APPEND flags -Wno-error=stringop-overread)
+
             # We do mixed enum arithmetic all over the place:
             list(APPEND flags -Wno-error=deprecated-enum-enum-conversion -Wno-error=deprecated-enum-float-conversion)
-
-            # GCC has some false positive, and it specifically comes through in MINGW
-            if (MINGW)
-                list(APPEND flags -Wno-error=stringop-overread)
-            endif()
         endif()
 
         if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0.0" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.2.0")
@@ -135,29 +133,29 @@ function(qt_internal_add_global_definition definition)
     endif()
 endfunction()
 
-add_library(PlatformCommonInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformCommonInternal)
+qt_internal_add_platform_internal_target(PlatformCommonInternal)
 target_link_libraries(PlatformCommonInternal INTERFACE Platform)
 
-add_library(PlatformModuleInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformModuleInternal)
+qt_internal_add_platform_internal_target(PlatformModuleInternal)
 target_link_libraries(PlatformModuleInternal INTERFACE PlatformCommonInternal)
 
-add_library(PlatformPluginInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformPluginInternal)
+qt_internal_add_platform_internal_target(PlatformPluginInternal)
 target_link_libraries(PlatformPluginInternal INTERFACE PlatformCommonInternal)
 
-add_library(PlatformAppInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformAppInternal)
+qt_internal_add_platform_internal_target(PlatformAppInternal)
 target_link_libraries(PlatformAppInternal INTERFACE PlatformCommonInternal)
 
-add_library(PlatformToolInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformToolInternal)
+qt_internal_add_platform_internal_target(PlatformToolInternal)
 target_link_libraries(PlatformToolInternal INTERFACE PlatformAppInternal)
 
 qt_internal_add_global_definition(QT_NO_JAVA_STYLE_ITERATORS)
+qt_internal_add_global_definition(QT_NO_QASCONST)
+qt_internal_add_global_definition(QT_NO_QEXCHANGE)
+qt_internal_add_global_definition(QT_NO_QSNPRINTF)
 qt_internal_add_global_definition(QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 qt_internal_add_global_definition(QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH)
+qt_internal_add_global_definition(QT_USE_QSTRINGBUILDER SCOPE PLUGIN TOOL MODULE)
+qt_internal_add_global_definition(QT_NO_FOREACH)
 
 if(WARNINGS_ARE_ERRORS)
     qt_internal_set_warnings_are_errors_flags(PlatformModuleInternal INTERFACE)
@@ -225,19 +223,29 @@ elseif(UIKIT)
     target_compile_definitions(PlatformCommonInternal INTERFACE GLES_SILENCE_DEPRECATION)
 endif()
 
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"
-    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0"
-)
-    # Xcode 14's Clang will emit objc_msgSend stubs by default, which ld
-    # from earlier Xcode versions will fail to understand when linking
-    # against static libraries with these stubs. Disable the stubs explicitly,
-    # for as long as we do support Xcode < 14.
-    set(is_static_lib "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>")
-    set(is_objc "$<COMPILE_LANGUAGE:OBJC,OBJCXX>")
-    set(is_static_and_objc "$<AND:${is_static_lib},${is_objc}>")
-    target_compile_options(PlatformCommonInternal INTERFACE
-        "$<${is_static_and_objc}:-fno-objc-msgsend-selector-stubs>"
-    )
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+        # Xcode 14's Clang will emit objc_msgSend stubs by default, which ld
+        # from earlier Xcode versions will fail to understand when linking
+        # against static libraries with these stubs. Disable the stubs explicitly,
+        # for as long as we do support Xcode < 14.
+        set(is_static_lib "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>")
+        set(is_objc "$<COMPILE_LANGUAGE:OBJC,OBJCXX>")
+        set(is_static_and_objc "$<AND:${is_static_lib},${is_objc}>")
+        target_compile_options(PlatformCommonInternal INTERFACE
+            "$<${is_static_and_objc}:-fno-objc-msgsend-selector-stubs>"
+        )
+    endif()
+
+    # A bug in Xcode 15 adds duplicate flags to the linker. In addition, the
+    # `-warn_duplicate_libraries` is now enabled by default which may result
+    # in several 'duplicate libraries warning'.
+    #   - https://gitlab.kitware.com/cmake/cmake/-/issues/25297 and
+    #   - https://indiestack.com/2023/10/xcode-15-duplicate-library-linker-warnings/
+    set(is_xcode15 "$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>")
+    set(not_disabled "$<NOT:$<BOOL:$<TARGET_PROPERTY:QT_NO_DISABLE_WARN_DUPLICATE_LIBRARIES>>>")
+    target_link_options(PlatformCommonInternal INTERFACE
+        "$<$<AND:${not_disabled},${is_xcode15}>:LINKER:-no_warn_duplicate_libraries>")
 endif()
 
 if(MSVC)
@@ -252,7 +260,7 @@ if(WASM AND QT_FEATURE_sse2)
 endif()
 
 # Taken from mkspecs/common/msvc-version.conf and mkspecs/common/msvc-desktop.conf
-if (MSVC)
+if (MSVC AND NOT CLANG)
     if (MSVC_VERSION GREATER_EQUAL 1799)
         target_compile_options(PlatformCommonInternal INTERFACE
             -FS
@@ -263,20 +271,16 @@ if (MSVC)
     if (MSVC_VERSION GREATER_EQUAL 1899)
         target_compile_options(PlatformCommonInternal INTERFACE
             -Zc:strictStrings
+            -Zc:throwingNew
         )
-        if (NOT CLANG)
-            target_compile_options(PlatformCommonInternal INTERFACE
-                -Zc:throwingNew
-            )
-        endif()
     endif()
-    if (MSVC_VERSION GREATER_EQUAL 1909 AND NOT CLANG) # MSVC 2017
+    if (MSVC_VERSION GREATER_EQUAL 1909) # MSVC 2017
         target_compile_options(PlatformCommonInternal INTERFACE
             -Zc:referenceBinding
             -Zc:ternary
         )
     endif()
-    if (MSVC_VERSION GREATER_EQUAL 1919 AND NOT CLANG) # MSVC 2019
+    if (MSVC_VERSION GREATER_EQUAL 1919) # MSVC 2019
         target_compile_options(PlatformCommonInternal INTERFACE
             -Zc:externConstexpr
             #-Zc:lambda # Buggy. TODO: Enable again when stable enough.
@@ -307,17 +311,46 @@ if (GCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "9.2")
     target_compile_options(PlatformCommonInternal INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wsuggest-override>)
 endif()
 
-if(QT_FEATURE_intelcet)
-    if(MSVC)
-        qt_internal_platform_link_options(PlatformCommonInternal INTERFACE
-            -CETCOMPAT
-        )
+# Hardening options
+
+qt_internal_apply_intel_cet_harderning(PlatformCommonInternal)
+
+if(QT_FEATURE_glibc_fortify_source)
+    set(is_optimized_build "$<OR:$<NOT:$<CONFIG:Debug>>,$<BOOL:${QT_FEATURE_optimize_debug}>>")
+    # Some compilers may define _FORTIFY_SOURCE by default when optimizing, remove it
+    # before defining our own
+    target_compile_options(PlatformCommonInternal BEFORE INTERFACE "$<${is_optimized_build}:-U_FORTIFY_SOURCE>")
+    if(TEST_glibc_234)
+        target_compile_options(PlatformCommonInternal INTERFACE "$<${is_optimized_build}:-D_FORTIFY_SOURCE=3>")
     else()
-        target_compile_options(PlatformCommonInternal INTERFACE
-            -fcf-protection=full
-        )
+        target_compile_options(PlatformCommonInternal INTERFACE "$<${is_optimized_build}:-D_FORTIFY_SOURCE=2>")
     endif()
 endif()
+
+if(QT_FEATURE_trivial_auto_var_init_pattern)
+    target_compile_options(PlatformCommonInternal INTERFACE -ftrivial-auto-var-init=pattern)
+endif()
+
+if(QT_FEATURE_stack_protector)
+    target_compile_options(PlatformCommonInternal INTERFACE -fstack-protector-strong)
+endif()
+
+if(QT_FEATURE_stack_clash_protection)
+    target_compile_options(PlatformCommonInternal INTERFACE -fstack-clash-protection)
+endif()
+
+if(QT_FEATURE_libstdcpp_assertions)
+    target_compile_definitions(PlatformCommonInternal INTERFACE _GLIBCXX_ASSERTIONS)
+endif()
+
+if(QT_FEATURE_libcpp_hardening)
+    target_compile_definitions(PlatformCommonInternal INTERFACE -D_LIBCPP_HARDENING_MODE=$<IF:$<CONFIG:Debug>,_LIBCPP_HARDENING_MODE_EXTENSIVE,_LIBCPP_HARDENING_MODE_FAST>)
+endif()
+
+if(QT_FEATURE_relro_now_linker)
+    qt_internal_platform_link_options(PlatformCommonInternal INTERFACE "-Wl,-z,relro,-z,now")
+endif()
+
 
 if(QT_FEATURE_force_asserts)
     target_compile_definitions(PlatformCommonInternal INTERFACE QT_FORCE_ASSERTS)
@@ -356,6 +389,15 @@ endif()
 if(QT_FEATURE_enable_new_dtags)
     qt_internal_platform_link_options(PlatformCommonInternal INTERFACE "-Wl,--enable-new-dtags")
 endif()
+
+function(qt_internal_apply_coverage_flags)
+    if(QT_FEATURE_coverage_gcov)
+        target_compile_options(PlatformCommonInternal INTERFACE
+            "$<$<CONFIG:Debug>:--coverage>")
+        target_link_options(PlatformCommonInternal INTERFACE "$<$<CONFIG:Debug>:--coverage>")
+    endif()
+endfunction()
+qt_internal_apply_coverage_flags()
 
 function(qt_get_implicit_sse2_genex_condition out_var)
     set(is_shared_lib "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>")

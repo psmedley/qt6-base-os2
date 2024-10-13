@@ -123,7 +123,7 @@ class QNetworkReplyHttpImplPrivate: public QNetworkReplyPrivate
 {
 public:
 
-    static QHttpNetworkRequest::Priority convert(const QNetworkRequest::Priority& prio);
+    static QHttpNetworkRequest::Priority convert(QNetworkRequest::Priority prio);
 
     QNetworkReplyHttpImplPrivate();
     ~QNetworkReplyHttpImplPrivate();
@@ -244,7 +244,7 @@ public:
     // From HTTP thread:
     void replyDownloadData(QByteArray);
     void replyFinished();
-    void replyDownloadMetaData(const QList<QPair<QByteArray,QByteArray> > &, int, const QString &,
+    void replyDownloadMetaData(const QHttpHeaders &, int, const QString &,
                                bool, QSharedPointer<char>, qint64, qint64, bool, bool);
     void replyDownloadProgressSlot(qint64,qint64);
     void httpAuthenticationRequired(const QHttpNetworkRequest &request, QAuthenticator *auth);

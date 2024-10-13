@@ -7,14 +7,17 @@ import android.content.ComponentName;
 import android.content.ServiceConnection;
 import android.os.IBinder;
 
-public class QtAndroidServiceConnection implements ServiceConnection
+import org.qtproject.qt.android.UsedFromNativeCode;
+
+class QtAndroidServiceConnection implements ServiceConnection
 {
-    public QtAndroidServiceConnection(long id)
+    @UsedFromNativeCode
+    QtAndroidServiceConnection(long id)
     {
         m_id = id;
     }
 
-    public void setId(long id)
+    void setId(long id)
     {
         synchronized(this)
         {

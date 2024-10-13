@@ -27,6 +27,8 @@ QT_IMPL_METATYPE_EXTERN(QItemSelection)
 
     \ingroup model-view
 
+    \compares equality
+
     A QItemSelectionRange contains information about a range of
     selected items in a model. A range of items is a contiguous array
     of model items, extending to cover a number of adjacent rows and
@@ -216,17 +218,17 @@ QItemSelectionRange QItemSelectionRange::intersected(const QItemSelectionRange &
 }
 
 /*!
-    \fn bool QItemSelectionRange::operator==(const QItemSelectionRange &other) const
+    \fn bool QItemSelectionRange::operator==(const QItemSelectionRange &lhs, const QItemSelectionRange &rhs)
 
-    Returns \c true if the selection range is exactly the same as the \a other
+    Returns \c true if \a lhs selection range is exactly the same as the \a rhs
     range given; otherwise returns \c false.
 
 */
 
 /*!
-    \fn bool QItemSelectionRange::operator!=(const QItemSelectionRange &other) const
+    \fn bool QItemSelectionRange::operator!=(const QItemSelectionRange &lhs, const QItemSelectionRange &rhs)
 
-    Returns \c true if the selection range differs from the \a other range given;
+    Returns \c true if \a lhs selection range differs from the \a rhs range given;
     otherwise returns \c false.
 
 */
@@ -238,7 +240,7 @@ QItemSelectionRange QItemSelectionRange::intersected(const QItemSelectionRange &
 
 */
 
-static void rowLengthsFromRange(const QItemSelectionRange &range, QList<QPair<QPersistentModelIndex, uint>> &result)
+static void rowLengthsFromRange(const QItemSelectionRange &range, QList<std::pair<QPersistentModelIndex, uint>> &result)
 {
     if (range.isValid() && range.model()) {
         const QModelIndex topLeft = range.topLeft();
@@ -249,7 +251,7 @@ static void rowLengthsFromRange(const QItemSelectionRange &range, QList<QPair<QP
             // We don't need to keep track of ItemIsSelectable and ItemIsEnabled here. That is
             // required in indexesFromRange() because that method is called from public API
             // which requires the limitation.
-            result.push_back(qMakePair(QPersistentModelIndex(topLeft.sibling(row, column)), width));
+            result.emplace_back(topLeft.sibling(row, column), width);
         }
     }
 }
@@ -432,9 +434,9 @@ QModelIndexList QItemSelection::indexes() const
     return qSelectionIndexes<QModelIndexList>(*this);
 }
 
-static QList<QPair<QPersistentModelIndex, uint>> qSelectionPersistentRowLengths(const QItemSelection &sel)
+static QList<std::pair<QPersistentModelIndex, uint>> qSelectionPersistentRowLengths(const QItemSelection &sel)
 {
-    QList<QPair<QPersistentModelIndex, uint>> result;
+    QList<std::pair<QPersistentModelIndex, uint>> result;
     for (const QItemSelectionRange &range : sel)
         rowLengthsFromRange(range, result);
     return result;
@@ -595,10 +597,8 @@ void QItemSelectionModelPrivate::initModel(QAbstractItemModel *m)
 
 void QItemSelectionModelPrivate::disconnectModel()
 {
-    for (auto &connection : connections) {
+    for (auto &connection : connections)
         QObject::disconnect(connection);
-        connection = QMetaObject::Connection();
-    }
 }
 
 /*!
@@ -877,7 +877,7 @@ void QItemSelectionModelPrivate::layoutAboutToBeChanged(const QList<QPersistentM
 /*!
     \internal
 */
-static QItemSelection mergeRowLengths(const QList<QPair<QPersistentModelIndex, uint>> &rowLengths)
+static QItemSelection mergeRowLengths(const QList<std::pair<QPersistentModelIndex, uint>> &rowLengths)
 {
     if (rowLengths.isEmpty())
       return QItemSelection();

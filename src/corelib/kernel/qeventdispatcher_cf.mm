@@ -169,7 +169,7 @@ static const CFTimeInterval kCFTimeIntervalDistantFuture = std::numeric_limits<C
 #pragma mark - Class definition
 
 QEventDispatcherCoreFoundation::QEventDispatcherCoreFoundation(QObject *parent)
-    : QAbstractEventDispatcher(parent)
+    : QAbstractEventDispatcherV2(parent)
     , m_processEvents(QEventLoop::EventLoopExec)
     , m_postedEventsRunLoopSource(this, &QEventDispatcherCoreFoundation::processPostedEvents)
     , m_runLoopActivityObserver(this, &QEventDispatcherCoreFoundation::handleRunLoopActivity, kCFRunLoopAllActivities)
@@ -195,7 +195,7 @@ void QEventDispatcherCoreFoundation::startingUp()
 QEventDispatcherCoreFoundation::~QEventDispatcherCoreFoundation()
 {
     invalidateTimer();
-    qDeleteAll(m_timerInfoList);
+    m_timerInfoList.clearTimers();
 
     m_cfSocketNotifier.removeSocketNotifiers();
 }
@@ -506,26 +506,28 @@ void QEventDispatcherCoreFoundation::unregisterSocketNotifier(QSocketNotifier *n
 
 #pragma mark - Timers
 
-void QEventDispatcherCoreFoundation::registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object)
+void QEventDispatcherCoreFoundation::registerTimer(Qt::TimerId timerId, Duration interval,
+                                                   Qt::TimerType timerType, QObject *object)
 {
-    qCDebug(lcEventDispatcherTimers) << "Registering timer with id =" << timerId << "interval =" << interval
+    qCDebug(lcEventDispatcherTimers) << "Registering timer with id =" << int(timerId) << "interval =" << interval
         << "type =" << timerType << "object =" << object;
 
-    Q_ASSERT(timerId > 0 && interval >= 0 && object);
+    Q_ASSERT(qToUnderlying(timerId) > 0 && interval.count() >= 0 && object);
     Q_ASSERT(object->thread() == thread() && thread() == QThread::currentThread());
 
     m_timerInfoList.registerTimer(timerId, interval, timerType, object);
     updateTimers();
 }
 
-bool QEventDispatcherCoreFoundation::unregisterTimer(int timerId)
+bool QEventDispatcherCoreFoundation::unregisterTimer(Qt::TimerId timerId)
 {
-    Q_ASSERT(timerId > 0);
+    Q_ASSERT(qToUnderlying(timerId) > 0);
     Q_ASSERT(thread() == QThread::currentThread());
 
     bool returnValue = m_timerInfoList.unregisterTimer(timerId);
 
-    qCDebug(lcEventDispatcherTimers) << "Unegistered timer with id =" << timerId << "Timers left:" << m_timerInfoList.size();
+    qCDebug(lcEventDispatcherTimers) << "Unegistered timer with id =" << qToUnderlying(timerId)
+                                     << "Timers left:" << m_timerInfoList.size();
 
     updateTimers();
     return returnValue;
@@ -543,22 +545,18 @@ bool QEventDispatcherCoreFoundation::unregisterTimers(QObject *object)
     return returnValue;
 }
 
-QList<QAbstractEventDispatcher::TimerInfo> QEventDispatcherCoreFoundation::registeredTimers(QObject *object) const
+QList<QAbstractEventDispatcher::TimerInfoV2>
+QEventDispatcherCoreFoundation::timersForObject(QObject *object) const
 {
     Q_ASSERT(object);
     return m_timerInfoList.registeredTimers(object);
 }
 
-int QEventDispatcherCoreFoundation::remainingTime(int timerId)
+QEventDispatcherCoreFoundation::Duration
+QEventDispatcherCoreFoundation::remainingTime(Qt::TimerId timerId) const
 {
-    Q_ASSERT(timerId > 0);
-    return m_timerInfoList.timerRemainingTime(timerId);
-}
-
-static double timespecToSeconds(const timespec &spec)
-{
-    static double nanosecondsPerSecond = 1.0 * 1000 * 1000 * 1000;
-    return spec.tv_sec + (spec.tv_nsec / nanosecondsPerSecond);
+    Q_ASSERT(qToUnderlying(timerId) > 0);
+    return m_timerInfoList.remainingDuration(timerId);
 }
 
 void QEventDispatcherCoreFoundation::updateTimers()
@@ -566,12 +564,20 @@ void QEventDispatcherCoreFoundation::updateTimers()
     if (m_timerInfoList.size() > 0) {
         // We have Qt timers registered, so create or reschedule CF timer to match
 
-        timespec tv = { -1, -1 };
-        CFAbsoluteTime timeToFire = m_timerInfoList.timerWait(tv) ?
+        using namespace std::chrono_literals;
+        using DoubleSeconds = std::chrono::duration<double, std::ratio<1>>;
+
+        CFAbsoluteTime timeToFire;
+        auto opt = m_timerInfoList.timerWait();
+        DoubleSeconds secs{};
+        if (opt) {
             // We have a timer ready to fire right now, or some time in the future
-            CFAbsoluteTimeGetCurrent() + timespecToSeconds(tv)
+            secs = DoubleSeconds{*opt};
+            timeToFire = CFAbsoluteTimeGetCurrent() + secs.count();
+        } else {
             // We have timers, but they are all currently blocked by callbacks
-            : kCFTimeIntervalDistantFuture;
+            timeToFire = kCFTimeIntervalDistantFuture;
+        }
 
         if (!m_runLoopTimer) {
             m_runLoopTimer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault,
@@ -587,9 +593,9 @@ void QEventDispatcherCoreFoundation::updateTimers()
             qCDebug(lcEventDispatcherTimers) << "Re-scheduled CFRunLoopTimer" << m_runLoopTimer;
         }
 
-        m_overdueTimerScheduled = !timespecToSeconds(tv);
+        m_overdueTimerScheduled = secs > 0s;
 
-        qCDebug(lcEventDispatcherTimers) << "Next timeout in" << tv << "seconds";
+        qCDebug(lcEventDispatcherTimers) << "Next timeout in" << secs;
 
     } else {
         // No Qt timers are registered, so make sure we're not running any CF timers

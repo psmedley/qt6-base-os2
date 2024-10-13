@@ -5,6 +5,7 @@
 #define PARSER_H
 
 #include "symbols.h"
+#include <QtCore/qbytearrayview.h>
 
 #include <stack>
 
@@ -43,11 +44,15 @@ public:
     inline QByteArray lexem() { return symbols.at(index-1).lexem();}
     inline QByteArray unquotedLexem() { return symbols.at(index-1).unquotedLexem();}
     inline const Symbol &symbol() { return symbols.at(index-1);}
+    inline const Symbol &symbolAt(qsizetype idx) { return symbols.at(idx); }
 
     Q_NORETURN void error(const Symbol &symbol);
     Q_NORETURN void error(const char *msg = nullptr);
     void warning(const char * = nullptr);
+    void warning(const Symbol &sym, QByteArrayView msg);
     void note(const char * = nullptr);
+    void defaultErrorMsg(const Symbol &sym);
+    void printMsg(QByteArrayView formatStringSuffix, QByteArrayView msg, const Symbol &sym);
 
 };
 

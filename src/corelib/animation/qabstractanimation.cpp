@@ -856,12 +856,15 @@ qint64 QAnimationDriver::elapsed() const
 QDefaultAnimationDriver::QDefaultAnimationDriver(QUnifiedTimer *timer)
     : QAnimationDriver(nullptr), m_unified_timer(timer)
 {
-    connect(this, SIGNAL(started()), this, SLOT(startTimer()));
-    connect(this, SIGNAL(stopped()), this, SLOT(stopTimer()));
+    connect(this, &QAnimationDriver::started, this, &QDefaultAnimationDriver::startTimer);
+    connect(this, &QAnimationDriver::stopped, this, &QDefaultAnimationDriver::stopTimer);
 }
 
 QDefaultAnimationDriver::~QDefaultAnimationDriver()
-    = default;
+{
+    disconnect(this, &QAnimationDriver::started, this, &QDefaultAnimationDriver::startTimer);
+    disconnect(this, &QAnimationDriver::stopped, this, &QDefaultAnimationDriver::stopTimer);
+}
 
 void QDefaultAnimationDriver::timerEvent(QTimerEvent *e)
 {
@@ -901,13 +904,13 @@ QAbstractAnimationPrivate::~QAbstractAnimationPrivate() { }
 void QAbstractAnimationPrivate::setState(QAbstractAnimation::State newState)
 {
     Q_Q(QAbstractAnimation);
-    if (state == newState)
+    const QAbstractAnimation::State oldState = state.valueBypassingBindings();
+    if (oldState == newState)
         return;
 
     if (loopCount == 0)
         return;
 
-    QAbstractAnimation::State oldState = state;
     int oldCurrentTime = currentTime;
     int oldCurrentLoop = currentLoop;
     QAbstractAnimation::Direction oldDirection = direction;
@@ -941,13 +944,15 @@ void QAbstractAnimationPrivate::setState(QAbstractAnimation::State newState)
     }
 
     q->updateState(newState, oldState);
-    if (!guard || newState != state) //this is to be safe if updateState changes the state
+    //this is to be safe if updateState changes the state
+    if (!guard || newState != state.valueBypassingBindings())
         return;
 
     // Notify state change
     state.notify();
     emit q->stateChanged(newState, oldState);
-    if (!guard || newState != state) //this is to be safe if updateState changes the state
+    //this is to be safe if updateState changes the state
+    if (!guard || newState != state.valueBypassingBindings())
         return;
 
     switch (state) {
@@ -1121,7 +1126,7 @@ void QAbstractAnimation::setDirection(Direction direction)
         return;
     }
 
-    Qt::beginPropertyUpdateGroup();
+    const QScopedPropertyUpdateGroup guard;
     const int oldCurrentLoop = d->currentLoop;
     if (state() == Stopped) {
         if (direction == Backward) {
@@ -1148,7 +1153,6 @@ void QAbstractAnimation::setDirection(Direction direction)
     if (d->currentLoop != oldCurrentLoop)
         d->currentLoop.notify();
     d->direction.notify();
-    Qt::endPropertyUpdateGroup();
 }
 
 QBindable<QAbstractAnimation::Direction> QAbstractAnimation::bindableDirection()
@@ -1378,7 +1382,7 @@ void QAbstractAnimation::setCurrentTime(int msecs)
 void QAbstractAnimation::start(DeletionPolicy policy)
 {
     Q_D(QAbstractAnimation);
-    if (d->state == Running)
+    if (d->state.valueBypassingBindings() == Running)
         return;
     d->deleteWhenStopped = policy;
     d->setState(Running);
@@ -1398,7 +1402,7 @@ void QAbstractAnimation::stop()
 {
     Q_D(QAbstractAnimation);
 
-    if (d->state == Stopped)
+    if (d->state.valueBypassingBindings() == Stopped)
         return;
 
     d->setState(Stopped);
@@ -1414,7 +1418,7 @@ void QAbstractAnimation::stop()
 void QAbstractAnimation::pause()
 {
     Q_D(QAbstractAnimation);
-    if (d->state == Stopped) {
+    if (d->state.valueBypassingBindings() == Stopped) {
         qWarning("QAbstractAnimation::pause: Cannot pause a stopped animation");
         return;
     }
@@ -1432,7 +1436,7 @@ void QAbstractAnimation::pause()
 void QAbstractAnimation::resume()
 {
     Q_D(QAbstractAnimation);
-    if (d->state != Paused) {
+    if (d->state.valueBypassingBindings() != Paused) {
         qWarning("QAbstractAnimation::resume: "
                  "Cannot resume an animation that is not paused");
         return;

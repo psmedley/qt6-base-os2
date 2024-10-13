@@ -101,7 +101,7 @@ class QFdContainer
     int m_fd;
     Q_DISABLE_COPY_MOVE(QFdContainer);
 public:
-    explicit QFdContainer(int fd = -1) noexcept : m_fd(fd) {}
+    Q_NODISCARD_CTOR explicit QFdContainer(int fd = -1) noexcept : m_fd(fd) {}
     ~QFdContainer() { reset(); }
 
     int get() const noexcept { return m_fd; }
@@ -165,7 +165,9 @@ public:
 private:
     void processKeyEvent(int nativecode, int unicode, int qtcode,
                          Qt::KeyboardModifiers modifiers, bool isPress, bool autoRepeat);
+#ifndef Q_OS_VXWORKS
     void switchLed(int, bool);
+#endif
 
     QString m_device;
     QFdContainer m_fd;

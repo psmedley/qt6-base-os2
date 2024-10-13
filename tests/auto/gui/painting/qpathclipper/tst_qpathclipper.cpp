@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #include "private/qpathclipper_p.h"
 #include "paths.h"
 #include "pathcompare.h"
@@ -470,15 +470,19 @@ void tst_QPathClipper::clipTest(int subjectIndex, int clipIndex, QPathClipper::O
             break;
         }
 
-        if (expected != inResult) {
-            char str[256];
-            const char *opStr =
-                 op == QPathClipper::BoolAnd ? "and" :
-                 op == QPathClipper::BoolOr ? "or" : "sub";
-            sprintf(str, "Expected: %d, actual: %d, subject: %d, clip: %d, op: %s\n",
-                     int(expected), int(inResult), subjectIndex, clipIndex, opStr);
-            QFAIL(str);
-        }
+        auto failLogger = qScopeGuard([&]{
+            qCritical().noquote().nospace()
+                << "\n\tExpected: " << expected
+                << "\n\tActual:   " << inResult
+                << "\n\tSubject:  " << subjectIndex
+                << "\n\tClip:     " << clipIndex
+                << "\n\tOp:       " << (op == QPathClipper::BoolAnd
+                                            ? "and"
+                                            : op == QPathClipper::BoolOr
+                                                  ? "or" : "sub");
+        });
+        QCOMPARE(inResult, expected);
+        failLogger.dismiss();
     }
 }
 
@@ -772,7 +776,7 @@ void tst_QPathClipper::testIntersections7()
 void tst_QPathClipper::testIntersections8()
 {
     QPainterPath path1 = Paths::node() * QTransform().translate(100, 50);
-    QPainterPath path2 = Paths::node() * QTransform().translate(150, 50);;
+    QPainterPath path2 = Paths::node() * QTransform().translate(150, 50);
 
     QVERIFY(path1.intersects(path2));
     QVERIFY(path2.intersects(path1));
@@ -820,7 +824,7 @@ void tst_QPathClipper::testIntersections9()
     QVERIFY(path1.intersects(path2));
     QVERIFY(path2.intersects(path1));
 
-    path1 = QPainterPath();;
+    path1 = QPainterPath();
     path2 = QPainterPath();
 
     path1.addRect(QRectF(-1,191, 136, 106));
@@ -828,7 +832,7 @@ void tst_QPathClipper::testIntersections9()
     QVERIFY(path1.intersects(path2));
     QVERIFY(path2.intersects(path1));
 
-    path1 = QPainterPath();;
+    path1 = QPainterPath();
     path2 = QPainterPath();
 
     path1.moveTo(-1 ,  143);

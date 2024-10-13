@@ -19,9 +19,11 @@
 #include <QtCore/qbasictimer.h>
 #include <QtCore/qrect.h>
 #include <QtCore/qnativeinterface.h>
+#include <QtGui/qwindow.h>
 
-#if defined(Q_OS_UNIX)
+#if QT_CONFIG(wayland)
 #include <any>
+#include <QtCore/qobject.h>
 
 struct wl_surface;
 #endif
@@ -41,12 +43,23 @@ public:
 
 namespace QNativeInterface::Private {
 
+#if defined(Q_OS_WASM) || defined(Q_QDOC)
+struct Q_GUI_EXPORT QWasmWindow
+{
+    QT_DECLARE_NATIVE_INTERFACE(QWasmWindow, 1, QWindow)
+    virtual emscripten::val document() const = 0;
+    virtual emscripten::val clientArea() const = 0;
+};
+#endif
+
 #if defined(Q_OS_MACOS) || defined(Q_QDOC)
 struct Q_GUI_EXPORT QCocoaWindow
 {
     QT_DECLARE_NATIVE_INTERFACE(QCocoaWindow, 1, QWindow)
     virtual void setContentBorderEnabled(bool enable) = 0;
     virtual QPoint bottomLeftClippedByNSWindowOffset() const = 0;
+
+    virtual bool inLiveResize() const = 0;
 };
 #endif
 
@@ -95,7 +108,7 @@ struct Q_GUI_EXPORT QWindowsWindow
 };
 #endif // Q_OS_WIN
 
-#if defined(Q_OS_UNIX)
+#if QT_CONFIG(wayland)
 struct Q_GUI_EXPORT QWaylandWindow : public QObject
 {
     Q_OBJECT
@@ -115,6 +128,8 @@ public:
 Q_SIGNALS:
     void surfaceCreated();
     void surfaceDestroyed();
+    void surfaceRoleCreated();
+    void surfaceRoleDestroyed();
     void xdgActivationTokenCreated(const QString &token);
 
 protected:

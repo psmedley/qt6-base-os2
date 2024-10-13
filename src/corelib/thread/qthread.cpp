@@ -65,9 +65,10 @@ QThreadData::~QThreadData()
     // crashing during QCoreApplicationData's global static cleanup we need to
     // safeguard the main thread here.. This fix is a bit crude, but it solves
     // the problem...
-    if (this->thread.loadAcquire() == QCoreApplicationPrivate::theMainThread.loadAcquire()) {
-       QCoreApplicationPrivate::theMainThread.storeRelease(nullptr);
-       QThreadData::clearCurrentThreadData();
+    if (threadId.loadAcquire() == QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
+        QCoreApplicationPrivate::theMainThread.storeRelease(nullptr);
+        QCoreApplicationPrivate::theMainThreadId.storeRelaxed(nullptr);
+        QThreadData::clearCurrentThreadData();
     }
 
     // ~QThread() sets thread to nullptr, so if it isn't null here, it's
@@ -146,7 +147,24 @@ void QAdoptedThread::run()
     // this function should never be called
     qFatal("QAdoptedThread::run(): Internal error, this implementation should never be called.");
 }
+#endif
 
+QScopedScopeLevelCounter::QScopedScopeLevelCounter(QThreadData *threadData)
+    : threadData(threadData)
+{
+    ++threadData->scopeLevel;
+    qCDebug(lcDeleteLater) << "Increased" << threadData->thread
+                      << "scope level to" << threadData->scopeLevel;
+}
+
+QScopedScopeLevelCounter::~QScopedScopeLevelCounter()
+{
+    --threadData->scopeLevel;
+    qCDebug(lcDeleteLater) << "Decreased" << threadData->thread
+                      << "scope level to" << threadData->scopeLevel;
+}
+
+#if QT_CONFIG(thread)
 /*
   QThreadPrivate
 */
@@ -262,22 +280,21 @@ QThreadPrivate::~QThreadPrivate()
     documentation for terminate() and setTerminationEnabled() for
     detailed information.
 
-    From Qt 4.8 onwards, it is possible to deallocate objects that
-    live in a thread that has just ended, by connecting the
-    finished() signal to QObject::deleteLater().
+    You often want to deallocate objects that live in a thread when
+    a thread ends. To do this, connect the finished() signal to
+    QObject::deleteLater().
 
     Use wait() to block the calling thread, until the other thread
     has finished execution (or until a specified time has passed).
 
     QThread also provides static, platform independent sleep
     functions: sleep(), msleep(), and usleep() allow full second,
-    millisecond, and microsecond resolution respectively. These
-    functions were made public in Qt 5.0.
+    millisecond, and microsecond resolution respectively.
 
     \note wait() and the sleep() functions should be unnecessary in
     general, since Qt is an event-driven framework. Instead of
     wait(), consider listening for the finished() signal. Instead of
-    the sleep() functions, consider using QTimer.
+    the sleep() functions, consider using QChronoTimer.
 
     The static functions currentThreadId() and currentThread() return
     identifiers for the currently executing thread. The former
@@ -294,7 +311,8 @@ QThreadPrivate::~QThreadPrivate()
     Note that this is currently not available with release builds on Windows.
 
     \sa {Thread Support in Qt}, QThreadStorage, {Synchronizing Threads},
-        Mandelbrot, {Semaphores Example}, {Wait Conditions Example}
+        Mandelbrot, {Producer and Consumer using Semaphores},
+        {Producer and Consumer using Wait Conditions}
 */
 
 /*!
@@ -415,6 +433,23 @@ QThread *QThread::currentThread()
 }
 
 /*!
+    \since 6.8
+
+    Returns whether the currently executing thread is the main thread.
+
+    The main thread is the thread in which QCoreApplication was created.
+    This is usually the thread that called the \c{main()} function, but not necessarily so.
+    It is the thread that is processing the GUI events and in which graphical objects
+    (QWindow, QWidget) can be created.
+
+    \sa currentThread(), QCoreApplication::instance()
+*/
+bool QThread::isMainThread() noexcept
+{
+    return currentThreadId() == QCoreApplicationPrivate::theMainThreadId.loadRelaxed();
+}
+
+/*!
     Constructs a new QThread to manage a new thread. The \a parent
     takes ownership of the QThread. The thread does not begin
     executing until start() is called.
@@ -502,10 +537,18 @@ bool QThread::isRunning() const
 }
 
 /*!
-    Sets the maximum stack size for the thread to \a stackSize. If \a
-    stackSize is greater than zero, the maximum stack size is set to
-    \a stackSize bytes, otherwise the maximum stack size is
-    automatically determined by the operating system.
+    Sets the stack size for the thread to \a stackSize. If \a stackSize is
+    zero, the operating system or runtime will choose a default value.
+    Otherwise, the thread's stack size will be the value provided (which may be
+    rounded up or down).
+
+    On most operating systems, the amount of memory allocated to serve the
+    stack will initially be smaller than \a stackSize and will grow as the
+    thread uses the stack. This parameter sets the maximum size it will be
+    allowed to grow to (that is, it sets the size of the virtual memory space
+    the stack is allowed to occupy).
+
+    This function can only be called before the thread is started.
 
     \warning Most operating systems place minimum and maximum limits
     on thread stack sizes. The thread will fail to start if the stack
@@ -757,16 +800,28 @@ QThread::Priority QThread::priority() const
 }
 
 /*!
-    \fn void QThread::sleep(unsigned long secs)
+    \fn void QThread::sleep(std::chrono::nanoseconds nsecs)
+    \since 6.6
 
-    Forces the current thread to sleep for \a secs seconds.
+    Forces the current thread to sleep for \a nsecs.
 
     Avoid using this function if you need to wait for a given condition to
     change. Instead, connect a slot to the signal that indicates the change or
     use an event handler (see \l QObject::event()).
 
     \note This function does not guarantee accuracy. The application may sleep
-    longer than \a secs under heavy load conditions.
+    longer than \a nsecs under heavy load conditions.
+*/
+
+/*!
+    \fn void QThread::sleep(unsigned long secs)
+
+    Forces the current thread to sleep for \a secs seconds.
+
+    This is an overloaded function, equivalent to calling:
+    \code
+    QThread::sleep(std::chrono::seconds{secs});
+    \endcode
 
     \sa msleep(), usleep()
 */
@@ -774,11 +829,10 @@ QThread::Priority QThread::priority() const
 /*!
     \fn void QThread::msleep(unsigned long msecs)
 
-    Forces the current thread to sleep for \a msecs milliseconds.
-
-    Avoid using this function if you need to wait for a given condition to
-    change. Instead, connect a slot to the signal that indicates the change or
-    use an event handler (see \l QObject::event()).
+    This is an overloaded function, equivalent to calling:
+    \code
+    QThread::sleep(std::chrono::milliseconds{msecs});
+    \endcode
 
     \note This function does not guarantee accuracy. The application may sleep
     longer than \a msecs under heavy load conditions. Some OSes might round \a
@@ -790,11 +844,10 @@ QThread::Priority QThread::priority() const
 /*!
     \fn void QThread::usleep(unsigned long usecs)
 
-    Forces the current thread to sleep for \a usecs microseconds.
-
-    Avoid using this function if you need to wait for a given condition to
-    change. Instead, connect a slot to the signal that indicates the change or
-    use an event handler (see \l QObject::event()).
+    This is an overloaded function, equivalent to calling:
+    \code
+    QThread::sleep(std::chrono::microseconds{secs});
+    \endcode
 
     \note This function does not guarantee accuracy. The application may sleep
     longer than \a usecs under heavy load conditions. Some OSes might round \a
@@ -892,6 +945,36 @@ int QThread::loopLevel() const
     return d->data->eventLoops.size();
 }
 
+/*!
+    \internal
+    Returns the thread handle of this thread.
+    It can be compared with the return value of currentThreadId().
+
+    This is used to implement isCurrentThread, and might be useful
+    for debugging (e.g. by comparing the value in gdb with info threads).
+
+    \note Thread handles of destroyed threads might be reused by the
+    operating system. Storing the return value of this function can
+    therefore give surprising results if it outlives the QThread object
+    (threads claimed to be the same even if they aren't).
+*/
+Qt::HANDLE QThreadPrivate::threadId() const noexcept
+{
+    return data->threadId.loadRelaxed();
+}
+
+/*!
+    \since 6.8
+    Returns true if this thread is QThread::currentThread.
+
+    \sa currentThreadId()
+*/
+bool QThread::isCurrentThread() const noexcept
+{
+    Q_D(const QThread);
+    return QThread::currentThreadId() == d->threadId();
+}
+
 #else // QT_CONFIG(thread)
 
 QThread::QThread(QObject *parent)
@@ -964,6 +1047,11 @@ QThread *QThread::currentThread()
     return QThreadData::current()->thread.loadAcquire();
 }
 
+bool QThread::isCurrentThread() const noexcept
+{
+    return true;
+}
+
 int QThread::idealThreadCount() noexcept
 {
     return 1;
@@ -995,6 +1083,10 @@ bool QThread::isInterruptionRequested() const
     return false;
 }
 
+void QThread::setTerminationEnabled(bool)
+{
+}
+
 // No threads: so we can just use static variables
 Q_CONSTINIT static QThreadData *data = nullptr;
 
@@ -1006,8 +1098,12 @@ QThreadData *QThreadData::current(bool createIfNecessary)
         data->threadId.storeRelaxed(Qt::HANDLE(data->thread.loadAcquire()));
         data->deref();
         data->isAdopted = true;
-        if (!QCoreApplicationPrivate::theMainThread.loadAcquire())
-            QCoreApplicationPrivate::theMainThread.storeRelease(data->thread.loadRelaxed());
+        if (!QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
+            auto *mainThread = data->thread.loadRelaxed();
+            mainThread->setObjectName("Qt mainThread");
+            QCoreApplicationPrivate::theMainThread.storeRelease(mainThread);
+            QCoreApplicationPrivate::theMainThreadId.storeRelaxed(data->threadId.loadRelaxed());
+        }
     }
     return data;
 }
@@ -1127,11 +1223,11 @@ bool QThread::event(QEvent *event)
 
 void QThread::requestInterruption()
 {
-    if (this == QCoreApplicationPrivate::theMainThread.loadAcquire()) {
+    Q_D(QThread);
+    if (d->threadId() == QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
         qWarning("QThread::requestInterruption has no effect on the main thread");
         return;
     }
-    Q_D(QThread);
     QMutexLocker locker(&d->mutex);
     if (!d->running || d->finished || d->isInFinish)
         return;
@@ -1197,7 +1293,6 @@ bool QThread::isInterruptionRequested() const
     \sa start()
 */
 
-#if QT_CONFIG(cxx11_future)
 class QThreadCreateThread : public QThread
 {
 public:
@@ -1226,7 +1321,6 @@ QThread *QThread::createThreadImpl(std::future<void> &&future)
 {
     return new QThreadCreateThread(std::move(future));
 }
-#endif // QT_CONFIG(cxx11_future)
 
 /*!
     \class QDaemonThread
@@ -1241,7 +1335,9 @@ QDaemonThread::QDaemonThread(QObject *parent)
 {
     // QThread::started() is emitted from the thread we start
     connect(this, &QThread::started,
-            [](){ QThreadData::current()->requiresCoreApplication = false; });
+            this,
+            [](){ QThreadData::current()->requiresCoreApplication = false; },
+            Qt::DirectConnection);
 }
 
 QDaemonThread::~QDaemonThread()

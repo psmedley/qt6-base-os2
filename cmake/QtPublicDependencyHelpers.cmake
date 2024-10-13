@@ -35,6 +35,38 @@ macro(_qt_internal_find_third_party_dependencies target target_dep_list)
         else()
             find_dependency(${__qt_${target}_find_package_args})
         endif()
+
+        _qt_internal_get_package_components_id(
+            PACKAGE_NAME "${__qt_${target}_pkg}"
+            COMPONENTS ${__qt_${target}_components}
+            OPTIONAL_COMPONENTS ${__qt_${target}_optional_components}
+            OUT_VAR_KEY __qt_${target}_package_components_id
+        )
+        if(${__qt_${target}_pkg}_FOUND
+                AND __qt_${target}_third_party_package_${__qt_${target}_package_components_id}_provided_targets)
+            set(__qt_${target}_sbom_args "")
+
+            if(${__qt_${target}_pkg}_VERSION)
+                list(APPEND __qt_${target}_sbom_args
+                    PACKAGE_VERSION "${${__qt_${target}_pkg}_VERSION}"
+                )
+            endif()
+
+            foreach(__qt_${target}_provided_target
+                    IN LISTS
+                    __qt_${target}_third_party_package_${__qt_${target}_package_components_id}_provided_targets)
+
+                _qt_internal_promote_3rd_party_provided_target_and_3rd_party_deps_to_global(
+                    "${__qt_${target}_provided_target}")
+
+                _qt_internal_sbom_record_system_library_usage(
+                    "${__qt_${target}_provided_target}"
+                    TYPE SYSTEM_LIBRARY
+                    FRIENDLY_PACKAGE_NAME "${__qt_${target}_pkg}"
+                    ${__qt_${target}_sbom_args}
+                )
+            endforeach()
+        endif()
     endforeach()
 endmacro()
 
@@ -112,9 +144,9 @@ macro(_qt_internal_find_qt_dependencies target target_dep_list find_dependency_p
                 NAMES
                     ${__qt_${target}_pkg_names}
                 PATHS
+                    ${QT_BUILD_CMAKE_PREFIX_PATH}
                     ${${find_dependency_path_list}}
                     ${_qt_additional_packages_prefix_paths}
-                    ${QT_EXAMPLES_CMAKE_PREFIX_PATH}
                 ${__qt_use_no_default_path_for_qt_packages}
             )
         endif()
@@ -233,6 +265,8 @@ macro(_qt_internal_setup_qt_host_path
     # Requiredness can be overridden via variable.
     if(DEFINED QT_REQUIRE_HOST_PATH_CHECK)
         set(_qt_platform_host_path_required "${QT_REQUIRE_HOST_PATH_CHECK}")
+    elseif(DEFINED ENV{QT_REQUIRE_HOST_PATH_CHECK})
+        set(_qt_platform_host_path_required "$ENV{QT_REQUIRE_HOST_PATH_CHECK}")
     else()
         set(_qt_platform_host_path_required "${host_path_required}")
     endif()

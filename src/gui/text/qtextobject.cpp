@@ -42,7 +42,7 @@ QT_BEGIN_NAMESPACE
     objects, you will also need to reimplement QTextDocument::createObject()
     which acts as a factory method for creating text objects.
 
-    \sa QTextDocument, {Text Object Example}
+    \sa QTextDocument
 */
 
 /*!
@@ -174,7 +174,7 @@ void QTextBlockGroupPrivate::markBlocksDirty()
 /*!
     \fn QTextBlockGroup::QTextBlockGroup(QTextDocument *document)
 
-    Creates a new new block group for the given \a document.
+    Creates a new block group for the given \a document.
 
     \warning This function should only be called from
     QTextDocument::createObject().

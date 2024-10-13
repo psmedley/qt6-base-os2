@@ -34,9 +34,14 @@
 #  include "private/qshortcutmap_p.h"
 #endif
 
+#include <QtCore/qpointer.h>
+
 #include <memory>
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_LOGGING_CATEGORY(lcPopup)
+Q_DECLARE_LOGGING_CATEGORY(lcVirtualKeyboard)
 
 class QColorTrcLut;
 class QPlatformIntegration;
@@ -113,9 +118,11 @@ public:
     static void processEnterEvent(QWindowSystemInterfacePrivate::EnterEvent *e);
     static void processLeaveEvent(QWindowSystemInterfacePrivate::LeaveEvent *e);
 
-    static void processActivatedEvent(QWindowSystemInterfacePrivate::ActivatedWindowEvent *e);
+    static void processFocusWindowEvent(QWindowSystemInterfacePrivate::FocusWindowEvent *e);
+
     static void processWindowStateChangedEvent(QWindowSystemInterfacePrivate::WindowStateChangedEvent *e);
     static void processWindowScreenChangedEvent(QWindowSystemInterfacePrivate::WindowScreenChangedEvent *e);
+    static void processWindowDevicePixelRatioChangedEvent(QWindowSystemInterfacePrivate::WindowDevicePixelRatioChangedEvent *e);
 
     static void processSafeAreaMarginsChangedEvent(QWindowSystemInterfacePrivate::SafeAreaMarginsChangedEvent *e);
 
@@ -161,6 +168,9 @@ public:
 
     static bool sendQWindowEventToQPlatformWindow(QWindow *window, QEvent *event);
 
+    static bool maybeForwardEventToVirtualKeyboard(QEvent *e);
+    static bool isUsingVirtualKeyboard();
+
     static inline Qt::Alignment visualAlignment(Qt::LayoutDirection direction, Qt::Alignment alignment)
     {
         if (!(alignment & Qt::AlignHorizontal_Mask))
@@ -192,8 +202,11 @@ public:
     virtual Qt::WindowModality defaultModality() const;
     virtual bool windowNeverBlocked(QWindow *window) const;
     bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = nullptr) const;
-    virtual bool popupActive() { return false; }
-    virtual bool closeAllPopups() { return false; }
+    static qsizetype popupCount() { return QGuiApplicationPrivate::popup_list.size(); }
+    static QWindow *activePopupWindow();
+    static void activatePopup(QWindow *popup);
+    static bool closePopup(QWindow *popup);
+    static bool closeAllPopups();
 
     static Qt::MouseButton mousePressButton;
     static struct QLastCursorPosition {
@@ -254,6 +267,8 @@ public:
     static QPalette *app_pal;
 
     static QWindowList window_list;
+    static QWindowList popup_list;
+    static const QWindow *active_popup_on_press;
     static QWindow *focus_window;
 
 #ifndef QT_NO_CURSOR
@@ -266,6 +281,7 @@ public:
     static QString styleOverride;
     static QStyleHints *styleHints;
     static bool obey_desktop_settings;
+    static bool popup_closed_on_press;
     QInputMethod *inputMethod;
 
     QString firstWindowTitle;
@@ -319,7 +335,7 @@ public:
 
     static void updatePalette();
 
-    static Qt::ColorScheme colorScheme();
+    static QEvent::Type contextMenuEventType();
 
 protected:
     virtual void handleThemeChanged();
@@ -336,6 +352,7 @@ private:
     static void clearPalette();
 
     friend class QDragManager;
+    friend class QWindowPrivate;
 
     static QGuiApplicationPrivate *self;
     static int m_fakeMouseSourcePointId;
@@ -399,8 +416,6 @@ struct Q_GUI_EXPORT QWindowsApplication
     virtual bool isWinTabEnabled() const = 0;
     virtual bool setWinTabEnabled(bool enabled) = 0;
 
-    virtual bool isDarkMode() const = 0;
-
     virtual DarkModeHandling darkModeHandling() const = 0;
     virtual void setDarkModeHandling(DarkModeHandling handling) = 0;
 
@@ -419,7 +434,7 @@ struct Q_GUI_EXPORT QWindowsApplication
     virtual QVariant gpu() const = 0; // internal, used by qtdiag
     virtual QVariant gpuList() const = 0;
 
-    virtual void lightSystemPalette(QPalette &pal) const = 0;
+    virtual void populateLightSystemPalette(QPalette &pal) const = 0;
 };
 #endif // Q_OS_WIN
 

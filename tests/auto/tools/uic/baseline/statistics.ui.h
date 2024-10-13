@@ -1,7 +1,7 @@
 /*
 
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 */
 
@@ -65,7 +65,7 @@ public:
         hboxLayout->setSpacing(6);
         hboxLayout->setObjectName("hboxLayout");
         hboxLayout->setObjectName(QString::fromUtf8("unnamed"));
-        spacer4_2 = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+        spacer4_2 = new QSpacerItem(40, 20, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
         hboxLayout->addItem(spacer4_2);
 
@@ -74,7 +74,7 @@ public:
 
         hboxLayout->addWidget(closeBtn);
 
-        spacer4 = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+        spacer4 = new QSpacerItem(40, 20, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
         hboxLayout->addItem(spacer4);
 

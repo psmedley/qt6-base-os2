@@ -51,17 +51,17 @@ struct QThreadPipe
     int check(const pollfd &pfd);
 
     // note for eventfd(7) support:
-    // if fds[1] is -1, then eventfd(7) is in use and is stored in fds[0]
-    int fds[2];
+    // fds[0] stores the eventfd, fds[1] is unused
+    int fds[2] = { -1, -1 };
     QAtomicInt wakeUps;
 
 #if defined(Q_OS_VXWORKS)
-    static const int len_name = 20;
-    char name[len_name];
+    static constexpr int len_name = 20;
+    char name[len_name] = {};
 #endif
 };
 
-class Q_CORE_EXPORT QEventDispatcherUNIX : public QAbstractEventDispatcher
+class Q_CORE_EXPORT QEventDispatcherUNIX : public QAbstractEventDispatcherV2
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QEventDispatcherUNIX)
@@ -75,12 +75,12 @@ public:
     void registerSocketNotifier(QSocketNotifier *notifier) final;
     void unregisterSocketNotifier(QSocketNotifier *notifier) final;
 
-    void registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object) final;
-    bool unregisterTimer(int timerId) final;
-    bool unregisterTimers(QObject *object) final;
-    QList<TimerInfo> registeredTimers(QObject *object) const final;
-
-    int remainingTime(int timerId) final;
+    void registerTimer(Qt::TimerId timerId, Duration interval, Qt::TimerType timerType,
+                       QObject *object) override final;
+    bool unregisterTimer(Qt::TimerId timerId) override final;
+    bool unregisterTimers(QObject *object) override final;
+    QList<TimerInfoV2> timersForObject(QObject *object) const override final;
+    Duration remainingTime(Qt::TimerId timerId) const override final;
 
     void wakeUp() override;
     void interrupt() final;

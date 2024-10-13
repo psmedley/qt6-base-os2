@@ -1,5 +1,5 @@
 // Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include "tst_qmetatype_common.h"
@@ -91,6 +91,8 @@ private slots:
     void isRegisteredStaticLess();
     void isNotRegistered();
     void isEnum();
+    void underlyingType_data();
+    void underlyingType();
     void automaticTemplateRegistration_1();
     void automaticTemplateRegistration_2(); // defined in tst_qmetatype3.cpp
     void saveAndLoadBuiltin_data();
@@ -109,6 +111,7 @@ private slots:
     void customDebugStream();
     void unknownType();
     void fromType();
+    void compareCompiles();
     void operatorEq_data();
     void operatorEq();
     void operatorEq2_data();
@@ -118,6 +121,7 @@ private slots:
     void typesWithInaccessibleDTors();
     void voidIsNotUnknown();
     void typeNameNormalization();
+    void typeNameInQtPrivate();
 
     // Tests for deprecated APIs
 #if QT_DEPRECATED_SINCE(6, 0)

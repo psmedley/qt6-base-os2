@@ -7,7 +7,7 @@
 #include "qurl.h"
 #include "private/qhttpnetworkreply_p.h"
 #include "private/qiodevice_p.h"
-#include "qelapsedtimer.h"
+#include "qdeadlinetimer.h"
 #include "qnetworkinterface.h"
 
 #if !defined(QT_NO_NETWORKPROXY)
@@ -310,19 +310,16 @@ bool QHttpSocketEngine::setOption(SocketOption option, int value)
     return false;
 }
 
-bool QHttpSocketEngine::waitForRead(int msecs, bool *timedOut)
+bool QHttpSocketEngine::waitForRead(QDeadlineTimer deadline, bool *timedOut)
 {
     Q_D(const QHttpSocketEngine);
 
     if (!d->socket || d->socket->state() == QAbstractSocket::UnconnectedState)
         return false;
 
-    QElapsedTimer stopWatch;
-    stopWatch.start();
-
     // Wait for more data if nothing is available.
     if (!d->socket->bytesAvailable()) {
-        if (!d->socket->waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
+        if (!d->socket->waitForReadyRead(deadline.remainingTime())) {
             if (d->socket->state() == QAbstractSocket::UnconnectedState)
                 return true;
             setError(d->socket->error(), d->socket->errorString());
@@ -332,11 +329,7 @@ bool QHttpSocketEngine::waitForRead(int msecs, bool *timedOut)
         }
     }
 
-    // If we're not connected yet, wait until we are, or until an error
-    // occurs.
-    while (d->state != Connected && d->socket->waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
-        // Loop while the protocol handshake is taking place.
-    }
+    waitForProtocolHandshake(deadline);
 
     // Report any error that may occur.
     if (d->state != Connected) {
@@ -348,14 +341,14 @@ bool QHttpSocketEngine::waitForRead(int msecs, bool *timedOut)
     return true;
 }
 
-bool QHttpSocketEngine::waitForWrite(int msecs, bool *timedOut)
+bool QHttpSocketEngine::waitForWrite(QDeadlineTimer deadline, bool *timedOut)
 {
     Q_D(const QHttpSocketEngine);
 
     // If we're connected, just forward the call.
     if (d->state == Connected) {
         if (d->socket->bytesToWrite()) {
-            if (!d->socket->waitForBytesWritten(msecs)) {
+            if (!d->socket->waitForBytesWritten(deadline.remainingTime())) {
                 if (d->socket->error() == QAbstractSocket::SocketTimeoutError && timedOut)
                     *timedOut = true;
                 return false;
@@ -364,15 +357,7 @@ bool QHttpSocketEngine::waitForWrite(int msecs, bool *timedOut)
         return true;
     }
 
-    QElapsedTimer stopWatch;
-    stopWatch.start();
-
-    // If we're not connected yet, wait until we are, and until bytes have
-    // been received (i.e., the socket has connected, we have sent the
-    // greeting, and then received the response).
-    while (d->state != Connected && d->socket->waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
-        // Loop while the protocol handshake is taking place.
-    }
+    waitForProtocolHandshake(deadline);
 
     // Report any error that may occur.
     if (d->state != Connected) {
@@ -386,23 +371,35 @@ bool QHttpSocketEngine::waitForWrite(int msecs, bool *timedOut)
 
 bool QHttpSocketEngine::waitForReadOrWrite(bool *readyToRead, bool *readyToWrite,
                                            bool checkRead, bool checkWrite,
-                                           int msecs, bool *timedOut)
+                                           QDeadlineTimer deadline, bool *timedOut)
 {
     Q_UNUSED(checkRead);
 
     if (!checkWrite) {
         // Not interested in writing? Then we wait for read notifications.
-        bool canRead = waitForRead(msecs, timedOut);
+        bool canRead = waitForRead(deadline, timedOut);
         if (readyToRead)
             *readyToRead = canRead;
         return canRead;
     }
 
     // Interested in writing? Then we wait for write notifications.
-    bool canWrite = waitForWrite(msecs, timedOut);
+    bool canWrite = waitForWrite(deadline, timedOut);
     if (readyToWrite)
         *readyToWrite = canWrite;
     return canWrite;
+}
+
+void QHttpSocketEngine::waitForProtocolHandshake(QDeadlineTimer deadline) const
+{
+    Q_D(const QHttpSocketEngine);
+
+    // If we're not connected yet, wait until we are (and until bytes have
+    // been received, i.e. the socket has connected, we have sent the
+    // greeting, and then received the response), or until an error occurs.
+    while (d->state != Connected && d->socket->waitForReadyRead(deadline.remainingTime())) {
+        // Loop while the protocol handshake is taking place.
+    }
 }
 
 bool QHttpSocketEngine::isReadNotificationEnabled() const
@@ -470,11 +467,14 @@ void QHttpSocketEngine::slotSocketConnected()
     data += " HTTP/1.1\r\n";
     data += "Proxy-Connection: keep-alive\r\n";
     data += "Host: " + peerAddress + "\r\n";
-    if (!d->proxy.hasRawHeader("User-Agent"))
+    const auto headers = d->proxy.headers();
+    if (!headers.contains(QHttpHeaders::WellKnownHeader::UserAgent))
         data += "User-Agent: Mozilla/5.0\r\n";
-    const auto headers = d->proxy.rawHeaderList();
-    for (const QByteArray &header : headers)
-        data += header + ": " + d->proxy.rawHeader(header) + "\r\n";
+    for (qsizetype i = 0; i < headers.size(); ++i) {
+        const auto name = headers.nameAt(i);
+        data += QByteArrayView(name.data(), name.size()) + ": "
+                + headers.valueAt(i) + "\r\n";
+    }
     QAuthenticatorPrivate *priv = QAuthenticatorPrivate::getPrivate(d->authenticator);
     //qDebug() << "slotSocketConnected: priv=" << priv << (priv ? (int)priv->method : -1);
     if (priv && priv->method != QAuthenticatorPrivate::None) {
@@ -556,16 +556,8 @@ void QHttpSocketEngine::slotSocketReadNotification()
             d->authenticator.detach();
         priv = QAuthenticatorPrivate::getPrivate(d->authenticator);
 
-        if (d->credentialsSent && priv->phase != QAuthenticatorPrivate::Phase2) {
-            // Remember that (e.g.) NTLM is two-phase, so only reset when the authentication is not currently in progress.
-            //407 response again means the provided username/password were invalid.
-            d->authenticator = QAuthenticator(); //this is needed otherwise parseHttpResponse won't set the state, and then signal isn't emitted.
-            d->authenticator.detach();
-            priv = QAuthenticatorPrivate::getPrivate(d->authenticator);
-            priv->hasFailed = true;
-        }
-
-        priv->parseHttpResponse(d->reply->header(), true, d->proxy.hostName());
+        const auto headers = d->reply->header();
+        priv->parseHttpResponse(headers, true, d->proxy.hostName());
 
         if (priv->phase == QAuthenticatorPrivate::Invalid) {
             // problem parsing the reply
@@ -574,6 +566,29 @@ void QHttpSocketEngine::slotSocketReadNotification()
             setError(QAbstractSocket::ProxyProtocolError, tr("Error parsing authentication request from proxy"));
             emitConnectionNotification();
             return;
+        }
+
+        if (priv->phase == QAuthenticatorPrivate::Done
+            || (priv->phase == QAuthenticatorPrivate::Start
+                && (priv->method == QAuthenticatorPrivate::Ntlm
+                    || priv->method == QAuthenticatorPrivate::Negotiate))) {
+            if (priv->phase == QAuthenticatorPrivate::Start)
+                priv->phase = QAuthenticatorPrivate::Phase1;
+            bool credentialsWasSent = d->credentialsSent;
+            if (d->credentialsSent) {
+                // Remember that (e.g.) NTLM is two-phase, so only reset when the authentication is
+                // not currently in progress. 407 response again means the provided
+                // username/password were invalid.
+                d->authenticator.detach();
+                priv = QAuthenticatorPrivate::getPrivate(d->authenticator);
+                priv->hasFailed = true;
+                d->credentialsSent = false;
+                priv->phase = QAuthenticatorPrivate::Done;
+            }
+            if ((priv->method != QAuthenticatorPrivate::Ntlm
+                 && priv->method != QAuthenticatorPrivate::Negotiate)
+                || credentialsWasSent)
+                proxyAuthenticationRequired(d->proxy, &d->authenticator);
         }
 
         bool willClose;
@@ -603,10 +618,8 @@ void QHttpSocketEngine::slotSocketReadNotification()
             d->reply = new QHttpNetworkReply(QUrl(), this);
         }
 
-        if (priv->phase == QAuthenticatorPrivate::Done)
-            proxyAuthenticationRequired(d->proxy, &d->authenticator);
-        // priv->phase will get reset to QAuthenticatorPrivate::Start if the authenticator got modified in the signal above.
         if (priv->phase == QAuthenticatorPrivate::Done) {
+            d->authenticator = QAuthenticator();
             setError(QAbstractSocket::ProxyAuthenticationRequiredError, tr("Authentication required"));
             d->socket->disconnectFromHost();
         } else {

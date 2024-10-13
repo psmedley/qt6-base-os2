@@ -1,6 +1,6 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -9,6 +9,8 @@
 
 #include <math.h>
 #include <float.h>
+
+#include <QtCore/q26numeric.h>
 
 namespace {
     template <typename F> struct Fuzzy {};
@@ -91,7 +93,7 @@ void tst_QNumeric::fuzzyCompare_data()
     QTest::addColumn<bool>("isEqual");
     const F zero(0), one(1), ten(10);
     const F huge = Fuzzy<F>::scale, tiny = one / huge;
-    const F deci(.1), giga(1e9), nano(1e-9), big(1e7), small(1e-10);
+    const F deci(.1f), giga(1e9f), nano(1e-9f), big(1e7f), small(1e-10f);
 
     QTest::newRow("zero") << zero << zero << true;
     QTest::newRow("ten") << ten << ten << true;
@@ -321,15 +323,19 @@ void tst_QNumeric::classifyfp()
 
     QCOMPARE(qFpClassify(inf), FP_INFINITE);
     QCOMPARE(qFpClassify(-inf), FP_INFINITE);
+    QT_WARNING_PUSH;
+    QT_WARNING_DISABLE_MSVC(4056);
     QCOMPARE(qFpClassify(huge * two), FP_INFINITE);
     QCOMPARE(qFpClassify(huge * -two), FP_INFINITE);
+    QT_WARNING_POP;
 
     QCOMPARE(qFpClassify(one), FP_NORMAL);
     QCOMPARE(qFpClassify(huge), FP_NORMAL);
     QCOMPARE(qFpClassify(-huge), FP_NORMAL);
     QCOMPARE(qFpClassify(tiny), FP_NORMAL);
     QCOMPARE(qFpClassify(-tiny), FP_NORMAL);
-    if (Bounds::has_denorm == std::denorm_present) {
+    QT_IGNORE_DEPRECATIONS(const bool has_denorm = Bounds::has_denorm == std::denorm_present;)
+    if (has_denorm) {
         QCOMPARE(qFpClassify(tiny / two), FP_SUBNORMAL);
         QCOMPARE(qFpClassify(tiny / -two), FP_SUBNORMAL);
     }
@@ -391,7 +397,8 @@ void tst_QNumeric::distance()
     QFETCH(F, from);
     QFETCH(F, stop);
     QFETCH(Count, expectedDistance);
-    if constexpr (std::numeric_limits<F>::has_denorm != std::denorm_present) {
+    QT_IGNORE_DEPRECATIONS(constexpr bool has_denorm = std::numeric_limits<F>::has_denorm != std::denorm_present;)
+    if constexpr (has_denorm) {
         if (qstrcmp(QTest::currentDataTag(), "denormal") == 0) {
             QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
         }
@@ -746,6 +753,41 @@ void tst_QNumeric::signedOverflow()
     QCOMPARE(qMulOverflow(maxInt, int(2), &r), true);
     QCOMPARE(qMulOverflow(maxInt, maxInt, &r), true);
 }
+
+namespace SaturateCastTest {
+
+template <typename T> static constexpr T max = std::numeric_limits<T>::max();
+template <typename T> static constexpr T min = std::numeric_limits<T>::min();
+
+static_assert(q26::saturate_cast<short>(max<unsigned>) == max<short>);
+static_assert(q26::saturate_cast<int>(max<unsigned>) == max<int>);
+static_assert(q26::saturate_cast<qint64>(max<unsigned>) == qint64(max<unsigned>));
+
+static_assert(q26::saturate_cast<short>(max<int>) == max<short>);
+static_assert(q26::saturate_cast<unsigned>(max<int>) == unsigned(max<int>));
+static_assert(q26::saturate_cast<qint64>(max<int>) == qint64(max<int>));
+
+static_assert(q26::saturate_cast<short>(max<qint64>) == max<short>);
+static_assert(q26::saturate_cast<int>(max<qint64>) == max<int>);
+static_assert(q26::saturate_cast<unsigned>(max<qint64>) == max<unsigned>);
+static_assert(q26::saturate_cast<quint64>(max<qint64>) == quint64(max<qint64>));
+
+static_assert(q26::saturate_cast<short>(max<quint64>) == max<short>);
+static_assert(q26::saturate_cast<int>(max<quint64>) == max<int>);
+static_assert(q26::saturate_cast<unsigned>(max<quint64>) == max<unsigned>);
+static_assert(q26::saturate_cast<qint64>(max<quint64>) == max<qint64>);
+
+static_assert(q26::saturate_cast<short>(min<int>) == min<short>);
+static_assert(q26::saturate_cast<qint64>(min<int>) == qint64(min<int>));
+static_assert(q26::saturate_cast<unsigned>(min<int>) == 0);
+static_assert(q26::saturate_cast<quint64>(min<int>) == 0);
+
+static_assert(q26::saturate_cast<short>(min<qint64>) == min<short>);
+static_assert(q26::saturate_cast<int>(min<qint64>) == min<int>);
+static_assert(q26::saturate_cast<unsigned>(min<qint64>) == 0);
+static_assert(q26::saturate_cast<quint64>(min<qint64>) == 0);
+
+} // namespace SaturateCastTest
 
 QTEST_APPLESS_MAIN(tst_QNumeric)
 #include "tst_qnumeric.moc"

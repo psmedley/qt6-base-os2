@@ -237,12 +237,12 @@ void QCosmeticStroker::setup()
 
         patternLength = 0;
         for (int i = 0; i < patternSize; ++i) {
-            patternLength += static_cast<int>(qBound(1., penPattern.at(i) * 64, 65536.));
+            patternLength += qBound(1, int(penPattern.at(i) * 64), 65536);
             pattern[i] = patternLength;
         }
         patternLength = 0;
         for (int i = 0; i < patternSize; ++i) {
-            patternLength += static_cast<int>(qBound(1., penPattern.at(patternSize - 1 - i) * 64, 65536.));
+            patternLength += qBound(1, int(penPattern.at(patternSize - 1 - i) * 64), 65536);
             reversePattern[i] = patternLength;
         }
         strokeSelection |= Dashed;
@@ -364,7 +364,7 @@ void QCosmeticStroker::drawPoints(const QPoint *points, int num)
     const QPoint *end = points + num;
     while (points < end) {
         QPointF p = QPointF(*points) * state->matrix;
-        drawPixel(this, qRound(p.x()), qRound(p.y()), 255);
+        drawPixel(this, std::floor(p.x()), std::floor(p.y()), 255);
         ++points;
     }
 
@@ -377,7 +377,7 @@ void QCosmeticStroker::drawPoints(const QPointF *points, int num)
     const QPointF *end = points + num;
     while (points < end) {
         QPointF p = (*points) * state->matrix;
-        drawPixel(this, qRound(p.x()), qRound(p.y()), 255);
+        drawPixel(this, std::floor(p.x()), std::floor(p.y()), 255);
         ++points;
     }
 

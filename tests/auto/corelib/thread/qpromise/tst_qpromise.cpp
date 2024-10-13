@@ -1,5 +1,5 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #include <QCoreApplication>
 #include <QDebug>
 
@@ -14,6 +14,8 @@
 #include <memory>
 #include <chrono>
 
+using namespace std::chrono_literals;
+
 class tst_QPromise : public QObject
 {
     Q_OBJECT
@@ -22,6 +24,7 @@ private slots:
     void promise();
     void futureFromPromise();
     void addResult();
+    void addResultWithBracedInitializer();
     void addResultOutOfOrder();
 #ifndef QT_NO_EXCEPTIONS
     void setException();
@@ -170,6 +173,15 @@ void tst_QPromise::addResult()
         QCOMPARE(f.resultCount(), 3);
         QCOMPARE(f.resultAt(2), result);
     }
+    // add multiple results in one go:
+    {
+        QList results = {42, 4242, 424242};
+        QVERIFY(promise.addResults(results));
+        QCOMPARE(f.resultCount(), 6);
+        QCOMPARE(f.resultAt(3), 42);
+        QCOMPARE(f.resultAt(4), 4242);
+        QCOMPARE(f.resultAt(5), 424242);
+    }
     // add as lvalue at position and overwrite
     {
         int result = -1;
@@ -184,6 +196,28 @@ void tst_QPromise::addResult()
         QVERIFY(!promise.addResult(-1, 0));
         QCOMPARE(f.resultCount(), originalCount);
         QCOMPARE(f.resultAt(0), resultAt0); // overwrite does not work
+    }
+}
+
+void tst_QPromise::addResultWithBracedInitializer() // QTBUG-111826
+{
+    struct MyClass
+    {
+        QString strValue;
+        int intValue = 0;
+#ifndef __cpp_aggregate_paren_init // make emplacement work with MyClass
+        MyClass(QString s, int i) : strValue(std::move(s)), intValue(i) {}
+#endif
+    };
+
+    {
+        QPromise<MyClass> myPromise;
+        myPromise.addResult({"bar", 1});
+    }
+
+    {
+        QPromise<MyClass> myPromise;
+        myPromise.emplaceResult("bar", 1);
     }
 }
 
@@ -310,9 +344,7 @@ void tst_QPromise::progress()
 
 void tst_QPromise::addInThread()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     const auto testAddResult = [] (auto promise, const auto &result) {
         promise.start();
         auto f = promise.future();
@@ -333,9 +365,7 @@ void tst_QPromise::addInThread()
 
 void tst_QPromise::addInThreadMoveOnlyObject()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     QPromise<MoveOnlyType> promise;
     promise.start();
     auto f = promise.future();
@@ -352,9 +382,7 @@ void tst_QPromise::addInThreadMoveOnlyObject()
 
 void tst_QPromise::reportFromMultipleThreads()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     QPromise<int> promise;
     auto f = promise.future();
     promise.start();
@@ -378,9 +406,7 @@ void tst_QPromise::reportFromMultipleThreads()
 
 void tst_QPromise::reportFromMultipleThreadsByMovedPromise()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     QPromise<int> initialPromise;
     auto f = initialPromise.future();
     {
@@ -412,9 +438,7 @@ void tst_QPromise::reportFromMultipleThreadsByMovedPromise()
 
 void tst_QPromise::doNotCancelWhenFinished()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     const auto testFinishedPromise = [] (auto promise) {
         auto f = promise.future();
         promise.start();
@@ -439,9 +463,7 @@ void tst_QPromise::doNotCancelWhenFinished()
 #ifndef QT_NO_EXCEPTIONS
 void tst_QPromise::cancelWhenDestroyed()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     QPromise<int> initialPromise;
     auto f = initialPromise.future();
 
@@ -475,15 +497,13 @@ void tst_QPromise::cancelWhenDestroyed()
 
 void tst_QPromise::cancelWhenReassigned()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     QPromise<int> promise;
     auto f = promise.future();
     promise.start();
 
     ThreadWrapper thr([p = std::move(promise)] () mutable {
-        QThread::msleep(100);
+        QThread::sleep(100ms);
         p = QPromise<int>();  // assign new promise, old must be correctly destroyed
     });
 
@@ -570,10 +590,14 @@ static inline void testCancelWhenDestroyedWithFailureHandler()
 
 void tst_QPromise::cancelWhenDestroyedWithFailureHandler()
 {
+#ifndef QT_NO_EXCEPTIONS
     testCancelWhenDestroyedWithFailureHandler<void>();
     testCancelWhenDestroyedWithFailureHandler<int>();
     testCancelWhenDestroyedWithFailureHandler<CopyOnlyType>();
     testCancelWhenDestroyedWithFailureHandler<MoveOnlyType>();
+#else
+    QSKIP("Exceptions are disabled, skipping the test");
+#endif
 }
 
 template <typename T>
@@ -606,9 +630,7 @@ void tst_QPromise::continuationsRunWhenFinished()
 
 void tst_QPromise::finishWhenSwapped()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     QPromise<int> promise1;
     auto f1 = promise1.future();
     promise1.start();
@@ -618,7 +640,7 @@ void tst_QPromise::finishWhenSwapped()
     promise2.start();
 
     ThreadWrapper thr([&promise1, &promise2] () mutable {
-        QThread::msleep(100);
+        QThread::sleep(100ms);
         promise1.addResult(0);
         promise2.addResult(1);
         swap(promise1, promise2);  // ADL must resolve this
@@ -649,9 +671,7 @@ void tst_QPromise::finishWhenSwapped()
 template <typename T>
 void testCancelWhenMoved()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     QPromise<T> promise1;
     auto f1 = promise1.future();
     promise1.start();
@@ -662,7 +682,7 @@ void testCancelWhenMoved()
 
     // Move promises to local scope to test cancellation behavior
     ThreadWrapper thr([p1 = std::move(promise1), p2 = std::move(promise2)] () mutable {
-        QThread::msleep(100);
+        QThread::sleep(100ms);
         p1 = std::move(p2);
         p1.finish();  // this finish is for future #2
     });
@@ -706,7 +726,7 @@ void tst_QPromise::waitUntilResumed()
 
     while (!f.isSuspended()) {  // busy wait until worker thread suspends
         QCOMPARE(f.isFinished(), false);  // exit condition in case of failure
-        QThread::msleep(50);  // allow another thread to actually carry on
+        QThread::sleep(50ms);  // allow another thread to actually carry on
     }
 
     f.resume();
@@ -719,9 +739,7 @@ void tst_QPromise::waitUntilResumed()
 
 void tst_QPromise::waitUntilCanceled()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
+#if QT_CONFIG(cxx11_future)
     QPromise<int> promise;
     promise.start();
     auto f = promise.future();
@@ -735,7 +753,7 @@ void tst_QPromise::waitUntilCanceled()
 
     while (!f.isSuspended()) {  // busy wait until worker thread suspends
         QCOMPARE(f.isFinished(), false);  // exit condition in case of failure
-        QThread::msleep(50);  // allow another thread to actually carry on
+        QThread::sleep(50ms);  // allow another thread to actually carry on
     }
 
     f.cancel();

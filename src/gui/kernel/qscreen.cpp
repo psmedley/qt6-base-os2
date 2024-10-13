@@ -37,29 +37,23 @@ QT_BEGIN_NAMESPACE
     \inmodule QtGui
 */
 
-QScreen::QScreen(QPlatformScreen *screen)
+QScreen::QScreen(QPlatformScreen *platformScreen)
     : QObject(*new QScreenPrivate(), nullptr)
 {
     Q_D(QScreen);
-    d->setPlatformScreen(screen);
-}
 
-void QScreenPrivate::setPlatformScreen(QPlatformScreen *screen)
-{
-    Q_Q(QScreen);
-    platformScreen = screen;
-    platformScreen->d_func()->screen = q;
-    orientation = platformScreen->orientation();
+    d->platformScreen = platformScreen;
+    platformScreen->d_func()->screen = this;
 
-    logicalDpi = QPlatformScreen::overrideDpi(platformScreen->logicalDpi());
-
-    refreshRate = platformScreen->refreshRate();
+    d->orientation = platformScreen->orientation();
+    d->logicalDpi = QPlatformScreen::overrideDpi(platformScreen->logicalDpi());
+    d->refreshRate = platformScreen->refreshRate();
     // safeguard ourselves against buggy platform behavior...
-    if (refreshRate < 1.0)
-        refreshRate = 60.0;
+    if (d->refreshRate < 1.0)
+        d->refreshRate = 60.0;
 
-    updateGeometry();
-    updatePrimaryOrientation(); // derived from the geometry
+    d->updateGeometry();
+    d->updatePrimaryOrientation(); // derived from the geometry
 }
 
 void QScreenPrivate::updateGeometry()
@@ -72,45 +66,13 @@ void QScreenPrivate::updateGeometry()
 
 /*!
     Destroys the screen.
+
+    \internal
  */
 QScreen::~QScreen()
 {
-    // Remove screen
-    const bool wasPrimary = QGuiApplication::primaryScreen() == this;
-    QGuiApplicationPrivate::screen_list.removeOne(this);
-    QGuiApplicationPrivate::resetCachedDevicePixelRatio();
-
-    if (!qGuiApp)
-        return;
-
-    QScreen *newPrimaryScreen = QGuiApplication::primaryScreen();
-    if (wasPrimary && newPrimaryScreen)
-        emit qGuiApp->primaryScreenChanged(newPrimaryScreen);
-
-    // Allow clients to manage windows that are affected by the screen going
-    // away, before we fall back to moving them to the primary screen.
-    emit qApp->screenRemoved(this);
-
-    if (QGuiApplication::closingDown())
-        return;
-
-    bool movingFromVirtualSibling = newPrimaryScreen
-        && newPrimaryScreen->handle()->virtualSiblings().contains(handle());
-
-    // Move any leftover windows to the primary screen
-    const auto allWindows = QGuiApplication::allWindows();
-    for (QWindow *window : allWindows) {
-        if (!window->isTopLevel() || window->screen() != this)
-            continue;
-
-        const bool wasVisible = window->isVisible();
-        window->setScreen(newPrimaryScreen);
-
-        // Re-show window if moved from a virtual sibling screen. Otherwise
-        // leave it up to the application developer to show the window.
-        if (movingFromVirtualSibling)
-            window->setVisible(wasVisible);
-    }
+    Q_ASSERT_X(!QGuiApplicationPrivate::screen_list.contains(this), "QScreen",
+        "QScreens should be removed via QWindowSystemInterface::handleScreenRemoved()");
 }
 
 /*!
@@ -499,8 +461,8 @@ Qt::ScreenOrientation QScreen::orientation() const
   \property QScreen::refreshRate
   \brief the approximate vertical refresh rate of the screen in Hz
 
-  \warning Avoid using the screen's refresh rate to drive animations
-  via a timer such as QTimer. Instead use QWindow::requestUpdate().
+  \warning Avoid using the screen's refresh rate to drive animations via a
+  timer such as QChronoTimer. Instead use QWindow::requestUpdate().
 
   \sa QWindow::requestUpdate()
 */
@@ -741,8 +703,23 @@ QPixmap QScreen::grabWindow(WId window, int x, int y, int width, int height)
     result.setDevicePixelRatio(result.devicePixelRatio() * factor);
     return result;
 }
+
+/*!
+    \fn template <typename QNativeInterface> QNativeInterface *QScreen::nativeInterface() const
+
+    Returns a native interface of the given type for the screen.
+
+    This function provides access to platform specific functionality
+    of QScreen, as defined in the QNativeInterface namespace:
+
+    \annotatedlist native-interfaces-qscreen
+
+    If the requested interface is not available a \nullptr is returned.
+ */
+
 void *QScreen::resolveInterface(const char *name, int revision) const
 {
+    using namespace QNativeInterface;
     using namespace QNativeInterface::Private;
 
     auto *platformScreen = handle();
@@ -770,7 +747,7 @@ void *QScreen::resolveInterface(const char *name, int revision) const
     QT_NATIVE_INTERFACE_RETURN_IF(QAndroidScreen, platformScreen);
 #endif
 
-#if defined(Q_OS_UNIX)
+#if QT_CONFIG(wayland)
     QT_NATIVE_INTERFACE_RETURN_IF(QWaylandScreen, platformScreen);
 #endif
 

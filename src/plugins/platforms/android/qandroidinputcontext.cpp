@@ -312,6 +312,18 @@ static jboolean updateCursorPosition(JNIEnv */*env*/, jobject /*thiz*/)
     return true;
 }
 
+static void reportFullscreenMode(JNIEnv */*env*/, jobject /*thiz*/, jboolean enabled)
+{
+    if (!m_androidInputContext)
+        return;
+
+    runOnQtThread([&]{m_androidInputContext->reportFullscreenMode(enabled);});
+}
+
+static jboolean fullscreenMode(JNIEnv */*env*/, jobject /*thiz*/)
+{
+    return m_androidInputContext ? m_androidInputContext->fullscreenMode() : false;
+}
 
 static JNINativeMethod methods[] = {
     {"beginBatchEdit", "()Z", (void *)beginBatchEdit},
@@ -332,7 +344,9 @@ static JNINativeMethod methods[] = {
     {"copy", "()Z", (void *)copy},
     {"copyURL", "()Z", (void *)copyURL},
     {"paste", "()Z", (void *)paste},
-    {"updateCursorPosition", "()Z", (void *)updateCursorPosition}
+    {"updateCursorPosition", "()Z", (void *)updateCursorPosition},
+    {"reportFullscreenMode", "(Z)V", (void *)reportFullscreenMode},
+    {"fullscreenMode", "()Z", (void *)fullscreenMode}
 };
 
 static QRect screenInputItemRectangle()
@@ -349,6 +363,7 @@ QAndroidInputContext::QAndroidInputContext()
     , m_handleMode(Hidden)
     , m_batchEditNestingLevel(0)
     , m_focusObject(0)
+    , m_fullScreenMode(false)
 {
     QJniEnvironment env;
     jclass clazz = env.findClass(QtNativeInputConnectionClassName);
@@ -531,11 +546,28 @@ void QAndroidInputContext::updateCursorPosition()
     }
 }
 
+bool QAndroidInputContext::isImhNoTextHandlesSet()
+{
+    QSharedPointer<QInputMethodQueryEvent> query = focusObjectInputMethodQuery();
+    if (query.isNull())
+        return false;
+    return query->value(Qt::ImHints).toUInt() & Qt::ImhNoTextHandles;
+}
+
 void QAndroidInputContext::updateSelectionHandles()
 {
+    if (m_fullScreenMode) {
+        QtAndroidInput::updateHandles(Hidden);
+        return;
+    }
     static bool noHandles = qEnvironmentVariableIntValue("QT_QPA_NO_TEXT_HANDLES");
     if (noHandles || !m_focusObject)
         return;
+
+    if (isImhNoTextHandlesSet()) {
+        QtAndroidInput::updateHandles(Hidden);
+        return;
+    }
 
     auto im = qGuiApp->inputMethod();
 
@@ -549,6 +581,11 @@ void QAndroidInputContext::updateSelectionHandles()
     const QVariant readOnlyVariant = query.value(Qt::ImReadOnly);
     bool readOnly = readOnlyVariant.toBool();
     QPlatformWindow *qPlatformWindow = qGuiApp->focusWindow()->handle();
+
+    if (!readOnly && ((m_handleMode & 0xff) == Hidden)) {
+        QtAndroidInput::updateHandles(Hidden);
+        return;
+    }
 
     if ( cpos == anchor && (!readOnlyVariant.isValid() || readOnly)) {
         QtAndroidInput::updateHandles(Hidden);
@@ -576,9 +613,8 @@ void QAndroidInputContext::updateSelectionHandles()
         if (!query.value(Qt::ImSurroundingText).toString().isEmpty())
             buttons |= EditContext::SelectAllButton;
         QtAndroidInput::updateHandles(m_handleMode, editMenuPoint, buttons, cursorPointGlobal);
-        // The VK is hidden, reset the timer
-        if (m_hideCursorHandleTimer.isActive())
-            m_hideCursorHandleTimer.start();
+        m_hideCursorHandleTimer.start();
+
         return;
     }
 
@@ -752,7 +788,15 @@ void QAndroidInputContext::touchDown(int x, int y)
                 focusObjectStopComposing();
         }
 
-        updateSelectionHandles();
+        // Check if cursor is visible in focused window before updating handles
+        QPlatformWindow *window = qGuiApp->focusWindow()->handle();
+        const QRectF curRect = cursorRectangle();
+        const QPoint cursorGlobalPoint = window->mapToGlobal(QPoint(curRect.x(), curRect.y()));
+        const QRect windowRect = QPlatformInputContext::inputItemClipRectangle().toRect();
+        const QRect windowGlobalRect = QRect(window->mapToGlobal(windowRect.topLeft()), windowRect.size());
+
+        if (windowGlobalRect.contains(cursorGlobalPoint.x(), cursorGlobalPoint.y()))
+            updateSelectionHandles();
     }
 }
 
@@ -858,6 +902,9 @@ void QAndroidInputContext::showInputPanel()
     QSharedPointer<QInputMethodQueryEvent> query = focusObjectInputMethodQuery();
     if (query.isNull())
         return;
+
+    if (!qGuiApp->focusWindow()->handle())
+        return; // not a real window, probably VR/XR
 
     disconnect(m_updateCursorPosConnection);
     m_updateCursorPosConnection = {};
@@ -1076,6 +1123,25 @@ jboolean QAndroidInputContext::finishComposingText()
     return JNI_TRUE;
 }
 
+void QAndroidInputContext::reportFullscreenMode(jboolean enabled)
+{
+    m_fullScreenMode = enabled;
+    BatchEditLock batchEditLock(this);
+    if (!focusObjectStopComposing())
+        return;
+
+    if (enabled)
+        m_handleMode = Hidden;
+
+    updateSelectionHandles();
+}
+
+// Called in calling thread's context
+jboolean QAndroidInputContext::fullscreenMode()
+{
+    return m_fullScreenMode;
+}
+
 bool QAndroidInputContext::focusObjectIsComposing() const
 {
     return m_composingCursor != -1;
@@ -1131,13 +1197,21 @@ bool QAndroidInputContext::focusObjectStopComposing()
 
     m_composingCursor = -1;
 
-    // commit composing text and cursor position
-    QList<QInputMethodEvent::Attribute> attributes;
-    attributes.append(
-        QInputMethodEvent::Attribute(QInputMethodEvent::Selection, localCursorPos, 0));
-    QInputMethodEvent event(QString(), attributes);
-    event.setCommitString(m_composingText);
-    sendInputMethodEvent(&event);
+    {
+        // commit the composing test
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event(QString(), attributes);
+        event.setCommitString(m_composingText);
+        sendInputMethodEvent(&event);
+    }
+    {
+        // Moving Qt's cursor to where the preedit cursor used to be
+        QList<QInputMethodEvent::Attribute> attributes;
+        attributes.append(
+                QInputMethodEvent::Attribute(QInputMethodEvent::Selection, localCursorPos, 0));
+        QInputMethodEvent event(QString(), attributes);
+        sendInputMethodEvent(&event);
+    }
 
     return true;
 }

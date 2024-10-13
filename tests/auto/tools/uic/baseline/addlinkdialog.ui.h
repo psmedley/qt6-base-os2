@@ -70,14 +70,14 @@ public:
 
         verticalLayout->addLayout(formLayout);
 
-        verticalSpacer = new QSpacerItem(0, 0, QSizePolicy::Minimum, QSizePolicy::Expanding);
+        verticalSpacer = new QSpacerItem(0, 0, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
 
         verticalLayout->addItem(verticalSpacer);
 
         line = new QFrame(AddLinkDialog);
         line->setObjectName("line");
-        line->setFrameShape(QFrame::HLine);
-        line->setFrameShadow(QFrame::Sunken);
+        line->setFrameShape(QFrame::Shape::HLine);
+        line->setFrameShadow(QFrame::Shadow::Sunken);
 
         verticalLayout->addWidget(line);
 

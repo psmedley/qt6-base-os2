@@ -271,7 +271,7 @@ int QStatusBar::insertWidget(int index, QWidget *widget, int stretch)
         widget->hide();
 
     reformat();
-    if (!widget->isHidden() || !widget->testAttribute(Qt::WA_WState_ExplicitShowHide))
+    if (!QWidgetPrivate::get(widget)->isExplicitlyHidden())
         widget->show();
 
     return index;
@@ -286,7 +286,7 @@ int QStatusBar::insertWidget(int index, QWidget *widget, int stretch)
     minimum of space.
 
     Permanently means that the widget may not be obscured by temporary
-    messages. It is is located at the far right of the status bar.
+    messages. It is located at the far right of the status bar.
 
     \sa insertPermanentWidget(), removeWidget(), addWidget()
 */
@@ -297,7 +297,6 @@ void QStatusBar::addPermanentWidget(QWidget * widget, int stretch)
         return;
     insertPermanentWidget(d_func()->items.size(), widget, stretch);
 }
-
 
 /*!
     \since 4.2
@@ -313,7 +312,7 @@ void QStatusBar::addPermanentWidget(QWidget * widget, int stretch)
     minimum of space.
 
     Permanently means that the widget may not be obscured by temporary
-    messages. It is is located at the far right of the status bar.
+    messages. It is located at the far right of the status bar.
 
     \sa addPermanentWidget(), removeWidget(), addWidget()
 */
@@ -333,7 +332,7 @@ int QStatusBar::insertPermanentWidget(int index, QWidget *widget, int stretch)
     d->items.insert(index, item);
 
     reformat();
-    if (!widget->isHidden() || !widget->testAttribute(Qt::WA_WState_ExplicitShowHide))
+    if (!QWidgetPrivate::get(widget)->isExplicitlyHidden())
         widget->show();
 
     return index;
@@ -495,7 +494,7 @@ void QStatusBar::showMessage(const QString &message, int timeout)
     if (timeout > 0) {
         if (!d->timer) {
             d->timer = new QTimer(this);
-            connect(d->timer, SIGNAL(timeout()), this, SLOT(clearMessage()));
+            connect(d->timer, &QTimer::timeout, this, &QStatusBar::clearMessage);
         }
         d->timer->start(timeout);
     } else if (d->timer) {
@@ -521,7 +520,7 @@ void QStatusBar::clearMessage()
     if (d->tempItem.isEmpty())
         return;
     if (d->timer) {
-        qDeleteInEventHandler(d->timer);
+        delete d->timer;
         d->timer = nullptr;
     }
     d->tempItem.clear();

@@ -12,7 +12,9 @@ qt_internal_add_module(Test
     QMAKE_MODULE_CONFIG console testlib_defines
     EXCEPTIONS
     SOURCES
-        3rdparty/cycle_p.h
+        3rdparty/cycle/cycle_p.h # Needed by tests, so visible to syncqt.
+        3rdparty/catch2/catch_p.h # Also needed by tests.
+        removed_api.cpp     # keep first
         qabstracttestlogger.cpp qabstracttestlogger_p.h
         qasciikey.cpp
         qbenchmark.cpp qbenchmark.h qbenchmark_p.h
@@ -21,13 +23,14 @@ qt_internal_add_module(Test
         qbenchmarkmetric.cpp qbenchmarkmetric.h qbenchmarkmetric_p.h
         qbenchmarkperfevents.cpp qbenchmarkperfevents_p.h
         qbenchmarktimemeasurers_p.h
+        qcomparisontesthelper.cpp qcomparisontesthelper_p.h
         qcsvbenchmarklogger.cpp qcsvbenchmarklogger_p.h
         qemulationdetector_p.h
         qjunittestlogger.cpp qjunittestlogger_p.h
         qplaintestlogger.cpp qplaintestlogger_p.h
         qpropertytesthelper_p.h
         qsignaldumper.cpp qsignaldumper_p.h
-        qsignalspy.h
+        qsignalspy.cpp qsignalspy.h
         qtaptestlogger.cpp qtaptestlogger_p.h
         qteamcitylogger.cpp qteamcitylogger_p.h
         qtest.h
@@ -39,6 +42,7 @@ qt_internal_add_module(Test
         qtestblacklist.cpp qtestblacklist_p.h
         qtestcase.cpp qtestcase.h qtestcase_p.h
         qtestcoreelement_p.h
+        qtestcrashhandler.cpp qtestcrashhandler_p.h
         qtestdata.cpp qtestdata.h
         qtestelement.cpp qtestelement_p.h
         qtestelementattribute.cpp qtestelementattribute_p.h
@@ -54,24 +58,38 @@ qt_internal_add_module(Test
         qtestsystem.h
         qtesttable.cpp qtesttable_p.h
         qtesttouch.h
+        qtesttostring.h
+        qtestwheel.h
         qttestglobal.h
         qxmltestlogger.cpp qxmltestlogger_p.h
     DEFINES
         QT_NO_CAST_FROM_ASCII
         QT_NO_CAST_TO_ASCII
+        QT_NO_CONTEXTLESS_CONNECT
         QT_NO_DATASTREAM
         QT_NO_FOREACH
+        QT_USE_NODISCARD_FILE_OPEN
         # Ensure uniform location info between release and debug builds
         QT_NO_MESSAGELOGCONTEXT
     LIBRARIES
         Qt::CorePrivate
+    NO_PCH_SOURCES
+        removed_api.cpp
     PUBLIC_LIBRARIES
         Qt::Core
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
-    GENERATE_CPP_EXPORTS
-    GENERATE_PRIVATE_CPP_EXPORTS
+    ATTRIBUTION_FILE_DIR_PATHS
+        3rdparty/catch2
+        3rdparty/cycle
+        3rdparty/linux
+        3rdparty/valgrind
 )
+
+if(TARGET Gui)
+    set_property(TARGET Test
+        APPEND PROPERTY _qt_internal_sync_headers_deps Gui_sync_headers)
+endif()
 
 ## Scopes:
 #####################################################################
@@ -86,10 +104,12 @@ qt_internal_extend_target(Test CONDITION QT_FEATURE_batch_test_support
         qtestregistry.cpp qtestregistry_p.h
 )
 
+# 3rdparty/valgrind/*_p.h deliberately omitted, so syncqt doesn't
+# mirror it in generated include/ directory - #include using "..._p.h"
+# with a relative path. Only this module's sources and Core's qsimd.h
+# should need to.
 qt_internal_extend_target(Test CONDITION QT_FEATURE_valgrind
     SOURCES
-        3rdparty/callgrind_p.h
-        3rdparty/valgrind_p.h
         qbenchmarkvalgrind.cpp qbenchmarkvalgrind_p.h
 )
 

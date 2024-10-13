@@ -9,7 +9,7 @@
 
     \keyword keyboard focus
 
-    Qt's widgets handle keyboard focus in the ways that have become
+    Qt's widgets handle keyboard focus in ways that have become
     customary in GUIs.
 
     The basic issue is that the user's key strokes can be directed at any
@@ -22,7 +22,7 @@
 
     \section1 Focus Motion
 
-    The customs which have evolved for directing keyboard focus to a
+    The customs that have evolved for directing keyboard focus to a
     particular widget are these:
 
     \list 1
@@ -54,7 +54,7 @@
 
     You can customize the tab order using QWidget::setTabOrder(). (If
     you don't, \uicontrol Tab generally moves focus in the order of widget
-    construction.) Qt Designer provides a means of visually
+    construction.) \QD provides a means of visually
     changing the tab order.
 
     Since pressing \uicontrol Tab is so common, most widgets that can have focus
@@ -63,7 +63,7 @@
     handler that moves the focus.
 
     For example, in a data entry dialog, there might be a field that
-    is only necessary in one per cent of all cases. In such a dialog,
+    is only necessary in one percent of all cases. In such a dialog,
     \uicontrol Tab could skip this field, and the dialog could use one of
     these mechanisms:
 

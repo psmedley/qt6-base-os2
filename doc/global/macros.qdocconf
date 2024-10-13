@@ -27,16 +27,12 @@ macro.ouml.HTML           = "&ouml;"
 macro.ouml.DocBook        = "&#246;"
 macro.nothing             = "\\dontdocument ()"
 macro.nullptr             = "\\c{nullptr}"
-macro.QA                  = "\\e{Qt Assistant}"
-macro.QD                  = "\\e{Qt Designer}"
-macro.QL                  = "\\e{Qt Linguist}"
 macro.Q_OBJECT            = "Q_OBJECT"
-macro.QQV                 = "\\e{Qt QML Viewer}"
 macro.QtVersion           = "$QT_VERSION"
 macro.QtVer               = "$QT_VER"
 macro.param               = "\\e"
 macro.raisedaster.HTML    = "<sup>*</sup>"
-macro.raisedaster.DocBook = "\\sup{*}"
+macro.raisedaster.DocBook = "<db:superscript>*</db:superscript>"
 macro.rarrow.HTML         = "&rarr;"
 macro.rarrow.DocBook      = "&#8594;"
 macro.reg.HTML            = "<sup>&reg;</sup>"
@@ -52,22 +48,57 @@ macro.mdash.DocBook       = "&#8212;"
 macro.pi.HTML             = "&Pi;"
 macro.pi.DocBook          = "&#928;"
 macro.beginqdoc.HTML      = "/*!"
+macro.beginqdoc.DocBook   = "/*!"
 macro.endqdoc.HTML        = "*/"
+macro.endqdoc.DocBook        = "*/"
 macro.borderedimage       = "\\div {class=\"border\"} \\image \1\n\\enddiv"
 macro.examplecategory     = "\\meta category {\1}\n\\ingroup category \1"
 
+# Macros for product names, sorted in alphabetic order
+
+macro.B2Q                 = "Boot to Qt"
+macro.B2QSS               = "Boot to Qt Software Stack"
+macro.B2QST               = "Boot to Qt Startup Screen"
+macro.IFW                 = "Qt Installer Framework"
+macro.QA                  = "Qt Assistant"
+macro.QB                  = "Qt Bridge"
+macro.QBF                 = "Qt Bridge for Figma"
+macro.QBPS                = "Qt Bridge for Adobe Photoshop"
+macro.QBSK                = "Qt Bridge for Sketch"
+macro.QBXD                = "Qt Bridge for Adobe XD"
+macro.QC                  = "Qt Creator"
+macro.QD                  = "Qt Widgets Designer"
 macro.QDS                 = "Qt Design Studio"
 macro.QDV                 = "Qt Design Viewer"
-macro.QB                  = "Qt Bridge"
-macro.QBPS                = "Qt Bridge for Adobe Photoshop"
-macro.QBXD                = "Qt Bridge for Adobe XD"
-macro.QBSK                = "Qt Bridge for Sketch"
-macro.QBF                 = "Qt Bridge for Figma"
+macro.QfP                 = "Qt for Python"
+macro.QL                  = "Qt Linguist"
 macro.QMCU                = "Qt for MCUs"
-macro.QUL                 = "Qt Quick Ultralite"
-macro.QtAA                = "Qt for Android Automotive"
-macro.QOI                 = "Qt Online Installer"
+macro.QMLP                = "QML Profiler"
+macro.QMLLS               = "QML Language Server"
 macro.QMT                 = "Qt Maintenance Tool"
+macro.QOI                 = "Qt Online Installer"
+macro.QQEM                = "Qt Quick Effect Maker"
+macro.QQV                 = "Qt QML Viewer"
+macro.QtAA                = "Qt for Android Automotive"
+macro.QUL                 = "Qt Quick Ultralite"
+macro.QtTAS               = "Qt Tools for Android Studio"
+
+# The following macros are used for various Android docs. The purpose is to keep
+# it as simple as updating these instead of updating multiple lines in scattered locations.
+macro.AndroidAbis         = "\\c{arm64-v8a}, \\c{x86_64}, \\c{x86}, and \\c{armeabi-v7a}"
+macro.NdkVer              = "r26b"
+macro.NdkFullVer          = "26.1.10909125"
+macro.NdkCompilerVer      = "Clang 17.0.2"
+macro.JdkVer              = "17"
+macro.AndroidMinApiVer    = "28"
+macro.AndroidMaxApiVer    = "34"
+macro.AndroidMinVer       = "9"
+macro.AndroidMaxVer       = "14"
+macro.AndroidPlatformVer  = "34"
+macro.AndroidBuildToolsVer = "34.0.0"
+macro.GradleVer           = "8.10"
+macro.AGPVer              = "8.6.0"
+macro.AAOSVer             = "10 to 13"
 
 macro.beginfloatleft.HTML   = "<div style=\"float: left; margin-right: 2em\">"
 macro.beginfloatright.HTML  = "<div style=\"float: right; margin-left: 2em\">"
@@ -103,6 +134,16 @@ macro.youtube.HTML = "<div class=\"video\">\n" \
                      "<img src=\"images/\1.jpg\"" \
                      "title=\"Click to play in a browser\" /></a>\n" \
                      "</div>\n"
+macro.youtube.DocBook = "<db:mediaobject>\n" \
+                        "<db:videoobject>\n" \
+                        "<db:videodata fileref=\"\1\">\n" \
+                        "</db:videodata>\n" \
+                        "</db:videoobject>\n" \
+                        "<db:imageobject>\n" \
+                        "<db:imagedata fileref=\"images/\1.jpg\">\n" \
+                        "</db:imagedata>\n" \
+                        "</db:imageobject>\n" \
+                        "</db:mediaobject>\n"
 
 macro.excludefromcreator = "\\meta tag broken"
 
@@ -125,7 +166,10 @@ macro.cmakepropertywebassemblyonly = "\\note This property is used only if targe
 macro.cmakepropertyiosonly = "\\note This property is used only if targeting iOS."
 macro.cmakevariableiosonly = "\\note This variable is used only if targeting iOS."
 
+macro.qtpolicydeprecatedbehavior = "\\note The \\c{OLD} behavior of a policy is deprecated, and may be removed in the future."
 #Appends the tech preview link to the brief sentence and adds to tech_preview
 #group.
 #Must be placed directly under a \brief command
 macro.techpreview = "(Technical preview)\n\n\\meta status {Technical preview}\n\\ingroup tech_preview\n"
+
+include(grid.qdocconf)

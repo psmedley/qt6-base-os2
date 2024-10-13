@@ -1,6 +1,12 @@
 # Copyright (C) 2022 The Qt Company Ltd.
 # SPDX-License-Identifier: BSD-3-Clause
 
+if(NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
+    cmake_minimum_required(VERSION 3.16)
+    project(qprocess LANGUAGES CXX)
+    find_package(Qt6BuildInternals REQUIRED COMPONENTS STANDALONE_TEST)
+endif()
+
 add_subdirectory(test)
 add_subdirectory(testProcessCrash)
 add_subdirectory(testProcessEcho)
@@ -27,4 +33,7 @@ add_subdirectory(testSpaceInName)
 if(WIN32)
     add_subdirectory(testProcessEchoGui)
     add_subdirectory(testSetNamedPipeHandleState)
+endif()
+if(UNIX)
+    add_subdirectory(testUnixProcessParameters)
 endif()

@@ -4,9 +4,15 @@
 #ifndef QMARGINS_H
 #define QMARGINS_H
 
+#include <QtCore/qcompare.h>
 #include <QtCore/qnamespace.h>
 
+#include <QtCore/q20type_traits.h>
+#include <QtCore/q23utility.h>
+
 QT_BEGIN_NAMESPACE
+
+QT_ENABLE_P0846_SEMANTICS_FOR(get)
 
 class QMarginsF;
 
@@ -49,34 +55,29 @@ private:
     int m_right;
     int m_bottom;
 
-    friend constexpr inline bool operator==(const QMargins &m1, const QMargins &m2) noexcept
+    friend constexpr bool comparesEqual(const QMargins &lhs, const QMargins &rhs) noexcept
     {
-        return
-                m1.m_left == m2.m_left &&
-                m1.m_top == m2.m_top &&
-                m1.m_right == m2.m_right &&
-                m1.m_bottom == m2.m_bottom;
+        return lhs.m_left == rhs.m_left
+                && lhs.m_top == rhs.m_top
+                && lhs.m_right == rhs.m_right
+                && lhs.m_bottom == rhs.m_bottom;
     }
-
-    friend constexpr inline bool operator!=(const QMargins &m1, const QMargins &m2) noexcept
-    {
-        return !(m1 == m2);
-    }
+    Q_DECLARE_EQUALITY_COMPARABLE_LITERAL_TYPE(QMargins)
 
     template <std::size_t I,
               typename M,
               std::enable_if_t<(I < 4), bool> = true,
-              std::enable_if_t<std::is_same_v<std::decay_t<M>, QMargins>, bool> = true>
+              std::enable_if_t<std::is_same_v<q20::remove_cvref_t<M>, QMargins>, bool> = true>
     friend constexpr decltype(auto) get(M &&m) noexcept
     {
         if constexpr (I == 0)
-            return (std::forward<M>(m).m_left);
+            return q23::forward_like<M>(m.m_left);
         else if constexpr (I == 1)
-            return (std::forward<M>(m).m_top);
+            return q23::forward_like<M>(m.m_top);
         else if constexpr (I == 2)
-            return (std::forward<M>(m).m_right);
+            return q23::forward_like<M>(m.m_right);
         else if constexpr (I == 3)
-            return (std::forward<M>(m).m_bottom);
+            return q23::forward_like<M>(m.m_bottom);
     }
 };
 
@@ -299,33 +300,50 @@ private:
     qreal m_right;
     qreal m_bottom;
 
-    friend constexpr inline bool operator==(const QMarginsF &lhs, const QMarginsF &rhs) noexcept
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_FLOAT_COMPARE
+    friend constexpr bool qFuzzyCompare(const QMarginsF &lhs, const QMarginsF &rhs) noexcept
     {
-        return qFuzzyCompare(lhs.left(), rhs.left())
-            && qFuzzyCompare(lhs.top(), rhs.top())
-            && qFuzzyCompare(lhs.right(), rhs.right())
-            && qFuzzyCompare(lhs.bottom(), rhs.bottom());
+        return ((!lhs.m_left || !rhs.m_left) ? qFuzzyIsNull(lhs.m_left - rhs.m_left)
+                                             : qFuzzyCompare(lhs.m_left, rhs.m_left))
+                && ((!lhs.m_top || !rhs.m_top) ? qFuzzyIsNull(lhs.m_top - rhs.m_top)
+                                               : qFuzzyCompare(lhs.m_top, rhs.m_top))
+                && ((!lhs.m_right || !rhs.m_right) ? qFuzzyIsNull(lhs.m_right - rhs.m_right)
+                                                   : qFuzzyCompare(lhs.m_right, rhs.m_right))
+                && ((!lhs.m_bottom || !rhs.m_bottom) ? qFuzzyIsNull(lhs.m_bottom - rhs.m_bottom)
+                                                     : qFuzzyCompare(lhs.m_bottom, rhs.m_bottom));
+    }
+    QT_WARNING_POP
+    friend constexpr bool qFuzzyIsNull(const QMarginsF &m) noexcept
+    {
+        return qFuzzyIsNull(m.m_left) && qFuzzyIsNull(m.m_top)
+                && qFuzzyIsNull(m.m_right) && qFuzzyIsNull(m.m_bottom);
     }
 
-    friend constexpr inline bool operator!=(const QMarginsF &lhs, const QMarginsF &rhs) noexcept
+    friend constexpr bool comparesEqual(const QMarginsF &lhs, const QMarginsF &rhs) noexcept
     {
-        return !(lhs == rhs);
+        return qFuzzyCompare(lhs, rhs);
     }
+    Q_DECLARE_EQUALITY_COMPARABLE_LITERAL_TYPE(QMarginsF)
+
+    friend constexpr bool comparesEqual(const QMarginsF &lhs, const QMargins &rhs) noexcept
+    { return comparesEqual(lhs, rhs.toMarginsF()); }
+    Q_DECLARE_EQUALITY_COMPARABLE_LITERAL_TYPE(QMarginsF, QMargins)
 
     template <std::size_t I,
               typename M,
               std::enable_if_t<(I < 4), bool> = true,
-              std::enable_if_t<std::is_same_v<std::decay_t<M>, QMarginsF>, bool> = true>
+              std::enable_if_t<std::is_same_v<q20::remove_cvref_t<M>, QMarginsF>, bool> = true>
     friend constexpr decltype(auto) get(M &&m) noexcept
     {
         if constexpr (I == 0)
-            return (std::forward<M>(m).m_left);
+            return q23::forward_like<M>(m.m_left);
         else if constexpr (I == 1)
-            return (std::forward<M>(m).m_top);
+            return q23::forward_like<M>(m.m_top);
         else if constexpr (I == 2)
-            return (std::forward<M>(m).m_right);
+            return q23::forward_like<M>(m.m_right);
         else if constexpr (I == 3)
-            return (std::forward<M>(m).m_bottom);
+            return q23::forward_like<M>(m.m_bottom);
     }
 };
 

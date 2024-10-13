@@ -33,6 +33,7 @@
 #include "private/qnoncontiguousbytedevice_p.h"
 #include "qnetworkaccessauthenticationmanager_p.h"
 #include <QtNetwork/private/http2protocol_p.h>
+#include <QtNetwork/qhttpheaders.h>
 
 QT_REQUIRE_CONFIG(http);
 
@@ -74,19 +75,18 @@ public:
 
     // outgoing, Retrieved in the synchronous HTTP case
     QByteArray synchronousDownloadData;
-    QList<QPair<QByteArray,QByteArray> > incomingHeaders;
+    QHttpHeaders incomingHeaders;
     int incomingStatusCode;
     QString incomingReasonPhrase;
     bool isPipeliningUsed;
     bool isHttp2Used;
+    bool isCompressed = false;
     qint64 incomingContentLength;
     qint64 removedContentLength;
     QNetworkReply::NetworkError incomingErrorCode;
     QString incomingErrorDetail;
     QHttp1Configuration http1Parameters;
     QHttp2Configuration http2Parameters;
-
-    bool isCompressed;
 
 protected:
     // The zerocopy download buffer, if used:
@@ -112,7 +112,7 @@ signals:
 #endif
     void socketStartedConnecting();
     void requestSent();
-    void downloadMetaData(const QList<QPair<QByteArray,QByteArray> > &, int, const QString &, bool,
+    void downloadMetaData(const QHttpHeaders &, int, const QString &, bool,
                           QSharedPointer<char>, qint64, qint64, bool, bool);
     void downloadProgress(qint64, qint64);
     void downloadData(const QByteArray &);
@@ -164,22 +164,18 @@ class QNonContiguousByteDeviceThreadForwardImpl : public QNonContiguousByteDevic
 {
     Q_OBJECT
 protected:
-    bool wantDataPending;
-    qint64 m_amount;
-    char *m_data;
+    bool wantDataPending = false;
+    qint64 m_amount = 0;
+    char *m_data = nullptr;
     QByteArray m_dataArray;
-    bool m_atEnd;
-    qint64 m_size;
-    qint64 m_pos; // to match calls of haveDataSlot with the expected position
+    bool m_atEnd = false;
+    qint64 m_size = 0;
+    qint64 m_pos = 0; // to match calls of haveDataSlot with the expected position
 public:
     QNonContiguousByteDeviceThreadForwardImpl(bool aE, qint64 s)
         : QNonContiguousByteDevice(),
-          wantDataPending(false),
-          m_amount(0),
-          m_data(nullptr),
           m_atEnd(aE),
-          m_size(s),
-          m_pos(0)
+          m_size(s)
     {
     }
 
@@ -252,6 +248,7 @@ public:
         if (b) {
             // the reset succeeded, we're at pos 0 again
             m_pos = 0;
+            m_atEnd = false;
             // the HTTP code will anyway abort the request if !b.
         }
         return b;

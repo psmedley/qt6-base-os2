@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -7,12 +7,14 @@
 #include <qapplication.h>
 #include <qwindow.h>
 #include <qwidget.h>
+#include <qlineedit.h>
 
 #include <qdockwidget.h>
 #include <qmainwindow.h>
 #include <qscreen.h>
 #include <qscopedpointer.h>
 #include <qevent.h>
+#include <qboxlayout.h>
 
 
 class Window : public QWindow
@@ -46,6 +48,7 @@ public:
 private slots:
     void testShow();
     void testPositionAndSize();
+    void testSizeHints();
     void testExposeObscure();
     void testOwnership();
     void testBehindTheScenesDeletion();
@@ -57,6 +60,9 @@ private slots:
     void testDockWidget();
     void testNativeContainerParent();
     void testPlatformSurfaceEvent();
+    void embedWidgetWindow();
+    void testFocus();
+    void parentDestroyed();
     void cleanup();
 
 private:
@@ -108,7 +114,29 @@ void tst_QWindowContainer::testPositionAndSize()
     QCOMPARE(window->height(), container->height());
 }
 
+void tst_QWindowContainer::testSizeHints()
+{
+    QScopedPointer<QWidget> tlw(new QWidget);
+    QWindow *window = new QWindow();
+    window->setMinimumSize(QSize(200, 200));
+    window->setGeometry(m_availableGeometry.x() + 300, m_availableGeometry.y() + 400, 500, 600);
 
+    QScopedPointer<QWidget> container(QWidget::createWindowContainer(window));
+    container->setWindowTitle(QTest::currentTestFunction());
+
+    QVBoxLayout *vbox = new QVBoxLayout(tlw.data());
+    vbox->addWidget(container.data());
+    vbox->setContentsMargins(0, 0, 0, 0);
+
+    // Size hints should work regardless of visibility
+    QCOMPARE(container->minimumSizeHint(), window->minimumSize());
+    QCOMPARE(vbox->minimumSize(), window->minimumSize());
+
+    // Respect dynamic updates
+    window->setMinimumSize(QSize(210, 210));
+    QCOMPARE(container->minimumSizeHint(), window->minimumSize());
+    QCOMPARE(vbox->minimumSize(), window->minimumSize());
+}
 
 void tst_QWindowContainer::testExposeObscure()
 {
@@ -408,6 +436,129 @@ void tst_QWindowContainer::testPlatformSurfaceEvent()
 
     QCOMPARE(window.data(), nullptr);
     QVERIFY(ok);
+}
+
+void tst_QWindowContainer::embedWidgetWindow()
+{
+    {
+        QWidget parent;
+        QWidget *widget = new QWidget;
+        widget->show();
+        QVERIFY(QTest::qWaitForWindowExposed(widget));
+        QVERIFY(widget->windowHandle());
+        QPointer<QWindow> widgetWindow = widget->windowHandle();
+        auto *container = QWidget::createWindowContainer(widgetWindow, &parent);
+        QCOMPARE(container, widget);
+        QCOMPARE(widget->parent(), &parent);
+        delete widget;
+        QTRY_VERIFY(widgetWindow.isNull());
+    }
+
+    QPointer<QWidget> widget = new QWidget;
+    QPointer<QWindow> widgetWindow;
+    {
+        QWidget parent;
+        widget->show();
+        QVERIFY(QTest::qWaitForWindowExposed(widget));
+        QVERIFY(widget->windowHandle());
+        widgetWindow = widget->windowHandle();
+        auto *container = QWidget::createWindowContainer(widgetWindow, &parent);
+        QCOMPARE(container, widget);
+        QCOMPARE(widget->parent(), &parent);
+    }
+    QTRY_VERIFY(widget.isNull());
+    QTRY_VERIFY(widgetWindow.isNull());
+
+}
+
+void tst_QWindowContainer::testFocus()
+{
+    QWidget root;
+    root.setGeometry(m_availableGeometry);
+
+    QLineEdit *lineEdit = new QLineEdit(&root);
+    lineEdit->setGeometry(0, 0, m_availableGeometry.width() * 0.1, 17);
+    lineEdit->setFocusPolicy(Qt::FocusPolicy::StrongFocus);
+
+    QWindow *embedded = new QWindow();
+    QWidget *container = QWidget::createWindowContainer(embedded, &root);
+    container->setGeometry(0, lineEdit->height() + 10, m_availableGeometry.width() * 0.2, m_availableGeometry.height() - (lineEdit->height() + 10));
+    container->setFocusPolicy(Qt::StrongFocus);
+
+    root.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&root));
+    lineEdit->setFocus();
+    QTRY_VERIFY(lineEdit->hasFocus());
+    QCOMPARE(QGuiApplication::focusWindow(), root.windowHandle());
+    QCOMPARE(QApplication::focusWidget(), lineEdit);
+
+    // embedded window gets focused because of mouse click
+    QPoint embeddedCenter = container->rect().center();
+    QTest::mousePress(root.windowHandle(), Qt::LeftButton, {}, embeddedCenter);
+    QVERIFY(QTest::qWaitForWindowFocused(embedded));
+    QVERIFY(container->hasFocus());
+    QCOMPARE(QGuiApplication::focusWindow(), embedded);
+    QCOMPARE(QApplication::focusWidget(), container);
+    QVERIFY(!lineEdit->hasFocus());
+
+    QTest::mouseClick(lineEdit, Qt::LeftButton, {});
+    QVERIFY(QTest::qWaitForWindowFocused(root.windowHandle()));
+    QCOMPARE(QGuiApplication::focusWindow(), root.windowHandle());
+    QCOMPARE(QApplication::focusWidget(), lineEdit);
+    QVERIFY(lineEdit->hasFocus());
+
+    // embedded window gets focused because of Tab key event
+    QTest::keyClick(root.windowHandle(), Qt::Key_Tab);
+    QVERIFY(QTest::qWaitForWindowFocused(embedded));
+    QVERIFY(container->hasFocus());
+    QCOMPARE(QGuiApplication::focusWindow(), embedded);
+    QCOMPARE(QApplication::focusWidget(), container);
+    QVERIFY(!lineEdit->hasFocus());
+    // A key tab event sent to the root window should cause
+    // the nextInFocusChain of the window container to get focused
+    QTest::keyClick(root.windowHandle(), Qt::Key_Tab);
+    QVERIFY(QTest::qWaitForWindowFocused(root.windowHandle()));
+    QCOMPARE(QGuiApplication::focusWindow(), root.windowHandle());
+    QCOMPARE(QApplication::focusWidget(), lineEdit);
+    QVERIFY(lineEdit->hasFocus());
+
+    // embedded window gets focused programmatically
+    embedded->requestActivate();
+    QVERIFY(QTest::qWaitForWindowFocused(embedded));
+    QVERIFY(container->hasFocus());
+    QCOMPARE(QGuiApplication::focusWindow(), embedded);
+    QCOMPARE(QApplication::focusWidget(), container);
+    QVERIFY(!lineEdit->hasFocus());
+}
+
+class CreateDestroyWidget : public QWidget
+{
+public:
+    void create() { QWidget::create(); }
+    void destroy() { QWidget::destroy(); }
+};
+
+void tst_QWindowContainer::parentDestroyed()
+{
+    CreateDestroyWidget topLevel;
+    topLevel.setAttribute(Qt::WA_NativeWindow);
+    QVERIFY(topLevel.windowHandle());
+
+    QPointer<QWindow> window = new QWindow;
+    QWidget *container = QWidget::createWindowContainer(window.get());
+    container->setParent(&topLevel);
+    topLevel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+    QCOMPARE(window->parent(), topLevel.windowHandle());
+
+    // Destroying the widget should not wipe out the contained QWindow
+    topLevel.destroy();
+    QVERIFY(window);
+
+    // Recreating the top level should once again reparent the contained window
+    topLevel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+    QCOMPARE(window->parent(), topLevel.windowHandle());
 }
 
 QTEST_MAIN(tst_QWindowContainer)

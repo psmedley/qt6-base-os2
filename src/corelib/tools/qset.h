@@ -6,6 +6,7 @@
 
 #include <QtCore/qhash.h>
 #include <QtCore/qcontainertools_impl.h>
+#include <QtCore/qttypetraits.h>
 
 #include <initializer_list>
 #include <iterator>
@@ -189,14 +190,18 @@ public:
     inline QSet<T> &operator+=(const T &value) { insert(value); return *this; }
     inline QSet<T> &operator-=(const QSet<T> &other) { subtract(other); return *this; }
     inline QSet<T> &operator-=(const T &value) { remove(value); return *this; }
-    inline QSet<T> operator|(const QSet<T> &other) const
-        { QSet<T> result = *this; result |= other; return result; }
-    inline QSet<T> operator&(const QSet<T> &other) const
-        { QSet<T> result = *this; result &= other; return result; }
-    inline QSet<T> operator+(const QSet<T> &other) const
-        { QSet<T> result = *this; result += other; return result; }
-    inline QSet<T> operator-(const QSet<T> &other) const
-        { QSet<T> result = *this; result -= other; return result; }
+
+    friend QSet operator|(const QSet &lhs, const QSet &rhs) { return QSet(lhs) |= rhs; }
+    friend QSet operator|(QSet &&lhs, const QSet &rhs) { lhs |= rhs; return std::move(lhs); }
+
+    friend QSet operator&(const QSet &lhs, const QSet &rhs) { return QSet(lhs) &= rhs; }
+    friend QSet operator&(QSet &&lhs, const QSet &rhs) { lhs &= rhs; return std::move(lhs); }
+
+    friend QSet operator+(const QSet &lhs, const QSet &rhs) { return QSet(lhs) += rhs; }
+    friend QSet operator+(QSet &&lhs, const QSet &rhs) { lhs += rhs; return std::move(lhs); }
+
+    friend QSet operator-(const QSet &lhs, const QSet &rhs) { return QSet(lhs) -= rhs; }
+    friend QSet operator-(QSet &&lhs, const QSet &rhs) { lhs -= rhs; return std::move(lhs); }
 
     QList<T> values() const;
 
@@ -224,10 +229,13 @@ Q_INLINE_TEMPLATE void QSet<T>::reserve(qsizetype asize) { q_hash.reserve(asize)
 template <class T>
 Q_INLINE_TEMPLATE QSet<T> &QSet<T>::unite(const QSet<T> &other)
 {
-    if (!q_hash.isSharedWith(other.q_hash)) {
-        for (const T &e : other)
-            insert(e);
-    }
+    if (q_hash.isSharedWith(other.q_hash))
+        return *this;
+    QSet<T> tmp = other;
+    if (size() < other.size())
+        swap(tmp);
+    for (const auto &e : std::as_const(tmp))
+        insert(e);
     return *this;
 }
 

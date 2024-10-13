@@ -1,7 +1,7 @@
 /*
 
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 */
 
@@ -93,7 +93,7 @@ public:
 
         horizontalLayout->addWidget(iconSelector);
 
-        spacerItem = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+        spacerItem = new QSpacerItem(40, 20, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
         horizontalLayout->addItem(spacerItem);
 
@@ -103,14 +103,14 @@ public:
 
         verticalLayout->addLayout(formLayout);
 
-        verticalSpacer = new QSpacerItem(0, 0, QSizePolicy::Minimum, QSizePolicy::Expanding);
+        verticalSpacer = new QSpacerItem(0, 0, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
 
         verticalLayout->addItem(verticalSpacer);
 
         line = new QFrame(qdesigner_internal__NewActionDialog);
         line->setObjectName("line");
-        line->setFrameShape(QFrame::HLine);
-        line->setFrameShadow(QFrame::Sunken);
+        line->setFrameShape(QFrame::Shape::HLine);
+        line->setFrameShadow(QFrame::Shadow::Sunken);
 
         verticalLayout->addWidget(line);
 

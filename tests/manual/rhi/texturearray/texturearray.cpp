@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "../shared/examplefw.h"
 #include <QElapsedTimer>
@@ -43,7 +43,9 @@ void Window::customInit()
     if (!m_r->isFeatureSupported(QRhi::TextureArrays))
         qFatal("Texture array objects are not supported by this backend");
 
-    d.texArr = m_r->newTextureArray(QRhiTexture::RGBA8, ARRAY_SIZE, QSize(512, 512));
+    d.texArr = m_r->newTextureArray(QRhiTexture::RGBA8, ARRAY_SIZE, QSize(512, 512), 1,
+        // mipmaps will be generated, to exercise that too
+        QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
     d.releasePool << d.texArr;
     d.texArr->create();
 
@@ -59,7 +61,9 @@ void Window::customInit()
     img.fill(Qt::yellow);
     d.initialUpdates->uploadTexture(d.texArr, QRhiTextureUploadDescription(QRhiTextureUploadEntry(3, 0, QRhiTextureSubresourceUploadDescription(img))));
 
-    d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+    d.initialUpdates->generateMips(d.texArr);
+
+    d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,
                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     d.releasePool << d.sampler;
     d.sampler->create();

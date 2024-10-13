@@ -21,6 +21,8 @@
 #include <QtCore/private/qglobal_p.h>
 #include <QtCore/qmap.h>
 
+#include <vector>
+
 // Different HTTP/2 constants/values as defined by RFC 7540.
 
 QT_BEGIN_NAMESPACE
@@ -115,9 +117,10 @@ const qint32 maxSessionReceiveWindowSize((quint32(1) << 31) - 1);
 // Presumably, we never use up to 100 streams so let it be 10 simultaneous:
 const qint32 qtDefaultStreamReceiveWindowSize = maxSessionReceiveWindowSize / 10;
 
-struct Frame configurationToSettingsFrame(const QHttp2Configuration &configuration);
+struct Frame Q_AUTOTEST_EXPORT configurationToSettingsFrame(const QHttp2Configuration &configuration);
 QByteArray settingsFrameToBase64(const Frame &settingsFrame);
 void appendProtocolUpgradeHeaders(const QHttp2Configuration &configuration, QHttpNetworkRequest *request);
+std::vector<uchar> assemble_hpack_block(const std::vector<Frame> &frames);
 
 extern const Q_AUTOTEST_EXPORT char Http2clientPreface[clientPrefaceLength];
 
@@ -129,7 +132,7 @@ enum class FrameStatus
     goodFrame
 };
 
-enum Http2Error
+enum Http2Error : quint32
 {
     // Old-style enum to avoid excessive name
     // qualification ...

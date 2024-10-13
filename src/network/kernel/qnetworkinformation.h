@@ -23,6 +23,7 @@ class Q_NETWORK_EXPORT QNetworkInformation : public QObject
                NOTIFY isBehindCaptivePortalChanged)
     Q_PROPERTY(TransportMedium transportMedium READ transportMedium NOTIFY transportMediumChanged)
     Q_PROPERTY(bool isMetered READ isMetered NOTIFY isMeteredChanged)
+    Q_CLASSINFO("RegisterEnumClassesUnscoped", "false")
 public:
     enum class Reachability {
         Unknown,
@@ -75,14 +76,13 @@ public:
     static QNetworkInformation *instance();
 
 Q_SIGNALS:
-    void reachabilityChanged(Reachability newReachability);
+    void reachabilityChanged(QNetworkInformation::Reachability newReachability);
     void isBehindCaptivePortalChanged(bool state);
-    void transportMediumChanged(TransportMedium current);
+    void transportMediumChanged(QNetworkInformation::TransportMedium current);
     void isMeteredChanged(bool isMetered);
 
 private:
     friend struct QNetworkInformationDeleter;
-    friend class QNetworkInformationPrivate;
     QNetworkInformation(QNetworkInformationBackend *backend);
     ~QNetworkInformation() override;
 

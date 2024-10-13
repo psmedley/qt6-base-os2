@@ -112,9 +112,9 @@ QByteArray QHttpNetworkRequest::uri(bool throughProxy) const
 
 QByteArray QHttpNetworkRequestPrivate::header(const QHttpNetworkRequest &request, bool throughProxy)
 {
-    QList<QPair<QByteArray, QByteArray> > fields = request.header();
+    const QHttpHeaders headers = request.header();
     QByteArray ba;
-    ba.reserve(40 + fields.size()*25); // very rough lower bound estimation
+    ba.reserve(40 + headers.size() * 25); // very rough lower bound estimation
 
     ba += request.methodName();
     ba += ' ';
@@ -126,12 +126,10 @@ QByteArray QHttpNetworkRequestPrivate::header(const QHttpNetworkRequest &request
     ba += QByteArray::number(request.minorVersion());
     ba += "\r\n";
 
-    QList<QPair<QByteArray, QByteArray> >::const_iterator it = fields.constBegin();
-    QList<QPair<QByteArray, QByteArray> >::const_iterator endIt = fields.constEnd();
-    for (; it != endIt; ++it) {
-        ba += it->first;
+    for (qsizetype i = 0; i < headers.size(); ++i) {
+        ba += headers.nameAt(i);
         ba += ": ";
-        ba += it->second;
+        ba += headers.valueAt(i);
         ba += "\r\n";
     }
     if (request.d->operation == QHttpNetworkRequest::Post) {
@@ -237,12 +235,12 @@ void QHttpNetworkRequest::setContentLength(qint64 length)
     d->setContentLength(length);
 }
 
-QList<QPair<QByteArray, QByteArray> > QHttpNetworkRequest::header() const
+QHttpHeaders QHttpNetworkRequest::header() const
 {
     return d->parser.headers();
 }
 
-QByteArray QHttpNetworkRequest::headerField(const QByteArray &name, const QByteArray &defaultValue) const
+QByteArray QHttpNetworkRequest::headerField(QByteArrayView name, const QByteArray &defaultValue) const
 {
     return d->headerField(name, defaultValue);
 }
@@ -264,6 +262,7 @@ void QHttpNetworkRequest::clearHeaders()
 
 QHttpNetworkRequest &QHttpNetworkRequest::operator=(const QHttpNetworkRequest &other)
 {
+    QHttpNetworkHeader::operator=(other);
     d = other.d;
     return *this;
 }
@@ -381,6 +380,16 @@ QString QHttpNetworkRequest::peerVerifyName() const
 void QHttpNetworkRequest::setPeerVerifyName(const QString &peerName)
 {
     d->peerVerifyName = peerName;
+}
+
+QString QHttpNetworkRequest::fullLocalServerName() const
+{
+    return d->fullLocalServerName;
+}
+
+void QHttpNetworkRequest::setFullLocalServerName(const QString &fullServerName)
+{
+    d->fullLocalServerName = fullServerName;
 }
 
 QT_END_NAMESPACE

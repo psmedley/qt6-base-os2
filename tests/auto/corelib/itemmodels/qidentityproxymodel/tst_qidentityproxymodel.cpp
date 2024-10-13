@@ -1,5 +1,5 @@
 // Copyright (C) 2011 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Stephen Kelly <stephen.kelly@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QAbstractItemModelTester>
 #include <QCoreApplication>
@@ -27,6 +27,17 @@ public:
         const QModelIndex idx = index(0, 0, QModelIndex());
         Q_EMIT dataChanged(idx, idx, QList<int>() << 1);
     }
+
+    // Workaround QObject::isSignalConnected() being a protected method
+    bool isConnected(const QMetaMethod &m) const { return isSignalConnected(m); }
+};
+
+class IdentityProxyModel : public QIdentityProxyModel
+{
+public:
+    // The name has to be different than the method from the base class
+    void setHandleSLC(bool b) { setHandleSourceLayoutChanges(b); }
+    void setHandleSDC(bool b) { setHandleSourceDataChanges(b); }
 };
 
 class tst_QIdentityProxyModel : public QObject
@@ -53,6 +64,10 @@ private slots:
 
     void persistIndexOnLayoutChange();
     void createPersistentOnLayoutAboutToBeChanged();
+
+    void testSetHandleLayoutChanges();
+    void testSetHandleDataChanges();
+
 protected:
     void verifyIdentity(QAbstractItemModel *model, const QModelIndex &parent = QModelIndex());
 
@@ -511,6 +526,45 @@ void tst_QIdentityProxyModel::createPersistentOnLayoutAboutToBeChanged() // QTBU
     model.sort(0);
     QCOMPARE(layoutAboutToBeChangedSpy.size(), 1);
     QCOMPARE(layoutChangedSpy.size(), 1);
+}
+
+void tst_QIdentityProxyModel::testSetHandleLayoutChanges()
+{
+    const std::array layoutSignals = {
+        QMetaMethod::fromSignal(&QAbstractItemModel::layoutChanged),
+        QMetaMethod::fromSignal(&QAbstractItemModel::layoutAboutToBeChanged),
+    };
+
+    DataChangedModel model;
+    IdentityProxyModel proxy;
+    proxy.setSourceModel(&model);
+    for (const auto &m : layoutSignals)
+        QVERIFY(model.isConnected(m)); // Connected by default
+
+    proxy.setSourceModel(nullptr);
+
+    // Disable handling (connecting to layout signals) of source model layout changes
+    proxy.setHandleSLC(false);
+    proxy.setSourceModel(&model);
+    for (const auto &m : layoutSignals)
+        QVERIFY(!model.isConnected(m));
+}
+
+void tst_QIdentityProxyModel::testSetHandleDataChanges()
+{
+    const auto signal = QMetaMethod::fromSignal(&QAbstractItemModel::dataChanged);
+
+    DataChangedModel model;
+    IdentityProxyModel proxy;
+    proxy.setSourceModel(&model);
+    QVERIFY(model.isConnected(signal)); // Connected by default
+
+    proxy.setSourceModel(nullptr);
+
+    // Disable handling (connecting to data signals) of source model data changes
+    proxy.setHandleSDC(false);
+    proxy.setSourceModel(&model);
+    QVERIFY(!model.isConnected(signal));
 }
 
 QTEST_MAIN(tst_QIdentityProxyModel)

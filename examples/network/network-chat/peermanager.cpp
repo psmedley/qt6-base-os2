@@ -2,20 +2,19 @@
 // Copyright (C) 2018 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
-#include <QtNetwork>
-
 #include "client.h"
 #include "connection.h"
 #include "peermanager.h"
+
+#include <QNetworkInterface>
+#include <QUuid>
 
 static const qint32 BroadcastInterval = 2000;
 static const unsigned broadcastPort = 45000;
 
 PeerManager::PeerManager(Client *client)
-    : QObject(client)
+    : QObject(client), client(client)
 {
-    this->client = client;
-
     static const char *envVariables[] = {
         "USERNAME", "USER", "USERDOMAIN", "HOSTNAME", "DOMAINNAME"
     };
@@ -29,8 +28,12 @@ PeerManager::PeerManager(Client *client)
     if (username.isEmpty())
         username = "unknown";
 
+    // We generate a unique per-process identifier so we can avoid multiple
+    // connections to/from the same remote peer as well as ignore our own
+    // broadcasts.
+    localUniqueId = QUuid::createUuid().toByteArray();
+
     updateAddresses();
-    serverPort = 0;
 
     broadcastSocket.bind(QHostAddress::Any, broadcastPort, QUdpSocket::ShareAddress
                          | QUdpSocket::ReuseAddressHint);
@@ -52,6 +55,11 @@ QString PeerManager::userName() const
     return username;
 }
 
+QByteArray PeerManager::uniqueId() const
+{
+    return localUniqueId;
+}
+
 void PeerManager::startBroadcasting()
 {
     broadcastTimer.start();
@@ -59,11 +67,7 @@ void PeerManager::startBroadcasting()
 
 bool PeerManager::isLocalHostAddress(const QHostAddress &address) const
 {
-    for (const QHostAddress &localAddress : ipAddresses) {
-        if (address.isEqual(localAddress))
-            return true;
-    }
-    return false;
+    return ipAddresses.contains(address);
 }
 
 void PeerManager::sendBroadcastDatagram()
@@ -72,15 +76,14 @@ void PeerManager::sendBroadcastDatagram()
     {
         QCborStreamWriter writer(&datagram);
         writer.startArray(2);
-        writer.append(username);
+        writer.append(localUniqueId);
         writer.append(serverPort);
         writer.endArray();
     }
 
     bool validBroadcastAddresses = true;
     for (const QHostAddress &address : std::as_const(broadcastAddresses)) {
-        if (broadcastSocket.writeDatagram(datagram, address,
-                                          broadcastPort) == -1)
+        if (broadcastSocket.writeDatagram(datagram, address, broadcastPort) == -1)
             validBroadcastAddresses = false;
     }
 
@@ -100,6 +103,7 @@ void PeerManager::readBroadcastDatagram()
             continue;
 
         int senderServerPort;
+        QByteArray peerUniqueId;
         {
             // decode the datagram
             QCborStreamReader reader(datagram);
@@ -109,10 +113,12 @@ void PeerManager::readBroadcastDatagram()
                 continue;
 
             reader.enterContainer();
-            if (reader.lastError() != QCborError::NoError || !reader.isString())
+            if (reader.lastError() != QCborError::NoError || !reader.isByteArray())
                 continue;
-            while (reader.readString().status == QCborStreamReader::Ok) {
-                // we don't actually need the username right now
+            auto r = reader.readByteArray();
+            while (r.status == QCborStreamReader::Ok) {
+                peerUniqueId = r.data;
+                r = reader.readByteArray();
             }
 
             if (reader.lastError() != QCborError::NoError || !reader.isUnsignedInteger())
@@ -120,10 +126,10 @@ void PeerManager::readBroadcastDatagram()
             senderServerPort = reader.toInteger();
         }
 
-        if (isLocalHostAddress(senderIp) && senderServerPort == serverPort)
+        if (peerUniqueId == localUniqueId)
             continue;
 
-        if (!client->hasConnection(senderIp)) {
+        if (!client->hasConnection(peerUniqueId)) {
             Connection *connection = new Connection(this);
             emit newConnection(connection);
             connection->connectToHost(senderIp, senderServerPort);

@@ -1,13 +1,17 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QSignalSpy>
+#if QT_CONFIG(sortfilterproxymodel)
 #include <QSortFilterProxyModel>
+#endif
 
 #include <qobject.h>
 #include <qmetaobject.h>
+#if QT_CONFIG(proxymodel)
 #include <qabstractproxymodel.h>
+#endif
 #include <private/qmetaobject_p.h>
 
 Q_DECLARE_METATYPE(const QMetaObject *)
@@ -30,6 +34,8 @@ Q_DECLARE_METATYPE(const QMetaObject *)
 // (non-variadic) code above
 #  define Q_NO_ARG
 #endif
+
+using namespace Qt::StringLiterals;
 
 struct MyStruct
 {
@@ -302,14 +308,16 @@ private slots:
     void invokeTypedefTypes();
     void invokeException();
     void invokeQueuedAutoRegister();
+    void invokeFreeFunction();
+    void invokeBind();
     void qtMetaObjectInheritance();
     void normalizedSignature_data();
     void normalizedSignature();
     void normalizedType_data();
     void normalizedType();
     void customPropertyType();
-    void checkScope_data();
-    void checkScope();
+    void keysToValue_data();
+    void keysToValue(); // Also keyToValue()
     void propertyNotify();
     void propertyConstant();
     void propertyFinal();
@@ -511,6 +519,8 @@ public slots:
     qint64 sl14();
     qlonglong *sl15(qlonglong *);
     MyForwardDeclaredType *sl16(MyForwardDeclaredType *);
+
+    void sl17(int *i) { *i = 242; }
 
     void overloadedSlot();
     void overloadedSlot(int, int);
@@ -1079,6 +1089,116 @@ void tst_QMetaObject::invokePointer()
         QCOMPARE(obj.slotResult, QString("sl1:1"));
     }
     QCOMPARE(countedStructObjectsCount, 0);
+
+    // Invoking with parameters
+    QString result;
+    QVERIFY(QMetaObject::invokeMethod(&obj, &QtTestObject::sl1, qReturnArg(result), u"bubu"_s));
+    QCOMPARE(obj.slotResult, u"sl1:bubu");
+    QCOMPARE(result, u"yessir");
+
+    // without taking return value
+    QVERIFY(QMetaObject::invokeMethod(&obj, &QtTestObject::sl1, u"bubu"_s));
+    QCOMPARE(obj.slotResult, u"sl1:bubu");
+
+    QVERIFY(QMetaObject::invokeMethod(&obj, &QtTestObject::sl1, Qt::DirectConnection, qReturnArg(result),
+            u"byebye"_s));
+    QCOMPARE(obj.slotResult, u"sl1:byebye");
+    QCOMPARE(result, u"yessir");
+
+    QVERIFY(QMetaObject::invokeMethod(&obj, qOverload<int, int>(&QtTestObject::overloadedSlot), 1, 2));
+    QCOMPARE(obj.slotResult, u"overloadedSlot:1,2");
+
+    // non-const ref parameter
+    QString original = u"bubu"_s;
+    QString &ref = original;
+    QVERIFY(QMetaObject::invokeMethod(&obj, &QtTestObject::sl1, qReturnArg(result), ref));
+    QCOMPARE(obj.slotResult, u"sl1:bubu");
+    QCOMPARE(result, u"yessir");
+
+    struct R {
+        bool operator()(int) { return true; }
+        int operator()(char) { return 15; }
+        int operator()(QString = {}, int = {}, int = {}) { return 242; }
+    } r;
+
+    // Test figuring out which operator() to call:
+    {
+        bool res = false;
+        QVERIFY(QMetaObject::invokeMethod(&obj, r, qReturnArg(res), 1));
+        QCOMPARE(res, true);
+    }
+    {
+        int res;
+        QVERIFY(QMetaObject::invokeMethod(&obj, r, qReturnArg(res), 'c'));
+        QCOMPARE(res, 15);
+    }
+    {
+        int res;
+        QVERIFY(QMetaObject::invokeMethod(&obj, r, qReturnArg(res)));
+        QCOMPARE(res, 242);
+        res = 0;
+        QVERIFY(QMetaObject::invokeMethod(&obj, r, qReturnArg(res), u"bu"_s));
+        QCOMPARE(res, 242);
+        res = 0;
+        QVERIFY(QMetaObject::invokeMethod(&obj, r, qReturnArg(res), u"bu"_s, 1));
+        QCOMPARE(res, 242);
+        res = 0;
+        QVERIFY(QMetaObject::invokeMethod(&obj, r, qReturnArg(res), u"bu"_s, 1, 2));
+        QCOMPARE(res, 242);
+    }
+
+    {
+        auto lambda = [](const QString &s) { return s + s; };
+        QVERIFY(QMetaObject::invokeMethod(&obj, lambda, qReturnArg(result), u"bu"_s));
+        QCOMPARE(result, u"bubu");
+    }
+
+    {
+        auto lambda = [](const QString &s = u"bu"_s) { return s + s; };
+        QVERIFY(QMetaObject::invokeMethod(&obj, lambda, qReturnArg(result)));
+        QCOMPARE(result, u"bubu");
+
+        QVERIFY(QMetaObject::invokeMethod(&obj, lambda, qReturnArg(result), u"bye"_s));
+        QCOMPARE(result, u"byebye");
+    }
+
+    {
+        auto lambda = [](const QString &s, qint64 a, qint16 b, qint8 c) {
+            return s + QString::number(a) + QString::number(b) + QString::number(c);
+        };
+        // Testing mismatching argument (int for qint64). The other arguments
+        // would static_assert for potential truncation if they were ints.
+        QVERIFY(QMetaObject::invokeMethod(&obj, lambda, qReturnArg(result), u"bu"_s, 1, qint16(2), qint8(3)));
+        QCOMPARE(result, u"bu123");
+    }
+    {
+        // Testing deduction
+        auto lambda = [](const QString &s, auto a) { return s + a; };
+        QVERIFY(QMetaObject::invokeMethod(&obj, lambda, qReturnArg(result), u"bu"_s, "bu"_L1));
+        QCOMPARE(result, u"bubu");
+
+        auto variadic = [](const QString &s, auto... a) { return s + (QString::number(a) + ...); };
+        QVERIFY(QMetaObject::invokeMethod(&obj, variadic, qReturnArg(result), u"bu"_s, 1, 2, 3, 4, 5, 6));
+        QCOMPARE(result, u"bu123456");
+    }
+    {
+        // Testing a functor returning void and accepting a pointer,
+        // this may trigger the pointer to be interpreted as the old void*
+        // return parameter.
+        bool invoked = false;
+        auto lambda = [&invoked](void *ptr) -> void {
+            Q_UNUSED(ptr);
+            invoked = true;
+        };
+        int i = 242;
+        QVERIFY(QMetaObject::invokeMethod(&obj, lambda, &i));
+        QVERIFY(invoked);
+
+        // member fn
+        i = 0;
+        QVERIFY(QMetaObject::invokeMethod(&obj, &QtTestObject::sl17, &i));
+        QCOMPARE(i, 242);
+    }
 }
 
 void tst_QMetaObject::invokeQueuedMetaMember()
@@ -1343,6 +1463,12 @@ void tst_QMetaObject::invokeQueuedPointer()
         QCOMPARE(var, 0);
     }
     QCOMPARE(countedStructObjectsCount, 0);
+
+    // Invoking with parameters
+    using namespace Qt::StringLiterals;
+    QVERIFY(QMetaObject::invokeMethod(&obj, &QtTestObject::sl1, Qt::QueuedConnection, u"bubu"_s));
+    qApp->processEvents(QEventLoop::AllEvents);
+    QCOMPARE(obj.slotResult, u"sl1:bubu");
 }
 
 // this test is duplicated below
@@ -1762,6 +1888,18 @@ void tst_QMetaObject::invokeBlockingQueuedPointer()
                                           Qt::BlockingQueuedConnection));
         QCOMPARE(obj.slotResult, QString("sl1:hehe"));
     }
+
+    // Test with parameters
+    QString result;
+    QVERIFY(QMetaObject::invokeMethod(&obj, &QtTestObject::sl1, Qt::BlockingQueuedConnection,
+            qReturnArg(result), u"bubu"_s));
+    QCOMPARE(result, u"yessir");
+    QCOMPARE(obj.slotResult, u"sl1:bubu");
+
+    QVERIFY(QMetaObject::invokeMethod(&obj, &QtTestObject::sl2, Qt::BlockingQueuedConnection,
+            u"bubu"_s, u"baba"_s));
+    QCOMPARE(obj.slotResult, u"sl2:bububaba");
+
     QVERIFY(QMetaObject::invokeMethod(&obj, [&](){obj.moveToThread(QThread::currentThread());}, Qt::BlockingQueuedConnection));
     t.quit();
     QVERIFY(t.wait());
@@ -1772,6 +1910,7 @@ void tst_QMetaObject::invokeBlockingQueuedPointer()
 void tst_QMetaObject::qtMetaObjectInheritance()
 {
     QVERIFY(!QObject::staticMetaObject.superClass());
+#if QT_CONFIG(sortfilterproxymodel)
     QCOMPARE(QSortFilterProxyModel::staticMetaObject.indexOfEnumerator("Qt::CaseSensitivity"), -1);
     QCOMPARE(QSortFilterProxyModel::staticMetaObject.indexOfEnumerator("CaseSensitivity"), -1);
     int indexOfSortCaseSensitivity = QSortFilterProxyModel::staticMetaObject.indexOfProperty("sortCaseSensitivity");
@@ -1779,6 +1918,7 @@ void tst_QMetaObject::qtMetaObjectInheritance()
     QMetaProperty sortCaseSensitivity = QSortFilterProxyModel::staticMetaObject.property(indexOfSortCaseSensitivity);
     QVERIFY(sortCaseSensitivity.isValid());
     QCOMPARE(sortCaseSensitivity.enumerator().name(), "CaseSensitivity");
+#endif
 }
 
 struct MyType
@@ -1997,6 +2137,49 @@ void tst_QMetaObject::invokeQueuedAutoRegister()
              QString("slotWithRegistrableArgument:myShared-myShared-myShared-myShared-00"));
 }
 
+namespace FunctionTest {
+    static void function0() {}
+    static int functionNoExcept() noexcept
+    {
+        return 42;
+    }
+}
+
+void tst_QMetaObject::invokeFreeFunction()
+{
+    using namespace FunctionTest;
+    QtTestObject obj;
+    QMetaObject::invokeMethod(&obj, function0);
+    int retInt = -1;
+    QMetaObject::invokeMethod(&obj, functionNoExcept, &retInt);
+    QCOMPARE(retInt, functionNoExcept());
+}
+
+void tst_QMetaObject::invokeBind()
+{
+    QtTestObject obj;
+
+    struct {
+        int number;
+        QString string;
+    } results;
+
+    const auto function = [&results](int number, const QString &string) -> bool {
+        results.number = number;
+        results.string = string;
+        return true;
+    };
+
+    const int number = 42;
+    const QString string("Test");
+    const auto binding = std::bind(function, number, string);
+    bool ret = false;
+    QMetaObject::invokeMethod(&obj, binding, &ret);
+    QVERIFY(ret);
+    QCOMPARE(results.number, number);
+    QCOMPARE(results.string, string);
+}
+
 void tst_QMetaObject::normalizedSignature_data()
 {
     QTest::addColumn<QString>("signature");
@@ -2162,7 +2345,7 @@ void tst_QMetaObject::customPropertyType()
     QCOMPARE(prop.metaType().id(), QMetaType::QVariantList);
 }
 
-void tst_QMetaObject::checkScope_data()
+void tst_QMetaObject::keysToValue_data()
 {
     QTest::addColumn<QObject *>("object");
     QTest::addColumn<QByteArray>("name");
@@ -2176,7 +2359,7 @@ void tst_QMetaObject::checkScope_data()
 }
 
 
-void tst_QMetaObject::checkScope()
+void tst_QMetaObject::keysToValue()
 {
     QFETCH(QObject *, object);
     QFETCH(QByteArray, name);
@@ -2189,6 +2372,8 @@ void tst_QMetaObject::checkScope()
     QVERIFY(!me.isFlag());
     QCOMPARE(QByteArray(me.scope()), QByteArray("MyNamespace::" + name));
     QCOMPARE(me.keyToValue("MyNamespace::" + name + "::MyEnum2", &ok), 1);
+    // Fully qualified unscoped enumerator
+    QCOMPARE(me.keyToValue("MyNamespace::" + name + "::MyEnum::MyEnum2", &ok), 1);
     QCOMPARE(ok, true);
     QCOMPARE(me.keyToValue(name + "::MyEnum2", &ok), -1);
     QCOMPARE(ok, false);
@@ -2218,6 +2403,9 @@ void tst_QMetaObject::checkScope()
     QCOMPARE(QByteArray(mf.scope()), QByteArray("MyNamespace::" + name));
     QCOMPARE(mf.keysToValue("MyNamespace::" + name + "::MyFlag2", &ok), 2);
     QCOMPARE(ok, true);
+    // Fully qualified
+    QCOMPARE(mf.keysToValue("MyNamespace::" + name + "::MyFlag::MyFlag2", &ok), 2);
+    QCOMPARE(ok, true);
     QCOMPARE(mf.keysToValue(name + "::MyFlag2", &ok), -1);
     QCOMPARE(ok, false);
     QCOMPARE(mf.keysToValue("MyNamespace::MyFlag2", &ok), -1);
@@ -2227,7 +2415,12 @@ void tst_QMetaObject::checkScope()
     QCOMPARE(mf.keysToValue("MyFlag", &ok), -1);
     QCOMPARE(ok, false);
     QCOMPARE(QLatin1String(mf.valueToKey(2)), QLatin1String("MyFlag2"));
-    QCOMPARE(mf.keysToValue("MyNamespace::" + name + "::MyFlag1|MyNamespace::" + name + "::MyFlag2", &ok), 3);
+
+    const QByteArray prefix = "MyNamespace::" + name;
+    QCOMPARE(mf.keysToValue(prefix + "::MyFlag1|" + prefix + "::MyFlag2", &ok), 3);
+    QCOMPARE(ok, true);
+    // Fully qualified
+    QCOMPARE(mf.keysToValue(prefix + "::MyFlag::MyFlag1|" + prefix + "::MyFlag::MyFlag2", &ok), 3);
     QCOMPARE(ok, true);
     QCOMPARE(mf.keysToValue(name + "::MyFlag1|" + name + "::MyFlag2", &ok), -1);
     QCOMPARE(ok, false);
@@ -2239,9 +2432,34 @@ void tst_QMetaObject::checkScope()
     QCOMPARE(ok, true);
     QCOMPARE(mf.keysToValue("MyFlag1|MyNamespace::" + name + "::MyFlag2", &ok), 3);
     QCOMPARE(ok, true);
-    QCOMPARE(mf.keysToValue("MyNamespace::" + name + "::MyFlag2|MyNamespace::" + name + "::MyFlag2", &ok), 2);
+    QCOMPARE(mf.keysToValue(prefix + "::MyFlag2|" + prefix + "::MyFlag2", &ok), 2);
+    QCOMPARE(ok, true);
+    // Fully qualified
+    QCOMPARE(mf.keysToValue(prefix + "::MyFlag::MyFlag2|" + prefix + "::MyFlag::MyFlag2", &ok), 2);
     QCOMPARE(ok, true);
     QCOMPARE(QLatin1String(mf.valueToKeys(3)), QLatin1String("MyFlag1|MyFlag2"));
+
+    // Test flags with extra '|'
+    QTest::ignoreMessage(QtWarningMsg,
+        QRegularExpression(u"QMetaEnum::keysToValue: malformed keys string, ends with '|'.+"_s));
+    QCOMPARE(mf.keysToValue("MyFlag1|MyFlag2|", &ok), -1);
+    QCOMPARE(ok, false);
+
+    QTest::ignoreMessage(QtWarningMsg,
+        QRegularExpression(u"QMetaEnum::keysToValue: malformed keys string, starts with '|'.+"_s));
+    QCOMPARE(mf.keysToValue("|MyFlag1|MyFlag2|", &ok), -1);
+    QCOMPARE(ok, false);
+
+    QTest::ignoreMessage(QtWarningMsg,
+        QRegularExpression(
+            u"QMetaEnum::keysToValue: malformed keys string, has two consecutive '|'.+"_s));
+    QCOMPARE(mf.keysToValue("MyFlag1||MyFlag2", &ok), -1);
+    QCOMPARE(ok, false);
+
+    // Test empty string
+    QTest::ignoreMessage(QtWarningMsg, "QMetaEnum::keysToValue: empty keys string.");
+    QCOMPARE(mf.keysToValue("", &ok), -1);
+    QCOMPARE(ok, false);
 }
 
 void tst_QMetaObject::propertyNotify()
@@ -2303,7 +2521,9 @@ void tst_QMetaObject::metaType()
 {
     QCOMPARE(QObject::staticMetaObject.metaType(), QMetaType::fromType<QObject>());
     QCOMPARE(MyGadget::staticMetaObject.metaType(), QMetaType::fromType<MyGadget>());
+#if QT_CONFIG(proxymodel)
     QCOMPARE(QAbstractProxyModel::staticMetaObject.metaType(), QMetaType::fromType<QAbstractProxyModel>());
+#endif
     auto qtNameSpaceMetaType = Qt::staticMetaObject.metaType();
     QVERIFY2(!qtNameSpaceMetaType.isValid(), qtNameSpaceMetaType.name());
 }

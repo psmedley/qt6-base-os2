@@ -1,6 +1,6 @@
 // Copyright (C) 2023 The Qt Company Ltd.
 // Copyright (C) 2017 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QByteArray>
 #include <QCryptographicHash>
@@ -178,7 +178,7 @@ void tst_QCryptographicHash::hmac_addData()
         mac.reset();
         mac.addData(data);
         [[maybe_unused]]
-        auto r = mac.result();
+        auto r = mac.resultView();
     }
 }
 

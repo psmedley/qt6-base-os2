@@ -1,5 +1,5 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <private/qhighdpiscaling_p.h>
 #include <qpa/qplatformscreen.h>
@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QStringView>
+#include <QSignalSpy>
 
 Q_LOGGING_CATEGORY(lcTests, "qt.gui.tests")
 
@@ -27,6 +28,7 @@ private: // helpers
     static QJsonObject offscreenConfiguration();
 
 private slots:
+    void initTestCase();
     void cleanup();
     void qhighdpiscaling_data();
     void qhighdpiscaling();
@@ -35,6 +37,7 @@ private slots:
     void screenDpiAndDpr_data();
     void screenDpiAndDpr();
     void screenDpiChange();
+    void screenDpiChangeWithWindow();
     void environment_QT_SCALE_FACTOR();
     void environment_QT_SCREEN_SCALE_FACTORS_data();
     void environment_QT_SCREEN_SCALE_FACTORS();
@@ -55,6 +58,8 @@ private slots:
     void mouseVelocity_data();
     void setCursor();
     void setCursor_data();
+    void setGlobalFactorEmits();
+    void setScreenFactorEmits();
 };
 
 /// Offscreen platform plugin test setup
@@ -107,7 +112,6 @@ QGuiApplication *tst_QHighDpi::createOffscreenApplication(const QByteArray &json
     // Write offscreen platform config file
     QFile configFile(QLatin1String("qt-offscreen-test-config.json"));
     if (!configFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        qFatal("Failed to open test config file: %s", qPrintable(configFile.errorString()));
     configFile.resize(0); // truncate
     if (configFile.write(jsonConfig) == -1)
         qFatal("Could not write config file: %s", qPrintable(configFile.errorString()));
@@ -146,6 +150,11 @@ QGuiApplication *tst_QHighDpi::createStandardOffscreenApp(const QJsonArray &scre
         {"screens" , screens},
     };
     return createOffscreenApplication(QJsonDocument(config).toJson());
+}
+
+void tst_QHighDpi::initTestCase()
+{
+    QDir::setCurrent(QDir::tempPath());
 }
 
 /// Auto test begins
@@ -235,6 +244,9 @@ void tst_QHighDpi::screenDpiAndDpr()
 
         QWindow window(screen);
         QCOMPARE(window.devicePixelRatio(), screen->devicePixelRatio());
+        window.setGeometry(QRect(screen->geometry().center(), QSize(10, 10)));
+        window.create();
+        QCOMPARE(window.devicePixelRatio(), screen->devicePixelRatio());
     }
 }
 
@@ -261,10 +273,46 @@ void tst_QHighDpi::screenDpiChange()
     for (QScreen *screen : app->screens()) {
         QCOMPARE(screen->devicePixelRatio(), newDpi / standardBaseDpi);
         QCOMPARE(screen->logicalDotsPerInch(), newDpi / screen->devicePixelRatio());
+
         QWindow window(screen);
+        QCOMPARE(window.devicePixelRatio(), screen->devicePixelRatio());
+        window.create();
         QCOMPARE(window.devicePixelRatio(), screen->devicePixelRatio());
     }
     QCOMPARE(app->devicePixelRatio(), newDpi / standardBaseDpi);
+}
+
+void tst_QHighDpi::screenDpiChangeWithWindow()
+{
+    QList<qreal> dpiValues = { 96, 192, 288 };
+    std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(dpiValues));
+
+    // Create windows for screens
+    QList<QScreen *> screens = app->screens();
+    QList<QWindow *> windows;
+    for (int i = 0; i < screens.count(); ++i) {
+        QScreen *screen = screens[i];
+        QWindow *window = new QWindow();
+        windows.append(window);
+        window->setGeometry(QRect(screen->geometry().center(), QSize(10, 10)));
+        window->create();
+        QCOMPARE(window->devicePixelRatio(), dpiValues[i] / standardBaseDpi);
+    }
+
+    // Change screen DPI
+    QList<qreal> newDpiValues = { 288, 192, 96 };
+    QJsonValue config = offscreenConfiguration();
+    QCborMap map = QCborMap::fromJsonObject(config.toObject());
+    for (int i = 0; i < screens.count(); ++i) {
+        map[QLatin1String("screens")][i][QLatin1String("logicalDpi")] = newDpiValues[i];
+    }
+    setOffscreenConfiguration(map.toJsonObject());
+
+    // Verify that window DPR changes on Screen DPI change.
+    for (int i = 0; i < screens.count(); ++i) {
+        QWindow *window = windows[i];
+        QCOMPARE(window->devicePixelRatio(), newDpiValues[i] / standardBaseDpi);
+    }
 }
 
 void tst_QHighDpi::environment_QT_SCALE_FACTOR()
@@ -313,9 +361,10 @@ void tst_QHighDpi::environment_QT_SCREEN_SCALE_FACTORS()
     QFETCH(QByteArray, environment);
     QFETCH(QList<qreal>, expectedDprValues);
 
+    qputenv("QT_SCREEN_SCALE_FACTORS", environment);
+
     // Verify that setting QT_SCREEN_SCALE_FACTORS overrides the from-platform-screen-DPI DPR.
     {
-        qputenv("QT_SCREEN_SCALE_FACTORS", environment);
         std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(platformScreenDpi));
         int i = 0;
         for (QScreen *screen : app->screens()) {
@@ -325,6 +374,18 @@ void tst_QHighDpi::environment_QT_SCREEN_SCALE_FACTORS()
             QCOMPARE(screen->logicalDotsPerInch(), 96);
             QWindow window(screen);
             QCOMPARE(window.devicePixelRatio(), expextedDpr);
+        }
+    }
+
+    // Verify that setHighDpiScaleFactorRoundingPolicy applies to QT_SCREEN_SCALE_FACTORS as well
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::Round);
+    {
+        std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(platformScreenDpi));
+        int i = 0;
+        for (QScreen *screen : app->screens()) {
+            qreal expectedRounderDpr = qRound(expectedDprValues[i++]);
+            qreal windowDpr = QWindow(screen).devicePixelRatio();
+            QCOMPARE(windowDpr, expectedRounderDpr);
         }
     }
 }
@@ -715,7 +776,7 @@ void tst_QHighDpi::mouseVelocity()
         {
             velocity = ev->points().first().velocity();
             if (ev->buttons())
-                qDebug(lcTests) << "velocity" << velocity << ev;
+                qCDebug(lcTests) << "velocity" << velocity << ev;
         }
     };
 
@@ -795,6 +856,35 @@ void tst_QHighDpi::setCursor()
         QPoint center = screen->geometry().center();
         QCursor::setPos(center.x(), center.y());
         QCOMPARE(QCursor::pos(), center);
+    }
+}
+
+void tst_QHighDpi::setGlobalFactorEmits()
+{
+    QList<qreal> dpiValues { 96, 96, 96 };
+    std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(dpiValues));
+
+    std::vector<std::unique_ptr<QSignalSpy>> spies;
+    for (QScreen *screen : app->screens())
+        spies.push_back(std::make_unique<QSignalSpy>(screen, &QScreen::geometryChanged));
+
+    QHighDpiScaling::setGlobalFactor(2);
+
+    for (const auto &spy : spies)
+        QCOMPARE(spy->count(), 1);
+
+    QHighDpiScaling::setGlobalFactor(1);
+}
+
+void tst_QHighDpi::setScreenFactorEmits()
+{
+    QList<qreal> dpiValues { 96, 96, 96 };
+    std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(dpiValues));
+
+    for (QScreen *screen : app->screens()) {
+        QSignalSpy spy(screen, &QScreen::geometryChanged);
+        QHighDpiScaling::setScreenFactor(screen, 2);
+        QCOMPARE(spy.count(), 1);
     }
 }
 

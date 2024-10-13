@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qevent.h"
+
 #include "qcursor.h"
 #include "private/qguiapplication_p.h"
 #include "private/qinputdevice_p.h"
@@ -9,6 +10,7 @@
 #include "qpa/qplatformintegration.h"
 #include "private/qevent_p.h"
 #include "private/qeventpoint_p.h"
+
 #include "qfile.h"
 #include "qhashfunctions.h"
 #include "qmetaobject.h"
@@ -16,6 +18,7 @@
 #include "qevent_p.h"
 #include "qmath.h"
 #include "qloggingcategory.h"
+#include "qpointer.h"
 
 #if QT_CONFIG(draganddrop)
 #include <qpa/qplatformdrag.h>
@@ -1440,12 +1443,13 @@ Q_IMPL_EVENT_COMMON(QKeyEvent)
 
     Returns the Unicode text that this key generated.
 
-    Return values when modifier keys such as
-    Shift, Control, Alt, and Meta are pressed
-    differ among platforms and could return an empty string.
+    The text is not limited to the printable range of Unicode
+    code points, and may include control characters or characters
+    from other Unicode categories, including QChar::Other_PrivateUse.
 
-    \note \l key() will always return a valid value,
-    independent of modifier keys.
+    The text may also be empty, for example when modifier keys such as
+    Shift, Control, Alt, and Meta are pressed (depending on the platform).
+    The key() function will always return a valid value.
 
     \sa Qt::WA_KeyCompression
 */
@@ -3589,10 +3593,15 @@ Q_IMPL_EVENT_COMMON(QShowEvent)
 
     \snippet qfileopenevent/Info.plist Custom Info.plist
 
-    The following implementation of a QApplication subclass prints the path to
-    the file that was, for example, dropped on the Dock icon of the application.
+    The following implementation of a QApplication subclass shows how to handle
+    QFileOpenEvent to open the file that was, for example, dropped on the Dock
+    icon of the application.
 
     \snippet qfileopenevent/main.cpp QApplication subclass
+
+    Note how \c{QFileOpenEvent::file()} is not guaranteed to be the name of a
+    local file that can be opened using QFile. The contents of the string depend
+    on the source application.
 */
 
 /*!
@@ -3620,19 +3629,23 @@ Q_IMPL_EVENT_COMMON(QFileOpenEvent)
 /*!
     \fn QString QFileOpenEvent::file() const
 
-    Returns the file that is being opened.
+    Returns the name of the file that the application should open.
+
+    This is not guaranteed to be the path to a local file.
 */
 
 /*!
     \fn QUrl QFileOpenEvent::url() const
 
-    Returns the url that is being opened.
+    Returns the url that the application should open.
 
     \since 4.6
 */
 
+#if QT_DEPRECATED_SINCE(6, 6)
 /*!
     \fn bool QFileOpenEvent::openFile(QFile &file, QIODevice::OpenMode flags) const
+    \deprecated [6.6] interpret the string returned by file()
 
     Opens a QFile on the \a file referenced by this event in the mode specified
     by \a flags. Returns \c true if successful; otherwise returns \c false.
@@ -3647,6 +3660,7 @@ bool QFileOpenEvent::openFile(QFile &file, QIODevice::OpenMode flags) const
     file.setFileName(m_file);
     return file.open(flags);
 }
+#endif
 
 #ifndef QT_NO_TOOLBAR
 /*!
@@ -4063,6 +4077,7 @@ QDebug operator<<(QDebug dbg, const QEvent *e)
         const Qt::MouseButtons buttons = spe->buttons();
         dbg << eventClassName(type) << '(';
         QtDebugUtils::formatQEnum(dbg, type);
+        dbg << " ts=" << spe->timestamp();
         if (isMouse) {
             if (type != QEvent::MouseMove && type != QEvent::NonClientAreaMouseMove) {
                 dbg << ' ';
@@ -4114,6 +4129,10 @@ QDebug operator<<(QDebug dbg, const QEvent *e)
             dbg << ", text=" << ke->text();
         if (ke->isAutoRepeat())
             dbg << ", autorepeat, count=" << ke->count();
+        if (dbg.verbosity() > QDebug::DefaultVerbosity) {
+            dbg << ", nativeScanCode=" << ke->nativeScanCode();
+            dbg << ", nativeVirtualKey=" << ke->nativeVirtualKey();
+        }
         dbg << ')';
     }
         break;
@@ -4460,8 +4479,6 @@ Q_IMPL_EVENT_COMMON(QWindowStateChangeEvent)
 */
 
 /*!
-    \deprecated [6.2] Use another constructor.
-
     Constructs a QTouchEvent with the given \a eventType, \a device,
     \a touchPoints, and current keyboard \a modifiers at the time of the event.
 */
@@ -4739,6 +4756,46 @@ Q_IMPL_EVENT_COMMON(QApplicationStateChangeEvent)
     \fn Qt::ApplicationState QApplicationStateChangeEvent::applicationState() const
 
     Returns the state of the application.
+*/
+
+/*!
+    \class QChildWindowEvent
+    \inmodule QtGui
+    \since 6.7
+    \brief The QChildWindowEvent class contains event parameters for
+    child window changes.
+
+    \ingroup events
+
+    Child window events are sent to windows when children are
+    added or removed.
+
+    In both cases you can only rely on the child being a QWindow
+    — not any subclass thereof. This is because in the
+    QEvent::ChildWindowAdded case the subclass is not yet fully
+    constructed, and in the QEvent::ChildWindowRemoved case it
+    might have already been destructed.
+*/
+
+/*!
+    Constructs a child window event object of a particular \a type
+    for the \a childWindow.
+
+    \a type can be QEvent::ChildWindowAdded or QEvent::ChildWindowRemoved.
+
+    \sa child()
+*/
+QChildWindowEvent::QChildWindowEvent(Type type, QWindow *childWindow)
+    : QEvent(type), c(childWindow)
+{
+}
+
+Q_IMPL_EVENT_COMMON(QChildWindowEvent)
+
+/*!
+    \fn QWindow *QChildWindowEvent::child() const
+
+    Returns the child window that was added or removed.
 */
 
 QMutableTouchEvent::~QMutableTouchEvent()

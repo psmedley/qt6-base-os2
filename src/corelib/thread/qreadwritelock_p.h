@@ -45,9 +45,10 @@ public:
     explicit QReadWriteLockPrivate(bool isRecursive = false)
         : recursive(isRecursive) {}
 
-    QtPrivate::mutex mutex;
-    QtPrivate::condition_variable writerCond;
-    QtPrivate::condition_variable readerCond;
+    alignas(QtPrivate::IdealMutexAlignment) std::condition_variable writerCond;
+    std::condition_variable readerCond;
+
+    alignas(QtPrivate::IdealMutexAlignment) std::mutex mutex;
     int readerCount = 0;
     int writerCount = 0;
     int waitingReaders = 0;
@@ -55,8 +56,8 @@ public:
     const bool recursive;
 
     //Called with the mutex locked
-    bool lockForWrite(std::unique_lock<QtPrivate::mutex> &lock, int timeout);
-    bool lockForRead(std::unique_lock<QtPrivate::mutex> &lock, int timeout);
+    bool lockForWrite(std::unique_lock<std::mutex> &lock, QDeadlineTimer timeout);
+    bool lockForRead(std::unique_lock<std::mutex> &lock, QDeadlineTimer timeout);
     void unlock();
 
     //memory management
@@ -75,8 +76,8 @@ public:
     QVarLengthArray<Reader, 16> currentReaders;
 
     // called with the mutex unlocked
-    bool recursiveLockForWrite(int timeout);
-    bool recursiveLockForRead(int timeout);
+    bool recursiveLockForWrite(QDeadlineTimer timeout);
+    bool recursiveLockForRead(QDeadlineTimer timeout);
     void recursiveUnlock();
 
     static QReadWriteLockStates::StateForWaitCondition

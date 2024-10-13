@@ -370,18 +370,18 @@ void QPlatformWindow::setMask(const QRegion &region)
   Reimplement to let Qt be able to request activation/focus for a window
 
   Some window systems will probably not have callbacks for this functionality,
-  and then calling QWindowSystemInterface::handleWindowActivated(QWindow *w)
+  and then calling QWindowSystemInterface::handleFocusWindowChanged(QWindow *w)
   would be sufficient.
 
   If the window system has some event handling/callbacks then call
-  QWindowSystemInterface::handleWindowActivated(QWindow *w) when the window system
+  QWindowSystemInterface::handleFocusWindowChanged(QWindow *w) when the window system
   gives the notification.
 
-  Default implementation calls QWindowSystem::handleWindowActivated(QWindow *w)
+  Default implementation calls QWindowSystem::handleFocusWindowChanged(QWindow *w)
 */
 void QPlatformWindow::requestActivateWindow()
 {
-    QWindowSystemInterface::handleWindowActivated(window());
+    QWindowSystemInterface::handleFocusWindowChanged(window());
 }
 
 /*!
@@ -727,20 +727,29 @@ QRect QPlatformWindow::initialGeometry(const QWindow *w, const QRect &initialGeo
     should be delivered using QPlatformWindow::deliverUpdateRequest()
     to not get out of sync with the internal state of QWindow.
 
-    The default implementation posts an UpdateRequest event to the
-    window after 5 ms. The additional time is there to give the event
-    loop a bit of idle time to gather system events.
+    The default implementation posts an UpdateRequest event to the window after
+    an interval that is at most 5 ms. If the window's associated screen reports
+    a \l{QPlatformScreen::refreshRate()}{refresh rate} higher than 60 Hz, the
+    interval is scaled down to a valid smaller than 5. The additional time is
+    there to give the event loop a bit of idle time to gather system events.
 
 */
 void QPlatformWindow::requestUpdate()
 {
     Q_D(QPlatformWindow);
 
-    static int updateInterval = []() {
-        bool ok = false;
-        int customUpdateInterval = qEnvironmentVariableIntValue("QT_QPA_UPDATE_IDLE_TIME", &ok);
-        return ok ? customUpdateInterval : 5;
-    }();
+    static bool customUpdateIntervalValid = false;
+    static int customUpdateInterval = qEnvironmentVariableIntValue("QT_QPA_UPDATE_IDLE_TIME",
+                                                                   &customUpdateIntervalValid);
+    int updateInterval = customUpdateInterval;
+    if (!customUpdateIntervalValid) {
+        updateInterval = 5;
+        if (QPlatformScreen *currentScreen = screen()) {
+            const qreal refreshRate = currentScreen->refreshRate();
+            if (refreshRate > 60.0)
+                updateInterval /= refreshRate / 60.0;
+        }
+    }
 
     Q_ASSERT(!d->updateTimer.isActive());
     d->updateTimer.start(updateInterval, Qt::PreciseTimer, window());
@@ -769,6 +778,15 @@ void QPlatformWindow::deliverUpdateRequest()
 
     QWindow *w = window();
     QWindowPrivate *wp = qt_window_private(w);
+
+    // We expect that the platform plugins send DevicePixelRatioChange events.
+    // As a fail-safe make a final check here to make sure the cached DPR value is
+    // always up to date before delivering the update request.
+    if (wp->updateDevicePixelRatio()) {
+        qWarning() << "The cached device pixel ratio value was stale on window update. "
+                   << "Please file a QTBUG which explains how to reproduce.";
+    }
+
     wp->updateRequestPending = false;
     QEvent request(QEvent::UpdateRequest);
     QCoreApplication::sendEvent(w, &request);

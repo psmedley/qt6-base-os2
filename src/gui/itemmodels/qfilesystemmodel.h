@@ -9,7 +9,6 @@
 #include <QtCore/qpair.h>
 #include <QtCore/qdir.h>
 #include <QtGui/qicon.h>
-#include <QtCore/qdiriterator.h>
 
 QT_REQUIRE_CONFIG(filesystemmodel);
 
@@ -35,9 +34,19 @@ Q_SIGNALS:
 public:
     enum Roles {
         FileIconRole = Qt::DecorationRole,
+
+        FileInfoRole = Qt::UserRole - 4, // New values go before, -5, -6 ..etc
+        QT7_ONLY(
+        FilePathRole = Qt::UserRole - 3,
+        FileNameRole = Qt::UserRole - 2,
+        FilePermissions = Qt::UserRole - 1,
+        )
+
+        QT6_ONLY(
         FilePathRole = Qt::UserRole + 1,
         FileNameRole = Qt::UserRole + 2,
-        FilePermissions = Qt::UserRole + 3
+        FilePermissions = Qt::UserRole + 3,
+        )
     };
 
     enum Option
@@ -113,7 +122,9 @@ public:
     bool isDir(const QModelIndex &index) const;
     qint64 size(const QModelIndex &index) const;
     QString type(const QModelIndex &index) const;
+
     QDateTime lastModified(const QModelIndex &index) const;
+    QDateTime lastModified(const QModelIndex &index, const QTimeZone &tz) const;
 
     QModelIndex mkdir(const QModelIndex &parent, const QString &name);
     bool rmdir(const QModelIndex &index);
@@ -132,18 +143,13 @@ private:
     Q_DECLARE_PRIVATE(QFileSystemModel)
     Q_DISABLE_COPY(QFileSystemModel)
 
-    Q_PRIVATE_SLOT(d_func(), void _q_directoryChanged(const QString &directory, const QStringList &list))
-    Q_PRIVATE_SLOT(d_func(), void _q_performDelayedSort())
-    Q_PRIVATE_SLOT(d_func(),
-                   void _q_fileSystemChanged(const QString &path,
-                                             const QList<QPair<QString, QFileInfo>> &))
-    Q_PRIVATE_SLOT(d_func(), void _q_resolvedName(const QString &fileName, const QString &resolvedName))
-
     friend class QFileDialogPrivate;
 };
 
 inline QString QFileSystemModel::fileName(const QModelIndex &aindex) const
-{ return aindex.data(Qt::DisplayRole).toString(); }
+{
+    return aindex.data(FileNameRole).toString();
+}
 inline QIcon QFileSystemModel::fileIcon(const QModelIndex &aindex) const
 { return qvariant_cast<QIcon>(aindex.data(Qt::DecorationRole)); }
 

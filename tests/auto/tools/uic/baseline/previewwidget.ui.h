@@ -1,7 +1,7 @@
 /*
 
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 */
 
@@ -69,7 +69,7 @@ public:
         if (qdesigner_internal__PreviewWidget->objectName().isEmpty())
             qdesigner_internal__PreviewWidget->setObjectName("qdesigner_internal__PreviewWidget");
         qdesigner_internal__PreviewWidget->resize(471, 251);
-        QSizePolicy sizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+        QSizePolicy sizePolicy(QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Minimum);
         sizePolicy.setHorizontalStretch(0);
         sizePolicy.setVerticalStretch(0);
         sizePolicy.setHeightForWidth(qdesigner_internal__PreviewWidget->sizePolicy().hasHeightForWidth());
@@ -141,7 +141,7 @@ public:
 
         gridLayout->addLayout(vboxLayout, 0, 1, 3, 1);
 
-        spacerItem = new QSpacerItem(20, 20, QSizePolicy::Minimum, QSizePolicy::Expanding);
+        spacerItem = new QSpacerItem(20, 20, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
 
         gridLayout->addItem(spacerItem, 3, 0, 1, 2);
 

@@ -1679,7 +1679,7 @@ static void getText(QString &text, QTextDocumentPrivate *priv, const QString &do
         const int offsetInFragment = qMax(0, pos - fragIt.position());
         const int len = qMin(int(frag->size_array[0] - offsetInFragment), end - pos);
 
-        text += QString(docText.constData() + frag->stringPosition + offsetInFragment, len);
+        text += QStringView(docText.constData() + frag->stringPosition + offsetInFragment, len);
         pos += len;
     }
 }
@@ -2300,7 +2300,7 @@ void QTextCursor::insertImage(const QTextImageFormat &format, QTextFrameFormat::
     d->priv->beginEditBlock();
     d->remove();
     const int idx = d->priv->formatCollection()->indexForFormat(fmt);
-    d->priv->insert(d->position, QString(QChar(QChar::ObjectReplacementCharacter)), idx);
+    d->priv->insert(d->position, QChar(QChar::ObjectReplacementCharacter), idx);
     d->priv->endEditBlock();
 }
 

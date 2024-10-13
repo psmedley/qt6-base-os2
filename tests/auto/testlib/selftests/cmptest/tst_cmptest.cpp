@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QtCore/QCoreApplication>
@@ -7,6 +7,7 @@
 #ifdef QT_GUI_LIB
 #include <QtGui/QColor>
 #include <QtGui/QImage>
+#include <QtGui/QPalette>
 #include <QtGui/QPixmap>
 #include <QtGui/QVector2D>
 #include <QtGui/QVector3D>
@@ -142,6 +143,8 @@ private slots:
     void compareQVector2D();
     void compareQVector3D();
     void compareQVector4D();
+    void compareQPalettes_data();
+    void compareQPalettes();
 #endif
     void tryCompare();
     void verify();
@@ -653,6 +656,54 @@ void tst_Cmptest::compareQVector4D()
     v4b.setY(3);
     QCOMPARE(v4a, v4b);
 }
+
+void tst_Cmptest::compareQPalettes_data()
+{
+    QTest::addColumn<QPalette>("actualPalette");
+    QTest::addColumn<QPalette>("expectedPalette");
+
+    // Initialize both to black, as the default palette values change
+    // depending on whether the test is run directly from a shell
+    // vs through generate_expected_output.py. We're not testing
+    // the defaults, we're testing that the full output is printed
+    // (QTBUG-5903 and QTBUG-87039).
+    QPalette actualPalette;
+    for (int i = 0; i < QPalette::NColorRoles; ++i) {
+        const auto role = QPalette::ColorRole(i);
+        actualPalette.setColor(QPalette::All, role, QColorConstants::Black);
+    }
+    QPalette expectedPalette;
+    for (int i = 0; i < QPalette::NColorRoles; ++i) {
+        const auto role = QPalette::ColorRole(i);
+        expectedPalette.setColor(QPalette::All, role, QColorConstants::Black);
+    }
+
+    for (int i = 0; i < QPalette::NColorRoles; ++i) {
+        const auto role = QPalette::ColorRole(i);
+        const auto color = QColor::fromRgb(i);
+        actualPalette.setColor(role, color);
+    }
+    QTest::newRow("all roles are different") << actualPalette << expectedPalette;
+
+    for (int i = 0; i < QPalette::NColorRoles - 1; ++i) {
+        const auto role = QPalette::ColorRole(i);
+        const auto color = QColor::fromRgb(i);
+        expectedPalette.setColor(role, color);
+    }
+    QTest::newRow("one role is different") << actualPalette << expectedPalette;
+
+    const auto lastRole = QPalette::ColorRole(QPalette::NColorRoles - 1);
+    expectedPalette.setColor(lastRole, QColor::fromRgb(lastRole));
+    QTest::newRow("all roles are the same") << actualPalette << expectedPalette;
+}
+
+void tst_Cmptest::compareQPalettes()
+{
+    QFETCH(QPalette, actualPalette);
+    QFETCH(QPalette, expectedPalette);
+
+    QCOMPARE(actualPalette, expectedPalette);
+}
 #endif // QT_GUI_LIB
 
 static int opaqueFunc()
@@ -720,9 +771,9 @@ void tst_Cmptest::tryCompare()
     }
     {
         DeferredFlag c;
-        QTRY_COMPARE_WITH_TIMEOUT(c, DeferredFlag(), 300);
+        QTRY_COMPARE_WITH_TIMEOUT(c, DeferredFlag(), 300ms);
         QVERIFY(!c); // Instantly equal, so succeeded without delay.
-        QTRY_COMPARE_WITH_TIMEOUT(c, trueAlready, 200);
+        QTRY_COMPARE_WITH_TIMEOUT(c, trueAlready, 1s);
         qInfo("Should now time out and fail");
         QTRY_COMPARE_WITH_TIMEOUT(c, DeferredFlag(), 200);
     }
@@ -737,7 +788,7 @@ void tst_Cmptest::tryVerify()
     }
     {
         DeferredFlag c;
-        QTRY_VERIFY_WITH_TIMEOUT(!c, 300);
+        QTRY_VERIFY_WITH_TIMEOUT(!c, 300ms);
         QTRY_VERIFY_WITH_TIMEOUT(c, 200);
         qInfo("Should now time out and fail");
         QTRY_VERIFY_WITH_TIMEOUT(!c, 200);
@@ -753,7 +804,7 @@ void tst_Cmptest::tryVerify2()
     }
     {
         DeferredFlag c;
-        QTRY_VERIFY2_WITH_TIMEOUT(!c, "Failed to check before looping", 300);
+        QTRY_VERIFY2_WITH_TIMEOUT(!c, "Failed to check before looping", 300ms);
         QTRY_VERIFY2_WITH_TIMEOUT(c, "Failed to trigger single-shot", 200);
         QTRY_VERIFY2_WITH_TIMEOUT(!c, "Should time out and fail", 200);
     }

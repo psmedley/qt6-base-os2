@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
@@ -408,7 +408,7 @@ void tst_QGlyphRun::drawMultiScriptText1()
     QPixmap drawGlyphs(1000, 1000);
     drawGlyphs.fill(Qt::white);
 
-    QList<QGlyphRun> glyphsList = textLayout.glyphRuns();
+    const QList<QGlyphRun> glyphsList = textLayout.glyphRuns();
     QCOMPARE(glyphsList.size(), 1);
 
     {
@@ -418,8 +418,7 @@ void tst_QGlyphRun::drawMultiScriptText1()
 
     {
         QPainter p(&drawGlyphs);
-        foreach (QGlyphRun glyphs, glyphsList)
-            p.drawGlyphRun(QPointF(50, 50), glyphs);
+        p.drawGlyphRun(QPointF(50, 50), glyphsList.first());
     }
 
 #if defined(DEBUG_SAVE_IMAGE)
@@ -449,7 +448,7 @@ void tst_QGlyphRun::drawMultiScriptText2()
     QPixmap drawGlyphs(1000, 1000);
     drawGlyphs.fill(Qt::white);
 
-    QList<QGlyphRun> glyphsList = textLayout.glyphRuns();
+    const QList<QGlyphRun> glyphsList = textLayout.glyphRuns();
     QCOMPARE(glyphsList.size(), 2);
 
     {
@@ -459,7 +458,7 @@ void tst_QGlyphRun::drawMultiScriptText2()
 
     {
         QPainter p(&drawGlyphs);
-        foreach (QGlyphRun glyphs, glyphsList)
+        for (const QGlyphRun &glyphs : glyphsList)
             p.drawGlyphRun(QPointF(50, 50), glyphs);
     }
 
@@ -564,6 +563,9 @@ void tst_QGlyphRun::boundingRect()
 
 void tst_QGlyphRun::mixedScripts()
 {
+    if (QFontDatabase::families(QFontDatabase::Korean).isEmpty())
+        QSKIP("This test requires support for Hangul text");
+
     QString s;
     s += QChar(0x31); // The character '1'
     s += QChar(0xbc14); // Hangul character
@@ -967,7 +969,7 @@ void tst_QGlyphRun::objectReplacementCharacter()
     QList<QGlyphRun> glyphRuns = layout.glyphRuns();
     QCOMPARE(glyphRuns.size(), 1);
     QCOMPARE(glyphRuns.first().glyphIndexes().size(), 1);
-    QCOMPARE(glyphRuns.first().glyphIndexes().first(), 5);
+    QCOMPARE(glyphRuns.first().glyphIndexes().first(), uint(5));
 }
 
 #endif // QT_NO_RAWFONT

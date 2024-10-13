@@ -59,8 +59,10 @@ class Q_CORE_EXPORT QCalendarBackend
 {
     friend class QCalendar;
     friend class QtPrivate::QCalendarRegistry;
+    Q_DISABLE_COPY_MOVE(QCalendarBackend)
 
 public:
+    QCalendarBackend() = default;
     virtual ~QCalendarBackend();
     virtual QString name() const = 0;
 
@@ -86,8 +88,9 @@ public:
     // Julian Day conversions:
     virtual bool dateToJulianDay(int year, int month, int day, qint64 *jd) const = 0;
     virtual QCalendar::YearMonthDay julianDayToDate(qint64 jd) const = 0;
-    // Day of week and week numbering:
+    // Day of week:
     virtual int dayOfWeek(qint64 jd) const;
+    virtual qint64 matchCenturyToWeekday(const QCalendar::YearMonthDay &parts, int dow) const;
 
     // Names of months and week-days (implemented in qlocale.cpp):
     virtual QString monthName(const QLocale &locale, int month, int year,

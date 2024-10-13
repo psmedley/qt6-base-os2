@@ -14,7 +14,6 @@
 #include <QtCore/qiodevice.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qnamespace.h>
-#include <QtCore/qpointer.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qurl.h>
 #include <QtCore/qvariant.h>
@@ -34,6 +33,7 @@ QT_BEGIN_NAMESPACE
 class QFile;
 class QAction;
 class QMouseEvent;
+template <typename T> class QPointer;
 class QPointerEvent;
 class QScreen;
 #if QT_CONFIG(shortcut)
@@ -71,6 +71,7 @@ protected:
 
 class Q_GUI_EXPORT QPointerEvent : public QInputEvent
 {
+    Q_GADGET
     Q_DECL_EVENT_COMMON(QPointerEvent)
 public:
     explicit QPointerEvent(Type type, const QPointingDevice *dev,
@@ -852,7 +853,10 @@ public:
 
     inline QString file() const { return m_file; }
     QUrl url() const { return m_url; }
+#if QT_DEPRECATED_SINCE(6, 6)
+    QT_DEPRECATED_VERSION_X_6_6("Interpret the string returned by file()")
     bool openFile(QFile &file, QIODevice::OpenMode flags) const;
+#endif
 private:
     QString m_file;
     QUrl m_url;
@@ -1015,6 +1019,17 @@ public:
 
 private:
     Qt::ApplicationState m_applicationState;
+};
+
+class Q_GUI_EXPORT QChildWindowEvent : public QEvent
+{
+    Q_DECL_EVENT_COMMON(QChildWindowEvent)
+public:
+    explicit QChildWindowEvent(Type type, QWindow *childWindow);
+    QWindow *child() const { return c; }
+
+private:
+    QWindow *c;
 };
 
 QT_END_NAMESPACE

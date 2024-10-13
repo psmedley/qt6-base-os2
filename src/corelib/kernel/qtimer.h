@@ -31,6 +31,7 @@ public:
     bool isActive() const;
     QBindable<bool> bindableActive();
     int timerId() const;
+    Qt::TimerId id() const;
 
     void setInterval(int msec);
     int interval() const;
@@ -46,85 +47,56 @@ public:
     bool isSingleShot() const;
     QBindable<bool> bindableSingleShot();
 
+    QT_CORE_INLINE_SINCE(6, 8)
     static void singleShot(int msec, const QObject *receiver, const char *member);
+
+    QT_CORE_INLINE_SINCE(6, 8)
     static void singleShot(int msec, Qt::TimerType timerType, const QObject *receiver, const char *member);
 
+    // singleShot with context
 #ifdef Q_QDOC
-    template<typename PointerToMemberFunction>
-    static void singleShot(int msec, const QObject *receiver, PointerToMemberFunction method);
-    template<typename PointerToMemberFunction>
-    static void singleShot(int msec, Qt::TimerType timerType, const QObject *receiver, PointerToMemberFunction method);
-    template<typename Functor>
-    static void singleShot(int msec, Functor functor);
-    template<typename Functor>
-    static void singleShot(int msec, Qt::TimerType timerType, Functor functor);
-    template<typename Functor, int>
-    static void singleShot(int msec, const QObject *context, Functor functor);
-    template<typename Functor, int>
-    static void singleShot(int msec, Qt::TimerType timerType, const QObject *context, Functor functor);
-    template <typename Functor>
-    QMetaObject::Connection callOnTimeout(Functor slot);
-    template <typename Functor>
-    QMetaObject::Connection callOnTimeout(const QObject *context, Functor slot, Qt::ConnectionType connectionType = Qt::AutoConnection);
-    template <typename MemberFunction>
-    QMetaObject::Connection callOnTimeout(const QObject *receiver, MemberFunction *slot, Qt::ConnectionType connectionType = Qt::AutoConnection);
+    template <typename Duration, typename Functor>
+    static inline void singleShot(Duration interval, const QObject *receiver, Functor &&slot);
+    template <typename Duration, typename Functor>
+    static inline void singleShot(Duration interval, Qt::TimerType timerType,
+                                  const QObject *receiver, Functor &&slot);
 #else
-    // singleShot to a QObject slot
-    template <typename Duration, typename Func1>
-    static inline void singleShot(Duration interval, const typename QtPrivate::FunctionPointer<Func1>::Object *receiver, Func1 slot)
+    template <typename Duration, typename Functor>
+    static inline void singleShot(Duration interval,
+                                  const typename QtPrivate::ContextTypeForFunctor<Functor>::ContextType *receiver,
+                                  Functor &&slot)
     {
-        singleShot(interval, defaultTypeFor(interval), receiver, slot);
+        singleShot(interval, defaultTypeFor(interval), receiver, std::forward<Functor>(slot));
     }
-    template <typename Duration, typename Func1>
-    static inline void singleShot(Duration interval, Qt::TimerType timerType, const typename QtPrivate::FunctionPointer<Func1>::Object *receiver,
-                                  Func1 slot)
+    template <typename Duration, typename Functor>
+    static inline void singleShot(Duration interval, Qt::TimerType timerType,
+                                  const typename QtPrivate::ContextTypeForFunctor<Functor>::ContextType *receiver,
+                                  Functor &&slot)
     {
-        typedef QtPrivate::FunctionPointer<Func1> SlotType;
-
-        //compilation error if the slot has arguments.
-        static_assert(int(SlotType::ArgumentCount) == 0,
-                          "The slot must not have any arguments.");
-
+        using Prototype = void(*)();
         singleShotImpl(interval, timerType, receiver,
-                       new QtPrivate::QSlotObject<Func1, typename SlotType::Arguments, void>(slot));
+                       QtPrivate::makeCallableObject<Prototype>(std::forward<Functor>(slot)));
     }
-    // singleShot to a functor or function pointer (without context)
-    template <typename Duration, typename Func1>
-    static inline typename std::enable_if<!QtPrivate::FunctionPointer<Func1>::IsPointerToMemberFunction &&
-                                          !std::is_same<const char*, Func1>::value, void>::type
-            singleShot(Duration interval, Func1 slot)
-    {
-        singleShot(interval, defaultTypeFor(interval), nullptr, std::move(slot));
-    }
-    template <typename Duration, typename Func1>
-    static inline typename std::enable_if<!QtPrivate::FunctionPointer<Func1>::IsPointerToMemberFunction &&
-                                          !std::is_same<const char*, Func1>::value, void>::type
-            singleShot(Duration interval, Qt::TimerType timerType, Func1 slot)
-    {
-        singleShot(interval, timerType, nullptr, std::move(slot));
-    }
-    // singleShot to a functor or function pointer (with context)
-    template <typename Duration, typename Func1>
-    static inline typename std::enable_if<!QtPrivate::FunctionPointer<Func1>::IsPointerToMemberFunction &&
-                                          !std::is_same<const char*, Func1>::value, void>::type
-            singleShot(Duration interval, const QObject *context, Func1 slot)
-    {
-        singleShot(interval, defaultTypeFor(interval), context, std::move(slot));
-    }
-    template <typename Duration, typename Func1>
-    static inline typename std::enable_if<!QtPrivate::FunctionPointer<Func1>::IsPointerToMemberFunction &&
-                                          !std::is_same<const char*, Func1>::value, void>::type
-            singleShot(Duration interval, Qt::TimerType timerType, const QObject *context, Func1 slot)
-    {
-        //compilation error if the slot has arguments.
-        typedef QtPrivate::FunctionPointer<Func1> SlotType;
-        static_assert(int(SlotType::ArgumentCount) <= 0,  "The slot must not have any arguments.");
+#endif
 
-        singleShotImpl(interval, timerType, context,
-                       new QtPrivate::QFunctorSlotObject<Func1, 0,
-                            typename QtPrivate::List_Left<void, 0>::Value, void>(std::move(slot)));
+    // singleShot without context
+    template <typename Duration, typename Functor>
+    static inline void singleShot(Duration interval, Functor &&slot)
+    {
+        singleShot(interval, defaultTypeFor(interval), nullptr, std::forward<Functor>(slot));
+    }
+    template <typename Duration, typename Functor>
+    static inline void singleShot(Duration interval, Qt::TimerType timerType, Functor &&slot)
+    {
+        singleShot(interval, timerType, nullptr, std::forward<Functor>(slot));
     }
 
+#ifdef Q_QDOC
+    template <typename Functor>
+    QMetaObject::Connection callOnTimeout(Functor &&slot);
+    template <typename Functor>
+    QMetaObject::Connection callOnTimeout(const QObject *context, Functor &&slot, Qt::ConnectionType connectionType = Qt::AutoConnection);
+#else
     template <typename ... Args>
     QMetaObject::Connection callOnTimeout(Args && ...args)
     {
@@ -143,10 +115,7 @@ Q_SIGNALS:
     void timeout(QPrivateSignal);
 
 public:
-    void setInterval(std::chrono::milliseconds value)
-    {
-        setInterval(int(value.count()));
-    }
+    void setInterval(std::chrono::milliseconds value);
 
     std::chrono::milliseconds intervalAsDuration() const
     {
@@ -158,20 +127,22 @@ public:
         return std::chrono::milliseconds(remainingTime());
     }
 
+#if QT_CORE_REMOVED_SINCE(6, 8)
     static void singleShot(std::chrono::milliseconds value, const QObject *receiver, const char *member)
     {
-        singleShot(int(value.count()), receiver, member);
+        singleShot(value, defaultTypeFor(value), receiver, member);
     }
-
-    static void singleShot(std::chrono::milliseconds value, Qt::TimerType timerType, const QObject *receiver, const char *member)
+    static void singleShot(std::chrono::milliseconds interval, Qt::TimerType timerType,
+                           const QObject *receiver, const char *member);
+#endif // QT_CORE_REMOVED_SINCE(6, 8)
+    static void singleShot(std::chrono::nanoseconds value, const QObject *receiver, const char *member)
     {
-        singleShot(int(value.count()), timerType, receiver, member);
+        singleShot(value, defaultTypeFor(value), receiver, member);
     }
+    static void singleShot(std::chrono::nanoseconds interval, Qt::TimerType timerType,
+                           const QObject *receiver, const char *member);
 
-    void start(std::chrono::milliseconds value)
-    {
-        start(int(value.count()));
-    }
+    void start(std::chrono::milliseconds value);
 
 protected:
     void timerEvent(QTimerEvent *) override;
@@ -179,25 +150,51 @@ protected:
 private:
     Q_DISABLE_COPY(QTimer)
     Q_DECLARE_PRIVATE(QTimer)
+    friend class QChronoTimer;
+
+    static std::chrono::nanoseconds from_msecs(std::chrono::milliseconds);
 
     inline int startTimer(int){ return -1;}
     inline void killTimer(int){}
 
     static constexpr Qt::TimerType defaultTypeFor(int msecs) noexcept
-    { return msecs >= 2000 ? Qt::CoarseTimer : Qt::PreciseTimer; }
+    { return defaultTypeFor(std::chrono::milliseconds{msecs}); }
+
+    static constexpr Qt::TimerType defaultTypeFor(std::chrono::nanoseconds interval) noexcept
+    {
+        // coarse timers are worst in their first firing
+        // so we prefer a high precision timer for something that happens only once
+        // unless the timeout is too big, in which case we go for coarse anyway
+        using namespace std::chrono_literals;
+        return interval >= 2s ? Qt::CoarseTimer : Qt::PreciseTimer;
+    }
+
+    QT_CORE_INLINE_SINCE(6, 8)
     static void singleShotImpl(int msec, Qt::TimerType timerType,
                                const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj);
 
-    static Qt::TimerType defaultTypeFor(std::chrono::milliseconds interval)
-    { return defaultTypeFor(int(interval.count())); }
-
+#if QT_CORE_REMOVED_SINCE(6, 8)
     static void singleShotImpl(std::chrono::milliseconds interval, Qt::TimerType timerType,
-                               const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj)
-    {
-        singleShotImpl(int(interval.count()),
-                       timerType, receiver, slotObj);
-    }
+                               const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj);
+#endif
+    static void singleShotImpl(std::chrono::nanoseconds interval, Qt::TimerType timerType,
+                               const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj);
 };
+
+#if QT_CORE_INLINE_IMPL_SINCE(6, 8)
+void QTimer::singleShot(int msec, const QObject *receiver, const char *member)
+{ singleShot(std::chrono::milliseconds{msec}, receiver, member); }
+
+void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiver,
+                        const char *member)
+{ singleShot(std::chrono::milliseconds{msec}, timerType, receiver, member); }
+
+void QTimer::singleShotImpl(int msec, Qt::TimerType timerType,
+                            const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj)
+{
+    singleShotImpl(std::chrono::milliseconds{msec}, timerType, receiver, slotObj);
+}
+#endif
 
 QT_END_NAMESPACE
 

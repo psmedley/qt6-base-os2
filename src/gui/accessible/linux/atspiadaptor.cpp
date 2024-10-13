@@ -35,6 +35,13 @@
 #define ATSPI_COORD_TYPE_PARENT 2
 #endif
 
+// ATSPI_*_VERSION defines were added in libatspi 2.50,
+// as was the AtspiLive enum; define values here for older versions
+#if !defined(ATSPI_MAJOR_VERSION) || !defined(ATSPI_MINOR_VERSION) || ATSPI_MAJOR_VERSION < 2 || ATSPI_MINOR_VERSION < 50
+#define ATSPI_LIVE_POLITE 1
+#define ATSPI_LIVE_ASSERTIVE 2
+#endif
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
@@ -42,11 +49,12 @@ using namespace Qt::StringLiterals;
 Q_LOGGING_CATEGORY(lcAccessibilityAtspi, "qt.accessibility.atspi")
 Q_LOGGING_CATEGORY(lcAccessibilityAtspiCreation, "qt.accessibility.atspi.creation")
 
-AtSpiAdaptor::AtSpiAdaptor(DBusConnection *connection, QObject *parent)
+AtSpiAdaptor::AtSpiAdaptor(QAtSpiDBusConnection *connection, QObject *parent)
     : QDBusVirtualObject(parent), m_dbus(connection)
     , sendFocus(0)
     , sendObject(0)
     , sendObject_active_descendant_changed(0)
+    , sendObject_announcement(0)
     , sendObject_attributes_changed(0)
     , sendObject_bounds_changed(0)
     , sendObject_children_changed(0)
@@ -127,6 +135,7 @@ QString AtSpiAdaptor::introspect(const QString &path) const
                 "  <interface name=\"org.a11y.atspi.Accessible\">\n"
                 "    <property access=\"read\" type=\"s\" name=\"Name\"/>\n"
                 "    <property access=\"read\" type=\"s\" name=\"Description\"/>\n"
+                "    <property access=\"read\" type=\"s\" name=\"HelpText\"/>\n"
                 "    <property access=\"read\" type=\"(so)\" name=\"Parent\">\n"
                 "      <annotation value=\"QSpiObjectReference\" name=\"org.qtproject.QtDBus.QtTypeName\"/>\n"
                 "    </property>\n"
@@ -469,6 +478,14 @@ QString AtSpiAdaptor::introspect(const QString &path) const
                 "      <arg direction=\"out\" name=\"row_extents\" type=\"i\" />\n"
                 "      <arg direction=\"out\" name=\"col_extents\" type=\"i\" />\n"
                 "    </method>\n"
+                "    <method name=\"GetColumnHeaderCells\">\n"
+                "      <arg direction=\"out\" type=\"a(so)\"/>\n"
+                "      <annotation value=\"QSpiObjectReferenceArray\" name=\"org.qtproject.QtDBus.QtTypeName.Out0\"/>\n"
+                "    </method>\n"
+                "    <method name=\"GetRowHeaderCells\">\n"
+                "      <arg direction=\"out\" type=\"a(so)\"/>\n"
+                "      <annotation value=\"QSpiObjectReferenceArray\" name=\"org.qtproject.QtDBus.QtTypeName.Out0\"/>\n"
+                "    </method>\n"
                 "  </interface>\n"
                 );
 
@@ -670,6 +687,8 @@ void AtSpiAdaptor::setBitFlag(const QString &flag)
             if (false) {
             } else if (right.startsWith("ActiveDescendantChanged"_L1)) {
                 sendObject_active_descendant_changed = 1;
+            } else if (right.startsWith("Announcement"_L1)) {
+                sendObject_announcement = 1;
             } else if (right.startsWith("AttributesChanged"_L1)) {
                 sendObject_attributes_changed = 1;
             } else if (right.startsWith("BoundsChanged"_L1)) {
@@ -921,6 +940,26 @@ void AtSpiAdaptor::notifyStateChange(QAccessibleInterface *interface, const QStr
     sendDBusSignal(path, ATSPI_DBUS_INTERFACE_EVENT_OBJECT ""_L1, "StateChanged"_L1, stateArgs);
 }
 
+void AtSpiAdaptor::sendAnnouncement(QAccessibleAnnouncementEvent *event)
+{
+    QAccessibleInterface *iface = event->accessibleInterface();
+    if (!iface) {
+        qCWarning(lcAccessibilityAtspi, "Announcement event has no accessible set.");
+        return;
+    }
+    if (!iface->isValid()) {
+        qCWarning(lcAccessibilityAtspi) << "Announcement event with invalid accessible: " << iface;
+        return;
+    }
+
+    const QString path = pathForInterface(iface);
+    const QString message = event->message();
+    const QAccessible::AnnouncementPoliteness prio = event->politeness();
+    const int politeness = (prio == QAccessible::AnnouncementPoliteness::Assertive) ? ATSPI_LIVE_ASSERTIVE : ATSPI_LIVE_POLITE;
+
+    const QVariantList args = packDBusSignalArguments(QString(), politeness, 0, QVariant::fromValue(QDBusVariant(message)));
+    sendDBusSignal(path, ATSPI_DBUS_INTERFACE_EVENT_OBJECT ""_L1, "Announcement"_L1, args);
+}
 
 /*!
     This function gets called when Qt notifies about accessibility updates.
@@ -993,6 +1032,14 @@ void AtSpiAdaptor::notify(QAccessibleEvent *event)
     case QAccessible::Focus: {
         if (sendFocus || sendObject || sendObject_state_changed)
             sendFocusChanged(event->accessibleInterface());
+        break;
+    }
+
+    case QAccessible::Announcement: {
+        if (sendObject || sendObject_announcement) {
+            QAccessibleAnnouncementEvent *announcementEvent = static_cast<QAccessibleAnnouncementEvent*>(event);
+            sendAnnouncement(announcementEvent);
+        }
         break;
     }
     case QAccessible::TextInserted:
@@ -1305,6 +1352,7 @@ void AtSpiAdaptor::notify(QAccessibleEvent *event)
     case QAccessible::HelpChanged:
     case QAccessible::DefaultActionChanged:
     case QAccessible::AcceleratorChanged:
+    case QAccessible::IdentifierChanged:
     case QAccessible::InvalidEvent:
         break;
     }
@@ -1508,26 +1556,6 @@ void AtSpiAdaptor::registerApplication()
     delete registry;
 }
 
-namespace {
-QString accessibleIdForAccessible(QAccessibleInterface *accessible)
-{
-    QString result;
-    while (accessible) {
-        if (!result.isEmpty())
-            result.prepend(u'.');
-        if (auto obj = accessible->object()) {
-            const QString name = obj->objectName();
-            if (!name.isEmpty())
-                result.prepend(name);
-            else
-                result.prepend(QString::fromUtf8(obj->metaObject()->className()));
-        }
-        accessible = accessible->parent();
-    }
-    return result;
-}
-} // namespace
-
 // Accessible
 bool AtSpiAdaptor::accessibleInterface(QAccessibleInterface *interface, const QString &function, const QDBusMessage &message, const QDBusConnection &connection)
 {
@@ -1578,6 +1606,8 @@ bool AtSpiAdaptor::accessibleInterface(QAccessibleInterface *interface, const QS
         sendReply(connection, message, accessibleInterfaces(interface));
     } else if (function == "GetDescription"_L1) {
         sendReply(connection, message, QVariant::fromValue(QDBusVariant(interface->text(QAccessible::Description))));
+    } else if (function == "GetHelpText"_L1) {
+        sendReply(connection, message, QVariant::fromValue(QDBusVariant(interface->text(QAccessible::Help))));
     } else if (function == "GetState"_L1) {
         quint64 spiState = spiStatesFromQState(interface->state());
         if (interface->tableInterface()) {
@@ -1598,7 +1628,7 @@ bool AtSpiAdaptor::accessibleInterface(QAccessibleInterface *interface, const QS
         sendReply(connection, message,
                   QVariant::fromValue(spiStateSetFromSpiStates(spiState)));
     } else if (function == "GetAttributes"_L1) {
-        sendReply(connection, message, QVariant::fromValue(QSpiAttributeSet()));
+        sendReply(connection, message, QVariant::fromValue(getAttributes(interface)));
     } else if (function == "GetRelationSet"_L1) {
         sendReply(connection, message, QVariant::fromValue(relationSet(interface, connection)));
     } else if (function == "GetApplication"_L1) {
@@ -1616,7 +1646,7 @@ bool AtSpiAdaptor::accessibleInterface(QAccessibleInterface *interface, const QS
         connection.send(message.createReply(QVariant::fromValue(children)));
     } else if (function == "GetAccessibleId"_L1) {
         sendReply(connection, message,
-                  QVariant::fromValue(QDBusVariant(accessibleIdForAccessible(interface))));
+                  QVariant::fromValue(QDBusVariant(QAccessibleBridgeUtils::accessibleId(interface))));
     } else {
         qCWarning(lcAccessibilityAtspi) << "AtSpiAdaptor::accessibleInterface does not implement" << function << message.path();
         return false;
@@ -1742,15 +1772,14 @@ bool AtSpiAdaptor::inheritsQAction(QObject *object)
 // Component
 static QAccessibleInterface * getWindow(QAccessibleInterface * interface)
 {
-    if (interface->role() == QAccessible::Dialog || interface->role() == QAccessible::Window)
-        return interface;
+    // find top-level window in a11y hierarchy (either has a
+    // corresponding role or is a direct child of the application object)
+    QAccessibleInterface* app = QAccessible::queryAccessibleInterface(qApp);
+    while (interface && interface->role() != QAccessible::Dialog
+           && interface->role() != QAccessible::Window && interface->parent() != app)
+        interface = interface->parent();
 
-    QAccessibleInterface * parent = interface->parent();
-    while (parent && parent->role() != QAccessible::Dialog
-            && parent->role() != QAccessible::Window)
-        parent = parent->parent();
-
-    return parent;
+    return interface;
 }
 
 bool AtSpiAdaptor::componentInterface(QAccessibleInterface *interface, const QString &function, const QDBusMessage &message, const QDBusConnection &connection)
@@ -2153,7 +2182,7 @@ namespace
     QString atspiColor(const QString &ia2Color)
     {
         // "rgb(%u,%u,%u)" -> "%u,%u,%u"
-        return ia2Color.mid(4, ia2Color.size() - (4+1));
+        return ia2Color.mid(4, ia2Color.size() - (4+1)).replace(u"\\,"_s, u","_s);
     }
 
     QString atspiSize(const QString &ia2Size)
@@ -2167,9 +2196,9 @@ namespace
         QString name = ia2Name;
         QString value = ia2Value;
 
-        // IAccessible2: http://www.linuxfoundation.org/collaborate/workgroups/accessibility/iaccessible2/textattributes
-        // ATK attribute names: https://git.gnome.org/browse/orca/tree/src/orca/text_attribute_names.py
-        // ATK attribute values: https://developer.gnome.org/atk/unstable/AtkText.html#AtkTextAttribute
+        // IAccessible2: https://wiki.linuxfoundation.org/accessibility/iaccessible2/textattributes
+        // ATK attribute names: https://gitlab.gnome.org/GNOME/orca/-/blob/master/src/orca/text_attribute_names.py
+        // ATK attribute values: https://gnome.pages.gitlab.gnome.org/atk/AtkText.html#AtkTextAttribute
 
         // https://bugzilla.gnome.org/show_bug.cgi?id=744553 "ATK docs provide no guidance for allowed values of some text attributes"
         // specifically for "weight", "invalid", "language" and value range for colors
@@ -2215,6 +2244,13 @@ namespace
                 // (on which it produces traceback and fails to read any following text attributes),
                 // but that is the default value, so omit it anyway
                 value = QString();
+        } else if (((ia2Name == "text-line-through-style"_L1 || ia2Name == "text-line-through-type"_L1) && (ia2Value != "none"_L1))
+                   || (ia2Name == "text-line-through-text"_L1 && !ia2Value.isEmpty())) {
+            // if any of the above is set, set "strikethrough" to true, but don't explicitly set
+            // to false otherwise, since any of the others might still be set to indicate strikethrough
+            // and no strikethrough is assumed anyway when nothing is explicitly set
+            name = QStringLiteral("strikethrough");
+            value = QStringLiteral("true");
         } else if (ia2Name == "text-position"_L1) {
             name = QStringLiteral("vertical-align");
             if (value != "baseline"_L1 && value != "super"_L1 && value != "sub"_L1) {
@@ -2250,6 +2286,38 @@ namespace
     }
 }
 
+QSpiAttributeSet AtSpiAdaptor::getAttributes(QAccessibleInterface *interface) const
+{
+    QSpiAttributeSet set;
+    QAccessibleAttributesInterface *attributesIface = interface->attributesInterface();
+    if (!attributesIface)
+        return set;
+
+    const QList<QAccessible::Attribute> attrKeys = attributesIface->attributeKeys();
+    for (QAccessible::Attribute key : attrKeys) {
+        const QVariant value = attributesIface->attributeValue(key);
+        // see "Core Accessibility API Mappings" spec: https://www.w3.org/TR/core-aam-1.2/
+        switch (key) {
+        case QAccessible::Attribute::Custom:
+        {
+            // forward custom attributes to AT-SPI as-is
+            Q_ASSERT((value.canConvert<QHash<QString, QString>>()));
+            const QHash<QString, QString> attrMap = value.value<QHash<QString, QString>>();
+            for (auto [name, val] : attrMap.asKeyValueRange())
+                set.insert(name, val);
+            break;
+        }
+        case QAccessible::Attribute::Level:
+            Q_ASSERT(value.canConvert<int>());
+            set.insert(QStringLiteral("level"), QString::number(value.toInt()));
+            break;
+        default:
+            break;
+        }
+    }
+    return set;
+}
+
 // FIXME all attribute methods below should share code
 QVariantList AtSpiAdaptor::getAttributes(QAccessibleInterface *interface, int offset, bool includeDefaults) const
 {
@@ -2262,11 +2330,13 @@ QVariantList AtSpiAdaptor::getAttributes(QAccessibleInterface *interface, int of
     QString joined = interface->textInterface()->attributes(offset, &startOffset, &endOffset);
     const QStringList attributes = joined.split(u';', Qt::SkipEmptyParts, Qt::CaseSensitive);
     for (const QString &attr : attributes) {
-        QStringList items;
-        items = attr.split(u':', Qt::SkipEmptyParts, Qt::CaseSensitive);
-        AtSpiAttribute attribute = atspiTextAttribute(items[0], items[1]);
-        if (!attribute.isNull())
-            set[attribute.name] = attribute.value;
+        QStringList items = attr.split(u':', Qt::SkipEmptyParts, Qt::CaseSensitive);
+        if (items.count() == 2)
+        {
+            AtSpiAttribute attribute = atspiTextAttribute(items[0], items[1]);
+            if (!attribute.isNull())
+                set[attribute.name] = attribute.value;
+        }
     }
 
     QVariantList list;
@@ -2678,14 +2748,15 @@ bool AtSpiAdaptor::tableInterface(QAccessibleInterface *interface, const QString
         if (cols > 0) {
             row = index / cols;
             col = index % cols;
-            QAccessibleTableCellInterface *cell = interface->tableInterface()->cellAt(row, col)->tableCellInterface();
-            if (cell) {
-                row = cell->rowIndex();
-                col = cell->columnIndex();
-                rowExtents = cell->rowExtent();
-                colExtents = cell->columnExtent();
-                isSelected = cell->isSelected();
-                success = true;
+            if (QAccessibleInterface *cell = interface->tableInterface()->cellAt(row, col)) {
+                if (QAccessibleTableCellInterface *cellIface = cell->tableCellInterface()) {
+                    row = cellIface->rowIndex();
+                    col = cellIface->columnIndex();
+                    rowExtents = cellIface->rowExtent();
+                    colExtents = cellIface->columnExtent();
+                    isSelected = cellIface->isSelected();
+                    success = true;
+                }
             }
         }
         QVariantList list;
@@ -2695,12 +2766,22 @@ bool AtSpiAdaptor::tableInterface(QAccessibleInterface *interface, const QString
     } else if (function == "GetColumnExtentAt"_L1) {
         int row = message.arguments().at(0).toInt();
         int column = message.arguments().at(1).toInt();
-        connection.send(message.createReply(interface->tableInterface()->cellAt(row, column)->tableCellInterface()->columnExtent()));
+        int columnExtent = 0;
+        if (QAccessibleInterface *cell = interface->tableInterface()->cellAt(row, column)) {
+            if (QAccessibleTableCellInterface *cellIface = cell->tableCellInterface())
+                columnExtent = cellIface->columnExtent();
+        }
+        connection.send(message.createReply(columnExtent));
 
     } else if (function == "GetRowExtentAt"_L1) {
         int row = message.arguments().at(0).toInt();
         int column = message.arguments().at(1).toInt();
-        connection.send(message.createReply(interface->tableInterface()->cellAt(row, column)->tableCellInterface()->rowExtent()));
+        int rowExtent = 0;
+        if (QAccessibleInterface *cell = interface->tableInterface()->cellAt(row, column)) {
+            if (QAccessibleTableCellInterface *cellIface = cell->tableCellInterface())
+                rowExtent = cellIface->rowExtent();
+        }
+        connection.send(message.createReply(rowExtent));
 
     } else if (function == "GetColumnHeader"_L1) {
         int column = message.arguments().at(0).toInt();
@@ -2740,8 +2821,12 @@ bool AtSpiAdaptor::tableInterface(QAccessibleInterface *interface, const QString
     } else if (function == "IsSelected"_L1) {
         int row = message.arguments().at(0).toInt();
         int column = message.arguments().at(1).toInt();
-        QAccessibleTableCellInterface* cell = interface->tableInterface()->cellAt(row, column)->tableCellInterface();
-        connection.send(message.createReply(cell->isSelected()));
+        bool selected = false;
+        if (QAccessibleInterface* cell = interface->tableInterface()->cellAt(row, column)) {
+            if (QAccessibleTableCellInterface *cellIface = cell->tableCellInterface())
+                selected = cellIface->isSelected();
+        }
+        connection.send(message.createReply(selected));
     } else if (function == "AddColumnSelection"_L1) {
         int column = message.arguments().at(0).toInt();
         connection.send(message.createReply(interface->tableInterface()->selectColumn(column)));
@@ -2770,7 +2855,17 @@ bool AtSpiAdaptor::tableCellInterface(QAccessibleInterface *interface, const QSt
         return false;
     }
 
-    if (function == "GetColumnSpan"_L1) {
+    if (function == "GetColumnHeaderCells"_L1) {
+        QSpiObjectReferenceArray headerCells;
+        const auto headerCellInterfaces = cellInterface->columnHeaderCells();
+        headerCells.reserve(headerCellInterfaces.size());
+        for (QAccessibleInterface *cell : headerCellInterfaces) {
+            const QString childPath = pathForInterface(cell);
+            const QSpiObjectReference ref(connection, QDBusObjectPath(childPath));
+            headerCells << ref;
+        }
+        connection.send(message.createReply(QVariant::fromValue(headerCells)));
+    } else if (function == "GetColumnSpan"_L1) {
         connection.send(message.createReply(QVariant::fromValue(QDBusVariant(
             QVariant::fromValue(cellInterface->columnExtent())))));
     } else if (function == "GetPosition"_L1) {
@@ -2778,6 +2873,16 @@ bool AtSpiAdaptor::tableCellInterface(QAccessibleInterface *interface, const QSt
         const int column = cellInterface->columnIndex();
         connection.send(message.createReply(QVariant::fromValue(QDBusVariant(
             QVariant::fromValue(QPoint(row, column))))));
+    } else if (function == "GetRowHeaderCells"_L1) {
+        QSpiObjectReferenceArray headerCells;
+        const auto headerCellInterfaces = cellInterface->rowHeaderCells();
+        headerCells.reserve(headerCellInterfaces.size());
+        for (QAccessibleInterface *cell : headerCellInterfaces) {
+            const QString childPath = pathForInterface(cell);
+            const QSpiObjectReference ref(connection, QDBusObjectPath(childPath));
+            headerCells << ref;
+        }
+        connection.send(message.createReply(QVariant::fromValue(headerCells)));
     } else if (function == "GetRowSpan"_L1) {
         connection.send(message.createReply(QVariant::fromValue(QDBusVariant(
             QVariant::fromValue(cellInterface->rowExtent())))));
@@ -2791,6 +2896,9 @@ bool AtSpiAdaptor::tableCellInterface(QAccessibleInterface *interface, const QSt
         if (table && table->tableInterface())
             ref = QSpiObjectReference(connection, QDBusObjectPath(pathForInterface(table)));
         connection.send(message.createReply(QVariant::fromValue(QDBusVariant(QVariant::fromValue(ref)))));
+    } else {
+        qCWarning(lcAccessibilityAtspi) << "AtSpiAdaptor::tableCellInterface does not implement" << function << message.path();
+        return false;
     }
 
     return true;

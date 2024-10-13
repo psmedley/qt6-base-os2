@@ -1,10 +1,14 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
+#include <QtTest/private/qcomparisontesthelper_p.h>
+
 #include <QtCore/QCoreApplication>
+#if QT_CONFIG(sortfilterproxymodel)
 #include <QtCore/QSortFilterProxyModel>
+#endif
 #include <QtCore/QStringListModel>
 #include <QtGui/QStandardItemModel>
 
@@ -36,6 +40,8 @@ private slots:
     void parent();
     void hasChildren();
     void data();
+    void invalidModelIndexDataReturnsInvalidQVariant();
+    void invalidPersistentModelIndexDataReturnsInvalidQVariant();
     void headerData();
     void itemData();
     void itemFlags();
@@ -56,6 +62,7 @@ private slots:
     void reset();
 
     void complexChangesWithPersistent();
+    void modelIndexComparisons();
 
     void testMoveSameParentUp_data();
     void testMoveSameParentUp();
@@ -77,9 +84,11 @@ private slots:
     void testMoveWithinOwnRange_data();
     void testMoveWithinOwnRange();
 
+#if QT_CONFIG(sortfilterproxymodel)
     void testMoveThroughProxy();
 
     void testReset();
+#endif
 
     void testDataChanged();
 
@@ -383,6 +392,33 @@ void tst_QAbstractItemModel::data()
     QCOMPARE(model.setHeaderData(0, Qt::Horizontal, QVariant(0), 0), false);
 }
 
+void tst_QAbstractItemModel::invalidModelIndexDataReturnsInvalidQVariant()
+{
+    const QModelIndex invalid;
+    QVERIFY(!invalid.isValid());
+    QVERIFY(!invalid.data(Qt::ItemDataRole::DisplayRole).isValid());
+
+    QtTestModel model(1, 1);
+    const QModelIndex mi = model.index(0, 1);
+    QVERIFY(!mi.isValid());
+    QVERIFY(!mi.data(Qt::ItemDataRole::DisplayRole).isValid());
+}
+
+void tst_QAbstractItemModel::invalidPersistentModelIndexDataReturnsInvalidQVariant()
+{
+    const QPersistentModelIndex invalid;
+    QVERIFY(!invalid.isValid());
+    QVERIFY(!invalid.data(Qt::ItemDataRole::DisplayRole).isValid());
+
+    QtTestModel model(1, 1);
+    const QPersistentModelIndex pmi = model.index(0, 0);
+    QVERIFY(pmi.isValid());
+    QVERIFY(pmi.data(Qt::ItemDataRole::DisplayRole).isValid());
+    model.removeRows(0, 1);
+    QVERIFY(!pmi.isValid());
+    QVERIFY(!pmi.data(Qt::ItemDataRole::DisplayRole).isValid());
+}
+
 void tst_QAbstractItemModel::headerData()
 {
     QtTestModel model(1, 1);
@@ -414,7 +450,7 @@ void tst_QAbstractItemModel::itemFlags()
 
 void tst_QAbstractItemModel::match()
 {
-    QtTestModel model(4, 1);
+    QtTestModel model(5, 1);
     QModelIndex start = model.index(0, 0, QModelIndex());
     QVERIFY(start.isValid());
     QModelIndexList res = model.match(start, Qt::DisplayRole, QVariant("1"), 3);
@@ -427,19 +463,20 @@ void tst_QAbstractItemModel::match()
     model.setData(model.index(1, 0, QModelIndex()), "cat", Qt::DisplayRole);
     model.setData(model.index(2, 0, QModelIndex()), "dog", Qt::DisplayRole);
     model.setData(model.index(3, 0, QModelIndex()), "boar", Qt::DisplayRole);
+    model.setData(model.index(4, 0, QModelIndex()), "bo/a/r", Qt::DisplayRole); // QTBUG-104585
 
     res = model.match(start, Qt::DisplayRole, QVariant("dog"), -1, Qt::MatchExactly);
     QCOMPARE(res.size(), 1);
     res = model.match(start, Qt::DisplayRole, QVariant("a"), -1, Qt::MatchContains);
-    QCOMPARE(res.size(), 3);
+    QCOMPARE(res.size(), 4);
     res = model.match(start, Qt::DisplayRole, QVariant("b"), -1, Qt::MatchStartsWith);
-    QCOMPARE(res.size(), 2);
+    QCOMPARE(res.size(), 3);
     res = model.match(start, Qt::DisplayRole, QVariant("t"), -1, Qt::MatchEndsWith);
     QCOMPARE(res.size(), 2);
     res = model.match(start, Qt::DisplayRole, QVariant("*a*"), -1, Qt::MatchWildcard);
-    QCOMPARE(res.size(), 3);
+    QCOMPARE(res.size(), 4);
     res = model.match(start, Qt::DisplayRole, QVariant(".*O.*"), -1, Qt::MatchRegularExpression);
-    QCOMPARE(res.size(), 2);
+    QCOMPARE(res.size(), 3);
     res = model.match(start, Qt::DisplayRole, QVariant(".*O.*"), -1, Qt::MatchRegularExpression | Qt::MatchCaseSensitive);
     QCOMPARE(res.size(), 0);
     res = model.match(start, Qt::DisplayRole, QVariant("BOAR"), -1, Qt::MatchFixedString);
@@ -450,7 +487,7 @@ void tst_QAbstractItemModel::match()
 
     res = model.match(start, Qt::DisplayRole, QVariant(".*O.*"), -1,
                       Qt::MatchRegularExpression);
-    QCOMPARE(res.size(), 2);
+    QCOMPARE(res.size(), 3);
     res = model.match(start, Qt::DisplayRole, QVariant(".*O.*"), -1,
                       Qt::MatchRegularExpression | Qt::MatchCaseSensitive);
     QCOMPARE(res.size(), 0);
@@ -464,7 +501,7 @@ void tst_QAbstractItemModel::match()
                                                   QRegularExpression::CaseInsensitiveOption)),
                       -1,
                       Qt::MatchRegularExpression);
-    QCOMPARE(res.size(), 2);
+    QCOMPARE(res.size(), 3);
 
     // Ensure that the case sensitivity is properly ignored when passing a
     // QRegularExpression object.
@@ -474,7 +511,7 @@ void tst_QAbstractItemModel::match()
                                                   QRegularExpression::CaseInsensitiveOption)),
                       -1,
                       Qt::MatchRegularExpression | Qt::MatchCaseSensitive);
-    QCOMPARE(res.size(), 2);
+    QCOMPARE(res.size(), 3);
 }
 
 typedef QPair<int, int> Position;
@@ -983,6 +1020,42 @@ void tst_QAbstractItemModel::complexChangesWithPersistent()
         QVERIFY(e[i] == model.index(2, i-2 , QModelIndex()));
 }
 
+void tst_QAbstractItemModel::modelIndexComparisons()
+{
+    QTestPrivate::testAllComparisonOperatorsCompile<QModelIndex>();
+    QTestPrivate::testAllComparisonOperatorsCompile<QPersistentModelIndex>();
+    QTestPrivate::testAllComparisonOperatorsCompile<QPersistentModelIndex, QModelIndex>();
+
+    QtTestModel model(3, 3);
+
+    QModelIndex mi11 = model.index(1, 1);
+    QModelIndex mi22 = model.index(2, 2);
+    QPersistentModelIndex pmi11 = mi11;
+    QPersistentModelIndex pmi22 = mi22;
+    QPersistentModelIndex pmiU;
+
+    QT_TEST_EQUALITY_OPS(mi11, mi11, true);
+    QT_TEST_EQUALITY_OPS(mi11, mi22, false);
+    QT_TEST_ALL_COMPARISON_OPS(mi11, mi11, Qt::strong_ordering::equal);
+    QT_TEST_ALL_COMPARISON_OPS(mi11, mi22, Qt::strong_ordering::less);
+    QT_TEST_ALL_COMPARISON_OPS(mi22, mi11, Qt::strong_ordering::greater);
+    QT_TEST_EQUALITY_OPS(pmi11, pmi11, true);
+    QT_TEST_EQUALITY_OPS(pmi11, pmi22, false);
+    QT_TEST_EQUALITY_OPS(pmi11, mi11, true);
+    QT_TEST_EQUALITY_OPS(pmi11, mi22, false);
+
+    QT_TEST_ALL_COMPARISON_OPS(pmi11, pmi11, Qt::strong_ordering::equal);
+    QT_TEST_ALL_COMPARISON_OPS(pmi11, pmi22, Qt::strong_ordering::less);
+    // Disengaged QPMIs are sorted randomly (based on address of their Private)
+    // So all we can check here is QPMIs with d == nullptr, which should reliably
+    // come before any others.
+    QT_TEST_ALL_COMPARISON_OPS(pmiU, pmiU, Qt::strong_ordering::equal);
+    QT_TEST_ALL_COMPARISON_OPS(pmi11, pmiU, Qt::strong_ordering::greater);
+    QT_TEST_ALL_COMPARISON_OPS(pmi11, mi11, Qt::strong_ordering::equal);
+    QT_TEST_ALL_COMPARISON_OPS(pmi11, mi22, Qt::strong_ordering::less);
+    QT_TEST_ALL_COMPARISON_OPS(pmiU, mi11, Qt::strong_ordering::less);
+}
+
 void tst_QAbstractItemModel::testMoveSameParentDown_data()
 {
     QTest::addColumn<int>("startRow");
@@ -1214,6 +1287,7 @@ void tst_QAbstractItemModel::testMoveSameParentUp()
     }
 }
 
+#if QT_CONFIG(sortfilterproxymodel)
 void tst_QAbstractItemModel::testMoveThroughProxy()
 {
     QSortFilterProxyModel *proxy = new QSortFilterProxyModel(this);
@@ -1232,6 +1306,7 @@ void tst_QAbstractItemModel::testMoveThroughProxy()
     moveCommand->setDestRow(0);
     moveCommand->doCommand();
 }
+#endif
 
 void tst_QAbstractItemModel::testMoveToGrandParent_data()
 {
@@ -1779,6 +1854,7 @@ void tst_QAbstractItemModel::testMoveWithinOwnRange()
     QCOMPARE(afterSpy.size(), 0);
 }
 
+#if QT_CONFIG(proxymodel)
 class ListenerObject : public QObject
 {
     Q_OBJECT
@@ -1797,7 +1873,7 @@ private:
     QList<QPersistentModelIndex> m_persistentIndexes;
     QModelIndexList m_nonPersistentIndexes;
 };
-
+#endif
 
 class ModelWithCustomRole : public QStringListModel
 {
@@ -1811,6 +1887,7 @@ public:
     }
 };
 
+#if QT_CONFIG(proxymodel)
 ListenerObject::ListenerObject(QAbstractProxyModel *parent)
     : QObject(parent), m_model(parent)
 {
@@ -1851,7 +1928,9 @@ void ListenerObject::slotReset()
         QVERIFY(!idx.isValid());
     }
 }
+#endif
 
+#if QT_CONFIG(sortfilterproxymodel)
 void tst_QAbstractItemModel::testReset()
 {
     QSignalSpy beforeResetSpy(m_model, &DynamicTreeModel::modelAboutToBeReset);
@@ -1906,6 +1985,7 @@ void tst_QAbstractItemModel::testReset()
     // After being reset the proxy must be queried again.
     QCOMPARE(nullProxy->roleNames().value(Qt::UserRole + 1), QByteArray());
 }
+#endif
 
 class CustomRoleModel : public QStringListModel
 {

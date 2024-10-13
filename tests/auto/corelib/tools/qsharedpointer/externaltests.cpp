@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include "externaltests.h"
@@ -55,7 +55,7 @@ namespace QTest {
     {
         if (process.state() == QProcess::Running) {
             process.terminate();
-            QThread::msleep(20);
+            QThread::sleep(std::chrono::milliseconds{20});
             if (process.state() == QProcess::Running)
                 process.kill();
         }

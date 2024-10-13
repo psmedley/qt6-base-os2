@@ -1,6 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QtCore/QCoreApplication>
@@ -16,6 +16,8 @@
 #include <QMimeDatabase>
 #include <QMetaType>
 
+#include <q20chrono.h>
+
 #ifdef __cpp_lib_memory_resource
 # include <memory_resource>
 namespace pmr = std::pmr;
@@ -23,6 +25,8 @@ namespace pmr = std::pmr;
 namespace pmr = std;
 #endif
 
+using namespace std::chrono;
+using namespace q20::chrono;
 using namespace Qt::StringLiterals;
 
 static_assert(QTypeTraits::has_ostream_operator_v<QDebug, int>);
@@ -47,8 +51,8 @@ class tst_QDebug: public QObject
 {
     Q_OBJECT
 public:
-    enum EnumType { EnumValue1 = 1, EnumValue2 = 2 };
-    enum FlagType { EnumFlag1 = 1, EnumFlag2 = 2 };
+    enum EnumType { EnumValue1 = 1, EnumValue2 = INT_MIN };
+    enum FlagType { EnumFlag1 = 1, EnumFlag2 = INT_MIN };
     Q_ENUM(EnumType)
     Q_DECLARE_FLAGS(Flags, FlagType)
     Q_FLAG(Flags)
@@ -83,6 +87,9 @@ private slots:
     void qDebugQByteArray() const;
     void qDebugQByteArrayView() const;
     void qDebugQFlags() const;
+    void qDebugStdChrono_data() const;
+    void qDebugStdChrono() const;
+    void qDebugStdOptional() const;
     void textStreamModifiers() const;
     void resetFormat() const;
     void defaultMessagehandler() const;
@@ -312,11 +319,17 @@ void tst_QDebug::debugNoQuotes() const
     MessageHandlerSetter mhs(myMessageHandler);
     {
         QDebug d = qDebug();
+        QVERIFY(d.quoteStrings());
         d << QStringLiteral("Hello");
+        QVERIFY(d.quoteStrings());
         d.noquote();
+        QVERIFY(!d.quoteStrings());
         d << QStringLiteral("Hello");
+        QVERIFY(!d.quoteStrings());
         d.quote();
+        QVERIFY(d.quoteStrings());
         d << QStringLiteral("Hello");
+        QVERIFY(d.quoteStrings());
     }
     QCOMPARE(s_msg, QString::fromLatin1("\"Hello\" Hello \"Hello\""));
 
@@ -325,7 +338,7 @@ void tst_QDebug::debugNoQuotes() const
         d << QChar('H');
         d << QLatin1String("Hello");
         d << QByteArray("Hello");
-        d.noquote();
+        d.setQuoteStrings(false);
         d << QChar('H');
         d << QLatin1String("Hello");
         d << QByteArray("Hello");
@@ -1069,7 +1082,8 @@ void tst_QDebug::qDebugQByteArrayView() const
 
 enum TestEnum {
     Flag1 = 0x1,
-    Flag2 = 0x10
+    Flag2 = 0x10,
+    SignFlag = INT_MIN,
 };
 
 Q_DECLARE_FLAGS(TestFlags, TestEnum)
@@ -1078,7 +1092,7 @@ void tst_QDebug::qDebugQFlags() const
 {
     QString file, function;
     int line = 0;
-    QFlags<TestEnum> flags(Flag1 | Flag2);
+    QFlags<TestEnum> flags(Flag1 | Flag2 | SignFlag);
 
     MessageHandlerSetter mhs(myMessageHandler);
     { qDebug() << flags; }
@@ -1086,7 +1100,7 @@ void tst_QDebug::qDebugQFlags() const
     file = __FILE__; line = __LINE__ - 2; function = Q_FUNC_INFO;
 #endif
     QCOMPARE(s_msgType, QtDebugMsg);
-    QCOMPARE(s_msg, QString::fromLatin1("QFlags(0x1|0x10)"));
+    QCOMPARE(s_msg, QString::fromLatin1("QFlags(0x1|0x10|0x80000000)"));
     QCOMPARE(QString::fromLatin1(s_file), file);
     QCOMPARE(s_line, line);
     QCOMPARE(QString::fromLatin1(s_function), function);
@@ -1100,6 +1114,129 @@ void tst_QDebug::qDebugQFlags() const
     tst_QDebug::Flags flags3(EnumFlag1);
     qDebug() << flags3;
     QCOMPARE(s_msg, QString::fromLatin1("QFlags<tst_QDebug::FlagType>(EnumFlag1)"));
+}
+
+using ToStringFunction = std::function<QString()>;
+void tst_QDebug::qDebugStdChrono_data() const
+{
+    using attoseconds = duration<int64_t, std::atto>;
+    using femtoseconds = duration<int64_t, std::femto>;
+    using picoseconds = duration<int64_t, std::pico>;
+    using centiseconds = duration<int64_t, std::centi>;
+    using deciseconds = duration<int64_t, std::deci>;
+
+    using quadriennia = duration<int, std::ratio_multiply<std::ratio<4>, years::period>>;
+    using decades = duration<int, std::ratio_multiply<years::period, std::deca>>; // decayears
+    using centuries = duration<int16_t, std::ratio_multiply<years::period, std::hecto>>; // hectoyears
+    using millennia = duration<int16_t, std::ratio_multiply<years::period, std::kilo>>; // kiloyears
+    using gigayears = duration<int8_t, std::ratio_multiply<years::period, std::giga>>;
+    using fortnights = duration<int, std::ratio_multiply<days::period, std::ratio<14>>>;
+    using microfortnights = duration<int64_t, std::ratio_multiply<fortnights::period, std::micro>>;
+    using telecom = duration<int64_t, std::ratio<1, 8000>>; // 8 kHz
+
+    using kiloseconds = duration<int64_t, std::kilo>;
+    using exaseconds = duration<int8_t, std::exa>;
+    using meter_per_light = duration<int64_t, std::ratio<1, 299'792'458>>;
+    using kilometer_per_light = duration<int64_t, std::ratio<1000, 299'792'458>>;
+
+    QTest::addColumn<ToStringFunction>("fn");
+    QTest::addColumn<QString>("expected");
+
+    auto addRow = [](const char *name, auto duration, const char *expected) {
+        auto toString = [duration]() { return QDebug::toString(duration); };
+        QTest::newRow(name) << ToStringFunction(toString) << expected;
+    };
+
+    addRow("1as", attoseconds{1}, "1as");
+    addRow("1fs", femtoseconds{1}, "1fs");
+    addRow("1ps", picoseconds{1}, "1ps");
+    addRow("0ns", 0ns, "0ns");
+    addRow("1000ns", 1000ns, "1000ns");
+    addRow("0us", 0us, "0us");
+    addRow("0ms", 0ms, "0ms");
+    addRow("1cs", centiseconds{1}, "1cs");
+    addRow("2ds", deciseconds{2}, "2ds");
+    addRow("-1s", -1s, "-1s");
+    addRow("0s", 0s, "0s");
+    addRow("1s", 1s, "1s");
+    addRow("60s", 60s, "60s");
+    addRow("1min", 1min, "1min");
+    addRow("1h", 1h, "1h");
+    addRow("1days", days{1}, "1d");
+    addRow("365days", days{365}, "365d");
+    addRow("1weeks", weeks{1}, "1wk");
+    addRow("1years", years{1}, "1yr"); // 365.2425 days
+    addRow("42years", years{42}, "42yr");
+
+    addRow("1ks", kiloseconds{1}, "1[1000]s");
+    addRow("2fortnights", fortnights{2}, "2[2]wk");
+    addRow("1quadriennia", quadriennia{1}, "1[4]yr");
+    addRow("1decades", decades{1}, "1[10]yr");
+    addRow("1centuries", centuries{1}, "1[100]yr");
+    addRow("1millennia", millennia{1}, "1[1000]yr");
+#if defined(Q_OS_LINUX) || defined(Q_OS_DARWIN)
+    // some OSes print the exponent differently
+    addRow("1Es", exaseconds{1}, "1[1e+18]s");
+    addRow("13gigayears", gigayears{13}, "13[1e+09]yr");
+#endif
+
+    // months are one twelfth of a Gregorian year, not 30 days
+    addRow("1months", months{1}, "1[2629746]s");
+
+    // weird units
+    addRow("2microfortnights", microfortnights{2}, "2[756/625]s");
+    addRow("1telecom", telecom{1}, "1[1/8000]s");
+    addRow("10m/c", meter_per_light{10}, "10[1/299792458]s");
+    addRow("10km/c", kilometer_per_light{10}, "10[500/149896229]s");
+
+    // real floting point
+    using fpsec = duration<double>;
+    using fpmsec = duration<double, std::milli>;
+    using fpnsec = duration<double, std::nano>;
+    addRow("1.0s", fpsec{1}, "1s");
+    addRow("1.5s", fpsec{1.5}, "1.5s");
+    addRow("1.0ms", fpmsec{1}, "1ms");
+    addRow("1.5ms", fpmsec{1.5}, "1.5ms");
+    addRow("1.0ns", fpnsec{1}, "1ns");
+    addRow("1.5ns", fpnsec{1.5}, "1.5ns");
+
+    // and some precision setting too
+    QTest::newRow("1.00000ns")
+            << ToStringFunction([]() {
+        QString buffer;
+        QDebug d(&buffer);
+        d.nospace() << qSetRealNumberPrecision(5) << Qt::fixed << fpnsec{1};
+        return buffer;
+    }) << "1.00000ns";
+}
+
+void tst_QDebug::qDebugStdChrono() const
+{
+    QFETCH(ToStringFunction, fn);
+    QFETCH(QString, expected);
+    QCOMPARE(fn(), expected);
+}
+
+void tst_QDebug::qDebugStdOptional() const
+{
+    QString file, function;
+    int line = 0;
+    MessageHandlerSetter mhs(myMessageHandler);
+    {
+        std::optional<QByteArray> notSet = std::nullopt;
+        std::optional<QByteArray> set("foo");
+        auto no = std::nullopt;
+        QDebug d = qDebug();
+        d << notSet << set << no;
+    }
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 4; function = Q_FUNC_INFO;
+#endif
+    QCOMPARE(s_msgType, QtDebugMsg);
+    QCOMPARE(s_msg, QString::fromLatin1("nullopt std::optional(\"foo\") nullopt"));
+    QCOMPARE(QString::fromLatin1(s_file), file);
+    QCOMPARE(s_line, line);
+    QCOMPARE(QString::fromLatin1(s_function), function);
 }
 
 void tst_QDebug::textStreamModifiers() const
@@ -1206,6 +1343,19 @@ void tst_QDebug::toString() const
         QDebug stream(&expectedString);
         stream.nospace() << &qobject;
         QCOMPARE(QDebug::toString(&qobject), expectedString);
+    }
+
+    // Overloaded operator&
+    {
+        struct TypeWithAddressOf
+        {
+            int* operator&() const { return nullptr; }
+            operator QByteArray() const { return "test"; }
+        };
+
+        TypeWithAddressOf object;
+        QString expectedString {"\"test\""};
+        QCOMPARE(QDebug::toString(object), expectedString);
     }
 }
 

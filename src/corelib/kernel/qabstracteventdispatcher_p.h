@@ -16,7 +16,9 @@
 //
 
 #include "QtCore/qabstracteventdispatcher.h"
+#include "QtCore/qnamespace.h"
 #include "private/qobject_p.h"
+#include "QtCore/qttypetraits.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -26,14 +28,22 @@ class Q_CORE_EXPORT QAbstractEventDispatcherPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QAbstractEventDispatcher)
 public:
-    inline QAbstractEventDispatcherPrivate()
-    { }
+    QAbstractEventDispatcherPrivate();
     ~QAbstractEventDispatcherPrivate() override;
 
     QList<QAbstractNativeEventFilter *> eventFilters;
 
+    bool isV2 = false;
+
     static int allocateTimerId();
     static void releaseTimerId(int id);
+    static void releaseTimerId(Qt::TimerId id)
+    { releaseTimerId(qToUnderlying(id)); }
+
+    static QAbstractEventDispatcherPrivate *get(QAbstractEventDispatcher *o)
+    { return o->d_func(); }
+    static const QAbstractEventDispatcherPrivate *get(const QAbstractEventDispatcher *o)
+    { return o->d_func(); }
 };
 
 QT_END_NAMESPACE

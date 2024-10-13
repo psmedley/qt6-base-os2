@@ -8,42 +8,47 @@
 #include "qlist.h"
 #include "qsqlfield.h"
 #include "qstring.h"
-#include "qstringlist.h"
 
 QT_BEGIN_NAMESPACE
 
-class QSqlRecordPrivate
+class QSqlRecordPrivate : public QSharedData
 {
 public:
-    QSqlRecordPrivate();
-    QSqlRecordPrivate(const QSqlRecordPrivate &other);
+    inline bool contains(qsizetype index) const
+    {
+      return index >= 0 && index < fields.size();
+    }
 
-    inline bool contains(int index) { return index >= 0 && index < fields.size(); }
-    QString createField(int index, const QString &prefix) const;
+    template <typename T>
+    qsizetype indexOfImpl(T name)
+    {
+        T tableName;
+        T fieldName;
+        const auto it = std::find(name.begin(), name.end(), u'.');
+        const auto idx = (it == name.end()) ? -1 : it - name.begin();
+        if (idx != -1) {
+            tableName = name.left(idx);
+            fieldName = name.mid(idx + 1);
+        }
+        const auto cnt = fields.size();
+        for (qsizetype i = 0; i < cnt; ++i) {
+            // Check the passed in name first in case it is an alias using a dot.
+            // Then check if both the table and field match when there is a table name specified.
+            const auto &currentField = fields.at(i);
+            const auto &currentFieldName = currentField.name();
+            if (name.compare(currentFieldName, Qt::CaseInsensitive) == 0)
+                return i;
+            if (idx != -1 &&
+                tableName.compare(currentField.tableName(), Qt::CaseInsensitive) == 0 &&
+                fieldName.compare(currentFieldName, Qt::CaseInsensitive) == 0)
+                return i;
+        }
+        return -1;
+    }
 
     QList<QSqlField> fields;
-    QAtomicInt ref;
 };
-
-QSqlRecordPrivate::QSqlRecordPrivate() : ref(1)
-{
-}
-
-QSqlRecordPrivate::QSqlRecordPrivate(const QSqlRecordPrivate &other): fields(other.fields), ref(1)
-{
-}
-
-/*! \internal
-    Just for compat
-*/
-QString QSqlRecordPrivate::createField(int index, const QString &prefix) const
-{
-    QString f;
-    if (!prefix.isEmpty())
-        f = prefix + u'.';
-    f += fields.at(index).name();
-    return f;
-}
+QT_DEFINE_QESDP_SPECIALIZATION_DTOR(QSqlRecordPrivate)
 
 /*!
     \class QSqlRecord
@@ -86,8 +91,8 @@ QString QSqlRecordPrivate::createField(int index, const QString &prefix) const
 */
 
 QSqlRecord::QSqlRecord()
+  : d(new QSqlRecordPrivate)
 {
-    d = new QSqlRecordPrivate();
 }
 
 /*!
@@ -97,11 +102,39 @@ QSqlRecord::QSqlRecord()
     of a record in \l{constant time}.
 */
 
-QSqlRecord::QSqlRecord(const QSqlRecord& other)
-{
-    d = other.d;
-    d->ref.ref();
-}
+QSqlRecord::QSqlRecord(const QSqlRecord &other)
+    = default;
+
+/*!
+    \fn QSqlRecord::QSqlRecord(QSqlRecord &&other)
+    \since 6.6
+
+    Move-constructs a new QSqlRecord from \a other.
+
+    \note The moved-from object \a other is placed in a partially-formed state,
+    in which the only valid operations are destruction and assignment of a new
+    value.
+*/
+
+/*!
+    \fn QSqlRecord &QSqlRecord::operator=(QSqlRecord &&other)
+    \since 6.6
+
+    Move-assigns \a other to this QSqlRecord instance.
+
+    \note The moved-from object \a other is placed in a partially-formed state,
+    in which the only valid operations are destruction and assignment of a new
+    value.
+*/
+
+/*!
+    \fn void QSqlRecord::swap(QSqlRecord &other)
+    \since 6.6
+
+    Swaps SQL record \a other with this SQL record. This operation is very fast
+    and never fails.
+*/
+
 
 /*!
     Sets the record equal to \a other.
@@ -110,21 +143,16 @@ QSqlRecord::QSqlRecord(const QSqlRecord& other)
     of a record in \l{constant time}.
 */
 
-QSqlRecord& QSqlRecord::operator=(const QSqlRecord& other)
-{
-    qAtomicAssign(d, other.d);
-    return *this;
-}
+QSqlRecord& QSqlRecord::operator=(const QSqlRecord &other)
+    = default;
 
 /*!
     Destroys the object and frees any allocated resources.
 */
 
 QSqlRecord::~QSqlRecord()
-{
-    if (!d->ref.deref())
-        delete d;
-}
+    = default;
+
 
 /*!
     \fn bool QSqlRecord::operator!=(const QSqlRecord &other) const
@@ -165,10 +193,12 @@ QVariant QSqlRecord::value(int index) const
     Returns the value of the field called \a name in the record. If
     field \a name does not exist an invalid variant is returned.
 
-    \sa indexOf()
-*/
+    \note In Qt versions prior to 6.8, this function took QString, not
+    QAnyStringView.
 
-QVariant QSqlRecord::value(const QString& name) const
+    \sa indexOf(), isNull()
+*/
+QVariant QSqlRecord::value(QAnyStringView name) const
 {
     return value(indexOf(name));
 }
@@ -191,31 +221,17 @@ QString QSqlRecord::fieldName(int index) const
     case-sensitive. If more than one field matches, the first one is
     returned.
 
-    \sa fieldName()
-*/
+    \note In Qt versions prior to 6.8, this function took QString, not
+    QAnyStringView.
 
-int QSqlRecord::indexOf(const QString& name) const
+    \sa fieldName()
+ */
+int QSqlRecord::indexOf(QAnyStringView name) const
 {
-    QStringView tableName;
-    QStringView fieldName(name);
-    const qsizetype idx = name.indexOf(u'.');
-    if (idx != -1) {
-        tableName = fieldName.left(idx);
-        fieldName = fieldName.mid(idx + 1);
-    }
-    const int cnt = count();
-    for (int i = 0; i < cnt; ++i) {
-        // Check the passed in name first in case it is an alias using a dot.
-        // Then check if both the table and field match when there is a table name specified.
-        const auto &currentField = d->fields.at(i);
-        const auto &currentFieldName = currentField.name();
-        if (currentFieldName.compare(name, Qt::CaseInsensitive) == 0
-            || (idx != -1 && currentFieldName.compare(fieldName, Qt::CaseInsensitive) == 0
-                && currentField.tableName().compare(tableName, Qt::CaseInsensitive) == 0)) {
-            return i;
-        }
-    }
-    return -1;
+    return name.visit([&](auto v)
+    {
+        return d->indexOfImpl(v);
+    });
 }
 
 /*!
@@ -228,10 +244,17 @@ QSqlField QSqlRecord::field(int index) const
     return d->fields.value(index);
 }
 
-/*! \overload
-    Returns the field called \a name.
+/*!
+    \overload
+
+    Returns the field called \a name. If the field called
+    \a name is not found, function returns
+    a \l{default-constructed value}.
+
+    \note In Qt versions prior to 6.8, this function took QString, not
+    QAnyStringView.
  */
-QSqlField QSqlRecord::field(const QString &name) const
+QSqlField QSqlRecord::field(QAnyStringView name) const
 {
     return field(indexOf(name));
 }
@@ -243,7 +266,7 @@ QSqlField QSqlRecord::field(const QString &name) const
     \sa insert(), replace(), remove()
 */
 
-void QSqlRecord::append(const QSqlField& field)
+void QSqlRecord::append(const QSqlField &field)
 {
     detach();
     d->fields.append(field);
@@ -254,7 +277,7 @@ void QSqlRecord::append(const QSqlField& field)
 
     \sa append(), replace(), remove()
  */
-void QSqlRecord::insert(int pos, const QSqlField& field)
+void QSqlRecord::insert(int pos, const QSqlField &field)
 {
    detach();
    d->fields.insert(pos, field);
@@ -267,7 +290,7 @@ void QSqlRecord::insert(int pos, const QSqlField& field)
     \sa append(), insert(), remove()
 */
 
-void QSqlRecord::replace(int pos, const QSqlField& field)
+void QSqlRecord::replace(int pos, const QSqlField &field)
 {
     if (!d->contains(pos))
         return;
@@ -316,13 +339,14 @@ bool QSqlRecord::isEmpty() const
     return d->fields.isEmpty();
 }
 
-
 /*!
     Returns \c true if there is a field in the record called \a name;
     otherwise returns \c false.
-*/
 
-bool QSqlRecord::contains(const QString& name) const
+    \note In Qt versions prior to 6.8, this function took QString, not
+    QAnyStringView.
+*/
+bool QSqlRecord::contains(QAnyStringView name) const
 {
     return indexOf(name) >= 0;
 }
@@ -337,9 +361,8 @@ bool QSqlRecord::contains(const QString& name) const
 void QSqlRecord::clearValues()
 {
     detach();
-    int count = d->fields.size();
-    for (int i = 0; i < count; ++i)
-        d->fields[i].clear();
+    for (QSqlField &f : d->fields)
+        f.clear();
 }
 
 /*!
@@ -348,17 +371,17 @@ void QSqlRecord::clearValues()
     fields that have \a generated set to true are included in the SQL
     that is generated by QSqlQueryModel for example.
 
+    \note In Qt versions prior to 6.8, this function took QString, not
+    QAnyStringView.
+
     \sa isGenerated()
 */
-
-void QSqlRecord::setGenerated(const QString& name, bool generated)
+void QSqlRecord::setGenerated(QAnyStringView name, bool generated)
 {
     setGenerated(indexOf(name), generated);
 }
 
 /*!
-    \overload
-
     Sets the generated flag for the field \a index to \a generated.
 
     \sa isGenerated()
@@ -373,10 +396,10 @@ void QSqlRecord::setGenerated(int index, bool generated)
 }
 
 /*!
-    \overload
-
     Returns \c true if the field \a index is null or if there is no field at
     position \a index; otherwise returns \c false.
+
+    \sa setNull()
 */
 bool QSqlRecord::isNull(int index) const
 {
@@ -384,12 +407,17 @@ bool QSqlRecord::isNull(int index) const
 }
 
 /*!
+    \overload
+
     Returns \c true if the field called \a name is null or if there is no
     field called \a name; otherwise returns \c false.
 
+    \note In Qt versions prior to 6.8, this function took QString, not
+    QAnyStringView.
+
     \sa setNull()
 */
-bool QSqlRecord::isNull(const QString& name) const
+bool QSqlRecord::isNull(QAnyStringView name) const
 {
     return isNull(indexOf(name));
 }
@@ -413,26 +441,32 @@ void QSqlRecord::setNull(int index)
 
     Sets the value of the field called \a name to null. If the field
     does not exist, nothing happens.
+
+    \note In Qt versions prior to 6.8, this function took QString, not
+    QAnyStringView.
 */
-void QSqlRecord::setNull(const QString& name)
+void QSqlRecord::setNull(QAnyStringView name)
 {
     setNull(indexOf(name));
 }
 
-
 /*!
+    \overload
+
     Returns \c true if the record has a field called \a name and this
     field is to be generated (the default); otherwise returns \c false.
 
+    \note In Qt versions prior to 6.8, this function took QString, not
+    QAnyStringView.
+
     \sa setGenerated()
 */
-bool QSqlRecord::isGenerated(const QString& name) const
+bool QSqlRecord::isGenerated(QAnyStringView name) const
 {
     return isGenerated(indexOf(name));
 }
 
-/*! \overload
-
+/*!
     Returns \c true if the record has a field at position \a index and this
     field is to be generated (the default); otherwise returns \c false.
 
@@ -461,7 +495,7 @@ int QSqlRecord::count() const
     \sa setNull()
 */
 
-void QSqlRecord::setValue(int index, const QVariant& val)
+void QSqlRecord::setValue(int index, const QVariant &val)
 {
     if (!d->contains(index))
         return;
@@ -469,15 +503,18 @@ void QSqlRecord::setValue(int index, const QVariant& val)
     d->fields[index].setValue(val);
 }
 
-
 /*!
     \overload
 
     Sets the value of the field called \a name to \a val. If the field
     does not exist, nothing happens.
-*/
 
-void QSqlRecord::setValue(const QString& name, const QVariant& val)
+    \note In Qt versions prior to 6.8, this function took QString, not
+    QAnyStringView.
+
+    \sa setNull()
+*/
+void QSqlRecord::setValue(QAnyStringView name, const QVariant &val)
 {
     setValue(indexOf(name), val);
 }
@@ -487,7 +524,7 @@ void QSqlRecord::setValue(const QString& name, const QVariant& val)
 */
 void QSqlRecord::detach()
 {
-    qAtomicDetach(d);
+    d.detach();
 }
 
 #ifndef QT_NO_DEBUG_STREAM

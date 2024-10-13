@@ -5,39 +5,106 @@
 
 #include "qtimezone.h"
 #include "qtimezoneprivate_p.h"
+#if QT_CONFIG(timezone_locale)
+#  include "qtimezonelocale_p.h"
+#endif
 #include "qtimezoneprivate_data_p.h"
 
-#include <private/qnumeric_p.h>
-#include <private/qtools_p.h>
 #include <qdatastream.h>
 #include <qdebug.h>
+#include <qstring.h>
+
+#include <private/qcalendarmath_p.h>
+#include <private/qnumeric_p.h>
+#include <private/qtools_p.h>
 
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
 using namespace QtMiscUtils;
+using namespace QtTimeZoneCldr;
+using namespace Qt::StringLiterals;
 
-/*
-    Static utilities for looking up Windows ID tables
-*/
+// For use with std::is_sorted() in assertions:
+[[maybe_unused]]
+constexpr bool earlierZoneData(const ZoneData &less, const ZoneData &more) noexcept
+{
+    return less.windowsIdKey < more.windowsIdKey
+        || (less.windowsIdKey == more.windowsIdKey && less.territory < more.territory);
+}
 
+[[maybe_unused]]
+static bool earlierWinData(const WindowsData &less, const WindowsData &more) noexcept
+{
+    // Actually only tested in the negative, to check more < less never happens,
+    // so should be true if more < less in either part; hence || not && combines.
+    return less.windowsIdKey < more.windowsIdKey
+        || less.windowsId().compare(more.windowsId(), Qt::CaseInsensitive) < 0;
+}
+
+// For use with std::lower_bound():
+constexpr bool atLowerUtcOffset(const UtcData &entry, qint32 offsetSeconds) noexcept
+{
+    return entry.offsetFromUtc < offsetSeconds;
+}
+
+constexpr bool atLowerWindowsKey(const WindowsData &entry, qint16 winIdKey) noexcept
+{
+    return entry.windowsIdKey < winIdKey;
+}
+
+static bool earlierAliasId(const AliasData &entry, QByteArrayView aliasId) noexcept
+{
+    return entry.aliasId().compare(aliasId, Qt::CaseInsensitive) < 0;
+}
+
+static bool earlierWindowsId(const WindowsData &entry, QByteArrayView winId) noexcept
+{
+    return entry.windowsId().compare(winId, Qt::CaseInsensitive) < 0;
+}
+
+constexpr bool zoneAtLowerWindowsKey(const ZoneData &entry, qint16 winIdKey) noexcept
+{
+    return entry.windowsIdKey < winIdKey;
+}
+
+// Static table-lookup helpers
 static quint16 toWindowsIdKey(const QByteArray &winId)
 {
-    for (const QWindowsData &data : windowsDataTable) {
-        if (data.windowsId() == winId)
-            return data.windowsIdKey;
-    }
+    // Key and winId are monotonic, table is sorted on them.
+    const auto data = std::lower_bound(std::begin(windowsDataTable), std::end(windowsDataTable),
+                                       winId, earlierWindowsId);
+    if (data != std::end(windowsDataTable) && data->windowsId() == winId)
+        return data->windowsIdKey;
     return 0;
 }
 
 static QByteArray toWindowsIdLiteral(quint16 windowsIdKey)
 {
-    for (const QWindowsData &data : windowsDataTable) {
-        if (data.windowsIdKey == windowsIdKey)
+    // Caller should be passing a valid (in range) key; and table is sorted in
+    // increasing order, with no gaps in numbering, starting with key = 1 at
+    // index [0]. So this should normally work:
+    if (Q_LIKELY(windowsIdKey > 0 && windowsIdKey <= std::size(windowsDataTable))) {
+        const auto &data = windowsDataTable[windowsIdKey - 1];
+        if (Q_LIKELY(data.windowsIdKey == windowsIdKey))
             return data.windowsId().toByteArray();
     }
+    // Fall back on binary chop - key and winId are monotonic, table is sorted on them:
+    const auto data = std::lower_bound(std::begin(windowsDataTable), std::end(windowsDataTable),
+                                       windowsIdKey, atLowerWindowsKey);
+    if (data != std::end(windowsDataTable) && data->windowsIdKey == windowsIdKey)
+        return data->windowsId().toByteArray();
+
     return QByteArray();
+}
+
+static auto zoneStartForWindowsId(quint16 windowsIdKey) noexcept
+{
+    // Caller must check the resulting iterator isn't std::end(zoneDataTable)
+    // and does match windowsIdKey, since this is just the lower bound.
+    return std::lower_bound(std::begin(zoneDataTable), std::end(zoneDataTable),
+                            windowsIdKey, zoneAtLowerWindowsKey);
 }
 
 /*
@@ -46,6 +113,12 @@ static QByteArray toWindowsIdLiteral(quint16 windowsIdKey)
 
 QTimeZonePrivate::QTimeZonePrivate()
 {
+    // If std::is_sorted() were constexpr, the first could be a static_assert().
+    // From C++20, we should be able to rework it in terms of std::all_of().
+    Q_ASSERT(std::is_sorted(std::begin(zoneDataTable), std::end(zoneDataTable),
+                            earlierZoneData));
+    Q_ASSERT(std::is_sorted(std::begin(windowsDataTable), std::end(windowsDataTable),
+                            earlierWinData));
 }
 
 QTimeZonePrivate::QTimeZonePrivate(const QTimeZonePrivate &other)
@@ -89,7 +162,7 @@ QLocale::Territory QTimeZonePrivate::territory() const
 {
     // Default fall-back mode, use the zoneTable to find Region of known Zones
     const QLatin1StringView sought(m_id.data(), m_id.size());
-    for (const QZoneData &data : zoneDataTable) {
+    for (const ZoneData &data : zoneDataTable) {
         for (QLatin1StringView token : data.ids()) {
             if (token == sought)
                 return QLocale::Territory(data.territory);
@@ -107,29 +180,43 @@ QString QTimeZonePrivate::displayName(qint64 atMSecsSinceEpoch,
                                       QTimeZone::NameType nameType,
                                       const QLocale &locale) const
 {
-    if (nameType == QTimeZone::OffsetName)
-        return isoOffsetFormat(offsetFromUtc(atMSecsSinceEpoch));
+    const Data tran = data(atMSecsSinceEpoch);
+    if (tran.atMSecsSinceEpoch != invalidMSecs()) {
+        if (nameType == QTimeZone::OffsetName && locale.language() == QLocale::C)
+            return isoOffsetFormat(tran.offsetFromUtc);
+        if (nameType == QTimeZone::ShortName && isDataLocale(locale))
+            return tran.abbreviation;
 
-    if (isDaylightTime(atMSecsSinceEpoch))
-        return displayName(QTimeZone::DaylightTime, nameType, locale);
-    else
-        return displayName(QTimeZone::StandardTime, nameType, locale);
+        QTimeZone::TimeType timeType
+            = tran.daylightTimeOffset != 0 ? QTimeZone::DaylightTime : QTimeZone::StandardTime;
+#if QT_CONFIG(timezone_locale)
+        return localeName(atMSecsSinceEpoch, tran.offsetFromUtc, timeType, nameType, locale);
+#else
+        return displayName(timeType, nameType, locale);
+#endif
+    }
+    return QString();
 }
 
 QString QTimeZonePrivate::displayName(QTimeZone::TimeType timeType,
                                       QTimeZone::NameType nameType,
                                       const QLocale &locale) const
 {
-    Q_UNUSED(timeType);
-    Q_UNUSED(nameType);
-    Q_UNUSED(locale);
+    const Data tran = data(timeType);
+    if (tran.atMSecsSinceEpoch != invalidMSecs()) {
+        if (nameType == QTimeZone::OffsetName && isDataLocale(locale))
+            return isoOffsetFormat(tran.offsetFromUtc);
+
+#if QT_CONFIG(timezone_locale)
+        return localeName(tran.atMSecsSinceEpoch, tran.offsetFromUtc, timeType, nameType, locale);
+#endif
+    }
     return QString();
 }
 
 QString QTimeZonePrivate::abbreviation(qint64 atMSecsSinceEpoch) const
 {
-    Q_UNUSED(atMSecsSinceEpoch);
-    return QString();
+    return displayName(atMSecsSinceEpoch, QTimeZone::ShortName, QLocale::c());
 }
 
 int QTimeZonePrivate::offsetFromUtc(qint64 atMSecsSinceEpoch) const
@@ -163,52 +250,113 @@ bool QTimeZonePrivate::isDaylightTime(qint64 atMSecsSinceEpoch) const
     return false;
 }
 
+QTimeZonePrivate::Data QTimeZonePrivate::data(QTimeZone::TimeType timeType) const
+{
+    // True if tran is valid and has the DST-ness to match timeType:
+    const auto validMatch = [timeType](const QTimeZonePrivate::Data &tran) {
+        return tran.atMSecsSinceEpoch != invalidMSecs()
+            && ((timeType == QTimeZone::DaylightTime) != (tran.daylightTimeOffset == 0));
+    };
+
+    // Get current tran, use if suitable:
+    const qint64 currentMSecs = QDateTime::currentMSecsSinceEpoch();
+    QTimeZonePrivate::Data tran = data(currentMSecs);
+    if (validMatch(tran))
+        return tran;
+
+    if (hasTransitions()) {
+        // Otherwise, next tran probably flips DST-ness:
+        tran = nextTransition(currentMSecs);
+        if (validMatch(tran))
+            return tran;
+
+        // Failing that, prev (or present, if current MSecs is exactly a
+        // transition moment) tran defines what data() got us and the one before
+        // that probably flips DST-ness; failing that, keep marching backwards
+        // in search of a DST interval:
+        tran = previousTransition(currentMSecs + 1);
+        while (tran.atMSecsSinceEpoch != invalidMSecs()) {
+            tran = previousTransition(tran.atMSecsSinceEpoch);
+            if (validMatch(tran))
+                return tran;
+        }
+    }
+    return {};
+}
+
+/*!
+    \internal
+
+    Returns true if the abbreviation given in data()'s returns is appropriate
+    for use in the given \a locale.
+
+    Base implementation assumes data() corresponds to the system locale; derived
+    classes should override if their data() is something else (such as
+    C/English).
+*/
+bool QTimeZonePrivate::isDataLocale(const QLocale &locale) const
+{
+    // Guess data is for the system locale unless backend overrides that.
+    return locale == QLocale::system();
+}
+
 QTimeZonePrivate::Data QTimeZonePrivate::data(qint64 forMSecsSinceEpoch) const
 {
     Q_UNUSED(forMSecsSinceEpoch);
-    return invalidData();
+    return {};
 }
 
 // Private only method for use by QDateTime to convert local msecs to epoch msecs
-QTimeZonePrivate::Data QTimeZonePrivate::dataForLocalTime(qint64 forLocalMSecs, int hint) const
+QDateTimePrivate::ZoneState QTimeZonePrivate::stateAtZoneTime(
+    qint64 forLocalMSecs, QDateTimePrivate::TransitionOptions resolve) const
 {
-#ifndef Q_OS_ANDROID
-    // The Android back-end's hasDaylightTime() is only true for zones with
-    // transitions in the future; we need it to mean "has ever had a transition"
-    // though, so can't trust it here.
-    if (!hasDaylightTime()) // No DST means same offset for all local msecs
-        return data(forLocalMSecs - standardTimeOffset(forLocalMSecs) * 1000);
-#endif
+    auto dataToState = [](const QTimeZonePrivate::Data &d) {
+        return QDateTimePrivate::ZoneState(d.atMSecsSinceEpoch + d.offsetFromUtc * 1000,
+                                           d.offsetFromUtc,
+                                           d.daylightTimeOffset ? QDateTimePrivate::DaylightTime
+                                                                : QDateTimePrivate::StandardTime);
+    };
 
     /*
       We need a UTC time at which to ask for the offset, in order to be able to
-      add that offset to forLocalMSecs, to get the UTC time we
-      need. Fortunately, no time-zone offset is more than 14 hours; and DST
-      transitions happen (much) more than thirty-two hours apart.  So sampling
-      offset sixteen hours each side gives us information we can be sure
+      add that offset to forLocalMSecs, to get the UTC time we need.
+      Fortunately, all time-zone offsets have been less than 17 hours; and DST
+      transitions happen (much) more than thirty-four hours apart. So sampling
+      offset seventeen hours each side gives us information we can be sure
       brackets the correct time and at most one DST transition.
     */
-    std::integral_constant<qint64, 16 * 3600 * 1000> sixteenHoursInMSecs;
-    static_assert(-sixteenHoursInMSecs / 1000 < QTimeZone::MinUtcOffsetSecs
-                  && sixteenHoursInMSecs / 1000 > QTimeZone::MaxUtcOffsetSecs);
+    std::integral_constant<qint64, 17 * 3600 * 1000> seventeenHoursInMSecs;
+    static_assert(-seventeenHoursInMSecs / 1000 < QTimeZone::MinUtcOffsetSecs
+                  && seventeenHoursInMSecs / 1000 > QTimeZone::MaxUtcOffsetSecs);
     qint64 millis;
-    // Clip the bracketing times to the bounds of the supported range. Exclude
-    // minMSecs(), because at least one backend (Windows) uses it for a
-    // start-of-time fake transition, that we want previousTransition() to find.
+    // Clip the bracketing times to the bounds of the supported range.
     const qint64 recent =
-        qSubOverflow(forLocalMSecs, sixteenHoursInMSecs, &millis) || millis <= minMSecs()
-        ? minMSecs() + 1 : millis; // Necessarily <= forLocalMSecs + 2.
+        qSubOverflow(forLocalMSecs, seventeenHoursInMSecs, &millis) || millis < minMSecs()
+        ? minMSecs() : millis; // Necessarily <= forLocalMSecs + 1.
     // (Given that minMSecs() is std::numeric_limits<qint64>::min() + 1.)
     const qint64 imminent =
-        qAddOverflow(forLocalMSecs, sixteenHoursInMSecs, &millis)
+        qAddOverflow(forLocalMSecs, seventeenHoursInMSecs, &millis)
         ? maxMSecs() : millis; // Necessarily >= forLocalMSecs
     // At most one of those was clipped to its boundary value:
-    Q_ASSERT(recent < imminent && sixteenHoursInMSecs < imminent - recent + 2);
+    Q_ASSERT(recent < imminent && seventeenHoursInMSecs < imminent - recent + 1);
+
+    const Data past = data(recent), future = data(imminent);
+    // > 99% of the time, past and future will agree:
+    if (Q_LIKELY(past.offsetFromUtc == future.offsetFromUtc
+                 && past.standardTimeOffset == future.standardTimeOffset
+                 // Those two imply same daylightTimeOffset.
+                 && past.abbreviation == future.abbreviation)) {
+        Data data = future;
+        data.atMSecsSinceEpoch = forLocalMSecs - future.offsetFromUtc * 1000;
+        return dataToState(data);
+    }
+
     /*
       Offsets are Local - UTC, positive to the east of Greenwich, negative to
-      the west; DST offset always exceeds standard offset, when DST applies.
+      the west; DST offset normally exceeds standard offset, when DST applies.
       When we have offsets on either side of a transition, the lower one is
-      standard, the higher is DST.
+      standard, the higher is DST, unless we have data telling us it's the other
+      way round.
 
       Non-DST transitions (jurisdictions changing time-zone and time-zones
       changing their standard offset, typically) are described below as if they
@@ -220,60 +368,34 @@ QTimeZonePrivate::Data QTimeZonePrivate::dataForLocalTime(qint64 forLocalMSecs, 
       and take the easy path; with transitions, tran and nextTran get the
       correct UTC time as atMSecsSinceEpoch so comparing to nextStart selects
       the right one.  In all other cases, the transition changes offset and the
-      reasoning that applies to DST applies just the same.  Aside from hinting,
-      the only thing that looks at DST-ness at all, other than inferred from
-      offset changes, is the case without transition data handling an invalid
-      time in the gap that a transition passed over.
+      reasoning that applies to DST applies just the same.
 
-      The handling of hint (see below) is apt to go wrong in non-DST
-      transitions.  There isn't really a great deal we can hope to do about that
-      without adding yet more unreliable complexity to the heuristics in use for
-      already obscure corner-cases.
-     */
-
-    /*
-      The hint (really a QDateTimePrivate::DaylightStatus) is > 0 if caller
-      thinks we're in DST, 0 if in standard.  A value of -2 means never-DST, so
-      should have been handled above; if it slips through, it's wrong but we
-      should probably treat it as standard anyway (never-DST means
-      always-standard, after all).  If the hint turns out to be wrong, fall back
-      on trying the other possibility: which makes it harmless to treat -1
-      (meaning unknown) as standard (i.e. try standard first, then try DST).  In
-      practice, away from a transition, the only difference hint makes is to
-      which candidate we try first: if the hint is wrong (or unknown and
-      standard fails), we'll try the other candidate and it'll work.
-
-      For the obscure (and invalid) case where forLocalMSecs falls in a
-      spring-forward's missing hour, a common case is that we started with a
-      date/time for which the hint was valid and adjusted it naively; for that
-      case, we should correct the adjustment by shunting across the transition
-      into where hint is wrong.  So half-way through the gap, arrived at from
-      the DST side, should be read as an hour earlier, in standard time; but, if
-      arrived at from the standard side, should be read as an hour later, in
-      DST.  (This shall be wrong in some cases; for example, when a country
-      changes its transition dates and changing a date/time by more than six
-      months lands it on a transition.  However, these cases are even more
-      obscure than those where the heuristic is good.)
-     */
-
+      The resolution of transitions, specified by \a resolve, may be lead astray
+      if (as happens on Windows) the backend has been obliged to guess whether a
+      transition is in fact a DST one or a change to standard offset; or to
+      guess that the higher-offset side is the DST one (the reverse of this is
+      true for Ireland, using negative DST). There's not much we can do about
+      that, though.
+    */
     if (hasTransitions()) {
         /*
           We have transitions.
 
-          Each transition gives the offsets to use until the next; so we need the
-          most recent transition before the time forLocalMSecs describes.  If it
-          describes a time *in* a transition, we'll need both that transition and
-          the one before it.  So find one transition that's probably after (and not
-          much before, otherwise) and another that's definitely before, then work
-          out which one to use.  When both or neither work on forLocalMSecs, use
-          hint to disambiguate.
+          Each transition gives the offsets to use until the next; so we need
+          the most recent transition before the time forLocalMSecs describes. If
+          it describes a time *in* a transition, we'll need both that transition
+          and the one before it. So find one transition that's probably after
+          (and not much before, otherwise) and another that's definitely before,
+          then work out which one to use. When both or neither work on
+          forLocalMSecs, use resolve to disambiguate.
         */
 
         // Get a transition definitely before the local MSecs; usually all we need.
         // Only around the transition times might we need another.
-        Data tran = previousTransition(recent);
+        Data tran = past; // Data after last transition before our window.
         Q_ASSERT(forLocalMSecs < 0 || // Pre-epoch TZ info may be unavailable
                  forLocalMSecs - tran.offsetFromUtc * 1000 >= tran.atMSecsSinceEpoch);
+        // If offset actually exceeds 17 hours, that assert may trigger.
         Data nextTran = nextTransition(tran.atMSecsSinceEpoch);
         /*
           Now walk those forward until they bracket forLocalMSecs with transitions.
@@ -281,7 +403,7 @@ QTimeZonePrivate::Data QTimeZonePrivate::dataForLocalTime(qint64 forLocalMSecs, 
           One of the transitions should then be telling us the right offset to use.
           In a transition, we need the transition before it (to describe the run-up
           to the transition) and the transition itself; so we need to stop when
-          nextTran is that transition.
+          nextTran is (invalid or) that transition.
         */
         while (nextTran.atMSecsSinceEpoch != invalidMSecs()
                && forLocalMSecs > nextTran.atMSecsSinceEpoch + nextTran.offsetFromUtc * 1000) {
@@ -294,6 +416,7 @@ QTimeZonePrivate::Data QTimeZonePrivate::dataForLocalTime(qint64 forLocalMSecs, 
             tran = nextTran;
             nextTran = newTran;
         }
+        const qint64 nextStart = nextTran.atMSecsSinceEpoch;
 
         // Check we do *really* have transitions for this zone:
         if (tran.atMSecsSinceEpoch != invalidMSecs()) {
@@ -302,53 +425,85 @@ QTimeZonePrivate::Data QTimeZonePrivate::dataForLocalTime(qint64 forLocalMSecs, 
                      || forLocalMSecs - tran.offsetFromUtc * 1000 > tran.atMSecsSinceEpoch);
             // Work out the UTC value it would make sense to return if using tran:
             tran.atMSecsSinceEpoch = forLocalMSecs - tran.offsetFromUtc * 1000;
-            // If we know of no transition after it, the answer is easy:
-            const qint64 nextStart = nextTran.atMSecsSinceEpoch;
-            if (nextStart == invalidMSecs())
-                return tran;
 
+            // If there are no transition after it, the answer is easy - or
+            // should be - but Darwin's handling of the distant future (in macOS
+            // 15, QTBUG-126391) runs out of transitions in 506'712 CE, despite
+            // knowing about offset changes long after that. So only trust the
+            // easy answer if offsets match; otherwise, fall through to the
+            // transitions-unknown code.
+            if (nextStart == invalidMSecs() && tran.offsetFromUtc == future.offsetFromUtc)
+                return dataToState(tran); // Last valid transition.
+        }
+
+        if (tran.atMSecsSinceEpoch != invalidMSecs() && nextStart != invalidMSecs()) {
             /*
               ... and nextTran is either after or only slightly before. We're
               going to interpret one as standard time, the other as DST
               (although the transition might in fact be a change in standard
-              offset, or a change in DST offset, e.g. to/from double-DST). Our
-              hint tells us which of those to use (defaulting to standard if no
-              hint): try it first; if that fails, try the other; if both fail,
-              life's tricky.
+              offset, or a change in DST offset, e.g. to/from double-DST).
+
+              Usually exactly one of those shall be relevant and we'll use it;
+              but if we're close to nextTran we may be in a transition, to be
+              settled according to resolve's rules.
             */
             // Work out the UTC value it would make sense to return if using nextTran:
             nextTran.atMSecsSinceEpoch = forLocalMSecs - nextTran.offsetFromUtc * 1000;
 
-            // If both or neither have zero DST, treat the one with lower offset as standard:
-            const bool nextIsDst = !nextTran.daylightTimeOffset == !tran.daylightTimeOffset
-                ? tran.offsetFromUtc < nextTran.offsetFromUtc : nextTran.daylightTimeOffset;
-            // If that agrees with hint > 0, our first guess is to use nextTran; else tran.
-            const bool nextFirst = nextIsDst == (hint > 0);
-            for (int i = 0; i < 2; i++) {
-                /*
-                  On the first pass, the case we consider is what hint told us to expect
-                  (except when hint was -1 and didn't actually tell us what to expect),
-                  so it's likely right.  We only get a second pass if the first failed,
-                  by which time the second case, that we're trying, is likely right.
-                */
-                if (nextFirst ? i == 0 : i) {
-                    if (nextStart <= nextTran.atMSecsSinceEpoch)
-                        return nextTran;
-                } else {
-                    // If next is invalid, nextFirst is false, to route us here first:
-                    if (nextStart > tran.atMSecsSinceEpoch)
-                        return tran;
-                }
-            }
+            bool fallBack = false;
+            if (nextStart > nextTran.atMSecsSinceEpoch) {
+                // If both UTC values are before nextTran's offset applies, use tran:
+                if (nextStart > tran.atMSecsSinceEpoch)
+                    return dataToState(tran);
 
-            /*
-              Neither is valid (e.g. in a spring-forward's gap) and
-              nextTran.atMSecsSinceEpoch < nextStart <= tran.atMSecsSinceEpoch;
-              swap their atMSecsSinceEpoch to give each a moment on its side of
-              the transition; and pick the reverse of what hint asked for:
-            */
-            std::swap(tran.atMSecsSinceEpoch, nextTran.atMSecsSinceEpoch);
-            return nextFirst ? tran : nextTran;
+                Q_ASSERT(tran.offsetFromUtc < nextTran.offsetFromUtc);
+                // We're in a spring-forward.
+            } else if (nextStart <= tran.atMSecsSinceEpoch) {
+                // Both UTC values say we should be using nextTran:
+                return dataToState(nextTran);
+            } else {
+                Q_ASSERT(nextTran.offsetFromUtc < tran.offsetFromUtc);
+                fallBack = true; // We're in a fall-back.
+            }
+            // (forLocalMSecs - nextStart) / 1000 lies between the two offsets.
+
+            // Apply resolve:
+            // Determine whether FlipForReverseDst affects the outcome:
+            const bool flipped
+                = resolve.testFlag(QDateTimePrivate::FlipForReverseDst)
+                && (fallBack ? !tran.daylightTimeOffset && nextTran.daylightTimeOffset
+                             : tran.daylightTimeOffset && !nextTran.daylightTimeOffset);
+
+            if (fallBack) {
+                if (resolve.testFlag(flipped
+                                     ? QDateTimePrivate::FoldUseBefore
+                                     : QDateTimePrivate::FoldUseAfter)) {
+                    return dataToState(nextTran);
+                }
+                if (resolve.testFlag(flipped
+                                     ? QDateTimePrivate::FoldUseAfter
+                                     : QDateTimePrivate::FoldUseBefore)) {
+                    return dataToState(tran);
+                }
+            } else {
+                /* Neither is valid (e.g. in a spring-forward's gap) and
+                   nextTran.atMSecsSinceEpoch < nextStart <= tran.atMSecsSinceEpoch.
+                   So swap their atMSecsSinceEpoch to give each a moment on the
+                   side of the transition that it describes, then select the one
+                   after or before according to the option set:
+                */
+                std::swap(tran.atMSecsSinceEpoch, nextTran.atMSecsSinceEpoch);
+                if (resolve.testFlag(flipped
+                                     ? QDateTimePrivate::GapUseBefore
+                                     : QDateTimePrivate::GapUseAfter))
+                    return dataToState(nextTran);
+                if (resolve.testFlag(flipped
+                                     ? QDateTimePrivate::GapUseAfter
+                                     : QDateTimePrivate::GapUseBefore))
+                    return dataToState(tran);
+            }
+            // Reject
+            return {forLocalMSecs};
         }
         // Before first transition, or system has transitions but not for this zone.
         // Try falling back to offsetFromUtc (works for before first transition, at least).
@@ -357,41 +512,54 @@ QTimeZonePrivate::Data QTimeZonePrivate::dataForLocalTime(qint64 forLocalMSecs, 
     /* Bracket and refine to discover offset. */
     qint64 utcEpochMSecs;
 
-    int early = offsetFromUtc(recent);
-    int late = offsetFromUtc(imminent);
-    if (early == late // > 99% of the time
-        || late == invalidSeconds()) {
+    // We don't have true data on DST-ness, so can't apply FlipForReverseDst.
+    int early = past.offsetFromUtc;
+    int late = future.offsetFromUtc;
+    if (early == late || late == invalidSeconds()) {
         if (early == invalidSeconds()
             || qSubOverflow(forLocalMSecs, early * qint64(1000), &utcEpochMSecs)) {
-            return invalidData(); // Outside representable range
+            return {forLocalMSecs}; // Outside representable range
         }
     } else {
-        // Close to a DST transition: early > late is near a fall-back,
-        // early < late is near a spring-forward.
-        const int offsetInDst = qMax(early, late);
-        const int offsetInStd = qMin(early, late);
         // Candidate values for utcEpochMSecs (if forLocalMSecs is valid):
-        const qint64 forDst = forLocalMSecs - offsetInDst * 1000;
-        const qint64 forStd = forLocalMSecs - offsetInStd * 1000;
-        // Best guess at the answer:
-        const qint64 hinted = hint > 0 ? forDst : forStd;
-        if (offsetFromUtc(hinted) == (hint > 0 ? offsetInDst : offsetInStd)) {
-            utcEpochMSecs = hinted;
-        } else if (hint <= 0 && offsetFromUtc(forDst) == offsetInDst) {
-            utcEpochMSecs = forDst;
-        } else if (hint > 0 && offsetFromUtc(forStd) == offsetInStd) {
-            utcEpochMSecs = forStd;
+        const qint64 forEarly = forLocalMSecs - early * 1000;
+        const qint64 forLate = forLocalMSecs - late * 1000;
+        // If either of those doesn't have the offset we got it from, it's on
+        // the wrong side of the transition (and both may be, for a gap):
+        const bool earlyOk = offsetFromUtc(forEarly) == early;
+        const bool lateOk = offsetFromUtc(forLate) == late;
+
+        if (earlyOk) {
+            if (lateOk) {
+                Q_ASSERT(early > late);
+                // fall-back's repeated interval
+                if (resolve.testFlag(QDateTimePrivate::FoldUseBefore))
+                    utcEpochMSecs = forEarly;
+                else if (resolve.testFlag(QDateTimePrivate::FoldUseAfter))
+                    utcEpochMSecs = forLate;
+                else
+                    return {forLocalMSecs};
+            } else {
+                // Before and clear of the transition:
+                utcEpochMSecs = forEarly;
+            }
+        } else if (lateOk) {
+            // After and clear of the transition:
+            utcEpochMSecs = forLate;
         } else {
-            // Invalid forLocalMSecs: in spring-forward gap.
-            const int dstStep = (offsetInDst - offsetInStd) * 1000;
-            // That'll typically be the DST offset at imminent, but changes to
-            // standard time have zero DST offset both before and after.
-            Q_ASSERT(dstStep > 0); // There can't be a gap without it !
-            utcEpochMSecs = (hint > 0) ? forStd - dstStep : forDst + dstStep;
+            // forLate <= gap < forEarly
+            Q_ASSERT(late > early);
+            const int dstStep = (late - early) * 1000;
+            if (resolve.testFlag(QDateTimePrivate::GapUseBefore))
+                utcEpochMSecs = forEarly - dstStep;
+            else if (resolve.testFlag(QDateTimePrivate::GapUseAfter))
+                utcEpochMSecs = forLate + dstStep;
+            else
+                return {forLocalMSecs};
         }
     }
 
-    return data(utcEpochMSecs);
+    return dataToState(data(utcEpochMSecs));
 }
 
 bool QTimeZonePrivate::hasTransitions() const
@@ -402,13 +570,13 @@ bool QTimeZonePrivate::hasTransitions() const
 QTimeZonePrivate::Data QTimeZonePrivate::nextTransition(qint64 afterMSecsSinceEpoch) const
 {
     Q_UNUSED(afterMSecsSinceEpoch);
-    return invalidData();
+    return {};
 }
 
 QTimeZonePrivate::Data QTimeZonePrivate::previousTransition(qint64 beforeMSecsSinceEpoch) const
 {
     Q_UNUSED(beforeMSecsSinceEpoch);
-    return invalidData();
+    return {};
 }
 
 QTimeZonePrivate::DataList QTimeZonePrivate::transitions(qint64 fromMSecsSinceEpoch,
@@ -434,7 +602,8 @@ QByteArray QTimeZonePrivate::systemTimeZoneId() const
 
 bool QTimeZonePrivate::isTimeZoneIdAvailable(const QByteArray& ianaId) const
 {
-    // Fall-back implementation, can be made faster in subclasses
+    // Fall-back implementation, can be made faster in subclasses.
+    // Backends that don't cache the available list SHOULD override this.
     const QList<QByteArray> tzIds = availableTimeZoneIds();
     return std::binary_search(tzIds.begin(), tzIds.end(), ianaId);
 }
@@ -444,29 +613,31 @@ QList<QByteArray> QTimeZonePrivate::availableTimeZoneIds() const
     return QList<QByteArray>();
 }
 
+static QList<QByteArray> selectAvailable(QList<QByteArray>&& desired, const QList<QByteArray>& all)
+{
+    std::sort(desired.begin(), desired.end());
+    const auto newEnd = std::unique(desired.begin(), desired.end());
+    const auto newSize = std::distance(desired.begin(), newEnd);
+    QList<QByteArray> result;
+    result.reserve(qMin(all.size(), newSize));
+    std::set_intersection(all.begin(), all.end(), desired.cbegin(),
+                          std::next(desired.cbegin(), newSize), std::back_inserter(result));
+    return result;
+}
+
 QList<QByteArray> QTimeZonePrivate::availableTimeZoneIds(QLocale::Territory territory) const
 {
     // Default fall-back mode, use the zoneTable to find Region of know Zones
     QList<QByteArray> regions;
 
     // First get all Zones in the Zones table belonging to the Region
-    for (const QZoneData &data : zoneDataTable) {
+    for (const ZoneData &data : zoneDataTable) {
         if (data.territory == territory) {
             for (auto l1 : data.ids())
                 regions << QByteArray(l1.data(), l1.size());
         }
     }
-
-    std::sort(regions.begin(), regions.end());
-    regions.erase(std::unique(regions.begin(), regions.end()), regions.end());
-
-    // Then select just those that are available
-    const QList<QByteArray> all = availableTimeZoneIds();
-    QList<QByteArray> result;
-    result.reserve(qMin(all.size(), regions.size()));
-    std::set_intersection(all.begin(), all.end(), regions.cbegin(), regions.cend(),
-                          std::back_inserter(result));
-    return result;
+    return selectAvailable(std::move(regions), availableTimeZoneIds());
 }
 
 QList<QByteArray> QTimeZonePrivate::availableTimeZoneIds(int offsetFromUtc) const
@@ -474,27 +645,17 @@ QList<QByteArray> QTimeZonePrivate::availableTimeZoneIds(int offsetFromUtc) cons
     // Default fall-back mode, use the zoneTable to find Offset of know Zones
     QList<QByteArray> offsets;
     // First get all Zones in the table using the Offset
-    for (const QWindowsData &winData : windowsDataTable) {
+    for (const WindowsData &winData : windowsDataTable) {
         if (winData.offsetFromUtc == offsetFromUtc) {
-            for (const QZoneData &data : zoneDataTable) {
-                if (data.windowsIdKey == winData.windowsIdKey) {
-                    for (auto l1 : data.ids())
-                        offsets << QByteArray(l1.data(), l1.size());
-                }
+            for (auto data = zoneStartForWindowsId(winData.windowsIdKey);
+                 data != std::end(zoneDataTable) && data->windowsIdKey == winData.windowsIdKey;
+                 ++data) {
+                for (auto l1 : data->ids())
+                    offsets << QByteArray(l1.data(), l1.size());
             }
         }
     }
-
-    std::sort(offsets.begin(), offsets.end());
-    offsets.erase(std::unique(offsets.begin(), offsets.end()), offsets.end());
-
-    // Then select just those that are available
-    const QList<QByteArray> all = availableTimeZoneIds();
-    QList<QByteArray> result;
-    result.reserve(qMin(all.size(), offsets.size()));
-    std::set_intersection(all.begin(), all.end(), offsets.cbegin(), offsets.cend(),
-                          std::back_inserter(result));
-    return result;
+    return selectAvailable(std::move(offsets), availableTimeZoneIds());
 }
 
 #ifndef QT_NO_DATASTREAM
@@ -506,37 +667,21 @@ void QTimeZonePrivate::serialize(QDataStream &ds) const
 
 // Static Utility Methods
 
-QTimeZonePrivate::Data QTimeZonePrivate::invalidData()
-{
-    Data data;
-    data.atMSecsSinceEpoch = invalidMSecs();
-    data.offsetFromUtc = invalidSeconds();
-    data.standardTimeOffset = invalidSeconds();
-    data.daylightTimeOffset = invalidSeconds();
-    return data;
-}
-
 QTimeZone::OffsetData QTimeZonePrivate::invalidOffsetData()
 {
-    QTimeZone::OffsetData offsetData;
-    offsetData.atUtc = QDateTime();
-    offsetData.offsetFromUtc = invalidSeconds();
-    offsetData.standardTimeOffset = invalidSeconds();
-    offsetData.daylightTimeOffset = invalidSeconds();
-    return offsetData;
+    return { QString(), QDateTime(),
+             invalidSeconds(), invalidSeconds(), invalidSeconds() };
 }
 
 QTimeZone::OffsetData QTimeZonePrivate::toOffsetData(const QTimeZonePrivate::Data &data)
 {
-    QTimeZone::OffsetData offsetData = invalidOffsetData();
-    if (data.atMSecsSinceEpoch != invalidMSecs()) {
-        offsetData.atUtc = QDateTime::fromMSecsSinceEpoch(data.atMSecsSinceEpoch, QTimeZone::UTC);
-        offsetData.offsetFromUtc = data.offsetFromUtc;
-        offsetData.standardTimeOffset = data.standardTimeOffset;
-        offsetData.daylightTimeOffset = data.daylightTimeOffset;
-        offsetData.abbreviation = data.abbreviation;
-    }
-    return offsetData;
+    if (data.atMSecsSinceEpoch == invalidMSecs())
+        return invalidOffsetData();
+
+    return {
+        data.abbreviation,
+        QDateTime::fromMSecsSinceEpoch(data.atMSecsSinceEpoch, QTimeZone::UTC),
+        data.offsetFromUtc, data.standardTimeOffset, data.daylightTimeOffset };
 }
 
 // Is the format of the ID valid ?
@@ -637,11 +782,25 @@ QString QTimeZonePrivate::isoOffsetFormat(int offsetFromUtc, QTimeZone::NameType
     return result;
 }
 
+QByteArray QTimeZonePrivate::aliasToIana(QByteArrayView alias)
+{
+    const auto data = std::lower_bound(std::begin(aliasMappingTable), std::end(aliasMappingTable),
+                                       alias, earlierAliasId);
+    if (data != std::end(aliasMappingTable) && data->aliasId() == alias)
+        return data->ianaId().toByteArray();
+    // Note: empty return means not an alias, which is true of an ID that others
+    // are aliases to, as the table omits self-alias entries. Let caller sort
+    // that out, rather than allocating to return alias.toByteArray().
+    return {};
+}
+
 QByteArray QTimeZonePrivate::ianaIdToWindowsId(const QByteArray &id)
 {
-    for (const QZoneData &data : zoneDataTable) {
+    const auto idUtf8 = QUtf8StringView(id);
+
+    for (const ZoneData &data : zoneDataTable) {
         for (auto l1 : data.ids()) {
-            if (l1 == QByteArrayView(id))
+            if (l1 == idUtf8)
                 return toWindowsIdLiteral(data.windowsIdKey);
         }
     }
@@ -650,13 +809,13 @@ QByteArray QTimeZonePrivate::ianaIdToWindowsId(const QByteArray &id)
 
 QByteArray QTimeZonePrivate::windowsIdToDefaultIanaId(const QByteArray &windowsId)
 {
-    for (const QWindowsData &data : windowsDataTable) {
-        if (data.windowsId() == windowsId) {
-            QByteArrayView id = data.ianaId();
-            if (qsizetype cut = id.indexOf(' '); cut >= 0)
-                id = id.first(cut);
-            return id.toByteArray();
-        }
+    const auto data = std::lower_bound(std::begin(windowsDataTable), std::end(windowsDataTable),
+                                       windowsId, earlierWindowsId);
+    if (data != std::end(windowsDataTable) && data->windowsId() == windowsId) {
+        QByteArrayView id = data->ianaId();
+        if (qsizetype cut = id.indexOf(' '); cut >= 0)
+            id = id.first(cut);
+        return id.toByteArray();
     }
     return QByteArray();
 }
@@ -673,11 +832,11 @@ QList<QByteArray> QTimeZonePrivate::windowsIdToIanaIds(const QByteArray &windows
     const quint16 windowsIdKey = toWindowsIdKey(windowsId);
     QList<QByteArray> list;
 
-    for (const QZoneData &data : zoneDataTable) {
-        if (data.windowsIdKey == windowsIdKey) {
-            for (auto l1 : data.ids())
-                list << QByteArray(l1.data(), l1.size());
-        }
+    for (auto data = zoneStartForWindowsId(windowsIdKey);
+         data != std::end(zoneDataTable) && data->windowsIdKey == windowsIdKey;
+         ++data) {
+        for (auto l1 : data->ids())
+            list << QByteArray(l1.data(), l1.size());
     }
 
     // Return the full list in alpha order
@@ -691,10 +850,12 @@ QList<QByteArray> QTimeZonePrivate::windowsIdToIanaIds(const QByteArray &windows
     QList<QByteArray> list;
     const quint16 windowsIdKey = toWindowsIdKey(windowsId);
     const qint16 land = static_cast<quint16>(territory);
-    for (const QZoneData &data : zoneDataTable) {
+    for (auto data = zoneStartForWindowsId(windowsIdKey);
+         data != std::end(zoneDataTable) && data->windowsIdKey == windowsIdKey;
+         ++data) {
         // Return the region matches in preference order
-        if (data.windowsIdKey == windowsIdKey && data.territory == land) {
-            for (auto l1 : data.ids())
+        if (data->territory == land) {
+            for (auto l1 : data->ids())
                 list << QByteArray(l1.data(), l1.size());
             break;
         }
@@ -715,14 +876,17 @@ static bool isEntryInIanaList(QByteArrayView id, QByteArrayView ianaIds)
     while ((cut = ianaIds.indexOf(' ')) >= 0) {
         if (id == ianaIds.first(cut))
             return true;
-        ianaIds = ianaIds.sliced(cut);
+        ianaIds = ianaIds.sliced(cut + 1);
     }
     return id == ianaIds;
 }
 
 /*
-    UTC Offset implementation, used when QT_NO_SYSTEMLOCALE set and ICU is not being used,
-    or for QDateTimes with a Qt:Spec of Qt::OffsetFromUtc.
+    UTC Offset backend.
+
+    Always present, based on UTC-offset zones.
+    Complements platform-specific backends.
+    Equivalent to Qt::OffsetFromUtc lightweight time representations.
 */
 
 // Create default UTC time zone
@@ -736,7 +900,7 @@ QUtcTimeZonePrivate::QUtcTimeZonePrivate()
 QUtcTimeZonePrivate::QUtcTimeZonePrivate(const QByteArray &id)
 {
     // Look for the name in the UTC list, if found set the values
-    for (const QUtcData &data : utcDataTable) {
+    for (const UtcData &data : utcDataTable) {
         if (isEntryInIanaList(id, data.id())) {
             QString name = QString::fromUtf8(id);
             init(id, data.offsetFromUtc, name, name, QLocale::AnyTerritory, name);
@@ -745,7 +909,7 @@ QUtcTimeZonePrivate::QUtcTimeZonePrivate(const QByteArray &id)
     }
 }
 
-qint64 QUtcTimeZonePrivate::offsetFromUtcString(const QByteArray &id)
+qint64 QUtcTimeZonePrivate::offsetFromUtcString(QByteArrayView id)
 {
     // Convert reasonable UTC[+-]\d+(:\d+){,2} to offset in seconds.
     // Assumption: id has already been tried as a CLDR UTC offset ID (notably
@@ -757,32 +921,47 @@ qint64 QUtcTimeZonePrivate::offsetFromUtcString(const QByteArray &id)
         return invalidSeconds(); // No sign
     const int sign = signChar == '-' ? -1 : 1;
 
-    const auto offsets = id.mid(4).split(':');
-    if (offsets.isEmpty() || offsets.size() > 3)
-        return invalidSeconds(); // No numbers, or too many.
-
     qint32 seconds = 0;
     int prior = 0; // Number of fields parsed thus far
-    for (const auto &offset : offsets) {
+    for (auto offset : QLatin1StringView(id.mid(4)).tokenize(':'_L1)) {
         bool ok = false;
         unsigned short field = offset.toUShort(&ok);
         // Bound hour above at 24, minutes and seconds at 60:
         if (!ok || field >= (prior ? 60 : 24))
             return invalidSeconds();
         seconds = seconds * 60 + field;
-        ++prior;
+        if (++prior > 3)
+            return invalidSeconds(); // Too many numbers
     }
+
+    if (!prior)
+        return invalidSeconds(); // No numbers
+
     while (prior++ < 3)
         seconds *= 60;
 
     return seconds * sign;
 }
 
-// Create offset from UTC
+// Create from UTC offset:
 QUtcTimeZonePrivate::QUtcTimeZonePrivate(qint32 offsetSeconds)
 {
-    QString utcId = isoOffsetFormat(offsetSeconds, QTimeZone::ShortName);
-    init(utcId.toUtf8(), offsetSeconds, utcId, utcId, QLocale::AnyTerritory, utcId);
+    QString name;
+    QByteArray id;
+    // If there's an IANA ID for this offset, use it:
+    const auto data = std::lower_bound(std::begin(utcDataTable), std::end(utcDataTable),
+                                       offsetSeconds, atLowerUtcOffset);
+    if (data != std::end(utcDataTable) && data->offsetFromUtc == offsetSeconds) {
+        QByteArrayView ianaId = data->id();
+        qsizetype cut = ianaId.indexOf(' ');
+        id = (cut < 0 ? ianaId : ianaId.first(cut)).toByteArray();
+        name = QString::fromUtf8(id);
+        Q_ASSERT(!name.isEmpty());
+    } else { // Fall back to a UTC-offset name:
+        name = isoOffsetFormat(offsetSeconds, QTimeZone::ShortName);
+        id = name.toUtf8();
+    }
+    init(id, offsetSeconds, name, name, QLocale::AnyTerritory, name);
 }
 
 QUtcTimeZonePrivate::QUtcTimeZonePrivate(const QByteArray &zoneId, int offsetSeconds,
@@ -820,9 +999,17 @@ QTimeZonePrivate::Data QUtcTimeZonePrivate::data(qint64 forMSecsSinceEpoch) cons
     return d;
 }
 
-void QUtcTimeZonePrivate::init(const QByteArray &zoneId)
+// Override to shortcut past base's complications:
+QTimeZonePrivate::Data QUtcTimeZonePrivate::data(QTimeZone::TimeType timeType) const
 {
-    m_id = zoneId;
+    Q_UNUSED(timeType);
+    return data(QDateTime::currentMSecsSinceEpoch());
+}
+
+bool QUtcTimeZonePrivate::isDataLocale(const QLocale &locale) const
+{
+    // Officially only supports C locale names; these are surely also viable for English.
+    return locale.language() == QLocale::C || locale.language() == QLocale::English;
 }
 
 void QUtcTimeZonePrivate::init(const QByteArray &zoneId, int offsetSeconds, const QString &name,
@@ -845,6 +1032,15 @@ QLocale::Territory QUtcTimeZonePrivate::territory() const
 QString QUtcTimeZonePrivate::comment() const
 {
     return m_comment;
+}
+
+// Override to bypass complications in base-class:
+QString QUtcTimeZonePrivate::displayName(qint64 atMSecsSinceEpoch,
+                                         QTimeZone::NameType nameType,
+                                         const QLocale &locale) const
+{
+    Q_UNUSED(atMSecsSinceEpoch);
+    return displayName(QTimeZone::StandardTime, nameType, locale);
 }
 
 QString QUtcTimeZonePrivate::displayName(QTimeZone::TimeType timeType,
@@ -886,11 +1082,13 @@ QByteArray QUtcTimeZonePrivate::systemTimeZoneId() const
 bool QUtcTimeZonePrivate::isTimeZoneIdAvailable(const QByteArray &ianaId) const
 {
     // Only the zone IDs supplied by CLDR and recognized by constructor.
-    for (const QUtcData &data : utcDataTable) {
+    for (const UtcData &data : utcDataTable) {
         if (isEntryInIanaList(ianaId, data.id()))
             return true;
     }
-    // But see offsetFromUtcString(), which lets us accept some "unavailable" IDs.
+    // Callers may want to || offsetFromUtcString(ianaId) != invalidSeconds(),
+    // but those are technically not IANA IDs and the custom QTimeZone
+    // constructor needs the return here to reflect that.
     return false;
 }
 
@@ -899,12 +1097,12 @@ QList<QByteArray> QUtcTimeZonePrivate::availableTimeZoneIds() const
     // Only the zone IDs supplied by CLDR and recognized by constructor.
     QList<QByteArray> result;
     result.reserve(std::size(utcDataTable));
-    for (const QUtcData &data : utcDataTable) {
+    for (const UtcData &data : utcDataTable) {
         QByteArrayView id = data.id();
         qsizetype cut;
         while ((cut = id.indexOf(' ')) >= 0) {
             result << id.first(cut).toByteArray();
-            id = id.sliced(cut);
+            id = id.sliced(cut + 1);
         }
         result << id.toByteArray();
     }
@@ -927,17 +1125,23 @@ QList<QByteArray> QUtcTimeZonePrivate::availableTimeZoneIds(qint32 offsetSeconds
     // Only if it's present in CLDR. (May get more than one ID: UTC, UTC+00:00
     // and UTC-00:00 all have the same offset.)
     QList<QByteArray> result;
-    for (const QUtcData &data : utcDataTable) {
-        if (data.offsetFromUtc == offsetSeconds) {
-            QByteArrayView id = data.id();
-            qsizetype cut;
-            while ((cut = id.indexOf(' ')) >= 0) {
-                result << id.first(cut).toByteArray();
-                id = id.sliced(cut);
-            }
-            result << id.toByteArray();
+    const auto data = std::lower_bound(std::begin(utcDataTable), std::end(utcDataTable),
+                                       offsetSeconds, atLowerUtcOffset);
+    if (data != std::end(utcDataTable) && data->offsetFromUtc == offsetSeconds) {
+        QByteArrayView id = data->id();
+        qsizetype cut;
+        while ((cut = id.indexOf(' ')) >= 0) {
+            result << id.first(cut).toByteArray();
+            id = id.sliced(cut + 1);
         }
+        result << id.toByteArray();
     }
+    // CLDR only has round multiples of a quarter hour, and only some of
+    // those. For anything else, throw in the ID we would use for this offset
+    // (if we'd accept that ID).
+    QByteArray isoName = isoOffsetFormat(offsetSeconds, QTimeZone::ShortName).toUtf8();
+    if (offsetFromUtcString(isoName) == qint64(offsetSeconds) && !result.contains(isoName))
+        result << isoName;
     // Not guaranteed to be sorted, so sort:
     std::sort(result.begin(), result.end());
     // ### assuming no duplicates

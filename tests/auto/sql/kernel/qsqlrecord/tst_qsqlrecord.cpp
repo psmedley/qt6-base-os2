@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -10,7 +10,7 @@
 
 #include <qsqlrecord.h>
 
-#define NUM_FIELDS 4
+#define NUM_FIELDS 5
 
 class tst_QSqlRecord : public QObject
 {
@@ -40,6 +40,7 @@ private slots:
     void clearValues();
     void clear();
     void append();
+    void moveSemantics();
 
 private:
     std::unique_ptr<QSqlRecord> rec;
@@ -66,6 +67,7 @@ void tst_QSqlRecord::createTestRecord()
     fields[1] = std::make_unique<QSqlField>(QStringLiteral("int"), QMetaType(QMetaType::Int), QStringLiteral("inttable"));
     fields[2] = std::make_unique<QSqlField>(QStringLiteral("double"), QMetaType(QMetaType::Double), QStringLiteral("doubletable"));
     fields[3] = std::make_unique<QSqlField>(QStringLiteral("bool"), QMetaType(QMetaType::Bool));
+    fields[4] = std::make_unique<QSqlField>(QStringLiteral("öäü@€"), QMetaType(QMetaType::Int));
     for (const auto &field : fields)
         rec->append(*field);
 }
@@ -172,9 +174,22 @@ void tst_QSqlRecord::clearValues()
 void tst_QSqlRecord::contains()
 {
     createTestRecord();
-    for (const auto &field : fields)
-        QVERIFY(rec->contains(field->name()));
-    QVERIFY( !rec->contains( "__Harry__" ) );
+    QStringList fieldNames;
+    for (const auto &field : fields) {
+        fieldNames.append(field->name());
+        if (!field->tableName().isEmpty())
+            fieldNames.append(field->tableName() + u'.' + field->name());
+    }
+    for (const auto &name : std::as_const(fieldNames)) {
+        QVERIFY(rec->contains(name));
+        const QByteArray nameBa = name.toUtf8();
+        QVERIFY(rec->contains(nameBa));
+        const char *nameStr = nameBa.constData();
+        QVERIFY(rec->contains(nameStr));
+        QVERIFY(!rec->contains(name.left(name.size() - 1)));
+        QVERIFY(!rec->contains(name + u'.' + name));
+    }
+    QVERIFY(!rec->contains("__Harry__"));
 }
 
 void tst_QSqlRecord::count()
@@ -447,6 +462,25 @@ void tst_QSqlRecord::value()
     rec2.append( QSqlField( "string", QMetaType(QMetaType::QString) ) );
     rec2.setValue( "string", "Harry" );
     QCOMPARE(rec2.value("string").toString(), QLatin1String("Harry"));
+}
+
+void tst_QSqlRecord::moveSemantics()
+{
+    QSqlRecord rec, empty;
+    rec.append(QSqlField("string", QMetaType(QMetaType::QString)));
+    rec.setValue("string", "Harry");
+    auto moved = std::move(rec);
+    // `rec` is not partially-formed
+
+    // moving transfers state:
+    QCOMPARE(moved.value("string").toString(), QLatin1String("Harry"));
+
+    // moved-from objects can be assigned-to:
+    rec = empty;
+    QVERIFY(rec.value("string").isNull());
+
+    // moved-from object can be destroyed:
+    moved = std::move(rec);
 }
 
 QTEST_MAIN(tst_QSqlRecord)

@@ -5,13 +5,50 @@
 
 #include <QtCore/qlogging.h>
 
+#include <cstdlib>
 #include <cstdio>
 #include <exception>
 #ifndef QT_NO_EXCEPTIONS
 #include <new>
 #endif
 
+#if defined(Q_CC_MSVC)
+#  include <crtdbg.h>
+#endif
+#ifdef Q_OS_WIN
+#  include <qt_windows.h>
+#endif
+
 QT_BEGIN_NAMESPACE
+
+Q_NORETURN void qAbort()
+{
+#ifdef Q_OS_WIN
+    // std::abort() in the MSVC runtime will call _exit(3) if the abort
+    // behavior is _WRITE_ABORT_MSG - see also _set_abort_behavior(). This is
+    // the default for a debug-mode build of the runtime. Worse, MinGW's
+    // std::abort() implementation (in msvcrt.dll) is basically a call to
+    // _exit(3) too. Unfortunately, _exit() and _Exit() *do* run the static
+    // destructors of objects in DLLs, a violation of the C++ standard (see
+    // [support.start.term]). So we bypass std::abort() and directly
+    // terminate the application.
+
+#  if defined(Q_CC_MSVC)
+    if (IsProcessorFeaturePresent(PF_FASTFAIL_AVAILABLE))
+        __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+#  else
+    RaiseFailFastException(nullptr, nullptr, 0);
+#  endif
+
+    // Fallback
+    TerminateProcess(GetCurrentProcess(), STATUS_FATAL_APP_EXIT);
+
+    // Tell the compiler the application has stopped.
+    Q_UNREACHABLE_IMPL();
+#else // !Q_OS_WIN
+    std::abort();
+#endif
+}
 
 /*!
     \macro void Q_ASSERT(bool test)
@@ -139,29 +176,20 @@ void qBadAlloc()
 
 /*!
     \macro void Q_ASSUME(bool expr)
+    \deprecated
     \relates <QtAssert>
     \since 5.0
 
-    Causes the compiler to assume that \a expr is \c true. This macro is useful
-    for improving code generation, by providing the compiler with hints about
-    conditions that it would not otherwise know about. However, there is no
-    guarantee that the compiler will actually use those hints.
+    Causes the compiler to assume that \a expr is \c true.
 
-    This macro could be considered a "lighter" version of \l{Q_ASSERT()}. While
-    Q_ASSERT will abort the program's execution if the condition is \c false,
-    Q_ASSUME will tell the compiler not to generate code for those conditions.
-    Therefore, it is important that the assumptions always hold, otherwise
-    undefined behavior may occur.
+    This macro is known to produce worse code than when no assumption was
+    inserted in the code, with some compiler versions. The arguments passed to
+    it are always evaluated, even in release mode, with some compilers and not
+    others, so application code needs to be aware of those possible differences
+    in behavior.
 
-    If \a expr is a constantly \c false condition, Q_ASSUME will tell the compiler
-    that the current code execution cannot be reached. That is, Q_ASSUME(false)
-    is equivalent to Q_UNREACHABLE().
-
-    In debug builds the condition is enforced by an assert to facilitate debugging.
-
-    \note Q_LIKELY() tells the compiler that the expression is likely, but not
-    the only possibility. Q_ASSUME tells the compiler that it is the only
-    possibility.
+    Do not use it in new code. It is retained as-is for compatibility with old
+    code and will likely be removed in the next major version Qt.
 
     \sa Q_ASSERT(), Q_UNREACHABLE(), Q_LIKELY()
 */
@@ -199,7 +227,7 @@ void qBadAlloc()
     compilers that need them, without causing warnings for compilers that
     complain about its presence.
 
-    \sa Q_ASSERT(), Q_ASSUME(), qFatal(), Q_UNREACHABLE_RETURN()
+    \sa Q_ASSERT(), qFatal(), Q_UNREACHABLE_RETURN()
 */
 
 /*!

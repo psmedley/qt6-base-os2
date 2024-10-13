@@ -34,8 +34,6 @@
 #include <QElapsedTimer>
 #include <QCache>
 
-#include <QSharedPointer>
-
 #include <atomic>
 
 QT_BEGIN_NAMESPACE
@@ -53,13 +51,13 @@ public:
 Q_SIGNALS:
     void resultsReady(const QHostInfo &info);
 
-protected:
-    bool event(QEvent *event) override;
+private Q_SLOTS:
+    void finalizePostResultsReady(const QHostInfo &info);
 
 private:
-    QHostInfoResult(const QHostInfoResult *other)
-        : receiver(other->receiver), slotObj{copy(other->slotObj)},
-          withContextObject(other->withContextObject)
+    QHostInfoResult(QHostInfoResult *other)
+        : receiver(other->receiver.get() != other ? other->receiver.get() : this),
+          slotObj{std::move(other->slotObj)}
     {
         // cleanup if the application terminates before results are delivered
         connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit,
@@ -68,9 +66,10 @@ private:
         moveToThread(other->thread());
     }
 
+    // receiver is either a QObject provided by the user,
+    // or it's set to `this` (to emulate the behavior of the contextless connect())
     QPointer<const QObject> receiver = nullptr;
     QtPrivate::SlotObjUniquePtr slotObj;
-    const bool withContextObject = false;
 };
 
 class QHostInfoAgent

@@ -10,19 +10,18 @@
 #include "qwasmaccessibility.h"
 #include "qwasmservices.h"
 #include "qwasmoffscreensurface.h"
-#include "qwasmstring.h"
-
+#include "qwasmplatform.h"
 #include "qwasmwindow.h"
 #include "qwasmbackingstore.h"
 #include "qwasmfontdatabase.h"
-#if defined(Q_OS_UNIX)
-#include <QtGui/private/qgenericunixeventdispatcher_p.h>
-#endif
+#include "qwasmdrag.h"
+
 #include <qpa/qplatformwindow.h>
 #include <QtGui/qscreen.h>
 #include <qpa/qwindowsysteminterface.h>
 #include <QtCore/qcoreapplication.h>
 #include <qpa/qplatforminputcontextfactory_p.h>
+#include <qpa/qwindowsysteminterface_p.h>
 
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
@@ -33,18 +32,25 @@
 
 QT_BEGIN_NAMESPACE
 
+extern void qt_set_sequence_auto_mnemonic(bool);
+
 using namespace emscripten;
 
 using namespace Qt::StringLiterals;
 
+static void setContainerElements(emscripten::val elementArray)
+{
+    QWasmIntegration::get()->setContainerElements(elementArray);
+}
+
 static void addContainerElement(emscripten::val element)
 {
-    QWasmIntegration::get()->addScreen(element);
+    QWasmIntegration::get()->addContainerElement(element);
 }
 
 static void removeContainerElement(emscripten::val element)
 {
-    QWasmIntegration::get()->removeScreen(element);
+    QWasmIntegration::get()->removeContainerElement(element);
 }
 
 static void resizeContainerElement(emscripten::val element)
@@ -63,13 +69,20 @@ static void resizeAllScreens(emscripten::val event)
     QWasmIntegration::get()->resizeAllScreens();
 }
 
+static void loadLocalFontFamilies(emscripten::val event)
+{
+    QWasmIntegration::get()->loadLocalFontFamilies(event);
+}
+
 EMSCRIPTEN_BINDINGS(qtQWasmIntegraton)
 {
+    function("qtSetContainerElements", &setContainerElements);
     function("qtAddContainerElement", &addContainerElement);
     function("qtRemoveContainerElement", &removeContainerElement);
     function("qtResizeContainerElement", &resizeContainerElement);
     function("qtUpdateDpi", &qtUpdateDpi);
     function("qtResizeAllScreens", &resizeAllScreens);
+    function("qtLoadLocalFontFamilies", &loadLocalFontFamilies);
 }
 
 QWasmIntegration *QWasmIntegration::s_instance;
@@ -84,12 +97,17 @@ QWasmIntegration::QWasmIntegration()
 {
     s_instance = this;
 
+    if (platform() == Platform::MacOS)
+        qt_set_sequence_auto_mnemonic(false);
+
     touchPoints = emscripten::val::global("navigator")["maxTouchPoints"].as<int>();
+    QWindowSystemInterfacePrivate::TabletEvent::setPlatformSynthesizesMouse(false);
 
     // Create screens for container elements. Each container element will ultimately become a
     // div element. Qt historically supported supplying canvas for screen elements - these elements
     // will be transformed into divs and warnings about deprecation will be printed. See
     // QWasmScreen ctor.
+    emscripten::val filtered = emscripten::val::array();
     emscripten::val qtContainerElements = val::module_property("qtContainerElements");
     if (qtContainerElements.isArray()) {
         for (int i = 0; i < qtContainerElements["length"].as<int>(); ++i) {
@@ -97,24 +115,25 @@ QWasmIntegration::QWasmIntegration()
             if (element.isNull() || element.isUndefined())
                 qWarning() << "Skipping null or undefined element in qtContainerElements";
             else
-                addScreen(element);
+                filtered.call<void>("push", element);
         }
     } else {
         // No screens, which may or may not be intended
         qWarning() << "The qtContainerElements module property was not set or is invalid. "
                       "Proceeding with no screens.";
     }
+    setContainerElements(filtered);
 
     // install browser window resize handler
     emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_TRUE,
-                                   [](int, const EmscriptenUiEvent *, void *) -> int {
+                                   [](int, const EmscriptenUiEvent *, void *) -> EM_BOOL {
                                        // This resize event is called when the HTML window is
                                        // resized. Depending on the page layout the elements might
                                        // also have been resized, so we update the Qt screen sizes
                                        // (and canvas render sizes).
                                        if (QWasmIntegration *integration = QWasmIntegration::get())
                                            integration->resizeAllScreens();
-                                       return 0;
+                                       return EM_FALSE;
                                    });
 
     // install visualViewport resize handler which picks up size and scale change on mobile.
@@ -123,7 +142,7 @@ QWasmIntegration::QWasmIntegration()
         visualViewport.call<void>("addEventListener", val("resize"),
                                   val::module_property("qtResizeAllScreens"));
     }
-    m_drag = std::make_unique<QSimpleDrag>();
+    m_drag = std::make_unique<QWasmDrag>();
 }
 
 QWasmIntegration::~QWasmIntegration()
@@ -138,14 +157,12 @@ QWasmIntegration::~QWasmIntegration()
 
     delete m_fontDb;
     delete m_desktopServices;
-    if (m_platformInputContext)
-        delete m_platformInputContext;
 #if QT_CONFIG(accessibility)
     delete m_accessibility;
 #endif
 
     for (const auto &elementAndScreen : m_screens)
-        elementAndScreen.second->deleteScreen();
+        elementAndScreen.wasmScreen->deleteScreen();
 
     m_screens.clear();
 
@@ -187,6 +204,16 @@ void QWasmIntegration::removeBackingStore(QWindow* window)
     m_backingStores.remove(window);
 }
 
+void QWasmIntegration::releaseRequesetUpdateHold()
+{
+    if (QWasmCompositor::releaseRequestUpdateHold())
+    {
+        for (const auto &elementAndScreen : m_screens) {
+            elementAndScreen.wasmScreen->compositor()->requestUpdate();
+        }
+    }
+}
+
 #ifndef QT_NO_OPENGL
 QPlatformOpenGLContext *QWasmIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
@@ -196,14 +223,14 @@ QPlatformOpenGLContext *QWasmIntegration::createPlatformOpenGLContext(QOpenGLCon
 
 void QWasmIntegration::initialize()
 {
-    if (qgetenv("QT_IM_MODULE").isEmpty() && touchPoints < 1)
-        return;
-
-    QString icStr = QPlatformInputContextFactory::requested();
-    if (!icStr.isNull())
-        m_inputContext.reset(QPlatformInputContextFactory::create(icStr));
-    else
+    auto icStrs = QPlatformInputContextFactory::requested();
+    if (!icStrs.isEmpty()) {
+        m_inputContext.reset(QPlatformInputContextFactory::create(icStrs));
+        m_wasmInputContext = nullptr;
+    } else {
         m_inputContext.reset(new QWasmInputContext());
+        m_wasmInputContext = static_cast<QWasmInputContext *>(m_inputContext.data());
+    }
 }
 
 QPlatformInputContext *QWasmIntegration::inputContext() const
@@ -231,10 +258,14 @@ QAbstractEventDispatcher *QWasmIntegration::createEventDispatcher() const
 
 QVariant QWasmIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
 {
-    if (hint == ShowIsFullScreen)
+    switch (hint) {
+    case ShowIsFullScreen:
         return true;
-
-    return QPlatformIntegration::styleHint(hint);
+    case UnderlineShortcut:
+        return platform() != Platform::MacOS;
+    default:
+        return QPlatformIntegration::styleHint(hint);
+    }
 }
 
 Qt::WindowState QWasmIntegration::defaultWindowState(Qt::WindowFlags flags) const
@@ -277,35 +308,93 @@ QPlatformAccessibility *QWasmIntegration::accessibility() const
 }
 #endif
 
-
-void QWasmIntegration::addScreen(const emscripten::val &element)
+void QWasmIntegration::setContainerElements(emscripten::val elementArray)
 {
-    QWasmScreen *screen = new QWasmScreen(element);
-    m_screens.append(qMakePair(element, screen));
-    QWindowSystemInterface::handleScreenAdded(screen);
+    const auto *primaryScreenBefore = m_screens.isEmpty() ? nullptr : m_screens[0].wasmScreen;
+    QList<ScreenMapping> newScreens;
+
+    QList<QWasmScreen *> screensToDelete;
+    std::transform(m_screens.begin(), m_screens.end(), std::back_inserter(screensToDelete),
+                   [](const ScreenMapping &mapping) { return mapping.wasmScreen; });
+
+    for (int i = 0; i < elementArray["length"].as<int>(); ++i) {
+        const auto element = elementArray[i];
+        const auto it = std::find_if(
+                m_screens.begin(), m_screens.end(),
+                [&element](const ScreenMapping &screen) { return screen.emscriptenVal == element; });
+        QWasmScreen *screen;
+        if (it != m_screens.end()) {
+            screen = it->wasmScreen;
+            screensToDelete.erase(std::remove_if(screensToDelete.begin(), screensToDelete.end(),
+                                                [screen](const QWasmScreen *removedScreen) {
+                                                    return removedScreen == screen;
+                                                }),
+                                 screensToDelete.end());
+        } else {
+            screen = new QWasmScreen(element);
+            QWindowSystemInterface::handleScreenAdded(screen);
+        }
+        newScreens.push_back({element, screen});
+    }
+
+    std::for_each(screensToDelete.begin(), screensToDelete.end(),
+                  [](QWasmScreen *removed) { removed->deleteScreen(); });
+
+    m_screens = newScreens;
+    auto *primaryScreenAfter = m_screens.isEmpty() ? nullptr : m_screens[0].wasmScreen;
+    if (primaryScreenAfter && primaryScreenAfter != primaryScreenBefore)
+        QWindowSystemInterface::handlePrimaryScreenChanged(primaryScreenAfter);
 }
 
-void QWasmIntegration::removeScreen(const emscripten::val &element)
+void QWasmIntegration::addContainerElement(emscripten::val element)
 {
-    auto it = std::find_if(m_screens.begin(), m_screens.end(),
-        [&] (const QPair<emscripten::val, QWasmScreen *> &candidate) { return candidate.first.equals(element); });
+    Q_ASSERT_X(m_screens.end()
+                       == std::find_if(m_screens.begin(), m_screens.end(),
+                                       [&element](const ScreenMapping &screen) {
+                                           return screen.emscriptenVal == element;
+                                       }),
+               Q_FUNC_INFO, "Double-add of an element");
+
+    QWasmScreen *screen = new QWasmScreen(element);
+    QWindowSystemInterface::handleScreenAdded(screen);
+    m_screens.push_back({element, screen});
+}
+
+void QWasmIntegration::removeContainerElement(emscripten::val element)
+{
+    const auto *primaryScreenBefore = m_screens.isEmpty() ? nullptr : m_screens[0].wasmScreen;
+
+    const auto it =
+            std::find_if(m_screens.begin(), m_screens.end(),
+                         [&element](const ScreenMapping &screen) { return screen.emscriptenVal == element; });
     if (it == m_screens.end()) {
-        qWarning() << "Attempting to remove non-existing screen for element" << QWasmString::toQString(element["id"]);;
+        qWarning() << "Attempt to remove a nonexistent screen.";
         return;
     }
-    it->second->deleteScreen();
-    m_screens.erase(it);
+
+    QWasmScreen *removedScreen = it->wasmScreen;
+    removedScreen->deleteScreen();
+
+    m_screens.erase(std::remove_if(m_screens.begin(), m_screens.end(),
+                                   [removedScreen](const ScreenMapping &mapping) {
+                                       return removedScreen == mapping.wasmScreen;
+                                   }),
+                    m_screens.end());
+    auto *primaryScreenAfter = m_screens.isEmpty() ? nullptr : m_screens[0].wasmScreen;
+    if (primaryScreenAfter && primaryScreenAfter != primaryScreenBefore)
+        QWindowSystemInterface::handlePrimaryScreenChanged(primaryScreenAfter);
 }
 
 void QWasmIntegration::resizeScreen(const emscripten::val &element)
 {
     auto it = std::find_if(m_screens.begin(), m_screens.end(),
-        [&] (const QPair<emscripten::val, QWasmScreen *> &candidate) { return candidate.first.equals(element); });
+        [&] (const ScreenMapping &candidate) { return candidate.emscriptenVal.equals(element); });
     if (it == m_screens.end()) {
-        qWarning() << "Attempting to resize non-existing screen for element" << QWasmString::toQString(element["id"]);;
+        qWarning() << "Attempting to resize non-existing screen for element"
+                   << QString::fromEcmaString(element["id"]);
         return;
     }
-    it->second->updateQScreenAndCanvasRenderSize();
+    it->wasmScreen->updateQScreenAndCanvasRenderSize();
 }
 
 void QWasmIntegration::updateDpi()
@@ -315,13 +404,18 @@ void QWasmIntegration::updateDpi()
         return;
     qreal dpiValue = dpi.as<qreal>();
     for (const auto &elementAndScreen : m_screens)
-        QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(elementAndScreen.second->screen(), dpiValue, dpiValue);
+        QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(elementAndScreen.wasmScreen->screen(), dpiValue, dpiValue);
 }
 
 void QWasmIntegration::resizeAllScreens()
 {
     for (const auto &elementAndScreen : m_screens)
-        elementAndScreen.second->updateQScreenAndCanvasRenderSize();
+        elementAndScreen.wasmScreen->updateQScreenAndCanvasRenderSize();
+}
+
+void QWasmIntegration::loadLocalFontFamilies(emscripten::val families)
+{
+    m_fontDb->populateLocalFontFamilies(families);
 }
 
 quint64 QWasmIntegration::getTimestamp()

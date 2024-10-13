@@ -74,9 +74,9 @@ public:
     void update();
     static void refreshAll();
 
-#if defined(Q_OS_UNIX) && !defined (Q_OS_MAC)
+#if defined(Q_OS_UNIX) && !defined (Q_OS_DARWIN)
     QLibraryPrivate *library(const QString &key) const;
-#endif // Q_OS_UNIX && !Q_OS_MAC
+#endif // Q_OS_UNIX && !Q_OS_DARWIN
 #endif // QT_CONFIG(library)
 
     void setExtraSearchPath(const QString &path);
@@ -86,6 +86,7 @@ public:
     using MetaDataList = QList<QPluginParsedMetaData>;
 
     MetaDataList metaData() const;
+    QList<QCborArray> metaDataKeys() const;
     QObject *instance(int index) const;
 };
 

@@ -1,7 +1,7 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // Copyright (C) 2020 Olivier Goffart <ogoffart@woboq.com>
 // Copyright (C) 2021 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 // This test actually wants to practice narrowing conditions, so never define this.
 #ifdef QT_NO_NARROWING_CONVERSIONS_IN_CONNECT
@@ -38,6 +38,8 @@
 #include <functional>
 
 #include <math.h>
+
+using namespace Qt::StringLiterals;
 
 class tst_QObject : public QObject
 {
@@ -80,7 +82,9 @@ private slots:
     void signalBlocking();
     void blockingQueuedConnection();
     void childEvents();
+    void parentEvents();
     void installEventFilter();
+    void installEventFilterOrder();
     void deleteSelfInSlot();
     void disconnectSelfInSlotAndDeleteAfterEmit();
     void dumpObjectInfo();
@@ -106,6 +110,7 @@ private slots:
     void baseDestroyed();
     void pointerConnect();
     void pointerDisconnect();
+    void mixedConnectDisconnect();
     void emitInDefinedOrderPointer();
     void customTypesPointer();
     void connectCxx0x();
@@ -149,6 +154,7 @@ private slots:
     void objectNameBinding();
     void emitToDestroyedClass();
     void declarativeData();
+    void asyncCallbackHelper();
 };
 
 struct QObjectCreatedOnShutdown
@@ -506,6 +512,12 @@ void tst_QObject::qobject_castTemplate()
     QVERIFY(!::qobject_cast<ReceiverObject*>(o.data()));
 }
 
+class DerivedObj : public QObject {
+    Q_OBJECT
+public:
+    using QObject::QObject;
+};
+
 void tst_QObject::findChildren()
 {
     QObject o;
@@ -518,6 +530,10 @@ void tst_QObject::findChildren()
     QTimer t1(&o);
     QTimer t121(&o12);
     QTimer emptyname(&o);
+    QObject oo;
+    QObject o21(&oo);
+    QObject o22(&oo);
+    QObject o23(&oo);
 
     Q_SET_OBJECT_NAME(o);
     Q_SET_OBJECT_NAME(o1);
@@ -528,6 +544,13 @@ void tst_QObject::findChildren()
     Q_SET_OBJECT_NAME(t1);
     Q_SET_OBJECT_NAME(t121);
     emptyname.setObjectName("");
+    Q_SET_OBJECT_NAME(oo);
+    const QUtf8StringView utf8_name = u8"utf8 ⁎ obj";
+    o21.setObjectName(utf8_name);
+    const QStringView utf16_name = u"utf16 ⁎ obj";
+    o22.setObjectName(utf16_name);
+    constexpr QLatin1StringView L1_name("L1 ⁎ obj");
+    o23.setObjectName(L1_name);
 
     QObject *op = nullptr;
 
@@ -557,6 +580,27 @@ void tst_QObject::findChildren()
     QCOMPARE(op, static_cast<QObject *>(0));
     op = o.findChild<QObject*>("o1");
     QCOMPARE(op, &o1);
+
+    op = oo.findChild<QObject*>(utf8_name);
+    QCOMPARE(op, &o21);
+    op = oo.findChild<QObject*>(utf8_name.chopped(1));
+    QCOMPARE(op, nullptr);
+    const QUtf8StringView utf8_name_with_trailing_data = u8"utf8 ⁎ obj_data";
+    op = oo.findChild<QObject*>(utf8_name_with_trailing_data.chopped(5));
+    QCOMPARE(op, &o21);
+    op = oo.findChild<QObject*>(utf16_name);
+    QCOMPARE(op, &o22);
+    op = oo.findChild<QObject*>(utf16_name.chopped(1));
+    QCOMPARE(op, nullptr);
+    const QStringView utf16_name_with_trailing_data = u"utf16 ⁎ obj_data";
+    op = oo.findChild<QObject*>(utf16_name_with_trailing_data.chopped(5));
+    QCOMPARE(op, &o22);
+    op = oo.findChild<QObject*>(L1_name);
+    QCOMPARE(op, &o23);
+    op = oo.findChild<QObject*>(L1_name.chopped(1));
+    QCOMPARE(op, nullptr);
+    op = oo.findChild<QObject*>((L1_name + "_data"_L1).chopped(5));
+    QCOMPARE(op, &o23);
 
     QList<QObject*> l;
     QList<QTimer*> tl;
@@ -733,7 +777,20 @@ void tst_QObject::findChildren()
     l = o.findChildren<QObject*>(QRegularExpression("^harry$"), Qt::FindDirectChildrenOnly);
     QCOMPARE(l.size(), 0);
 
+    DerivedObj dr1(&o111);
+    DerivedObj dr2(&o111);
+    Q_SET_OBJECT_NAME(dr1);
+    Q_SET_OBJECT_NAME(dr2);
+
     // empty and null string check
+    op = o.findChild<QObject*>(Qt::FindDirectChildrenOnly);
+    QCOMPARE(op, &o1);
+    op = o.findChild<QTimer*>(Qt::FindDirectChildrenOnly);
+    QCOMPARE(op, &t1);
+    op = o.findChild<DerivedObj*>(Qt::FindDirectChildrenOnly);
+    QCOMPARE(op, nullptr);
+    op = o.findChild<DerivedObj*>(Qt::FindChildrenRecursively);
+    QCOMPARE(op, &dr1);
     op = o.findChild<QObject*>(QString(), Qt::FindDirectChildrenOnly);
     QCOMPARE(op, &o1);
     op = o.findChild<QObject*>("", Qt::FindDirectChildrenOnly);
@@ -1815,13 +1872,15 @@ void tst_QObject::moveToThread()
         QObject *child = new QObject(object);
         QCOMPARE(object->thread(), currentThread);
         QCOMPARE(child->thread(), currentThread);
-        object->moveToThread(0);
+        QVERIFY(object->moveToThread(nullptr));
         QCOMPARE(object->thread(), (QThread *)0);
         QCOMPARE(child->thread(), (QThread *)0);
-        object->moveToThread(currentThread);
+        QVERIFY(object->moveToThread(currentThread));
         QCOMPARE(object->thread(), currentThread);
         QCOMPARE(child->thread(), currentThread);
-        object->moveToThread(0);
+        QTest::ignoreMessage(QtWarningMsg, "QObject::moveToThread: Cannot move objects with a parent");
+        QVERIFY(!child->moveToThread(nullptr));
+        QVERIFY(object->moveToThread(nullptr));
         QCOMPARE(object->thread(), (QThread *)0);
         QCOMPARE(child->thread(), (QThread *)0);
         // can delete an object with no thread anywhere
@@ -3084,6 +3143,8 @@ void tst_QObject::blockingQueuedConnection()
     }
 }
 
+static int s_eventSpyCounter = -1;
+
 class EventSpy : public QObject
 {
     Q_OBJECT
@@ -3103,14 +3164,17 @@ public:
     void clear()
     {
         events.clear();
+        thisCounter = -1;
     }
 
     bool eventFilter(QObject *object, QEvent *event) override
     {
         events.append(qMakePair(object, event->type()));
+        thisCounter = ++s_eventSpyCounter;
         return false;
     }
 
+    int thisCounter = -1;
 private:
     EventList events;
 };
@@ -3199,6 +3263,78 @@ void tst_QObject::childEvents()
     }
 }
 
+void tst_QObject::parentEvents()
+{
+#ifdef QT_BUILD_INTERNAL
+    EventSpy::EventList expected;
+
+    {
+        // Parent events not enabled
+        QObject parent;
+        QObject child;
+
+        EventSpy spy;
+        child.installEventFilter(&spy);
+
+        QCoreApplication::postEvent(&child, new QEvent(QEvent::Type(QEvent::User + 1)));
+
+        child.setParent(&parent);
+
+        QCoreApplication::postEvent(&child, new QEvent(QEvent::Type(QEvent::User + 2)));
+
+        expected =
+            EventSpy::EventList();
+        QCOMPARE(spy.eventList(), expected);
+        spy.clear();
+
+        QCoreApplication::processEvents();
+
+        expected =
+            EventSpy::EventList()
+            << qMakePair(&child, QEvent::Type(QEvent::User + 1))
+            << qMakePair(&child, QEvent::Type(QEvent::User + 2));
+        QCOMPARE(spy.eventList(), expected);
+    }
+
+    {
+        // Parent events enabled
+        QObject parent;
+        QObject child;
+        auto *childPrivate = QObjectPrivate::get(&child);
+        childPrivate->receiveParentEvents = true;
+
+        EventSpy spy;
+        child.installEventFilter(&spy);
+
+        QCoreApplication::postEvent(&child, new QEvent(QEvent::Type(QEvent::User + 1)));
+
+        child.setParent(&parent);
+        child.setParent(nullptr);
+
+        QCoreApplication::postEvent(&child, new QEvent(QEvent::Type(QEvent::User + 2)));
+
+        expected =
+            EventSpy::EventList()
+            << qMakePair(&child, QEvent::ParentAboutToChange)
+            << qMakePair(&child, QEvent::ParentChange)
+            << qMakePair(&child, QEvent::ParentAboutToChange)
+            << qMakePair(&child, QEvent::ParentChange);
+        QCOMPARE(spy.eventList(), expected);
+        spy.clear();
+
+        QCoreApplication::processEvents();
+
+        expected =
+            EventSpy::EventList()
+            << qMakePair(&child, QEvent::Type(QEvent::User + 1))
+            << qMakePair(&child, QEvent::Type(QEvent::User + 2));
+        QCOMPARE(spy.eventList(), expected);
+    }
+#else
+    QSKIP("Needs QT_BUILD_INTERNAL");
+#endif
+}
+
 void tst_QObject::installEventFilter()
 {
     QEvent event(QEvent::User);
@@ -3238,6 +3374,70 @@ void tst_QObject::installEventFilter()
     object.installEventFilter(&spy);
     QCoreApplication::sendEvent(&object, &event);
     QVERIFY(spy.eventList().isEmpty());
+}
+
+#define CHECK_FAIL(message) \
+do {\
+    if (QTest::currentTestFailed())\
+        QFAIL("failed one line above on " message);\
+} while (false)
+
+void tst_QObject::installEventFilterOrder()
+{
+    // installEventFilter() adds new objects to d_func()->extraData->eventFilters, which
+    // affects the order of calling each object's eventFilter() when processing the events.
+
+    QObject object;
+    EventSpy spy1, spy2, spy3;
+
+    auto clearSignalSpies = [&] {
+        for (auto *s : {&spy1, &spy2, &spy3})
+            s->clear();
+        s_eventSpyCounter = -1;
+    };
+
+    const EventSpy::EventList expected = { { &object, QEvent::Type(QEvent::User + 1) } };
+
+    // Call Order: from first to last
+    auto checkCallOrder = [&expected](const QList<EventSpy *> &spies) {
+        for (int i = 0; i < spies.size(); ++i) {
+            EventSpy *spy = spies.at(i);
+            QVERIFY2(spy->eventList() == expected,
+                     QString("The spy %1 wasn't triggered exactly once.").arg(i).toLatin1());
+            QCOMPARE(spy->thisCounter, i);
+        }
+    };
+
+    // Install event filters and check the order of invocations:
+    // The last installed = the first called.
+    object.installEventFilter(&spy1);
+    object.installEventFilter(&spy2);
+    object.installEventFilter(&spy3);
+    clearSignalSpies();
+    QCoreApplication::postEvent(&object, new QEvent(QEvent::Type(QEvent::User + 1)));
+    QCoreApplication::processEvents();
+    checkCallOrder({ &spy3, &spy2, &spy1 });
+    CHECK_FAIL("checkCallOrder() - 1st round");
+
+    // Install event filter for `spy1` again, which reorders spy1 in `eventFilters`
+    // (the list doesn't have duplicates).
+    object.installEventFilter(&spy1);
+    clearSignalSpies();
+    QCoreApplication::postEvent(&object, new QEvent(QEvent::Type(QEvent::User + 1)));
+    QCoreApplication::processEvents();
+    checkCallOrder({ &spy1, &spy3, &spy2 });
+    CHECK_FAIL("checkCallOrder() - 2nd round");
+
+    // Remove event filter for `spy3`, ensure it's not called anymore and the
+    // existing filters order is preserved.
+    object.removeEventFilter(&spy3);
+    clearSignalSpies();
+    QCoreApplication::postEvent(&object, new QEvent(QEvent::Type(QEvent::User + 1)));
+    QCoreApplication::processEvents();
+    checkCallOrder({ &spy1, &spy2 });
+    CHECK_FAIL("checkCallOrder() - 3rd round");
+    QVERIFY(spy3.eventList().isEmpty());
+    QCOMPARE(spy3.thisCounter, -1);
 }
 
 class EmitThread : public QThread
@@ -4651,6 +4851,125 @@ void tst_QObject::pointerDisconnect()
     QVERIFY(!r2.called(2));
     QVERIFY(!r1.called(2));
     QVERIFY(!r2.called(2));
+}
+
+struct MixingFunctor
+{
+    int index;
+    void operator()() { s_called[index] = true; }
+    bool called() const { return s_called[index]; }
+    void reset() { s_called[index] = false; }
+
+private:
+    static inline bool s_called[5] = {};
+};
+
+void tst_QObject::mixedConnectDisconnect()
+{
+    SenderObject s;
+    ReceiverObject pmf;
+    ReceiverObject named;
+
+    MixingFunctor functor1{1};
+    MixingFunctor functor2{2};
+    MixingFunctor functor3{3};
+    MixingFunctor functor4{4};
+
+    auto makePMFConnections = [sender = &s](const ReceiverObject *receiver){
+        QObject::connect(sender, &SenderObject::signal1, receiver, &ReceiverObject::slot1);
+        QObject::connect(sender, &SenderObject::signal2, receiver, &ReceiverObject::slot2);
+        QObject::connect(sender, &SenderObject::signal3, receiver, &ReceiverObject::slot3);
+        QObject::connect(sender, &SenderObject::signal4, receiver, &ReceiverObject::slot4);
+    };
+    auto makeNamedConnections = [sender = &s](const ReceiverObject *receiver){
+        QObject::connect(sender, SIGNAL(signal1()), receiver, SLOT(slot1()));
+        QObject::connect(sender, SIGNAL(signal2()), receiver, SLOT(slot2()));
+        QObject::connect(sender, SIGNAL(signal3()), receiver, SLOT(slot3()));
+        QObject::connect(sender, SIGNAL(signal4()), receiver, SLOT(slot4()));
+    };
+
+    makePMFConnections(&pmf);
+    makeNamedConnections(&named);
+    QObject::connect(&s, &SenderObject::signal1, &named, functor1);
+    QObject::connect(&s, &SenderObject::signal2, &named, functor2);
+    QObject::connect(&s, &SenderObject::signal3, &named, functor3);
+    QObject::connect(&s, &SenderObject::signal4, &named, functor4);
+
+    // sanity check
+    s.emitSignal1();
+    QVERIFY(pmf.called(1));
+    QVERIFY(named.called(1));
+    QVERIFY(functor1.called());
+    pmf.reset();
+    named.reset();
+    functor1.reset();
+
+    // disconnecting a string-based connection with PMF-based disconnect doesn't work
+    bool ret = false;
+    ret = QObject::disconnect(&s, &SenderObject::signal1, &pmf, &ReceiverObject::slot1);
+    QVERIFY(ret);
+    ret = QObject::disconnect(&s, &SenderObject::signal1, &named, &ReceiverObject::slot1);
+    QEXPECT_FAIL("", "Mixing PMF connect with string-based disconnect doesn't work", Continue);
+    QVERIFY(ret);
+
+    s.emitSignal1();
+    QVERIFY(!pmf.called(1));
+    QEXPECT_FAIL("", "Mixing PMF connect with string-based disconnect doesn't work", Continue);
+    QVERIFY(!named.called(1));
+    // cannot disconnect a specific functor (or lambda)
+    QVERIFY(functor1.called());
+    pmf.reset();
+    named.reset();
+    functor1.reset();
+
+    // wildcard disconnect works even in mixed cases and for functor objects
+    ret = QObject::disconnect(&s, SIGNAL(signal2()), &pmf, nullptr);
+    QVERIFY(ret);
+    ret = QObject::disconnect(&s, &SenderObject::signal2, &named, nullptr);
+    QVERIFY(ret);
+
+    s.emitSignal2();
+    QVERIFY(!pmf.called(2));
+    QVERIFY(!named.called(2));
+    QVERIFY(!functor2.called());
+    pmf.reset();
+    named.reset();
+    functor2.reset();
+
+    ret = QObject::disconnect(&s, &SenderObject::signal3, nullptr, nullptr);
+    QVERIFY(ret);
+
+    s.emitSignal3();
+    QVERIFY(!pmf.called(3));
+    QVERIFY(!named.called(3));
+    QVERIFY(!functor3.called());
+    pmf.reset();
+    named.reset();
+    functor3.reset();
+
+    // disconnect() member function is only available for string-based syntax
+    // and doesn't disconnect PMF-based connections
+    ret = s.disconnect(&pmf, SLOT(slot4()));
+    QEXPECT_FAIL("", "Mixing PMF connect with string-based disconnect doesn't work", Continue);
+    QVERIFY(ret);
+    s.emitSignal4();
+    QEXPECT_FAIL("", "Mixing PMF connect with string-based disconnect doesn't work", Continue);
+    QVERIFY(!pmf.called(4));
+    // the functor gets of course still called
+    QVERIFY(functor4.called());
+
+    pmf.reset();
+    named.reset();
+    functor4.reset();
+
+    ret = s.disconnect(&named, nullptr);
+    QVERIFY(ret);
+
+    s.emitSignal4();
+    QVERIFY(!named.called(4));
+    QVERIFY(!functor4.called());
+    named.reset();
+    functor4.reset();
 }
 
 
@@ -6074,6 +6393,7 @@ void tst_QObject::connectFunctorArgDifference()
 
     connect(&timer, &QTimer::timeout, [=](){});
     connect(&timer, &QTimer::objectNameChanged, [=](const QString &){});
+    connect(&timer, &QTimer::objectNameChanged, this, [](){});
     connect(qApp, &QCoreApplication::aboutToQuit, [=](){});
 
     connect(&timer, &QTimer::objectNameChanged, [=](){});
@@ -6301,11 +6621,46 @@ void tst_QObject::connectFunctorWithContextUnique()
     QVERIFY(QObject::connect(&sender, &SenderObject::signal1, &receiver, &ReceiverObject::slot1));
     receiver.count_slot1 = 0;
 
-    QTest::ignoreMessage(QtWarningMsg, "QObject::connect(SenderObject, ReceiverObject): unique connections require a pointer to member function of a QObject subclass");
+    QVERIFY(QObject::connect(&sender, &SenderObject::signal2, &receiver, &ReceiverObject::slot2));
+    receiver.count_slot2 = 0;
+
+    const auto oredType = Qt::ConnectionType(Qt::DirectConnection | Qt::UniqueConnection);
+
+    // Will assert in debug builds, so only test in release builds
+#if defined(QT_NO_DEBUG) && !defined(QT_FORCE_ASSERTS)
+    auto ignoreMsg = [] {
+        QTest::ignoreMessage(QtWarningMsg,
+                             "QObject::connect(SenderObject, ReceiverObject): unique connections "
+                             "require a pointer to member function of a QObject subclass");
+    };
+
+    ignoreMsg();
     QVERIFY(!QObject::connect(&sender, &SenderObject::signal1, &receiver, [&](){ receiver.slot1(); }, Qt::UniqueConnection));
+
+    ignoreMsg();
+    QVERIFY(!QObject::connect(
+        &sender, &SenderObject::signal2, &receiver, [&]() { receiver.slot2(); }, oredType));
+#endif
 
     sender.emitSignal1();
     QCOMPARE(receiver.count_slot1, 1);
+
+    sender.emitSignal2();
+    QCOMPARE(receiver.count_slot2, 1);
+
+    // Check connecting to PMF doesn't hit the assert
+
+    QVERIFY(QObject::connect(&sender, &SenderObject::signal3, &receiver, &ReceiverObject::slot3,
+                             Qt::UniqueConnection));
+    receiver.count_slot3 = 0;
+    sender.emitSignal3();
+    QCOMPARE(receiver.count_slot3, 1);
+
+    QVERIFY(QObject::connect(&sender, &SenderObject::signal4, &receiver, &ReceiverObject::slot4,
+                             oredType));
+    receiver.count_slot4 = 0;
+    sender.emitSignal4();
+    QCOMPARE(receiver.count_slot4, 1);
 }
 
 class MyFunctor
@@ -6812,7 +7167,11 @@ struct QmlReceiver : public QtPrivate::QSlotObjectBase
         , magic(0)
     {}
 
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
     static void impl(int which, QSlotObjectBase *this_, QObject *, void **metaArgs, bool *ret)
+#else
+    static void impl(QSlotObjectBase *this_, QObject *, void **metaArgs, int which, bool *ret)
+#endif
     {
         switch (which) {
         case Destroy: delete static_cast<QmlReceiver*>(this_); return;
@@ -8191,16 +8550,6 @@ void tst_QObject::objectNameBinding()
     QObject obj;
     QTestPrivate::testReadWritePropertyBasics<QObject, QString>(obj, "test1", "test2",
                                                                 "objectName");
-
-    const QPropertyBinding<QString> binding([]() {
-        QObject obj2;
-        obj2.setObjectName(QLatin1String("no loop"));
-        return obj2.objectName();
-    }, {});
-    obj.bindableObjectName().setBinding(binding);
-
-    QCOMPARE(obj.objectName(), QLatin1String("no loop"));
-    QVERIFY2(!binding.error().hasError(), qPrintable(binding.error().description()));
 }
 
 namespace EmitToDestroyedClass {
@@ -8363,6 +8712,241 @@ void tst_QObject::declarativeData()
     QtDeclarative::Object *child = new QtDeclarative::Object;
     child->setParent(&p);
 #endif
+}
+
+/*
+    Compile-time test for the helpers in qobjectdefs_impl.h.
+*/
+class AsyncCaller : public QObject
+{
+    Q_OBJECT
+public:
+    ~AsyncCaller()
+    {
+        if (slotObject)
+            slotObject->destroyIfLastRef();
+    }
+    void callback0() {}
+    void callback1(const QString &) {}
+    void callbackInt(int) {}
+    int returnInt() const { return 0; }
+
+    static int staticCallback0() { return 0; }
+    static void staticCallback1(const QString &) {}
+
+    using Prototype0 = int(*)();
+    using Prototype1 = void(*)(QString);
+
+    template<typename Functor>
+    bool callMe0(const typename QtPrivate::ContextTypeForFunctor<Functor>::ContextType *, Functor &&func)
+    {
+        if (slotObject) {
+            slotObject->destroyIfLastRef();
+            slotObject = nullptr;
+        }
+        QtPrivate::AssertCompatibleFunctions<Prototype0, Functor>();
+        slotObject = QtPrivate::makeCallableObject<Prototype0>(std::forward<Functor>(func));
+        return true;
+    }
+
+    template<typename Functor>
+    bool callMe0(Functor &&func)
+    {
+        return callMe0(nullptr, std::forward<Functor>(func));
+    }
+
+    template<typename Functor>
+    bool callMe1(const typename QtPrivate::ContextTypeForFunctor<Functor>::ContextType *, Functor &&func)
+    {
+        if (slotObject) {
+            slotObject->destroyIfLastRef();
+            slotObject = nullptr;
+        }
+        QtPrivate::AssertCompatibleFunctions<Prototype1, Functor>();
+        slotObject = QtPrivate::makeCallableObject<Prototype1>(std::forward<Functor>(func));
+        return true;
+    }
+
+    template<typename Functor>
+    bool callMe1(Functor &&func)
+    {
+        return callMe1(nullptr, std::forward<Functor>(func));
+    }
+
+    QtPrivate::QSlotObjectBase *slotObject = nullptr;
+};
+
+static void freeFunction0() {}
+static void freeFunction1(QString) {}
+static void freeFunctionVariant(QVariant) {}
+
+template<typename Prototype, typename Functor>
+inline constexpr bool compiles(Functor &&) {
+    return QtPrivate::AreFunctionsCompatible<Prototype, Functor>::value;
+}
+
+void tst_QObject::asyncCallbackHelper()
+{
+    int result = 0;
+    QString arg1 = "Parameter";
+    void *argv[] = { &result, &arg1 };
+
+    auto lambda0 = []{};
+    auto lambda1 = [](const QString &) {};
+    auto lambda2 = [](const QString &, int) {};
+    const auto constLambda = [](const QString &) {};
+    auto moveOnlyLambda = [u = std::unique_ptr<int>()]{};
+    auto moveOnlyLambda1 = [u = std::unique_ptr<int>()](const QString &){};
+
+    SlotFunctor functor0;
+    SlotFunctorString functor1;
+
+    // no parameters provided or needed
+    static_assert(compiles<AsyncCaller::Prototype0>(&AsyncCaller::callback0));
+    static_assert(compiles<AsyncCaller::Prototype0>(&AsyncCaller::staticCallback0));
+    static_assert(compiles<AsyncCaller::Prototype0>(lambda0));
+    static_assert(compiles<AsyncCaller::Prototype0>(std::move(moveOnlyLambda)));
+    static_assert(compiles<AsyncCaller::Prototype0>(freeFunction0));
+    static_assert(compiles<AsyncCaller::Prototype0>(functor0));
+
+    // more parameters than needed
+    static_assert(compiles<AsyncCaller::Prototype1>(&AsyncCaller::callback0));
+    static_assert(compiles<AsyncCaller::Prototype1>(&AsyncCaller::staticCallback0));
+    static_assert(compiles<AsyncCaller::Prototype1>(lambda0));
+    static_assert(compiles<AsyncCaller::Prototype1>(freeFunction0));
+    static_assert(compiles<AsyncCaller::Prototype1>(functor0));
+
+    // matching parameter
+    static_assert(compiles<AsyncCaller::Prototype1>(&AsyncCaller::callback1));
+    static_assert(compiles<AsyncCaller::Prototype1>(&AsyncCaller::staticCallback1));
+    static_assert(compiles<AsyncCaller::Prototype1>(lambda1));
+    static_assert(compiles<AsyncCaller::Prototype1>(std::move(moveOnlyLambda1)));
+    static_assert(compiles<AsyncCaller::Prototype1>(constLambda));
+    static_assert(compiles<AsyncCaller::Prototype1>(freeFunction1));
+    static_assert(compiles<AsyncCaller::Prototype1>(functor1));
+
+    // not enough parameters
+    static_assert(!compiles<AsyncCaller::Prototype0>(&AsyncCaller::callback1));
+    static_assert(!compiles<AsyncCaller::Prototype0>(&AsyncCaller::staticCallback1));
+    static_assert(!compiles<AsyncCaller::Prototype0>(lambda1));
+    static_assert(!compiles<AsyncCaller::Prototype0>(constLambda));
+    static_assert(!compiles<AsyncCaller::Prototype0>(lambda2));
+    static_assert(!compiles<AsyncCaller::Prototype0>(freeFunction1));
+    static_assert(!compiles<AsyncCaller::Prototype0>(functor1));
+
+    // wrong parameter type
+    static_assert(!compiles<AsyncCaller::Prototype1>(&AsyncCaller::callbackInt));
+
+    // old-style slot name
+    static_assert(!compiles<AsyncCaller::Prototype0>("callback1"));
+
+    // slot with return value is ok, we just don't pass
+    // the return value through to anything.
+    static_assert(compiles<AsyncCaller::Prototype0>(&AsyncCaller::returnInt));
+
+    static_assert(compiles<AsyncCaller::Prototype1>(freeFunctionVariant));
+
+    std::function<int()> stdFunction0(&AsyncCaller::staticCallback0);
+    std::function<void(QString)> stdFunction1(&AsyncCaller::staticCallback1);
+    static_assert(compiles<AsyncCaller::Prototype0>(stdFunction0));
+    static_assert(compiles<AsyncCaller::Prototype1>(stdFunction1));
+
+    AsyncCaller caller;
+    // with context
+    QVERIFY(caller.callMe0(&caller, &AsyncCaller::callback0));
+    QVERIFY(caller.callMe0(&caller, &AsyncCaller::returnInt));
+    QVERIFY(caller.callMe0(&caller, &AsyncCaller::staticCallback0));
+    QVERIFY(caller.callMe0(&caller, lambda0));
+    QVERIFY(caller.callMe0(&caller, freeFunction0));
+    QVERIFY(caller.callMe0(&caller, std::move(moveOnlyLambda)));
+    QVERIFY(caller.callMe0(&caller, stdFunction0));
+
+    QVERIFY(caller.callMe1(&caller, &AsyncCaller::callback1));
+    QVERIFY(caller.callMe1(&caller, &AsyncCaller::staticCallback1));
+    QVERIFY(caller.callMe1(&caller, lambda1));
+    QVERIFY(caller.callMe1(&caller, freeFunction1));
+    QVERIFY(caller.callMe1(&caller, constLambda));
+    QVERIFY(caller.callMe1(&caller, stdFunction1));
+
+    // without context
+    QVERIFY(caller.callMe0(&AsyncCaller::staticCallback0));
+    QVERIFY(caller.callMe0(lambda0));
+    QVERIFY(caller.callMe0(freeFunction0));
+    QVERIFY(caller.callMe0(stdFunction0));
+
+    QVERIFY(caller.callMe1(&AsyncCaller::staticCallback1));
+    QVERIFY(caller.callMe1(lambda1));
+    QVERIFY(caller.callMe1(constLambda));
+    QVERIFY(caller.callMe1(std::move(moveOnlyLambda1)));
+    QVERIFY(caller.callMe1(freeFunction1));
+    QVERIFY(caller.callMe1(stdFunction1));
+
+    static const char *expectedPayload = "Hello World!";
+    {
+        struct MoveOnlyFunctor {
+            MoveOnlyFunctor() = default;
+            MoveOnlyFunctor(MoveOnlyFunctor &&) = default;
+            MoveOnlyFunctor(const MoveOnlyFunctor &) = delete;
+            ~MoveOnlyFunctor() = default;
+
+            int operator()() const {
+                qDebug().noquote() << payload;
+                return int(payload.length());
+            }
+            QString payload = expectedPayload;
+        } moveOnlyFunctor;
+        QVERIFY(caller.callMe0(std::move(moveOnlyFunctor)));
+    }
+    QTest::ignoreMessage(QtDebugMsg, expectedPayload);
+    caller.slotObject->call(nullptr, argv);
+    QCOMPARE(result, QLatin1String(expectedPayload).length());
+
+    // mutable lambda; same behavior as mutableFunctor - we copy the functor
+    // in the QCallableObject, so the original is not modified
+    int status = 0;
+    auto mutableLambda1 = [&status, calls = 0]() mutable { status = ++calls; };
+
+    mutableLambda1();
+    QCOMPARE(status, 1);
+    QVERIFY(caller.callMe0(mutableLambda1)); // this copies the lambda with count == 1
+    caller.slotObject->call(nullptr, argv);  // this doesn't change mutableLambda1, but the copy
+    QCOMPARE(status, 2);
+    mutableLambda1();
+    QCOMPARE(status, 2);                     // and we are still at two
+
+    auto mutableLambda2 = [calls = 0]() mutable { return ++calls; };
+    QCOMPARE(mutableLambda2(), 1);
+    QVERIFY(caller.callMe0(mutableLambda2)); // this copies the lambda
+    caller.slotObject->call(nullptr, argv);  // this call doesn't change mutableLambda2
+    QCOMPARE(mutableLambda2(), 2);           // so we are still at 2
+
+    {
+        int called = -1;
+        struct MutableFunctor {
+            void operator()() { called = 0; }
+            int &called;
+        };
+        struct ConstFunctor
+        {
+            void operator()() const { called = 1; }
+            int &called;
+        };
+
+        MutableFunctor mf{called};
+        QMetaObject::invokeMethod(this, mf);
+        QCOMPARE(called, 0);
+        ConstFunctor cf{called};
+        QMetaObject::invokeMethod(this, cf);
+        QCOMPARE(called, 1);
+        QMetaObject::invokeMethod(this, [&called, u = std::unique_ptr<int>()]{ called = 2; });
+        QCOMPARE(called, 2);
+        QMetaObject::invokeMethod(this, [&called, count = 0]() mutable {
+            if (!count)
+                called = 3;
+            ++count;
+        });
+        QCOMPARE(called, 3);
+    }
 }
 
 QTEST_MAIN(tst_QObject)

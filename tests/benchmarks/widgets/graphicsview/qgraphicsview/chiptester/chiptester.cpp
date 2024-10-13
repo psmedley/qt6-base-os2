@@ -1,5 +1,5 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "chiptester.h"
 #include "chip.h"
@@ -79,7 +79,6 @@ void ChipTester::populateScene()
 
     // Populate scene
     int xx = 0;
-    int nitems = 0;
     for (int i = -1100; i < 1100; i += 110) {
         ++xx;
         int yy = 0;
@@ -92,8 +91,6 @@ void ChipTester::populateScene()
             QGraphicsItem *item = new Chip(color, xx, yy);
             item->setPos(QPointF(i, j));
             scene->addItem(item);
-
-            ++nitems;
         }
     }
 }

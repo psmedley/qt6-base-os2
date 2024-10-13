@@ -30,6 +30,7 @@ Q_LOGGING_CATEGORY(lcQpaClipboard, "qt.qpa.clipboard")
 Q_LOGGING_CATEGORY(lcInputDevices, "qt.qpa.input.devices")
 Q_LOGGING_CATEGORY(lcQpaDialogs, "qt.qpa.dialogs")
 Q_LOGGING_CATEGORY(lcQpaMenus, "qt.qpa.menus")
+Q_LOGGING_CATEGORY(lcQpaServices, "qt.qpa.services")
 
 //
 // Conversion Functions
@@ -334,6 +335,15 @@ Qt::MouseButtons currentlyPressedMouseButtons()
 QString qt_mac_removeAmpersandEscapes(QString s)
 {
     return QPlatformTheme::removeMnemonics(s).trimmed();
+}
+
+NSString *qt_mac_AppKitString(NSString *table, NSString *key)
+{
+    static const NSBundle *appKit = [NSBundle bundleForClass:NSApplication.class];
+    if (!appKit)
+        return key;
+
+    return [appKit localizedStringForKey:key value:nil table:table];
 }
 
 QT_END_NAMESPACE

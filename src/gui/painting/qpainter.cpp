@@ -221,7 +221,7 @@ qreal QPainterPrivate::effectiveDevicePixelRatio() const
     if (device->devType() == QInternal::Printer)
         return qreal(1);
 
-    return qMax(qreal(1), device->devicePixelRatio());
+    return device->devicePixelRatio();
 }
 
 QTransform QPainterPrivate::hidpiScaleTransform() const
@@ -954,8 +954,6 @@ void QPainterPrivate::updateState(QPainterState *newState)
     used inside a paintEvent() function or in a function called by
     paintEvent().
 
-    \tableofcontents
-
     \section1 Settings
 
     There are several settings that you can customize to make QPainter
@@ -1125,24 +1123,22 @@ void QPainterPrivate::updateState(QPainterState *newState)
     The QPainter class also provides a means of controlling the
     rendering quality through its RenderHint enum and the support for
     floating point precision: All the functions for drawing primitives
-    has a floating point version. These are often used in combination
+    have floating point versions.
+
+    \snippet code/src_gui_painting_qpainter.cpp floatBased
+
+    These are often used in combination
     with the \l {RenderHint}{QPainter::Antialiasing} render hint.
+
+    \snippet code/src_gui_painting_qpainter.cpp renderHint
 
     \table 100%
     \row
+    \li Comparing concentric circles with int and float, and with or without
+        anti-aliased rendering. Using the floating point precision versions
+        produces evenly spaced rings. Anti-aliased rendering results in
+        smooth circles.
     \li \inlineimage qpainter-concentriccircles.png
-    \li
-    \b {Concentric Circles Example}
-
-    The \l {painting/concentriccircles}{Concentric Circles} example
-    shows the improved rendering quality that can be obtained using
-    floating point precision and anti-aliasing when drawing custom
-    widgets.
-
-    The application's main window displays several widgets which are
-    drawn using the various combinations of precision and
-    anti-aliasing.
-
     \endtable
 
     The RenderHint enum specifies flags to QPainter that may or may
@@ -1420,7 +1416,7 @@ void QPainterPrivate::updateState(QPainterState *newState)
     This value was added in Qt 6.4.
 
     \sa renderHints(), setRenderHint(), {QPainter#Rendering
-    Quality}{Rendering Quality}, {Concentric Circles Example}
+    Quality}{Rendering Quality}
 
 */
 
@@ -1767,9 +1763,12 @@ bool QPainter::begin(QPaintDevice *pd)
                 qWarning("QPainter::begin: Cannot paint on a null image");
                 qt_cleanup_painter_state(d);
                 return false;
-            } else if (img->format() == QImage::Format_Indexed8) {
-                // Painting on indexed8 images is not supported.
-                qWarning("QPainter::begin: Cannot paint on an image with the QImage::Format_Indexed8 format");
+            } else if (img->format() == QImage::Format_Indexed8 ||
+                       img->format() == QImage::Format_CMYK8888) {
+                // Painting on these formats is not supported.
+                qWarning() << "QPainter::begin: Cannot paint on an image with the"
+                           << img->format()
+                           << "format";
                 qt_cleanup_painter_state(d);
                 return false;
             }
@@ -1824,7 +1823,7 @@ bool QPainter::begin(QPaintDevice *pd)
 
     Q_ASSERT(d->engine->isActive());
 
-    if (!d->state->redirectionMatrix.isIdentity() || d->effectiveDevicePixelRatio() > 1)
+    if (!d->state->redirectionMatrix.isIdentity() || !qFuzzyCompare(d->effectiveDevicePixelRatio(), qreal(1.0)))
         d->updateMatrix();
 
     Q_ASSERT(d->engine->isActive());
@@ -3901,8 +3900,10 @@ void QPainter::drawRoundedRect(const QRectF &rect, qreal xRadius, qreal yRadius,
 #endif
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::drawRoundedRect: Painter not active");
         return;
+    }
 
     if (xRadius <= 0 || yRadius <= 0) {             // draw normal rectangle
         drawRect(rect);
@@ -3963,8 +3964,10 @@ void QPainter::drawEllipse(const QRectF &r)
 #endif
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::drawEllipse: Painter not active");
         return;
+    }
 
     QRectF rect(r.normalized());
 
@@ -4004,8 +4007,10 @@ void QPainter::drawEllipse(const QRect &r)
 #endif
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::drawEllipse: Painter not active");
         return;
+    }
 
     QRect rect(r.normalized());
 
@@ -4091,8 +4096,10 @@ void QPainter::drawArc(const QRectF &r, int a, int alen)
 #endif
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::drawArc: Painter not active");
         return;
+    }
 
     QRectF rect = r.normalized();
 
@@ -4153,8 +4160,10 @@ void QPainter::drawPie(const QRectF &r, int a, int alen)
 #endif
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::drawPie: Painter not active");
         return;
+    }
 
     if (a > (360*16)) {
         a = a % (360*16);
@@ -4222,8 +4231,10 @@ void QPainter::drawChord(const QRectF &r, int a, int alen)
 #endif
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::drawChord: Painter not active");
         return;
+    }
 
     QRectF rect = r.normalized();
 
@@ -6509,8 +6520,10 @@ void QPainter::drawPicture(const QPointF &p, const QPicture &picture)
 {
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::drawPicture: Painter not active");
         return;
+    }
 
     if (!d->extended)
         d->updateState(d->state);
@@ -6621,8 +6634,10 @@ void QPainter::fillRect(const QRectF &r, const QBrush &brush)
 {
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::fillRect: Painter not active");
         return;
+    }
 
     if (d->extended && !needsEmulation(brush)) {
         d->extended->fillRect(r, brush);
@@ -6656,8 +6671,10 @@ void QPainter::fillRect(const QRect &r, const QBrush &brush)
 {
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::fillRect: Painter not active");
         return;
+    }
 
     if (d->extended && !needsEmulation(brush)) {
         d->extended->fillRect(r, brush);
@@ -6694,8 +6711,10 @@ void QPainter::fillRect(const QRect &r, const QColor &color)
 {
     Q_D(QPainter);
 
-    if (!d->engine)
+    if (!d->engine) {
+        qWarning("QPainter::fillRect: Painter not active");
         return;
+    }
 
     if (d->extended) {
         d->extended->fillRect(r, color);
@@ -7080,6 +7099,13 @@ void qt_format_text(const QFont &fnt, const QRectF &_r,
 {
 
     Q_ASSERT( !((tf & ~Qt::TextDontPrint)!=0 && option!=nullptr) ); // we either have an option or flags
+
+    if (_r.isEmpty()) {
+        if (!brect)
+            return;
+        else
+            tf |= Qt::TextDontPrint;
+    }
 
     if (option) {
         tf |= option->alignment();

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qnetworkmanagerservice.h"
+#include "qnetworkmanagernetworkinformationbackend.h"
 
 #include <QObject>
 #include <QList>
@@ -14,21 +15,40 @@
 #include <QtDBus/QDBusObjectPath>
 #include <QtDBus/QDBusPendingCall>
 
-#define DBUS_PROPERTIES_INTERFACE "org.freedesktop.DBus.Properties"
+#define DBUS_PROPERTIES_INTERFACE "org.freedesktop.DBus.Properties"_L1
 
-#define NM_DBUS_SERVICE "org.freedesktop.NetworkManager"
+#define NM_DBUS_INTERFACE "org.freedesktop.NetworkManager"
+#define NM_DBUS_SERVICE NM_DBUS_INTERFACE ""_L1
 
-#define NM_DBUS_PATH "/org/freedesktop/NetworkManager"
-#define NM_DBUS_INTERFACE NM_DBUS_SERVICE
-#define NM_CONNECTION_DBUS_INTERFACE NM_DBUS_SERVICE ".Connection.Active"
-#define NM_DEVICE_DBUS_INTERFACE NM_DBUS_SERVICE ".Device"
+#define NM_DBUS_PATH "/org/freedesktop/NetworkManager"_L1
+#define NM_CONNECTION_DBUS_INTERFACE NM_DBUS_SERVICE ".Connection.Active"_L1
+#define NM_DEVICE_DBUS_INTERFACE NM_DBUS_SERVICE ".Device"_L1
 
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
+namespace {
+constexpr QLatin1StringView propertiesChangedKey = "PropertiesChanged"_L1;
+const QString &stateKey()
+{
+    static auto key = u"State"_s;
+    return key;
+}
+const QString &connectivityKey()
+{
+    static auto key = u"Connectivity"_s;
+    return key;
+}
+const QString &primaryConnectionKey()
+{
+    static auto key = u"PrimaryConnection"_s;
+    return key;
+}
+}
+
 QNetworkManagerInterfaceBase::QNetworkManagerInterfaceBase(QObject *parent)
-    : QDBusAbstractInterface(NM_DBUS_SERVICE ""_L1, NM_DBUS_PATH ""_L1,
+    : QDBusAbstractInterface(NM_DBUS_SERVICE, NM_DBUS_PATH,
                              NM_DBUS_INTERFACE, QDBusConnection::systemBus(), parent)
 {
 }
@@ -41,45 +61,49 @@ bool QNetworkManagerInterfaceBase::networkManagerAvailable()
 QNetworkManagerInterface::QNetworkManagerInterface(QObject *parent)
     : QNetworkManagerInterfaceBase(parent)
 {
-    if (!isValid())
+    if (!QDBusAbstractInterface::isValid())
         return;
 
     PropertiesDBusInterface managerPropertiesInterface(
-            NM_DBUS_SERVICE ""_L1, NM_DBUS_PATH ""_L1, DBUS_PROPERTIES_INTERFACE,
+            NM_DBUS_SERVICE, NM_DBUS_PATH, DBUS_PROPERTIES_INTERFACE,
             QDBusConnection::systemBus());
     QList<QVariant> argumentList;
-    argumentList << NM_DBUS_INTERFACE ""_L1;
+    argumentList << NM_DBUS_SERVICE;
     QDBusPendingReply<QVariantMap> propsReply = managerPropertiesInterface.callWithArgumentList(
             QDBus::Block, "GetAll"_L1, argumentList);
-    if (!propsReply.isError()) {
-        propertyMap = propsReply.value();
-    } else {
-        qWarning() << "propsReply" << propsReply.error().message();
+    if (propsReply.isError()) {
+        validDBusConnection = false;
+        if (auto error = propsReply.error(); error.type() != QDBusError::AccessDenied)
+            qWarning() << "Failed to query NetworkManager properties:" << error.message();
+        return;
     }
+    propertyMap = propsReply.value();
 
-    QDBusConnection::systemBus().connect(NM_DBUS_SERVICE ""_L1, NM_DBUS_PATH ""_L1,
-            DBUS_PROPERTIES_INTERFACE""_L1, "PropertiesChanged"_L1, this,
-            SLOT(setProperties(QString, QMap<QString, QVariant>, QList<QString>)));
+    validDBusConnection = QDBusConnection::systemBus().connect(NM_DBUS_SERVICE, NM_DBUS_PATH,
+            DBUS_PROPERTIES_INTERFACE, propertiesChangedKey, this,
+            SLOT(setProperties(QString,QMap<QString,QVariant>,QList<QString>)));
 }
 
 QNetworkManagerInterface::~QNetworkManagerInterface()
 {
-    QDBusConnection::systemBus().disconnect(NM_DBUS_SERVICE ""_L1, NM_DBUS_PATH ""_L1,
-            DBUS_PROPERTIES_INTERFACE ""_L1, "PropertiesChanged"_L1, this,
-            SLOT(setProperties(QString, QMap<QString, QVariant>, QList<QString>)));
+    QDBusConnection::systemBus().disconnect(NM_DBUS_SERVICE, NM_DBUS_PATH,
+            DBUS_PROPERTIES_INTERFACE, propertiesChangedKey, this,
+            SLOT(setProperties(QString,QMap<QString,QVariant>,QList<QString>)));
 }
 
 QNetworkManagerInterface::NMState QNetworkManagerInterface::state() const
 {
-    if (propertyMap.contains("State"))
-        return static_cast<QNetworkManagerInterface::NMState>(propertyMap.value("State").toUInt());
+    auto it = propertyMap.constFind(stateKey());
+    if (it != propertyMap.cend())
+        return static_cast<QNetworkManagerInterface::NMState>(it->toUInt());
     return QNetworkManagerInterface::NM_STATE_UNKNOWN;
 }
 
 QNetworkManagerInterface::NMConnectivityState QNetworkManagerInterface::connectivityState() const
 {
-    if (propertyMap.contains("Connectivity"))
-        return static_cast<NMConnectivityState>(propertyMap.value("Connectivity").toUInt());
+    auto it = propertyMap.constFind(connectivityKey());
+    if (it != propertyMap.cend())
+        return static_cast<NMConnectivityState>(it->toUInt());
     return QNetworkManagerInterface::NM_CONNECTIVITY_UNKNOWN;
 }
 
@@ -102,7 +126,7 @@ static std::optional<QDBusInterface> getPrimaryDevice(const QDBusObjectPath &dev
 
 std::optional<QDBusObjectPath> QNetworkManagerInterface::primaryConnectionDevicePath() const
 {
-    auto it = propertyMap.constFind(u"PrimaryConnection"_s);
+    auto it = propertyMap.constFind(primaryConnectionKey());
     if (it != propertyMap.cend())
         return it->value<QDBusObjectPath>();
     return std::nullopt;
@@ -150,6 +174,11 @@ auto QNetworkManagerInterface::extractDeviceMetered(const QDBusObjectPath &devic
     return static_cast<NMMetered>(metered.toUInt());
 }
 
+void QNetworkManagerInterface::setBackend(QNetworkManagerNetworkInformationBackend *ourBackend)
+{
+    backend = ourBackend;
+}
+
 void QNetworkManagerInterface::setProperties(const QString &interfaceName,
                                              const QMap<QString, QVariant> &map,
                                              const QStringList &invalidatedProperties)
@@ -169,18 +198,18 @@ void QNetworkManagerInterface::setProperties(const QString &interfaceName,
         }
 
         if (valueChanged) {
-            if (i.key() == "State"_L1) {
+            if (i.key() == stateKey()) {
                 quint32 state = i.value().toUInt();
-                Q_EMIT stateChanged(static_cast<NMState>(state));
-            } else if (i.key() == "Connectivity"_L1) {
+                backend->onStateChanged(static_cast<NMState>(state));
+            } else if (i.key() == connectivityKey()) {
                 quint32 state = i.value().toUInt();
-                Q_EMIT connectivityChanged(static_cast<NMConnectivityState>(state));
-            } else if (i.key() == "PrimaryConnection"_L1) {
+                backend->onConnectivityChanged(static_cast<NMConnectivityState>(state));
+            } else if (i.key() == primaryConnectionKey()) {
                 const QDBusObjectPath devicePath = i->value<QDBusObjectPath>();
-                Q_EMIT deviceTypeChanged(extractDeviceType(devicePath));
-                Q_EMIT meteredChanged(extractDeviceMetered(devicePath));
+                backend->onDeviceTypeChanged(extractDeviceType(devicePath));
+                backend->onMeteredChanged(extractDeviceMetered(devicePath));
             } else if (i.key() == "Metered"_L1) {
-                Q_EMIT meteredChanged(static_cast<NMMetered>(i->toUInt()));
+                backend->onMeteredChanged(static_cast<NMMetered>(i->toUInt()));
             }
         }
     }

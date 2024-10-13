@@ -25,15 +25,26 @@ Q_GUI_EXPORT int qt_defaultDpiX();
 
 namespace QStyleHelper {
 
-QString uniqueName(const QString &key, const QStyleOption *option, const QSize &size)
+static inline bool usePixmapCache(const QStyleOption *opt)
 {
+    if (QWidget *widget = qobject_cast<QWidget *>(opt->styleObject))
+        return !widget->testAttribute(Qt::WA_StyleSheetTarget);
+    return true;
+}
+
+QString uniqueName(const QString &key, const QStyleOption *option, const QSize &size, qreal dpr)
+{
+    if (!usePixmapCache(option))
+        return {};
+
     const QStyleOptionComplex *complexOption = qstyleoption_cast<const QStyleOptionComplex *>(option);
     QString tmp = key % HexString<uint>(option->state)
                       % HexString<uint>(option->direction)
                       % HexString<uint>(complexOption ? uint(complexOption->activeSubControls) : 0u)
                       % HexString<quint64>(option->palette.cacheKey())
                       % HexString<uint>(size.width())
-                      % HexString<uint>(size.height());
+                      % HexString<uint>(size.height())
+                      % HexString<qreal>(dpr);
 
 #if QT_CONFIG(spinbox)
     if (const QStyleOptionSpinBox *spinBox = qstyleoption_cast<const QStyleOptionSpinBox *>(option)) {
@@ -191,7 +202,7 @@ QPolygonF calcLines(const QStyleOptionSlider *dial)
     qreal xc = width / 2 + 0.5;
     qreal yc = height / 2 + 0.5;
     const int ns = dial->tickInterval;
-    if (!ns) // Invalid values may be set by Qt Designer.
+    if (!ns) // Invalid values may be set by Qt Widgets Designer.
         return poly;
     int notches = (dial->maximum + ns - 1 - dial->minimum) / ns;
     if (notches <= 0)

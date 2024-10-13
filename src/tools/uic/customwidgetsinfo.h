@@ -7,6 +7,7 @@
 #include "treewalker.h"
 #include <qstringlist.h>
 #include <qmap.h>
+#include <QtCore/qmetaobject.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -29,7 +30,7 @@ public:
     QString customWidgetAddPageMethod(const QString &name) const;
     QString simpleContainerAddPageMethod(const QString &name) const;
 
-    QString realClassName(const QString &className) const;
+    static QString realClassName(const QString &className);
 
     bool extends(const QString &className, QAnyStringView baseClassName) const;
     bool extendsOneOf(const QString &className, const QStringList &baseClassNames) const;
@@ -38,10 +39,14 @@ public:
 
     bool isAmbiguousSignal(const QString &className,
                            const QString &signalSignature) const;
+    bool isAmbiguousSlot(const QString &className,
+                         const QString &slotSignature) const;
 
 private:
     using NameCustomWidgetMap = QMap<QString, DomCustomWidget*>;
     NameCustomWidgetMap m_customWidgets;
+    bool isAmbiguous(const QString &className, const QString &signature,
+                     QMetaMethod::MethodType type) const;
 };
 
 QT_END_NAMESPACE

@@ -11,6 +11,7 @@
 #include "qthreadstorage.h"
 
 QT_BEGIN_NAMESPACE
+QT_DEFINE_QESDP_SPECIALIZATION_DTOR(QCollatorSortKeyPrivate)
 
 namespace {
 struct GenerationalCollator
@@ -57,9 +58,25 @@ Q_GLOBAL_STATIC(QThreadStorage<GenerationalCollator>, defaultCollator)
     In addition to the locale, several optional flags can be set that influence
     the result of the collation.
 
-    \note On Linux, Qt is normally compiled to use ICU. When it isn't, all
-    options are ignored and the only supported locales are the system default
-    (that \c{setlocale(LC_COLLATE, nullptr)} would report) and the "C" locale.
+    \section1 POSIX fallback implementation
+
+    On Unix systems, Qt is normally compiled to use ICU (except for \macos,
+    where Qt defaults to using an equivalent Apple API). However, if ICU was
+    not available at compile time or explicitly disabled, Qt will use a
+    fallback backend that uses the POSIX API only. This backend has several
+    limitations:
+
+    \list
+      \li Only the QLocale::c() and QLocale::system() locales are supported.
+          Consult the POSIX and C Standard Library manuals for the
+          \c{<locale.h>} header for more information on the system locale.
+      \li caseSensitivity() is not supported: only case-sensitive collation
+          can be performed.
+      \li numericMode() and ignorePunctuation() are not supported.
+    \endlist
+
+    The use of any of the unsupported options will cause a warning to be
+    printed to the application's output.
 */
 
 /*!
@@ -134,19 +151,19 @@ QCollator &QCollator::operator=(const QCollator &other)
 
     Move constructor. Moves from \a other into this collator.
 
-    Note that a moved-from QCollator can only be destroyed or assigned to.
-    The effect of calling other functions than the destructor or one of the
-    assignment operators is undefined.
+//! [partially-formed]
+    \note The moved-from object \a other is placed in a partially-formed state,
+    in which the only valid operations are destruction and assignment of a new
+    value.
+//! [partially-formed]
 */
 
 /*!
     \fn QCollator & QCollator::operator=(QCollator && other)
 
-    Move-assigns from \a other to this collator.
+    Move-assigns \a other to this QCollator instance.
 
-    Note that a moved-from QCollator can only be destroyed or assigned to.
-    The effect of calling other functions than the destructor or one of the
-    assignment operators is undefined.
+    \include qcollator.cpp partially-formed
 */
 
 /*!
@@ -301,8 +318,8 @@ bool QCollator::ignorePunctuation() const
 
     Compares \a s1 with \a s2.
 
-    Returns an integer less than, equal to, or greater than zero depending on
-    whether \a s1 sorts before, with or after \a s2.
+    Returns a negative integer if \a s1 is less than \a s2, a positive integer
+    if it is greater than \a s2, and zero if they are equal.
 */
 
 /*!
@@ -325,8 +342,9 @@ bool QCollator::ignorePunctuation() const
     Compares \a s1 with \a s2. \a len1 and \a len2 specify the lengths of the
     QChar arrays pointed to by \a s1 and \a s2.
 
-    Returns an integer less than, equal to, or greater than zero depending on
-    whether \a s1 sorts before, with or after \a s2.
+    Returns a negative integer if \a s1 is less than \a s2, a positive integer
+    if it is greater than \a s2, and zero if they are equal.
+
 
     \note In Qt versions prior to 6.4, the length arguments were of type
     \c{int}, not \c{qsizetype}.
@@ -407,6 +425,14 @@ QCollatorSortKey::QCollatorSortKey(const QCollatorSortKey &other)
 }
 
 /*!
+    \since 6.8
+    \fn QCollatorSortKey::QCollatorSortKey(QCollatorSortKey &&other)
+    Move-constructs a new QCollatorSortKey from \a other.
+
+    \include qcollator.cpp partially-formed
+*/
+
+/*!
     Destroys the collator key.
 */
 QCollatorSortKey::~QCollatorSortKey()
@@ -427,7 +453,9 @@ QCollatorSortKey& QCollatorSortKey::operator=(const QCollatorSortKey &other)
 /*!
     \fn QCollatorSortKey &QCollatorSortKey::operator=(QCollatorSortKey && other)
 
-    Move-assigns \a other to this collator key.
+    Move-assigns \a other to this QCollatorSortKey instance.
+
+    \include qcollator.cpp partially-formed
 */
 
 /*!

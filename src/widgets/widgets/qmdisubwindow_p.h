@@ -42,7 +42,7 @@ template<typename T>
 class ControlElement : public T             // ELFVERSION:ignore
 {
 public:
-    ControlElement(QMdiSubWindow *child) : T(child, nullptr)
+    ControlElement(QMdiSubWindow *child) : T(nullptr)
     {
         Q_ASSERT(child);
         mdiChild = child;
@@ -236,6 +236,7 @@ public:
     bool restoreFocus();
     void storeFocusWidget();
     void setWindowFlags(Qt::WindowFlags windowFlags) override;
+    using QWidgetPrivate::setVisible;
     void setVisible(WindowStateAction, bool visible = true);
 #ifndef QT_NO_ACTION
     void setEnabled(WindowStateAction, bool enable = true);

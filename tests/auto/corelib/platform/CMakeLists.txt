@@ -3,4 +3,9 @@
 
 if(ANDROID)
     add_subdirectory(android)
+    add_subdirectory(android_appless)
+    add_subdirectory(androiditemmodel)
+endif()
+if(WIN32)
+    add_subdirectory(windows)
 endif()

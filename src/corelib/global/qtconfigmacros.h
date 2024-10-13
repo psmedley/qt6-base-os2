@@ -7,15 +7,12 @@
 #if 0
 #  pragma qt_sync_stop_processing
 #endif
-#ifdef QT_BOOTSTRAPPED
-// qconfig-bootstrapped.h is not supposed to be a part of the synced header files. So we find it by
-// the include path specified for Bootstrap library in the source tree instead of the build tree as
-// it's done for regular header files.
-#include "qconfig-bootstrapped.h"
-#else
-#include <QtCore/qconfig.h>
-#include <QtCore/qtcore-config.h>
-#endif
+
+#include <QtCore/qtconfiginclude.h>
+#include <QtCore/qtdeprecationdefinitions.h>
+#include <QtCore/qtversionchecks.h>
+
+#include <assert.h>
 
 /*
    The Qt modules' export macros.
@@ -48,6 +45,9 @@
    No, this is not an evil backdoor. QT_BUILD_INTERNAL just exports more symbols
    for Qt's internal unit tests. If you want slower loading times and more
    symbols that can vanish from version to version, feel free to define QT_BUILD_INTERNAL.
+
+   \note After adding Q_AUTOTEST_EXPORT to a method, you'll need to wrap any unittests
+   that will use that method in "#ifdef QT_BUILD_INTERNAL".
 */
 #if defined(QT_BUILD_INTERNAL) && defined(QT_BUILDING_QT) && defined(QT_SHARED)
 #    define Q_AUTOTEST_EXPORT Q_DECL_EXPORT
@@ -65,7 +65,7 @@
         1: The feature is available
 */
 #define QT_CONFIG(feature) (1/QT_FEATURE_##feature == 1)
-#define QT_REQUIRE_CONFIG(feature) Q_STATIC_ASSERT_X(QT_FEATURE_##feature == 1, "Required feature " #feature " for file " __FILE__ " not available.")
+#define QT_REQUIRE_CONFIG(feature) static_assert(QT_FEATURE_##feature == 1, "Required feature " #feature " for file " __FILE__ " not available.")
 
 /* moc compats (signals/slots) */
 #ifndef QT_MOC_COMPAT
@@ -106,6 +106,22 @@
 # define QT_END_INCLUDE_NAMESPACE
 # define QT_FORWARD_DECLARE_CLASS(name) class name;
 # define QT_FORWARD_DECLARE_STRUCT(name) struct name;
+
+#elif defined(QT_INLINE_NAMESPACE) /* user inline namespace FIXME in Qt 7: Default */
+
+# define QT_PREPEND_NAMESPACE(name) ::QT_NAMESPACE::name
+# define QT_USE_NAMESPACE
+# define QT_BEGIN_NAMESPACE inline namespace QT_NAMESPACE {
+# define QT_END_NAMESPACE }
+# define QT_BEGIN_INCLUDE_NAMESPACE }
+# define QT_END_INCLUDE_NAMESPACE inline namespace QT_NAMESPACE {
+# define QT_FORWARD_DECLARE_CLASS(name) \
+QT_BEGIN_NAMESPACE class name; QT_END_NAMESPACE
+
+# define QT_FORWARD_DECLARE_STRUCT(name) \
+QT_BEGIN_NAMESPACE struct name; QT_END_NAMESPACE
+
+inline namespace QT_NAMESPACE {}
 
 #else /* user namespace */
 
@@ -156,5 +172,43 @@ namespace QT_NAMESPACE {}
 #ifndef QT_END_MOC_NAMESPACE
 # define QT_END_MOC_NAMESPACE
 #endif
+
+/*
+    Strict mode
+*/
+#ifdef QT_ENABLE_STRICT_MODE_UP_TO
+#ifndef QT_DISABLE_DEPRECATED_UP_TO
+#  define QT_DISABLE_DEPRECATED_UP_TO QT_ENABLE_STRICT_MODE_UP_TO
+#endif
+
+#if QT_ENABLE_STRICT_MODE_UP_TO >= QT_VERSION_CHECK(6, 0, 0)
+#  define QT_NO_FOREACH
+#  define QT_NO_CAST_FROM_ASCII
+#  define QT_NO_CAST_TO_ASCII
+#  define QT_NO_CAST_FROM_BYTEARRAY
+#  define QT_NO_URL_CAST_FROM_STRING
+#  define QT_NO_NARROWING_CONVERSIONS_IN_CONNECT
+#  define QT_NO_JAVA_STYLE_ITERATORS
+#endif // 6.0.0
+
+#if QT_ENABLE_STRICT_MODE_UP_TO >= QT_VERSION_CHECK(6, 6, 0)
+#  define QT_NO_QEXCHANGE
+#endif // 6.6.0
+
+#if QT_ENABLE_STRICT_MODE_UP_TO >= QT_VERSION_CHECK(6, 7, 0)
+#  define QT_NO_CONTEXTLESS_CONNECT
+#endif // 6.7.0
+
+#if QT_ENABLE_STRICT_MODE_UP_TO >= QT_VERSION_CHECK(6, 8, 0)
+#  define QT_NO_QASCONST
+#  if !defined(QT_USE_NODISCARD_FILE_OPEN) && !defined(QT_NO_USE_NODISCARD_FILE_OPEN)
+#    define QT_USE_NODISCARD_FILE_OPEN
+#  endif
+#endif // 6.8.0
+
+#if QT_ENABLE_STRICT_MODE_UP_TO >= QT_VERSION_CHECK(6, 9, 0)
+#  define QT_NO_QSNPRINTF
+#endif // 6.9.0
+#endif // QT_ENABLE_STRICT_MODE_UP_TO
 
 #endif /* QTCONFIGMACROS_H */

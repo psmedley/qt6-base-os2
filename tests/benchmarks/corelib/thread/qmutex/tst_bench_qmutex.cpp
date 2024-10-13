@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtCore/QtCore>
 #include <QTest>
@@ -8,6 +8,8 @@
 #include <math.h>
 
 //#define USE_SEM_T
+
+using namespace std::chrono_literals;
 
 #if defined(Q_OS_UNIX)
 #if !defined(USE_SEM_T)
@@ -228,7 +230,8 @@ void tst_QMutex::contendedNative_data()
 class NativeMutexThread : public QThread
 {
     NativeMutexType *mutex1, *mutex2;
-    int iterations, msleepDuration;
+    int iterations;
+    std::chrono::milliseconds msleepDuration;
     bool use2mutexes;
 public:
     bool done;
@@ -246,8 +249,8 @@ public:
                 NativeMutexLock(mutex1);
                 if (use2mutexes)
                     NativeMutexLock(mutex2);
-                if (msleepDuration >= 0)
-                    msleep(msleepDuration);
+                if (msleepDuration >= 0ms)
+                    sleep(msleepDuration);
                 if (use2mutexes)
                     NativeMutexUnlock(mutex2);
                 NativeMutexUnlock(mutex1);
@@ -298,7 +301,8 @@ void tst_QMutex::contendedNative()
 class QMutexThread : public QThread
 {
     QMutex *mutex1, *mutex2;
-    int iterations, msleepDuration;
+    int iterations;
+    std::chrono::milliseconds msleepDuration;
     bool use2mutexes;
 public:
     bool done;
@@ -316,8 +320,8 @@ public:
                 mutex1->lock();
                 if (use2mutexes)
                     mutex2->lock();
-                if (msleepDuration >= 0)
-                    msleep(msleepDuration);
+                if (msleepDuration >= 0ms)
+                    sleep(msleepDuration);
                 if (use2mutexes)
                     mutex2->unlock();
                 mutex1->unlock();
@@ -363,7 +367,8 @@ void tst_QMutex::contendedQMutex()
 class QMutexLockerThread : public QThread
 {
     QMutex *mutex1, *mutex2;
-    int iterations, msleepDuration;
+    int iterations;
+    std::chrono::milliseconds msleepDuration;
     bool use2mutexes;
 public:
     bool done;
@@ -381,8 +386,8 @@ public:
                 {
                     QMutexLocker locker1(mutex1);
                     QMutexLocker locker2(use2mutexes ? mutex2 : 0);
-                    if (msleepDuration >= 0)
-                        msleep(msleepDuration);
+                    if (msleepDuration >= 0ms)
+                        sleep(msleepDuration);
                 }
 
                 QThread::yieldCurrentThread();

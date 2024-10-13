@@ -27,7 +27,6 @@
 #include "QtGui/qpainter.h"
 #include "QtWidgets/qstyle.h"
 #include "QtWidgets/qstyleoption.h"
-#include "QtCore/qpair.h"
 #include "QtCore/qtimer.h"
 #include "private/qwidget_p.h"
 #include "QtCore/qpointer.h"
@@ -184,6 +183,7 @@ class Q_WIDGETS_EXPORT QComboBoxPrivateContainer : public QFrame
 
 public:
     QComboBoxPrivateContainer(QAbstractItemView *itemView, QComboBox *parent);
+    ~QComboBoxPrivateContainer();
     QAbstractItemView *itemView() const;
     void setItemView(QAbstractItemView *itemView);
     int spacing() const;
@@ -319,24 +319,25 @@ public:
     QComboBoxPrivateContainer* viewContainer();
     void updateLineEditGeometry();
     Qt::MatchFlags matchFlags() const;
-    void _q_editingFinished();
-    void _q_returnPressed();
-    void _q_complete();
-    void _q_itemSelected(const QModelIndex &item);
+    void editingFinished();
+    void returnPressed();
+    void complete();
+    void itemSelected(const QModelIndex &item);
     bool contains(const QString &text, int role);
     void emitActivated(const QModelIndex &index);
-    void _q_emitHighlighted(const QModelIndex &index);
-    void _q_emitCurrentIndexChanged(const QModelIndex &index);
-    void _q_modelDestroyed();
-    void _q_modelReset();
+    void emitHighlighted(const QModelIndex &index);
+    void emitCurrentIndexChanged(const QModelIndex &index);
+    void modelDestroyed();
+    void modelReset();
+    void updateMicroFocus() { q_func()->updateMicroFocus(); } // PMF connect doesn't handle default args
 #if QT_CONFIG(completer)
-    void _q_completerActivated(const QModelIndex &index);
+    void completerActivated(const QModelIndex &index);
 #endif
-    void _q_resetButton();
-    void _q_dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
-    void _q_updateIndexBeforeChange();
-    void _q_rowsInserted(const QModelIndex &parent, int start, int end);
-    void _q_rowsRemoved(const QModelIndex &parent, int start, int end);
+    void resetButton();
+    void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
+    void updateIndexBeforeChange();
+    void rowsInserted(const QModelIndex &parent, int start, int end);
+    void rowsRemoved(const QModelIndex &parent, int start, int end);
     void updateArrow(QStyle::StateFlag state);
     bool updateHoverControl(const QPoint &pos);
     void trySetValidIndex();
@@ -357,6 +358,9 @@ public:
     void updateFocusPolicy();
     void showPopupFromMouseEvent(QMouseEvent *e);
     void doHidePopup();
+    void updateCurrentText(const QString &text);
+    void connectModel();
+    void disconnectModel();
 
 #ifdef Q_OS_MAC
     void cleanupNativePopup();
@@ -373,15 +377,17 @@ public:
     };
 #endif
 
+    std::array<QMetaObject::Connection, 8> modelConnections;
     QAbstractItemModel *model = nullptr;
     QLineEdit *lineEdit = nullptr;
-    QComboBoxPrivateContainer *container = nullptr;
+    QPointer<QComboBoxPrivateContainer> container;
 #ifdef Q_OS_MAC
     QPlatformMenu *m_platformMenu = nullptr;
 #endif
     QPersistentModelIndex currentIndex;
     QPersistentModelIndex root;
     QString placeholderText;
+    QString currentText;
     QRect hoverRect;
     QSize iconSize;
     mutable QSize minimumSizeHint;

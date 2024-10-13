@@ -1,7 +1,7 @@
 /*
 
 * Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 */
 
@@ -83,8 +83,8 @@ public:
 
         line = new QFrame(FormWindowSettings);
         line->setObjectName("line");
-        line->setFrameShape(QFrame::HLine);
-        line->setFrameShadow(QFrame::Sunken);
+        line->setFrameShape(QFrame::Shape::HLine);
+        line->setFrameShadow(QFrame::Shadow::Sunken);
 
         gridLayout->addWidget(line, 5, 0, 1, 2);
 
@@ -219,7 +219,7 @@ public:
 
         gridLayout->addLayout(hboxLayout1, 3, 1, 1, 1);
 
-        spacerItem = new QSpacerItem(111, 115, QSizePolicy::Minimum, QSizePolicy::Expanding);
+        spacerItem = new QSpacerItem(111, 115, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
 
         gridLayout->addItem(spacerItem, 4, 1, 1, 1);
 

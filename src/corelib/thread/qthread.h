@@ -9,10 +9,8 @@
 #include <QtCore/qdeadlinetimer.h>
 
 // For QThread::create
-#if QT_CONFIG(cxx11_future)
-#  include <future> // for std::async
-#  include <functional> // for std::invoke; no guard needed as it's a C++98 header
-#endif
+#include <future> // for std::async
+#include <functional> // for std::invoke; no guard needed as it's a C++98 header
 // internal compiler error with mingw 8.1
 #if defined(Q_CC_MSVC) && defined(Q_PROCESSOR_X86)
 #include <intrin.h>
@@ -24,6 +22,7 @@ QT_BEGIN_NAMESPACE
 class QThreadData;
 class QThreadPrivate;
 class QAbstractEventDispatcher;
+class QEventLoopLocker;
 
 class Q_CORE_EXPORT QThread : public QObject
 {
@@ -31,6 +30,7 @@ class Q_CORE_EXPORT QThread : public QObject
 public:
     static Qt::HANDLE currentThreadId() noexcept Q_DECL_PURE_FUNCTION;
     static QThread *currentThread();
+    static bool isMainThread() noexcept;
     static int idealThreadCount() noexcept;
     static void yieldCurrentThread();
 
@@ -69,10 +69,10 @@ public:
     bool event(QEvent *event) override;
     int loopLevel() const;
 
-#if QT_CONFIG(cxx11_future) || defined(Q_QDOC)
+    bool isCurrentThread() const noexcept;
+
     template <typename Function, typename... Args>
     [[nodiscard]] static QThread *create(Function &&f, Args &&... args);
-#endif
 
 public Q_SLOTS:
     void start(Priority = InheritPriority);
@@ -92,6 +92,7 @@ public:
     static void sleep(unsigned long);
     static void msleep(unsigned long);
     static void usleep(unsigned long);
+    static void sleep(std::chrono::nanoseconds nsec);
 
 Q_SIGNALS:
     void started(QPrivateSignal);
@@ -108,17 +109,15 @@ protected:
 
 private:
     Q_DECLARE_PRIVATE(QThread)
+    friend class QEventLoopLocker;
 
-#if QT_CONFIG(cxx11_future)
     [[nodiscard]] static QThread *createThreadImpl(std::future<void> &&future);
-#endif
     static Qt::HANDLE currentThreadIdImpl() noexcept Q_DECL_PURE_FUNCTION;
 
     friend class QCoreApplication;
     friend class QThreadData;
 };
 
-#if QT_CONFIG(cxx11_future)
 template <typename Function, typename... Args>
 QThread *QThread::create(Function &&f, Args &&... args)
 {
@@ -133,7 +132,6 @@ QThread *QThread::create(Function &&f, Args &&... args)
                                        std::move(threadFunction),
                                        std::forward<Args>(args)...));
 }
-#endif // QT_CONFIG(cxx11_future)
 
 /*
     On architectures and platforms we know, interpret the thread control
@@ -156,13 +154,13 @@ inline Qt::HANDLE QThread::currentThreadId() noexcept
     static_assert(sizeof(tid) == sizeof(void*));
     // See https://akkadia.org/drepper/tls.pdf for x86 ABI
 #if defined(Q_PROCESSOR_X86_32) && ((defined(Q_OS_LINUX) && defined(__GLIBC__)) || defined(Q_OS_FREEBSD)) // x86 32-bit always uses GS
-    __asm__("movl %%gs:%c1, %0" : "=r" (tid) : "i" (2 * sizeof(void*)) : );
-#elif defined(Q_PROCESSOR_X86_64) && defined(Q_OS_DARWIN64)
+    __asm__("mov %%gs:%c1, %0" : "=r" (tid) : "i" (2 * sizeof(void*)) : );
+#elif defined(Q_PROCESSOR_X86_64) && defined(Q_OS_DARWIN)
     // 64bit macOS uses GS, see https://github.com/apple/darwin-xnu/blob/master/libsyscall/os/tsd.h
-    __asm__("movq %%gs:0, %0" : "=r" (tid) : : );
+    __asm__("mov %%gs:0, %0" : "=r" (tid) : : );
 #elif defined(Q_PROCESSOR_X86_64) && ((defined(Q_OS_LINUX) && defined(__GLIBC__)) || defined(Q_OS_FREEBSD))
     // x86_64 Linux, BSD uses FS
-    __asm__("movq %%fs:%c1, %0" : "=r" (tid) : "i" (2 * sizeof(void*)) : );
+    __asm__("mov %%fs:%c1, %0" : "=r" (tid) : "i" (2 * sizeof(void*)) : );
 #elif defined(Q_PROCESSOR_X86_64) && defined(Q_OS_WIN)
     // See https://en.wikipedia.org/wiki/Win32_Thread_Information_Block
     // First get the pointer to the TIB

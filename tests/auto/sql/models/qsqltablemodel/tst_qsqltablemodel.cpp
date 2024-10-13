@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -116,6 +116,8 @@ private slots:
     void submitAllOnInvalidTable();
     void insertRecordsInLoop_data() { generic_data(); }
     void insertRecordsInLoop();
+    void sqlite_escaped_delimiters_data() { generic_data("QSQLITE"); }
+    void sqlite_escaped_delimiters();
     void sqlite_attachedDatabase_data() { generic_data("QSQLITE"); }
     void sqlite_attachedDatabase(); // For task 130799
     void tableModifyWithBlank_data() { generic_data(); }
@@ -155,18 +157,15 @@ void tst_QSqlTableModel::dropTestTables()
         if (dbType == QSqlDriver::PostgreSQL)
             QVERIFY_SQL( q, exec("set client_min_messages='warning'"));
 
-        QStringList tableNames;
-        tableNames << qTableName("test1", __FILE__, db)
-                   << qTableName("test2", __FILE__, db)
-                   << qTableName("test3", __FILE__, db)
-                   << qTableName("test4", __FILE__, db)
-                   << qTableName("emptytable", __FILE__, db)
-                   << qTableName("bigtable", __FILE__, db)
-                   << qTableName("foo", __FILE__, db)
-                   << qTableName("pktest", __FILE__, db);
-        if (testWhiteSpaceNames(db.driverName()))
-            tableNames << qTableName("qtestw hitespace", db);
-
+        QStringList tableNames{qTableName("test1", __FILE__, db),
+                               qTableName("test2", __FILE__, db),
+                               qTableName("test3", __FILE__, db),
+                               qTableName("test4", __FILE__, db),
+                               qTableName("emptytable", __FILE__, db),
+                               qTableName("bigtable", __FILE__, db),
+                               qTableName("foo", __FILE__, db),
+                               qTableName("pktest", __FILE__, db),
+                               qTableName("qtestw hitespace", __FILE__, db)};
         tst_Databases::safeDropTables(db, tableNames);
 
         if (db.driverName().startsWith("QPSQL")) {
@@ -196,10 +195,8 @@ void tst_QSqlTableModel::createTestTables()
 
         QVERIFY_SQL(q, exec("create table " + qTableName("emptytable", __FILE__, db) + "(id int)"));
 
-        if (testWhiteSpaceNames(db.driverName())) {
-            QString qry = "create table " + qTableName("qtestw hitespace", db) + " ("+ db.driver()->escapeIdentifier("a field", QSqlDriver::FieldName) + " int)";
-            QVERIFY_SQL( q, exec(qry));
-        }
+        const auto fieldStr = db.driver()->escapeIdentifier("a field", QSqlDriver::FieldName);
+        QVERIFY_SQL(q, exec("create table " + qTableName("qtestw hitespace", __FILE__, db) + " ("+ fieldStr + " int)"));
 
         QVERIFY_SQL(q, exec("create table " + qTableName("pktest", __FILE__, db) + "(id int not null primary key, a varchar(20))"));
     }
@@ -430,8 +427,7 @@ void tst_QSqlTableModel::insertColumns()
 {
     // Just like the select test, with extra stuff
     QFETCH(QString, dbName);
-    QFETCH(int, submitpolicy_i);
-    QSqlTableModel::EditStrategy submitpolicy = (QSqlTableModel::EditStrategy) submitpolicy_i;
+    QFETCH(QSqlTableModel::EditStrategy, submitpolicy);
     QSqlDatabase db = QSqlDatabase::database(dbName);
     CHECK_DATABASE(db);
     const auto test = qTableName("test1", __FILE__, db);
@@ -581,13 +577,13 @@ void tst_QSqlTableModel::setRecord()
     CHECK_DATABASE(db);
     const auto test3 = qTableName("test3", __FILE__, db);
 
-    QList<QSqlTableModel::EditStrategy> policies = QList<QSqlTableModel::EditStrategy>() << QSqlTableModel::OnFieldChange << QSqlTableModel::OnRowChange << QSqlTableModel::OnManualSubmit;
+    const auto policies = { QSqlTableModel::OnFieldChange, QSqlTableModel::OnRowChange, QSqlTableModel::OnManualSubmit };
 
     QString Xsuffix;
-    foreach( QSqlTableModel::EditStrategy submitpolicy, policies) {
+    for (QSqlTableModel::EditStrategy submitpolicy : policies) {
 
         QSqlTableModel model(0, db);
-        model.setEditStrategy((QSqlTableModel::EditStrategy)submitpolicy);
+        model.setEditStrategy(submitpolicy);
         model.setTable(test3);
         model.setSort(0, Qt::AscendingOrder);
         QVERIFY_SQL(model, select());
@@ -601,7 +597,7 @@ void tst_QSqlTableModel::setRecord()
             QVERIFY(model.setRecord(i, rec));
 
             // dataChanged() emitted by setData() for each *changed* column
-            if ((QSqlTableModel::EditStrategy)submitpolicy == QSqlTableModel::OnManualSubmit) {
+            if (submitpolicy == QSqlTableModel::OnManualSubmit) {
                 QCOMPARE(spy.size(), 2);
                 QCOMPARE(spy.at(0).size(), 2);
                 QCOMPARE(qvariant_cast<QModelIndex>(spy.at(0).at(0)), model.index(i, 1));
@@ -609,10 +605,10 @@ void tst_QSqlTableModel::setRecord()
                 QCOMPARE(qvariant_cast<QModelIndex>(spy.at(1).at(0)), model.index(i, 2));
                 QCOMPARE(qvariant_cast<QModelIndex>(spy.at(1).at(1)), model.index(i, 2));
                 QVERIFY(model.submitAll());
-            } else if ((QSqlTableModel::EditStrategy)submitpolicy == QSqlTableModel::OnRowChange && i == model.rowCount() -1)
+            } else if (submitpolicy == QSqlTableModel::OnRowChange && i == model.rowCount() -1)
                 model.submit();
             else {
-                if ((QSqlTableModel::EditStrategy)submitpolicy != QSqlTableModel::OnManualSubmit)
+                if (submitpolicy != QSqlTableModel::OnManualSubmit)
                     // dataChanged() also emitted by selectRow()
                     QCOMPARE(spy.size(), 3);
                 else
@@ -714,8 +710,7 @@ void tst_QSqlTableModel::recordReimpl()
 void tst_QSqlTableModel::insertRow()
 {
     QFETCH(QString, dbName);
-    QFETCH(int, submitpolicy_i);
-    QSqlTableModel::EditStrategy submitpolicy = (QSqlTableModel::EditStrategy) submitpolicy_i;
+    QFETCH(QSqlTableModel::EditStrategy, submitpolicy);
     QSqlDatabase db = QSqlDatabase::database(dbName);
     CHECK_DATABASE(db);
     const auto test = qTableName("test1", __FILE__, db);
@@ -824,8 +819,7 @@ void tst_QSqlTableModel::insertRowFailure()
 {
     QFETCH(QString, dbName);
     QSqlDatabase db = QSqlDatabase::database(dbName);
-    QFETCH(int, submitpolicy_i);
-    QSqlTableModel::EditStrategy submitpolicy = (QSqlTableModel::EditStrategy) submitpolicy_i;
+    QFETCH(QSqlTableModel::EditStrategy, submitpolicy);
     CHECK_DATABASE(db);
 
     QSqlTableModel model(0, db);
@@ -974,8 +968,7 @@ void tst_QSqlTableModel::insertMultiRecords()
 void tst_QSqlTableModel::insertWithAutoColumn()
 {
     QFETCH(QString, dbName);
-    QFETCH(int, submitpolicy_i);
-    QSqlTableModel::EditStrategy submitpolicy = (QSqlTableModel::EditStrategy) submitpolicy_i;
+    QFETCH(QSqlTableModel::EditStrategy, submitpolicy);
     QSqlDatabase db = QSqlDatabase::database(dbName);
     CHECK_DATABASE(db);
 
@@ -1197,8 +1190,7 @@ void tst_QSqlTableModel::removeRows()
 void tst_QSqlTableModel::removeInsertedRow()
 {
     QFETCH(QString, dbName);
-    QFETCH(int, submitpolicy_i);
-    QSqlTableModel::EditStrategy submitpolicy = (QSqlTableModel::EditStrategy) submitpolicy_i;
+    QFETCH(QSqlTableModel::EditStrategy, submitpolicy);
     QSqlDatabase db = QSqlDatabase::database(dbName);
     CHECK_DATABASE(db);
     const auto test = qTableName("test1", __FILE__, db);
@@ -1382,8 +1374,7 @@ void tst_QSqlTableModel::removeInsertedRows()
 void tst_QSqlTableModel::revert()
 {
     QFETCH(QString, dbName);
-    QFETCH(int, submitpolicy_i);
-    QSqlTableModel::EditStrategy submitpolicy = (QSqlTableModel::EditStrategy) submitpolicy_i;
+    QFETCH(QSqlTableModel::EditStrategy, submitpolicy);
     QSqlDatabase db = QSqlDatabase::database(dbName);
     CHECK_DATABASE(db);
 
@@ -1459,8 +1450,7 @@ void tst_QSqlTableModel::revert()
 void tst_QSqlTableModel::isDirty()
 {
     QFETCH(QString, dbName);
-    QFETCH(int, submitpolicy_i);
-    QSqlTableModel::EditStrategy submitpolicy = (QSqlTableModel::EditStrategy) submitpolicy_i;
+    QFETCH(QSqlTableModel::EditStrategy, submitpolicy);
     QSqlDatabase db = QSqlDatabase::database(dbName);
     CHECK_DATABASE(db);
     const auto test = qTableName("test1", __FILE__, db);
@@ -1665,11 +1655,11 @@ void tst_QSqlTableModel::emptyTable()
     QCOMPARE(model.columnCount(), 1);
 
     // QTBUG-29108: check correct horizontal header for empty query with pending insert
-    QCOMPARE(model.headerData(0, Qt::Horizontal).toString(), QString("id"));
+    QCOMPARE(model.headerData(0, Qt::Horizontal).toString().toLower(), QString("id"));
     model.setEditStrategy(QSqlTableModel::OnManualSubmit);
     model.insertRow(0);
     QCOMPARE(model.rowCount(), 1);
-    QCOMPARE(model.headerData(0, Qt::Horizontal).toString(), QString("id"));
+    QCOMPARE(model.headerData(0, Qt::Horizontal).toString().toLower(), QString("id"));
     model.revertAll();
 }
 
@@ -1700,10 +1690,7 @@ void tst_QSqlTableModel::whitespaceInIdentifiers()
     QSqlDatabase db = QSqlDatabase::database(dbName);
     CHECK_DATABASE(db);
 
-    if (!testWhiteSpaceNames(db.driverName()))
-        QSKIP("DBMS doesn't support whitespaces in identifiers");
-
-    QString tableName = qTableName("qtestw hitespace", db);
+    QString tableName = qTableName("qtestw hitespace", __FILE__, db);
 
     QSqlTableModel model(0, db);
     model.setTable(tableName);
@@ -1935,6 +1922,75 @@ void tst_QSqlTableModel::insertRecordsInLoop()
     QCOMPARE(model.columnCount(), 3);
 }
 
+void tst_QSqlTableModel::sqlite_escaped_delimiters()
+{
+    QFETCH(QString, dbName);
+    QSqlDatabase db = QSqlDatabase::database(dbName);
+    CHECK_DATABASE(db);
+    if (db.databaseName() == ":memory:")
+        QSKIP(":memory: database, skipping test");
+
+    auto attachedDb = QSqlDatabase::cloneDatabase(db, db.driverName() + QLatin1String("attached"));
+    attachedDb.setDatabaseName(db.databaseName() + QLatin1String("attached.dat"));
+    QVERIFY_SQL(attachedDb, open());
+    QSqlQuery q(attachedDb);
+    TableScope tsAttached(attachedDb, "attachedTestTable", __FILE__);
+    QVERIFY_SQL(q,
+                exec("CREATE TABLE attachedTestTable("
+                     "id int, \"attachedCol [unit]\" varchar(20))"));
+    QVERIFY_SQL(q,
+                exec("INSERT INTO attachedTestTable VALUES("
+                     "1, 'attachTestData')"));
+
+    QSqlQuery q2(db);
+    TableScope ts(db, "testTable", __FILE__);
+    QVERIFY_SQL(q2, exec("CREATE TABLE testTable(id int, \"col [unit]\" varchar(20))"));
+    QVERIFY_SQL(q2, exec("INSERT INTO testTable VALUES(2, 'testData')"));
+    QVERIFY_SQL(q2, exec("ATTACH DATABASE \"" + attachedDb.databaseName() + "\" AS attachedDb"));
+
+    const std::array<std::pair<QLatin1Char, QLatin1Char>, 3> escapingPairs{
+        std::make_pair(QLatin1Char{'"'}, QLatin1Char{'"'}),
+        std::make_pair(QLatin1Char{'`'}, QLatin1Char{'`'}),
+        std::make_pair(QLatin1Char{'['}, QLatin1Char{']'})
+    };
+
+    QSqlTableModel model(nullptr, db);
+    model.setTable("testTable");
+    QVERIFY_SQL(model, select());
+    for (const auto &escapingPair : escapingPairs) {
+        model.setTable(escapingPair.first + "testTable" + escapingPair.second);
+        QVERIFY_SQL(model, select());
+    }
+
+    model.setTable("attachedDb.attachedTestTable");
+    QFAIL_SQL(model, select());
+    for (const auto &escapingPair : escapingPairs) {
+        model.setTable(escapingPair.first + "attachedDb.attachedTestTable" + escapingPair.second);
+        QFAIL_SQL(model, select());
+        model.setTable(escapingPair.first + "attachedDb" + escapingPair.first + ".a"
+                       + escapingPair.second + "ttachedTestTable" + escapingPair.second);
+        QFAIL_SQL(model, select());
+    }
+
+    for (std::size_t i = 0; i <= escapingPairs.size(); ++i) {
+        for (std::size_t j = 0; j <= escapingPairs.size(); ++j) {
+            if (i == escapingPairs.size() && j == escapingPairs.size())
+                continue;
+
+            QString leftName = "attachedDb";
+            if (i != escapingPairs.size())
+                leftName = escapingPairs.at(i).first + leftName + escapingPairs.at(i).second;
+            QString rightName = "attachedTestTable";
+            if (j != escapingPairs.size())
+                rightName = escapingPairs.at(j).first + rightName + escapingPairs.at(j).second;
+            model.setTable(leftName + "." + rightName);
+            QVERIFY_SQL(model, select());
+        }
+    }
+
+    attachedDb.close();
+}
+
 void tst_QSqlTableModel::sqlite_attachedDatabase()
 {
     QFETCH(QString, dbName);
@@ -1947,21 +2003,23 @@ void tst_QSqlTableModel::sqlite_attachedDatabase()
     attachedDb.setDatabaseName(db.databaseName()+QLatin1String("attached.dat"));
     QVERIFY_SQL(attachedDb, open());
     QSqlQuery q(attachedDb);
-    tst_Databases::safeDropTables(attachedDb, QStringList() << "atest" << "atest2");
+    TableScope ts(db, "atest", __FILE__);
+    TableScope tsAttached(attachedDb, "atest", __FILE__);
+    TableScope tsAttached2(attachedDb, "atest2", __FILE__);
+
     QVERIFY_SQL( q, exec("CREATE TABLE atest(id int, text varchar(20))"));
     QVERIFY_SQL( q, exec("CREATE TABLE atest2(id int, text varchar(20))"));
     QVERIFY_SQL( q, exec("INSERT INTO atest VALUES(1, 'attached-atest')"));
     QVERIFY_SQL( q, exec("INSERT INTO atest2 VALUES(2, 'attached-atest2')"));
 
     QSqlQuery q2(db);
-    tst_Databases::safeDropTable(db, "atest");
     QVERIFY_SQL(q2, exec("CREATE TABLE atest(id int, text varchar(20))"));
     QVERIFY_SQL(q2, exec("INSERT INTO atest VALUES(3, 'main')"));
     QVERIFY_SQL(q2, exec("ATTACH DATABASE \""+attachedDb.databaseName()+"\" as adb"));
 
     // This should query the table in the attached database (schema supplied)
     QSqlTableModel model(0, db);
-    model.setTable("adb.atest");
+    model.setTable("\"adb\".\"atest\"");
     QVERIFY_SQL(model, select());
     QCOMPARE(model.rowCount(), 1);
     QCOMPARE(model.data(model.index(0, 0), Qt::DisplayRole).toInt(), 1);
@@ -2145,29 +2203,27 @@ void tst_QSqlTableModel::sqlite_selectFromIdentifierWithDot()
 {
     QFETCH(QString, dbName);
     QSqlDatabase db = QSqlDatabase::database(dbName);
+    TableScope fieldDot(db, "fieldDot", __FILE__);
+    TableScope tableDot(db, u'[' + qTableName("table.dot", __FILE__, db) + u']');
     CHECK_DATABASE(db);
     {
-        const auto fieldDot = qTableName("fieldDot", __FILE__, db);
-        tst_Databases::safeDropTable(db, fieldDot);
         QSqlQuery qry(db);
-        QVERIFY_SQL(qry, exec("create table " + fieldDot + " (id int primary key, "
+        QVERIFY_SQL(qry, exec("create table " + fieldDot.tableName() + " (id int primary key, "
                               "\"person.firstname\" varchar(20))"));
-        QVERIFY_SQL(qry, exec("insert into " + fieldDot + " values(1, 'Andy')"));
+        QVERIFY_SQL(qry, exec("insert into " + fieldDot.tableName() + " values(1, 'Andy')"));
         QSqlTableModel model(0, db);
-        model.setTable(fieldDot);
+        model.setTable(fieldDot.tableName());
         QVERIFY_SQL(model, select());
         QCOMPARE(model.data(model.index(0, 0)).toInt(), 1);
         QCOMPARE(model.data(model.index(0, 1)).toString(), QString("Andy"));
     }
-    const auto tableDot = QLatin1Char('[') + qTableName("table.dot", __FILE__, db) + QLatin1Char(']');
     {
-        tst_Databases::safeDropTable(db, tableDot);
         QSqlQuery qry(db);
-        QVERIFY_SQL(qry, exec("create table " + tableDot + " (id int primary key, "
+        QVERIFY_SQL(qry, exec("create table " + tableDot.tableName() + " (id int primary key, "
                               "\"person.firstname\" varchar(20))"));
-        QVERIFY_SQL(qry, exec("insert into " + tableDot + " values(1, 'Andy')"));
+        QVERIFY_SQL(qry, exec("insert into " + tableDot.tableName() + " values(1, 'Andy')"));
         QSqlTableModel model(0, db);
-        model.setTable(tableDot);
+        model.setTable(tableDot.tableName());
         QVERIFY_SQL(model, select());
         QCOMPARE(model.data(model.index(0, 0)).toInt(), 1);
         QCOMPARE(model.data(model.index(0, 1)).toString(), QString("Andy"));
@@ -2179,7 +2235,7 @@ void tst_QSqlTableModel::sqlite_selectFromIdentifierWithDot()
         QSqlQuery qry(attachedDb);
         QVERIFY_SQL(qry, exec(QString("attach '%1' AS 'attached'").arg(db.databaseName())));
         QSqlTableModel model(0, attachedDb);
-        model.setTable(QString("attached.%1").arg(tableDot));
+        model.setTable(QString("attached.%1").arg(tableDot.tableName()));
         QVERIFY_SQL(model, select());
         QCOMPARE(model.data(model.index(0, 0)).toInt(), 1);
         QCOMPARE(model.data(model.index(0, 1)).toString(), QString("Andy"));

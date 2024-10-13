@@ -22,7 +22,7 @@
 #include "qendian.h"
 #include "qresource.h"
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_NACL) && !defined(Q_OS_INTEGRITY)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_INTEGRITY)
 #  define QT_USE_MMAP
 #  include "private/qcore_unix_p.h"
 // for mmap
@@ -39,8 +39,11 @@
 
 QT_BEGIN_NAMESPACE
 
+namespace {
 enum Tag { Tag_End = 1, Tag_SourceText16, Tag_Translation, Tag_Context16, Tag_Obsolete1,
            Tag_SourceText, Tag_Context, Tag_Comment, Tag_Obsolete2 };
+}
+
 /*
 $ mcookie
 3cb86418caef9c95cd211cbf60a1bddd
@@ -627,7 +630,7 @@ static QString find_translation(const QLocale & locale,
     // "prefix_en_us.qm" won't be found under the "en_US" locale. Note
     // that the Qt resource system is always case-sensitive, even on
     // Windows (in other words: this codepath is *not* UNIX-only).
-    QStringList languages = locale.uiLanguages();
+    QStringList languages = locale.uiLanguages(QLocale::TagSeparator::Underscore);
     for (int i = languages.size()-1; i >= 0; --i) {
         QString lang = languages.at(i);
         QString lowerLang = lang.toLower();
@@ -636,8 +639,6 @@ static QString find_translation(const QLocale & locale,
     }
 
     for (QString localeName : std::as_const(languages)) {
-        localeName.replace(u'-', u'_');
-
         // try the complete locale name first and progressively truncate from
         // the end until a matching language tag is found (with or without suffix)
         for (;;) {

@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtGui>
 #include <QEvent>
@@ -14,8 +14,8 @@ struct MyApplication : public QGuiApplication
     {
         if (event->type() == QEvent::FileOpen) {
             QFileOpenEvent* ev = static_cast<QFileOpenEvent *>(event);
-            QFile file;
-            bool ok = ev->openFile(file, QFile::Append | QFile::Unbuffered);
+            QFile file(ev->file());
+            bool ok = file.open(QFile::Append | QFile::Unbuffered);
             if (ok)
                 file.write(QByteArray("+external"));
             return true;

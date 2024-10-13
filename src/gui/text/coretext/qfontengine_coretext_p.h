@@ -38,7 +38,7 @@ public:
     ~QCoreTextFontEngine();
 
     glyph_t glyphIndex(uint ucs4) const override;
-    bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const override;
+    int stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const override;
     void recalcAdvances(QGlyphLayout *, ShaperFlags) const override;
 
     glyph_metrics_t boundingBox(glyph_t glyph) override;
@@ -91,7 +91,7 @@ public:
     static bool ct_getSfntTable(void *user_data, uint tag, uchar *buffer, uint *length);
     static QFont::Weight qtWeightFromCFWeight(float value);
 
-    static QCoreTextFontEngine *create(const QByteArray &fontData, qreal pixelSize, QFont::HintingPreference hintingPreference);
+    static QCoreTextFontEngine *create(const QByteArray &fontData, qreal pixelSize, QFont::HintingPreference hintingPreference, const QMap<QFont::Tag, float> &variableAxisValue);
 
 protected:
     QCoreTextFontEngine(const QFontDef &def);

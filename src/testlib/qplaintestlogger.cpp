@@ -11,6 +11,7 @@
 #include <QtCore/private/qlogging_p.h>
 
 #include <array>
+#include <cstdio>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,11 +65,11 @@ template <int N> struct FixedBufString
         buf[used] = '\0';
     }
 
-    template <typename... Args> void appendf(const char *format, Args &&... args)
+    template <typename... Args> void appendf(const char *format, Args... args)
     {
         // vsnprintf includes the terminating null
-        used += qsnprintf(buf.data() + used, MaxSize - used + 1, format,
-                          std::forward<Args>(args)...);
+        used += std::snprintf(buf.data() + used, MaxSize - used + 1, format,
+                              args...);
     }
 
     template <int Power = 1000> void appendScaled(qreal value, const char *unit)
@@ -78,7 +79,7 @@ template <int N> struct FixedBufString
         qint64 ratio;
         if (v < 1 && Power == 1000) {
             const char *prefixes = submultiplePrefixes;
-            ratio = qreal(std::atto::num) / std::atto::den;
+            ratio = qreal(std::atto::num) / qreal(std::atto::den);
             while (value * ratio > 1000 && *prefixes) {
                 ++prefixes;
                 ratio *= 1000;
@@ -236,7 +237,7 @@ namespace QTest {
 
     QPlainTestLogger implements basic logging of test results.
 
-    The format is Qt-specific and aims to be be easy to read.
+    The format is Qt-specific and aims to be easy to read.
 */
 
 void QPlainTestLogger::outputMessage(const char *str)
@@ -413,13 +414,13 @@ void QPlainTestLogger::startLogging()
 
     char buf[1024];
     if (QTestLog::verboseLevel() < 0) {
-        qsnprintf(buf, sizeof(buf), "Testing %s\n", QTestResult::currentTestObjectName());
+        std::snprintf(buf, sizeof(buf), "Testing %s\n", QTestResult::currentTestObjectName());
     } else {
-        qsnprintf(buf, sizeof(buf),
-                  "********* Start testing of %s *********\n"
-                  "Config: Using QtTest library " QTEST_VERSION_STR
-                  ", %s, %s %s\n", QTestResult::currentTestObjectName(), QLibraryInfo::build(),
-                  qPrintable(QSysInfo::productType()), qPrintable(QSysInfo::productVersion()));
+        std::snprintf(buf, sizeof(buf),
+                      "********* Start testing of %s *********\n"
+                      "Config: Using QtTest library " QTEST_VERSION_STR
+                      ", %s, %s %s\n", QTestResult::currentTestObjectName(), QLibraryInfo::build(),
+                      qPrintable(QSysInfo::productType()), qPrintable(QSysInfo::productVersion()));
     }
     outputMessage(buf);
 }
@@ -429,16 +430,17 @@ void QPlainTestLogger::stopLogging()
     char buf[1024];
     const int timeMs = qRound(QTestLog::msecsTotalTime());
     if (QTestLog::verboseLevel() < 0) {
-        qsnprintf(buf, sizeof(buf), "Totals: %d passed, %d failed, %d skipped, %d blacklisted, %dms\n",
-                  QTestLog::passCount(), QTestLog::failCount(),
-                  QTestLog::skipCount(), QTestLog::blacklistCount(), timeMs);
+        std::snprintf(buf, sizeof(buf),
+                      "Totals: %d passed, %d failed, %d skipped, %d blacklisted, %dms\n",
+                      QTestLog::passCount(), QTestLog::failCount(),
+                      QTestLog::skipCount(), QTestLog::blacklistCount(), timeMs);
     } else {
-        qsnprintf(buf, sizeof(buf),
-                  "Totals: %d passed, %d failed, %d skipped, %d blacklisted, %dms\n"
-                  "********* Finished testing of %s *********\n",
-                  QTestLog::passCount(), QTestLog::failCount(),
-                  QTestLog::skipCount(), QTestLog::blacklistCount(), timeMs,
-                  QTestResult::currentTestObjectName());
+        std::snprintf(buf, sizeof(buf),
+                      "Totals: %d passed, %d failed, %d skipped, %d blacklisted, %dms\n"
+                      "********* Finished testing of %s *********\n",
+                      QTestLog::passCount(), QTestLog::failCount(),
+                      QTestLog::skipCount(), QTestLog::blacklistCount(), timeMs,
+                      QTestResult::currentTestObjectName());
     }
     outputMessage(buf);
 
@@ -490,6 +492,15 @@ void QPlainTestLogger::addMessage(MessageTypes type, const QString &message,
         return;
 
     printMessage(MessageSource::Other, QTest::ptMessageType2String(type), qPrintable(message), file, line);
+}
+
+bool QPlainTestLogger::isRepeatSupported() const
+{
+    // The plain text logger creates unstructured reports. Such reports are not
+    // parser friendly, and are unlikely to be parsed by any test reporting
+    // tools. We can therefore allow repeated test runs with minimum risk that
+    // any parsers fails to handle repeated test names.
+    return true;
 }
 
 QT_END_NAMESPACE

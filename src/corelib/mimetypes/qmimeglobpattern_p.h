@@ -22,6 +22,8 @@ QT_REQUIRE_CONFIG(mimetype);
 #include <QtCore/qstringlist.h>
 #include <QtCore/qhash.h>
 
+#include <algorithm>
+
 QT_BEGIN_NAMESPACE
 
 struct QMimeGlobMatchResult
@@ -77,7 +79,7 @@ private:
         AnimPattern,       // special handling for "*.anim[1-9j]" pattern
         OtherPattern
     };
-    PatternType detectPatternType(const QString &pattern) const;
+    PatternType detectPatternType(QStringView pattern) const;
 
     QString m_pattern;
     QString m_mimeType;
@@ -87,31 +89,32 @@ private:
 };
 Q_DECLARE_SHARED(QMimeGlobPattern)
 
+using AddMatchFilterFunc = std::function<bool(const QString &)>;
+
 class QMimeGlobPatternList : public QList<QMimeGlobPattern>
 {
 public:
-    bool hasPattern(const QString &mimeType, const QString &pattern) const
+    bool hasPattern(QStringView mimeType, QStringView pattern) const
     {
-        const_iterator it = begin();
-        const const_iterator myend = end();
-        for (; it != myend; ++it)
-            if ((*it).pattern() == pattern && (*it).mimeType() == mimeType)
-                return true;
-        return false;
+        auto matchesMimeAndPattern = [mimeType, pattern](const QMimeGlobPattern &e) {
+            return e.pattern() == pattern && e.mimeType() == mimeType;
+        };
+        return std::any_of(begin(), end(), matchesMimeAndPattern);
     }
 
     /*!
         "noglobs" is very rare occurrence, so it's ok if it's slow
      */
-    void removeMimeType(const QString &mimeType)
+    void removeMimeType(QStringView mimeType)
     {
-        auto isMimeTypeEqual = [&mimeType](const QMimeGlobPattern &pattern) {
+        auto isMimeTypeEqual = [mimeType](const QMimeGlobPattern &pattern) {
             return pattern.mimeType() == mimeType;
         };
         removeIf(isMimeTypeEqual);
     }
 
-    void match(QMimeGlobMatchResult &result, const QString &fileName) const;
+    void match(QMimeGlobMatchResult &result, const QString &fileName,
+               const AddMatchFilterFunc &filterFunc) const;
 };
 
 /*!
@@ -128,7 +131,8 @@ public:
 
     void addGlob(const QMimeGlobPattern &glob);
     void removeMimeType(const QString &mimeType);
-    void matchingGlobs(const QString &fileName, QMimeGlobMatchResult &result) const;
+    void matchingGlobs(const QString &fileName, QMimeGlobMatchResult &result,
+                       const AddMatchFilterFunc &filterFunc) const;
     void clear();
 
     PatternsMap m_fastPatterns; // example: "doc" -> "application/msword", "text/plain"

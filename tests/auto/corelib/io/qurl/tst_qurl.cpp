@@ -1,11 +1,12 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qurl.h>
 #include <QtCore/QDebug>
 
 #include <QTest>
+#include <QtTest/private/qcomparisontesthelper_p.h>
 #include <QDirIterator>
 
 #include <qcoreapplication.h>
@@ -31,6 +32,7 @@ private slots:
     void hashInPath();
     void unc();
     void assignment();
+    void orderingCompiles();
     void comparison();
     void comparison2_data();
     void comparison2();
@@ -289,6 +291,11 @@ void tst_QUrl::assignment()
     QCOMPARE(url, copy);
 }
 
+void tst_QUrl::orderingCompiles()
+{
+    QTestPrivate::testAllComparisonOperatorsCompile<QUrl>();
+}
+
 void tst_QUrl::comparison()
 {
     QUrl url1("http://qt-project.org/");
@@ -437,17 +444,18 @@ void tst_QUrl::comparison2()
     QFETCH(QUrl, url2);
     QFETCH(int, ordering);
 
+    const Qt::weak_ordering expectedOrdering = [&ordering] {
+        if (ordering > 0)
+            return Qt::weak_ordering::greater;
+        else if (ordering < 0)
+            return Qt::weak_ordering::less;
+        return Qt::weak_ordering::equivalent;
+    }();
+
     QCOMPARE(url1.toString() == url2.toString(), ordering == 0);
-    QCOMPARE(url1 == url2, ordering == 0);
-    QCOMPARE(url1 != url2, ordering != 0);
+    QT_TEST_ALL_COMPARISON_OPS(url1, url2, expectedOrdering);
     if (ordering == 0)
         QCOMPARE(qHash(url1), qHash(url2));
-
-    QCOMPARE(url1 < url2, ordering < 0);
-    QCOMPARE(!(url1 < url2), ordering >= 0);
-
-    QCOMPARE(url2 < url1, ordering > 0);
-    QCOMPARE(!(url2 < url1), ordering <= 0);
 
     // redundant checks (the above should catch these)
     QCOMPARE(url1 < url2 || url2 < url1, ordering != 0);
@@ -1387,7 +1395,7 @@ void tst_QUrl::fromLocalFileNormalize()
 
 void tst_QUrl::macTypes()
 {
-#ifndef Q_OS_MAC
+#ifndef Q_OS_DARWIN
     QSKIP("This is a Mac-only test");
 #else
     extern void tst_QUrl_mactypes(); // in tst_qurl_mac.mm
@@ -2798,6 +2806,7 @@ void tst_QUrl::stripTrailingSlash_data()
     QTest::newRow("file root") << "file:///" << "file:///" << "file:///" << "file:///";
     QTest::newRow("file_root_manyslashes") << "file://///" << "file:///" << "file://///" << "file:///";
     QTest::newRow("no path") << "remote://" << "remote://" << "remote://" << "remote://";
+    QTest::newRow("no authority") << "/root/test/../foo/bar" << "/root/test/../foo/bar" << "/root/test/../foo/" << "/root/test/../foo";
 }
 
 void tst_QUrl::stripTrailingSlash()
@@ -3768,13 +3777,13 @@ void tst_QUrl::setComponents_data()
                                << PrettyDecoded << QString() << "foo:/path";
     QTest::newRow("host-empty") << QUrl("foo://example.com/path")
                                << int(Host) << "" << Tolerant << true
-                               << PrettyDecoded << QString() << "foo:///path";
+                               << PrettyDecoded << "" << "foo:///path";
     QTest::newRow("authority-null") << QUrl("foo://example.com/path")
                                     << int(Authority) << QString() << Tolerant << true
                                     << PrettyDecoded << QString() << "foo:/path";
     QTest::newRow("authority-empty") << QUrl("foo://example.com/path")
                                      << int(Authority) << "" << Tolerant << true
-                                     << PrettyDecoded << QString() << "foo:///path";
+                                     << PrettyDecoded << "" << "foo:///path";
     QTest::newRow("query-null") << QUrl("http://example.com/?q=foo")
                                    << int(Query) << QString() << Tolerant << true
                                    << PrettyDecoded << QString() << "http://example.com/";
@@ -3832,10 +3841,10 @@ void tst_QUrl::setComponents_data()
                                     << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-authority-1") << QUrl("http://example.com")
                                          << int(Authority) << "-not-valid-" << Tolerant << false
-                                         << PrettyDecoded << QString() << QString();
+                                         << PrettyDecoded << "" << QString();
     QTest::newRow("invalid-authority-2") << QUrl("http://example.com")
                                          << int(Authority) << "%31%30.%30.%30.%31" << Strict << false
-                                         << PrettyDecoded << QString() << QString();
+                                         << PrettyDecoded << "" << QString();
 
     QTest::newRow("invalid-path-0") << QUrl("http://example.com")
                                     << int(Path) << "{}" << Strict << false
@@ -4118,14 +4127,30 @@ void tst_QUrl::testThreadingHelper()
 
 void tst_QUrl::testThreading()
 {
+    enum { Count = 100 };
+
     if (QTestPrivate::isRunningArmOnX86())
         QSKIP("This test fails in QEMU and looks like because of a data race, QTBUG-93176");
     s_urlStorage = new UrlStorage;
-    QThreadPool::globalInstance()->setMaxThreadCount(100);
-    QFutureSynchronizer<void> sync;
-    for (int i = 0; i < 100; ++i)
-        sync.addFuture(QtConcurrent::run(&tst_QUrl::testThreadingHelper, this));
-    sync.waitForFinished();
+    QThreadPool::globalInstance()->setMaxThreadCount(Count);
+
+    // Written this way because wasm need the eventloop
+    QList<QFuture<void>> futures;
+    futures.reserve(Count);
+
+    for (int i = 0; i < Count; ++i)
+        futures.push_back(QtConcurrent::run(&tst_QUrl::testThreadingHelper, this));
+
+    QEventLoop loop;
+    std::atomic<int> remaining = Count;
+    for (int i = 0; i < Count; ++i) {
+        futures[i].then([&]() {
+            if (!--remaining)
+                loop.quit();
+        });
+    }
+    loop.exec();
+
     delete s_urlStorage;
 }
 
@@ -4225,30 +4250,67 @@ void tst_QUrl::normalizeRemotePaths_data()
 {
     QTest::addColumn<QUrl>("url");
     QTest::addColumn<QString>("expected");
+    QTest::addColumn<QString>("expectedNoFilename");
 
-    QTest::newRow("dotdot-slashslash") << QUrl("http://qt-project.org/some/long/..//path") << "http://qt-project.org/some//path";
-    QTest::newRow("slashslash-dotdot") << QUrl("http://qt-project.org/some//../path") << "http://qt-project.org/some/path";
-    QTest::newRow("slashslash-dotdot2") << QUrl("http://qt-project.org/some//path/../") << "http://qt-project.org/some//";
-    QTest::newRow("dot-slash") << QUrl("http://qt-project.org/some/./path") << "http://qt-project.org/some/path";
-    QTest::newRow("slashslash-dot-slashslash") << QUrl("http://qt-project.org/some//.//path") << "http://qt-project.org/some///path";
-    QTest::newRow("dot-slashslash") << QUrl("http://qt-project.org/some/.//path") << "http://qt-project.org/some//path";
-    QTest::newRow("multiple-slashes") << QUrl("http://qt-project.org/some//path") << "http://qt-project.org/some//path";
-    QTest::newRow("multiple-slashes4") << QUrl("http://qt-project.org/some////path") << "http://qt-project.org/some////path";
-    QTest::newRow("slashes-at-end") << QUrl("http://qt-project.org/some//") << "http://qt-project.org/some//";
-    QTest::newRow("dot-dotdot") << QUrl("http://qt-project.org/path/./../") << "http://qt-project.org/";
-    QTest::newRow("slash-dot-slash-dot-slash") << QUrl("http://qt-project.org/path//.//.//") << "http://qt-project.org/path////";
-    QTest::newRow("dotdot") << QUrl("http://qt-project.org/../") << "http://qt-project.org/";
-    QTest::newRow("dotdot-dotdot") << QUrl("http://qt-project.org/path/../../") << "http://qt-project.org/";
-    QTest::newRow("dot-dotdot-tail") << QUrl("http://qt-project.org/stem/path/./../tail") << "http://qt-project.org/stem/tail";
-    QTest::newRow("slash-dotdot-slash-tail") << QUrl("http://qt-project.org/stem/path//..//tail") << "http://qt-project.org/stem/path//tail";
+    QTest::newRow("dotdot-slashslash") << QUrl("http://qt-project.org/some/long/..//path")
+                                       << "http://qt-project.org/some//path"
+                                       << "http://qt-project.org/some//";
+    QTest::newRow("slashslash-dotdot") << QUrl("http://qt-project.org/some//../path")
+                                       << "http://qt-project.org/some/path"
+                                       << "http://qt-project.org/some/";
+    QTest::newRow("slashslash-dotdot2") << QUrl("http://qt-project.org/some//path/../")
+                                        << "http://qt-project.org/some//"
+                                        << "http://qt-project.org/some//";
+    QTest::newRow("dot-slash") << QUrl("http://qt-project.org/some/./path")
+                               << "http://qt-project.org/some/path"
+                               << "http://qt-project.org/some/";
+    QTest::newRow("slashslash-dot-slashslash") << QUrl("http://qt-project.org/some//.//path")
+                                               << "http://qt-project.org/some///path"
+                                               << "http://qt-project.org/some///";
+    QTest::newRow("dot-slashslash") << QUrl("http://qt-project.org/some/.//path")
+                                    << "http://qt-project.org/some//path"
+                                    << "http://qt-project.org/some//";
+    QTest::newRow("multiple-slashes") << QUrl("http://qt-project.org/some//path")
+                                      << "http://qt-project.org/some//path"
+                                      << "http://qt-project.org/some//";
+    QTest::newRow("multiple-slashes4") << QUrl("http://qt-project.org/some////path")
+                                       << "http://qt-project.org/some////path"
+                                       << "http://qt-project.org/some////";
+    QTest::newRow("slashes-at-end") << QUrl("http://qt-project.org/some//")
+                                    << "http://qt-project.org/some//"
+                                    << "http://qt-project.org/some//";
+    QTest::newRow("dot-dotdot") << QUrl("http://qt-project.org/path/./../")
+                                << "http://qt-project.org/"
+                                << "http://qt-project.org/";
+    QTest::newRow("slash-dot-slash-dot-slash") << QUrl("http://qt-project.org/path//.//.//")
+                                               << "http://qt-project.org/path////"
+                                               << "http://qt-project.org/path////";
+    QTest::newRow("dotdot") << QUrl("http://qt-project.org/../")
+                            << "http://qt-project.org/"
+                            << "http://qt-project.org/";
+    QTest::newRow("dotdot-tail") << QUrl("http://qt-project.org/root/test/../foo/bar")
+                                 << "http://qt-project.org/root/foo/bar"
+                                 << "http://qt-project.org/root/foo/";
+    QTest::newRow("dotdot-dotdot") << QUrl("http://qt-project.org/path/../../")
+                                   << "http://qt-project.org/"
+                                   << "http://qt-project.org/";
+    QTest::newRow("dot-dotdot-tail") << QUrl("http://qt-project.org/stem/path/./../tail")
+                                     << "http://qt-project.org/stem/tail"
+                                     << "http://qt-project.org/stem/";
+    QTest::newRow("slash-dotdot-slash-tail") << QUrl("http://qt-project.org/stem/path//..//tail")
+                                             << "http://qt-project.org/stem/path//tail"
+                                             << "http://qt-project.org/stem/path//";
 }
 
 void tst_QUrl::normalizeRemotePaths()
 {
     QFETCH(QUrl, url);
     QFETCH(QString, expected);
+    QFETCH(QString, expectedNoFilename);
 
     QCOMPARE(url.adjusted(QUrl::NormalizePathSegments).toString(), expected);
+    QCOMPARE(url.adjusted(QUrl::NormalizePathSegments | QUrl::RemoveFilename).toString(),
+             expectedNoFilename);
 }
 
 QTEST_MAIN(tst_QUrl)

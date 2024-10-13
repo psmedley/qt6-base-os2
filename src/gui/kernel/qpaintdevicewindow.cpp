@@ -136,6 +136,11 @@ int QPaintDeviceWindow::metric(PaintDeviceMetric metric) const
     case PdmDevicePixelRatioScaled:
         return int(QWindow::devicePixelRatio() * devicePixelRatioFScale());
         break;
+    case PdmDevicePixelRatioF_EncodedA:
+        Q_FALLTHROUGH();
+    case PdmDevicePixelRatioF_EncodedB:
+        return QPaintDevice::encodeMetricF(metric, QWindow::devicePixelRatio());
+        break;
     default:
         break;
     }
@@ -171,6 +176,8 @@ bool QPaintDeviceWindow::event(QEvent *event)
         auto region = QRect(QPoint(0, 0), size());
         d->doFlush(region); // Will end up calling paintEvent
         return true;
+    } else if (event->type() == QEvent::Resize) {
+        d->handleResizeEvent();
     }
 
     return QWindow::event(event);

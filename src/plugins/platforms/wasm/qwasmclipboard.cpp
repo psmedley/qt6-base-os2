@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "qwasmclipboard.h"
+#include "qwasminputcontext.h"
 #include "qwasmdom.h"
 #include "qwasmevent.h"
 #include "qwasmwindow.h"
-#include "qwasmstring.h"
+
 #include <private/qstdweb_p.h>
 
 #include <QCoreApplication>
@@ -26,12 +27,11 @@ static void commonCopyEvent(val event)
 
     // doing it this way seems to sanitize the text better that calling data() like down below
     if (_mimes->hasText()) {
-        event["clipboardData"].call<void>("setData", val("text/plain")
-                                          ,  QWasmString::fromQString(_mimes->text()));
+        event["clipboardData"].call<void>("setData", val("text/plain"),
+                                          _mimes->text().toEcmaString());
     }
     if (_mimes->hasHtml()) {
-        event["clipboardData"].call<void>("setData", val("text/html")
-                                          ,   QWasmString::fromQString(_mimes->html()));
+        event["clipboardData"].call<void>("setData", val("text/html"), _mimes->html().toEcmaString());
     }
 
     for (auto mimetype : _mimes->formats()) {
@@ -39,8 +39,8 @@ static void commonCopyEvent(val event)
             continue;
         QByteArray ba = _mimes->data(mimetype);
         if (!ba.isEmpty())
-            event["clipboardData"].call<void>("setData", QWasmString::fromQString(mimetype)
-                                              , val(ba.constData()));
+            event["clipboardData"].call<void>("setData", mimetype.toEcmaString(),
+                                              val(ba.constData()));
     }
 
     event.call<void>("preventDefault");
@@ -48,6 +48,10 @@ static void commonCopyEvent(val event)
 
 static void qClipboardCutTo(val event)
 {
+    QWasmInputContext *wasmInput = QWasmIntegration::get()->wasmInputContext();
+    if (wasmInput && wasmInput->usingTextInput())
+        return;
+
     if (!QWasmIntegration::get()->getWasmClipboard()->hasClipboardApi()) {
         // Send synthetic Ctrl+X to make the app cut data to Qt's clipboard
          QWindowSystemInterface::handleKeyEvent(
@@ -59,6 +63,10 @@ static void qClipboardCutTo(val event)
 
 static void qClipboardCopyTo(val event)
 {
+    QWasmInputContext *wasmInput = QWasmIntegration::get()->wasmInputContext();
+    if (wasmInput && wasmInput->usingTextInput())
+        return;
+
     if (!QWasmIntegration::get()->getWasmClipboard()->hasClipboardApi()) {
         // Send synthetic Ctrl+C to make the app copy data to Qt's clipboard
             QWindowSystemInterface::handleKeyEvent(
@@ -69,27 +77,13 @@ static void qClipboardCopyTo(val event)
 
 static void qClipboardPasteTo(val event)
 {
+    QWasmInputContext *wasmInput = QWasmIntegration::get()->wasmInputContext();
+    if (wasmInput && wasmInput->usingTextInput())
+        return;
+
     event.call<void>("preventDefault"); // prevent browser from handling drop event
 
-    static std::shared_ptr<qstdweb::CancellationFlag> readDataCancellation = nullptr;
-    readDataCancellation = qstdweb::readDataTransfer(
-            event["clipboardData"],
-            [](QByteArray fileContent) {
-                QImage image;
-                image.loadFromData(fileContent, nullptr);
-                return image;
-            },
-            [event](std::unique_ptr<QMimeData> data) {
-                if (data->formats().isEmpty())
-                    return;
-
-                // Persist clipboard data so that the app can read it when handling the CTRL+V
-                QWasmIntegration::get()->clipboard()->QPlatformClipboard::setMimeData(
-                        data.release(), QClipboard::Clipboard);
-
-                QWindowSystemInterface::handleKeyEvent(0, QEvent::KeyPress, Qt::Key_V,
-                                                       Qt::ControlModifier, "V");
-            });
+    QWasmIntegration::get()->getWasmClipboard()->sendClipboardData(event);
 }
 
 EMSCRIPTEN_BINDINGS(qtClipboardModule) {
@@ -262,12 +256,12 @@ void QWasmClipboard::writeToClipboardApi()
 
         // we have a blob, now create a ClipboardItem
         emscripten::val type = emscripten::val::array();
-        type.set("type", val(QWasmString::fromQString(mimetype)));
+        type.set("type", mimetype.toEcmaString());
 
         emscripten::val contentBlob = emscripten::val::global("Blob").new_(contentArray, type);
 
         emscripten::val clipboardItemObject = emscripten::val::object();
-        clipboardItemObject.set(val(QWasmString::fromQString(mimetype)), contentBlob);
+        clipboardItemObject.set(mimetype.toEcmaString(), contentBlob);
 
         val clipboardItemData = val::global("ClipboardItem").new_(clipboardItemObject);
 
@@ -300,5 +294,24 @@ void QWasmClipboard::writeToClipboard()
     // interested in removing it. There is no replacement, so we use it here.
     val document = val::global("document");
     document.call<val>("execCommand", val("copy"));
+}
+
+void QWasmClipboard::sendClipboardData(emscripten::val event)
+{
+    qDebug() << "sendClipboardData";
+
+    dom::DataTransfer *transfer = new dom::DataTransfer(event["clipboardData"]);
+    const auto mimeCallback = std::function([transfer](QMimeData *data) {
+
+        // Persist clipboard data so that the app can read it when handling the CTRL+V
+        QWasmIntegration::get()->clipboard()->QPlatformClipboard::setMimeData(data, QClipboard::Clipboard);
+        QWindowSystemInterface::handleKeyEvent(0, QEvent::KeyPress, Qt::Key_V,
+                                               Qt::ControlModifier, "V");
+        QWindowSystemInterface::handleKeyEvent(0, QEvent::KeyRelease, Qt::Key_V,
+                                               Qt::ControlModifier, "V");
+        delete transfer;
+    });
+
+    transfer->toMimeDataWithFile(mimeCallback);
 }
 QT_END_NAMESPACE

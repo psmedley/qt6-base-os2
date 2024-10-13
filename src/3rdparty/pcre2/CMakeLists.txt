@@ -11,6 +11,7 @@ qt_internal_add_3rdparty_library(BundledPcre2
         src/pcre2.h
         src/pcre2_auto_possess.c
         src/pcre2_chartables.c
+        src/pcre2_chkdint.c
         src/pcre2_compile.c
         src/pcre2_config.c
         src/pcre2_context.c
@@ -44,6 +45,8 @@ qt_internal_add_3rdparty_library(BundledPcre2
         PCRE2_CODE_UNIT_WIDTH=16
     PUBLIC_INCLUDE_DIRECTORIES
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    CPE_VENDOR "pcre"
+    CPE_PRODUCT "pcre2"
 )
 qt_disable_warnings(BundledPcre2)
 qt_set_symbol_visibility_hidden(BundledPcre2)

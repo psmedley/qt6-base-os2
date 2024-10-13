@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -267,6 +267,8 @@ private slots:
     void inputMethodQueryImHints_data();
     void inputMethodQueryImHints();
 
+    void inputMethodQueryEnterKeyType();
+
     void inputMethodUpdate();
 
     void undoRedoAndEchoModes_data();
@@ -291,6 +293,11 @@ private slots:
     void testQuickSelectionWithMouse();
     void inputRejected();
     void keyReleasePropagates();
+
+#if QT_CONFIG(shortcut)
+    void deleteWordByKeySequence_data();
+    void deleteWordByKeySequence();
+#endif
 
 protected slots:
     void editingFinished();
@@ -1588,44 +1595,14 @@ void tst_QLineEdit::textMask()
     QCOMPARE( testWidget->text(), insertString );
 }
 
-class LineEditChangingText : public QLineEdit
-{
-    Q_OBJECT
-
-public:
-    LineEditChangingText(QWidget *parent) : QLineEdit(parent)
-    {
-        connect(this, &QLineEdit::textEdited, this, &LineEditChangingText::onTextEdited);
-    }
-
-public slots:
-    void onTextEdited(const QString &text)
-    {
-        if (text.length() == 3)
-            setText(text + "-");
-    }
-};
-
 void tst_QLineEdit::setText()
 {
     QLineEdit *testWidget = ensureTestWidget();
-    {
-        QSignalSpy editedSpy(testWidget, &QLineEdit::textEdited);
-        QSignalSpy changedSpy(testWidget, &QLineEdit::textChanged);
-        testWidget->setText("hello");
-        QCOMPARE(editedSpy.size(), 0);
-        QCOMPARE(changedSpy.value(0).value(0).toString(), QString("hello"));
-    }
-
-    QTestEventList keys;
-    keys.addKeyClick(Qt::Key_A);
-    keys.addKeyClick(Qt::Key_B);
-    keys.addKeyClick(Qt::Key_C);
-
-    LineEditChangingText lineEdit(nullptr);
-    keys.simulate(&lineEdit);
-    QCOMPARE(lineEdit.text(), "abc-");
-    QCOMPARE(lineEdit.cursorPosition(), 4);
+    QSignalSpy editedSpy(testWidget, SIGNAL(textEdited(QString)));
+    QSignalSpy changedSpy(testWidget, SIGNAL(textChanged(QString)));
+    testWidget->setText("hello");
+    QCOMPARE(editedSpy.size(), 0);
+    QCOMPARE(changedSpy.value(0).value(0).toString(), QString("hello"));
 }
 
 void tst_QLineEdit::displayText_data()
@@ -1960,9 +1937,6 @@ public:
 
 void tst_QLineEdit::noCursorBlinkWhenReadOnly()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     int cursorFlashTime = QApplication::cursorFlashTime();
     if (cursorFlashTime == 0)
         return;
@@ -1970,7 +1944,8 @@ void tst_QLineEdit::noCursorBlinkWhenReadOnly()
     centerOnScreen(&le);
     le.show();
     le.setFocus();
-    QVERIFY(QTest::qWaitForWindowActive(&le));
+    QVERIFY(QTest::qWaitForWindowFocused(&le));
+    QVERIFY(le.hasFocus());
     le.updates = 0;
     QTest::qWait(cursorFlashTime);
     QVERIFY(le.updates > 0);
@@ -3330,9 +3305,6 @@ void tst_QLineEdit::readOnlyStyleOption()
 
 void tst_QLineEdit::validateOnFocusOut()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QLineEdit *testWidget = ensureTestWidget();
     QSignalSpy editingFinishedSpy(testWidget, SIGNAL(editingFinished()));
     testWidget->setValidator(new QIntValidator(100, 999, testWidget));
@@ -3346,7 +3318,7 @@ void tst_QLineEdit::validateOnFocusOut()
     centerOnScreen(testWidget);
     testWidget->show();
     testWidget->activateWindow();
-    QVERIFY(QTest::qWaitForWindowActive(testWidget));
+    QVERIFY(QTest::qWaitForWindowFocused(testWidget));
     QVERIFY(testWidget->hasFocus());
 
     QTest::keyPress(testWidget, '0');
@@ -3547,11 +3519,12 @@ void tst_QLineEdit::textMargin_data()
     QLineEdit testWidget;
     QFontMetrics metrics(testWidget.font());
     const QString s = QLatin1String("MMM MMM MMM");
+    const int windows11StyleHorizontalOffset = qApp->style()->inherits("QWindows11Style") ? 8 : 0;
 
     // Different styles generate different offsets, so
     // calculate the width rather than hardcode it.
-    const int pixelWidthOfM = metrics.horizontalAdvance(s, 1);
-    const int pixelWidthOfMMM_MM = metrics.horizontalAdvance(s, 6);
+    const int pixelWidthOfM = windows11StyleHorizontalOffset + metrics.horizontalAdvance(s, 1);
+    const int pixelWidthOfMMM_MM = windows11StyleHorizontalOffset + metrics.horizontalAdvance(s, 6);
 
     QTest::newRow("default-0") << 0 << 0 << 0 << 0 << QPoint(pixelWidthOfMMM_MM, 0) << 6;
     QTest::newRow("default-1") << 0 << 0 << 0 << 0 << QPoint(1, 1) << 0;
@@ -3733,9 +3706,6 @@ void tst_QLineEdit::task180999_focus()
 
 void tst_QLineEdit::task174640_editingFinished()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QWidget mw;
     QVBoxLayout *layout = new QVBoxLayout(&mw);
     QLineEdit *le1 = new QLineEdit(&mw);
@@ -3744,10 +3714,8 @@ void tst_QLineEdit::task174640_editingFinished()
     layout->addWidget(le2);
 
     mw.show();
-    QApplicationPrivate::setActiveWindow(&mw);
     mw.activateWindow();
-    QVERIFY(QTest::qWaitForWindowActive(&mw));
-    QCOMPARE(&mw, QApplication::activeWindow());
+    QVERIFY(QTest::qWaitForWindowFocused(&mw));
 
     QSignalSpy editingFinishedSpy(le1, SIGNAL(editingFinished()));
 
@@ -3840,8 +3808,6 @@ void tst_QLineEdit::task210502_caseInsensitiveInlineCompletion()
 #ifdef Q_OS_ANDROID
     QSKIP("QCompleter does not work on Android, see QTBUG-77174");
 #endif
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
 
     QString completion("ABCD");
     QStringList completions;
@@ -3852,10 +3818,9 @@ void tst_QLineEdit::task210502_caseInsensitiveInlineCompletion()
     completer.setCompletionMode(QCompleter::InlineCompletion);
     lineEdit.setCompleter(&completer);
     lineEdit.show();
-    QApplicationPrivate::setActiveWindow(&lineEdit);
-    QVERIFY(QTest::qWaitForWindowActive(&lineEdit));
     lineEdit.setFocus();
-    QTRY_VERIFY(lineEdit.hasFocus());
+    QVERIFY(QTest::qWaitForWindowFocused(&lineEdit));
+    QVERIFY(lineEdit.hasFocus());
     QTest::keyPress(&lineEdit, 'a');
     QTest::keyPress(&lineEdit, Qt::Key_Return);
     QCOMPARE(lineEdit.text(), completion);
@@ -3940,9 +3905,6 @@ void tst_QLineEdit::task233101_cursorPosAfterInputMethod()
 
 void tst_QLineEdit::task241436_passwordEchoOnEditRestoreEchoMode()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QStyleOptionFrame opt;
     QLineEdit *testWidget = ensureTestWidget();
     const int passwordCharacter = testWidget->style()->styleHint(QStyle::SH_LineEdit_PasswordCharacter, &opt, testWidget);
@@ -3953,8 +3915,7 @@ void tst_QLineEdit::task241436_passwordEchoOnEditRestoreEchoMode()
     testWidget->setFocus();
     centerOnScreen(testWidget);
     testWidget->show();
-    QApplicationPrivate::setActiveWindow(testWidget);
-    QVERIFY(QTest::qWaitForWindowActive(testWidget));
+    QVERIFY(QTest::qWaitForWindowFocused(testWidget));
     QVERIFY(testWidget->hasFocus());
 
     QTest::keyPress(testWidget, '0');
@@ -3992,9 +3953,6 @@ void tst_QLineEdit::task248948_redoRemovedSelection()
 
 void tst_QLineEdit::taskQTBUG_4401_enterKeyClearsPassword()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QString password("Wanna guess?");
 
     QLineEdit *testWidget = ensureTestWidget();
@@ -4004,8 +3962,8 @@ void tst_QLineEdit::taskQTBUG_4401_enterKeyClearsPassword()
     testWidget->selectAll();
     centerOnScreen(testWidget);
     testWidget->show();
-    QApplicationPrivate::setActiveWindow(testWidget);
-    QVERIFY(QTest::qWaitForWindowActive(testWidget));
+    QVERIFY(QTest::qWaitForWindowFocused(testWidget));
+    QVERIFY(testWidget->hasFocus());
 
     QTest::keyPress(testWidget, Qt::Key_Enter);
     QTRY_COMPARE(testWidget->text(), password);
@@ -4086,11 +4044,9 @@ void tst_QLineEdit::taskQTBUG_7395_readOnlyShortcut()
     le.addAction(&action);
 
     le.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&le));
-    QApplicationPrivate::setActiveWindow(&le);
-    QVERIFY(QTest::qWaitForWindowActive(&le));
     le.setFocus();
-    QTRY_VERIFY(le.hasFocus());
+    QVERIFY(QTest::qWaitForWindowFocused(&le));
+    QVERIFY(le.hasFocus());
 
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_P);
     QCOMPARE(spy.size(), 1);
@@ -4109,10 +4065,9 @@ void tst_QLineEdit::QTBUG697_paletteCurrentColorGroup()
     le.setPalette(p);
 
     le.show();
-    QApplicationPrivate::setActiveWindow(&le);
-    QVERIFY(QTest::qWaitForWindowActive(&le));
     le.setFocus();
-    QTRY_VERIFY(le.hasFocus());
+    QVERIFY(QTest::qWaitForWindowFocused(&le));
+    QVERIFY(le.hasFocus());
     le.selectAll();
 
     QImage img(le.size(),QImage::Format_ARGB32 );
@@ -4123,7 +4078,7 @@ void tst_QLineEdit::QTBUG697_paletteCurrentColorGroup()
     window.resize(100, 50);
     window.show();
     window.requestActivate();
-    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QVERIFY(QTest::qWaitForWindowFocused(&window));
     le.render(&img);
     QCOMPARE(img.pixel(10, le.height()/2), QColor(Qt::red).rgb());
 }
@@ -4441,6 +4396,33 @@ void tst_QLineEdit::inputMethodQueryImHints()
     QCOMPARE(static_cast<Qt::InputMethodHints>(value.toInt()), hints);
 }
 
+void tst_QLineEdit::inputMethodQueryEnterKeyType()
+{
+    QWidget mw;
+    QVBoxLayout layout(&mw);
+    QLineEdit le1(&mw);
+    layout.addWidget(&le1);
+    mw.show();
+    QVariant enterType = le1.inputMethodQuery(Qt::ImEnterKeyType);
+    QCOMPARE(enterType.value<Qt::EnterKeyType>(), Qt::EnterKeyDefault);
+
+    mw.hide();
+    QLineEdit le2(&mw);
+    layout.addWidget(&le2);
+    mw.show();
+
+    enterType = le1.inputMethodQuery(Qt::ImEnterKeyType);
+#ifdef Q_OS_ANDROID
+    // QTBUG-61652
+    // EnterKey is changed to EnterKeyNext if the focus can be moved to widget below
+    QCOMPARE(enterType.value<Qt::EnterKeyType>(), Qt::EnterKeyNext);
+#else
+    QCOMPARE(enterType.value<Qt::EnterKeyType>(), Qt::EnterKeyDefault);
+#endif
+    enterType = le2.inputMethodQuery(Qt::ImEnterKeyType);
+    QCOMPARE(enterType.value<Qt::EnterKeyType>(), Qt::EnterKeyDefault);
+}
+
 void tst_QLineEdit::inputMethodUpdate()
 {
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
@@ -4577,7 +4559,6 @@ void tst_QLineEdit::clearButton()
     l->addWidget(listView);
     testWidget.move(300, 300);
     testWidget.show();
-    QApplicationPrivate::setActiveWindow(&testWidget);
     QVERIFY(QTest::qWaitForWindowActive(&testWidget));
     // Flip the clear button on,off, trying to detect crashes.
     filterLineEdit->setClearButtonEnabled(true);
@@ -4902,7 +4883,7 @@ void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit_data()
     QTest::newRow("Left press") << QKeySequence(Qt::Key_Left) << true;
 
     QTest::newRow("Paste") << QKeySequence(QKeySequence::Paste) << false;
-    QTest::newRow("Paste") << QKeySequence(QKeySequence::Cut) << false;
+    QTest::newRow("Cut") << QKeySequence(QKeySequence::Cut) << false;
     QTest::newRow("Undo") << QKeySequence(QKeySequence::Undo) << false;
     QTest::newRow("Redo") << QKeySequence(QKeySequence::Redo) << false;
 
@@ -4917,9 +4898,6 @@ void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit_data()
 
 void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QFETCH(QKeySequence, keySequence);
     QFETCH(bool, shouldBeHandledByQLineEdit);
 
@@ -4932,10 +4910,9 @@ void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit()
     QLineEdit *lineEdit = new QLineEdit(QStringLiteral("Test"), &widget);
     lineEdit->setReadOnly(true);
     lineEdit->setFocus();
-
     widget.show();
-
-    QVERIFY(QTest::qWaitForWindowActive(&widget));
+    QVERIFY(QTest::qWaitForWindowFocused(lineEdit));
+    QVERIFY(lineEdit->hasFocus());
 
     const int keySequenceCount = keySequence.count();
     for (int i = 0; i < keySequenceCount; ++i) {
@@ -4979,7 +4956,7 @@ void tst_QLineEdit::QTBUG59957_clearButtonLeftmostAction()
 
 bool tst_QLineEdit::unselectingWithLeftOrRightChangesCursorPosition()
 {
-#if defined Q_OS_WIN || defined Q_OS_QNX //Windows and QNX do not jump to the beginning of the selection
+#if defined Q_OS_WIN || defined Q_OS_QNX || defined Q_OS_VXWORKS //Windows, QNX and VxWorks do not jump to the beginning of the selection
     return true;
 #endif
     // Platforms minimal/offscreen also need left after unselecting with right
@@ -5185,6 +5162,112 @@ void tst_QLineEdit::keyReleasePropagates()
     QCOMPARE(dialog.releasedKey, Qt::Key_Alt);
 }
 
+#if QT_CONFIG(shortcut)
+
+void tst_QLineEdit::deleteWordByKeySequence_data()
+{
+    QTest::addColumn<QString>("startText");
+    QTest::addColumn<int>("selectionStart");
+    QTest::addColumn<int>("selectionEnd");
+    QTest::addColumn<int>("cursorPosition");
+    QTest::addColumn<QKeySequence::StandardKey>("key");
+    QTest::addColumn<QString>("expectedText");
+    QTest::addColumn<int>("expectedCursorPosition");
+
+    QTest::newRow("Delete start, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 9 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some ") << 5;
+    QTest::newRow("Delete end, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 5 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some ") << 5;
+    QTest::newRow("Delete start from middle, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 7 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some xt") << 5;
+    QTest::newRow("Delete end from middle, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 7 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some Te") << 7;
+    QTest::newRow("Delete end from first, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Text") << 0;
+
+    QTest::newRow("Delete start, full selection")
+            << QStringLiteral("Some Text") << 0 << 9 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("") << 0;
+    QTest::newRow("Delete end, full selection")
+            << QStringLiteral("Some Text") << 0 << 9 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("") << 0;
+    QTest::newRow("Delete start, full selection, single word")
+            << QStringLiteral("Some") << 0 << 4 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("") << 0;
+    QTest::newRow("Delete end, full selection, single word")
+            << QStringLiteral("Some") << 0 << 4 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("") << 0;
+
+    QTest::newRow("Delete start, word selection")
+            << QStringLiteral("Some Text") << 5 << 9 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some ") << 5;
+    QTest::newRow("Delete end, word selection")
+            << QStringLiteral("Some Text") << 5 << 9 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some ") << 5;
+    QTest::newRow("Delete start, partial word selection")
+            << QStringLiteral("Some Text") << 5 << 7 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some xt") << 5;
+    QTest::newRow("Delete end, partial word selection")
+            << QStringLiteral("Some Text") << 5 << 7 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some xt") << 5;
+    QTest::newRow("Delete start, partial inner word selection")
+            << QStringLiteral("Some Text") << 6 << 8 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some Tt") << 6;
+    QTest::newRow("Delete end, partial inner word selection")
+            << QStringLiteral("Some Text") << 6 << 8 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some Tt") << 6;
+    QTest::newRow("Delete start, selection with space")
+            << QStringLiteral("Some Text") << 3 << 9 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Som") << 3;
+    QTest::newRow("Delete end, selection with space")
+            << QStringLiteral("Some Text") << 3 << 9 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Som") << 3;
+    QTest::newRow("Delete start, partial word selection with space")
+            << QStringLiteral("Some Text") << 3 << 7 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Somxt") << 3;
+    QTest::newRow("Delete end, partial selection with space")
+            << QStringLiteral("Some Text") << 3 << 7 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Somxt") << 3;
+}
+
+void tst_QLineEdit::deleteWordByKeySequence()
+{
+    QFETCH(QString, startText);
+    QFETCH(int, selectionStart);
+    QFETCH(int, selectionEnd);
+    QFETCH(int, cursorPosition);
+    QFETCH(QKeySequence::StandardKey, key);
+    QFETCH(QString, expectedText);
+    QFETCH(int, expectedCursorPosition);
+
+    QWidget widget;
+
+    QLineEdit *lineEdit = new QLineEdit(startText, &widget);
+    lineEdit->setFocus();
+    lineEdit->setCursorPosition(cursorPosition);
+    if (selectionStart != selectionEnd)
+        lineEdit->setSelection(selectionStart, selectionEnd - selectionStart);
+
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowFocused(&widget));
+    QVERIFY(lineEdit->hasFocus());
+
+    QTestEventList keys;
+    addKeySequenceStandardKey(keys, key);
+    keys.simulate(lineEdit);
+
+    QCOMPARE(lineEdit->text(), expectedText);
+    QCOMPARE(lineEdit->selectionStart(), -1);
+    QCOMPARE(lineEdit->selectionEnd(), -1);
+    QCOMPARE(lineEdit->cursorPosition(), expectedCursorPosition);
+}
+
+#endif // QT_CONFIG(shortcut)
 
 QTEST_MAIN(tst_QLineEdit)
 #include "tst_qlineedit.moc"

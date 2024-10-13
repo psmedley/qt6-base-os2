@@ -40,6 +40,7 @@
 #include <QtGui/private/qfontengine_coretext_p.h>
 
 #include <IOKit/graphics/IOGraphicsLib.h>
+#include <UniformTypeIdentifiers/UTCoreTypes.h>
 
 #include <inttypes.h>
 
@@ -124,9 +125,9 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
 #endif
         mFontDb.reset(new QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>);
 
-    QString icStr = QPlatformInputContextFactory::requested();
-    icStr.isNull() ? mInputContext.reset(new QCocoaInputContext)
-                   : mInputContext.reset(QPlatformInputContextFactory::create(icStr));
+    auto icStrs = QPlatformInputContextFactory::requested();
+    icStrs.isEmpty() ? mInputContext.reset(new QCocoaInputContext)
+                     : mInputContext.reset(QPlatformInputContextFactory::create(icStrs));
 
     initResources();
     QMacAutoReleasePool pool;
@@ -141,16 +142,6 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
         // wants to be foreground applications so change the process type. (But
         // see the function implementation for exceptions.)
         qt_mac_transformProccessToForegroundApplication();
-
-        // Move the application window to front to make it take focus, also when launching
-        // from the terminal. On 10.12+ this call has been moved to applicationDidFinishLauching
-        // to work around issues with loss of focus at startup.
-        if (QOperatingSystemVersion::current() < QOperatingSystemVersion::MacOSSierra) {
-            // Ignoring other apps is necessary (we must ignore the terminal), but makes
-            // Qt apps play slightly less nice with other apps when lanching from Finder
-            // (See the activateIgnoringOtherApps docs.)
-            [cocoaApplication activateIgnoringOtherApps : YES];
-        }
     }
 
     // Qt 4 also does not set the application delegate, so that behavior
@@ -177,6 +168,12 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
 
     connect(qGuiApp, &QGuiApplication::focusWindowChanged,
         this, &QCocoaIntegration::focusWindowChanged);
+
+    // Opening of a native menu should close all popup windows
+    m_menuTrackingObserver = QMacNotificationObserver(nil,
+        NSMenuDidBeginTrackingNotification, ^{
+            QGuiApplicationPrivate::instance()->closeAllPopups();
+        });
 }
 
 QCocoaIntegration::~QCocoaIntegration()
@@ -193,6 +190,9 @@ QCocoaIntegration::~QCocoaIntegration()
         // reset the application delegate
         [[NSApplication sharedApplication] setDelegate:nil];
     }
+
+    // Stop global mouse event and app activation monitoring
+    QCocoaWindow::removePopupMonitor();
 
 #ifndef QT_NO_CLIPBOARD
     // Delete the clipboard integration and destroy mime type converters.
@@ -242,6 +242,7 @@ bool QCocoaIntegration::hasCapability(QPlatformIntegration::Capability cap) cons
     case RasterGLSurface:
     case ApplicationState:
     case ApplicationIcon:
+    case BackingStoreStaticContents:
         return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
@@ -310,6 +311,17 @@ QPlatformBackingStore *QCocoaIntegration::createPlatformBackingStore(QWindow *wi
     case QSurface::MetalSurface:
     case QSurface::OpenGLSurface:
     case QSurface::VulkanSurface:
+        // If the window is a widget window, we know that the QWidgetRepaintManager
+        // will explicitly use rhiFlush() for the window owning the backingstore,
+        // and any child window with the same surface format. This means we can
+        // safely return a QCALayerBackingStore here, to ensure that any plain
+        // flush() for child windows that don't have a matching surface format
+        // will still work, by setting the layer's contents property.
+        if (window->inherits("QWidgetWindow"))
+            return new QCALayerBackingStore(window);
+
+        // Otherwise we return a QRhiBackingStore, that implements flush() in
+        // terms of rhiFlush().
         return new QRhiBackingStore(window);
     default:
         return nullptr;
@@ -400,14 +412,9 @@ QVariant QCocoaIntegration::styleHint(StyleHint hint) const
     return QPlatformIntegration::styleHint(hint);
 }
 
-Qt::KeyboardModifiers QCocoaIntegration::queryKeyboardModifiers() const
+QPlatformKeyMapper *QCocoaIntegration::keyMapper() const
 {
-    return QAppleKeyMapper::queryKeyboardModifiers();
-}
-
-QList<int> QCocoaIntegration::possibleKeys(const QKeyEvent *event) const
-{
-    return mKeyboardMapper->possibleKeys(event);
+    return mKeyboardMapper.data();
 }
 
 void QCocoaIntegration::setApplicationIcon(const QIcon &icon) const
@@ -440,8 +447,8 @@ void QCocoaIntegration::focusWindowChanged(QWindow *focusWindow)
         return;
 
     static bool hasDefaultApplicationIcon = [](){
-        NSImage *genericApplicationIcon = [[NSWorkspace sharedWorkspace]
-            iconForFileType:NSFileTypeForHFSTypeCode(kGenericApplicationIcon)];
+        NSImage *genericApplicationIcon = [NSWorkspace.sharedWorkspace
+            iconForContentType:UTTypeApplicationBundle];
         NSImage *applicationIcon = [NSImage imageNamed:NSImageNameApplicationIcon];
 
         NSRect rect = NSMakeRect(0, 0, 32, 32);

@@ -107,8 +107,6 @@ public:
     static void setActiveWindow(QWidget* act);
 
     static bool inPopupMode();
-    bool popupActive() override { return inPopupMode(); }
-    bool closeAllPopups() override;
     void closePopup(QWidget *popup);
     void openPopup(QWidget *popup);
     static void setFocusWidget(QWidget *focus, Qt::FocusReason reason);
@@ -145,9 +143,7 @@ public:
     static QWidget *main_widget;
     static QWidget *focus_widget;
     static QWidget *hidden_focus_widget;
-    static QWidget *active_window;
 #if QT_CONFIG(wheelevent)
-    static int  wheel_scroll_lines;
     static QPointer<QWidget> wheel_widget;
 #endif
 
@@ -172,7 +168,7 @@ public:
     static QString styleSheet;
 #endif
     static QPointer<QWidget> leaveAfterRelease;
-    static QWidget *pickMouseReceiver(QWidget *candidate, const QPoint &windowPos, QPoint *pos,
+    static QWidget *pickMouseReceiver(QWidget *candidate, const QPointF &windowPos, QPointF *pos,
                                       QEvent::Type type, Qt::MouseButtons buttons,
                                       QWidget *buttonDown, QWidget *alienWidget);
     static bool sendMouseEvent(QWidget *receiver, QMouseEvent *event, QWidget *alienWidget,
@@ -228,6 +224,7 @@ private:
     static void giveFocusAccordingToFocusPolicy(QWidget *w, QEvent *event, QPoint localPos);
     static bool shouldSetFocus(QWidget *w, Qt::FocusPolicy policy);
 
+    static QWidget *active_window;
 
     static bool isAlien(QWidget *);
 };

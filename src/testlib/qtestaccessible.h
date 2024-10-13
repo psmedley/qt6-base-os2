@@ -108,7 +108,7 @@ public:
             qWarning("Timeout waiting for accessibility event.");
             return false;
         }
-        const bool res = *eventList().first() == *ev;
+        const bool res = *eventList().constFirst() == *ev;
         if (!res)
             qWarning("%s", qPrintable(msgAccessibilityEventListMismatch(eventList(), ev)));
         delete eventList().takeFirst();
@@ -150,8 +150,8 @@ private:
     static void updateHandler(QAccessibleEvent *event)
     {
         auto ev = copyEvent(event);
-        if (ev->object()) {
-            QObject::connect(ev->object(), &QObject::destroyed, [&, ev](){
+        if (auto obj = ev->object()) {
+            QObject::connect(obj, &QObject::destroyed, obj, [&, ev](){
                 auto index= eventList().indexOf(ev);
                 if (index == -1)
                     return;
@@ -227,6 +227,17 @@ private:
             newEvent->setFirstColumn(oldEvent->firstColumn());
             newEvent->setLastRow(oldEvent->lastRow());
             newEvent->setLastColumn(oldEvent->lastColumn());
+            ev = newEvent;
+        } else if (event->type() == QAccessible::Announcement) {
+            QAccessibleAnnouncementEvent *oldEvent =
+                    static_cast<QAccessibleAnnouncementEvent *>(event);
+            QAccessibleAnnouncementEvent *newEvent;
+            if (event->object())
+                newEvent = new QAccessibleAnnouncementEvent(event->object(), oldEvent->message());
+            else
+                newEvent = new QAccessibleAnnouncementEvent(event->accessibleInterface(),
+                                                            oldEvent->message());
+            newEvent->setPoliteness(oldEvent->politeness());
             ev = newEvent;
         } else {
             if (event->object())

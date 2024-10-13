@@ -12,6 +12,7 @@
 #include <qfontmetrics.h>
 #include <qbrush.h>
 #include <qimagereader.h>
+#include <qtextformat.h>
 
 #include <algorithm>
 
@@ -35,18 +36,28 @@ struct QCssKnownValue
     quint64 id;
 };
 
+// This array is sorted alphabetically.
 static const QCssKnownValue properties[NumProperties - 1] = {
     { "-qt-background-role", QtBackgroundRole },
     { "-qt-block-indent", QtBlockIndent },
     { "-qt-fg-texture-cachekey", QtForegroundTextureCacheKey },
+    { "-qt-foreground", QtForeground },
     { "-qt-line-height-type", QtLineHeightType },
     { "-qt-list-indent", QtListIndent },
     { "-qt-list-number-prefix", QtListNumberPrefix },
     { "-qt-list-number-suffix", QtListNumberSuffix },
     { "-qt-paragraph-type", QtParagraphType },
+    { "-qt-stroke-color", QtStrokeColor },
+    { "-qt-stroke-dasharray", QtStrokeDashArray },
+    { "-qt-stroke-dashoffset", QtStrokeDashOffset },
+    { "-qt-stroke-linecap", QtStrokeLineCap },
+    { "-qt-stroke-linejoin", QtStrokeLineJoin },
+    { "-qt-stroke-miterlimit", QtStrokeMiterLimit },
+    { "-qt-stroke-width", QtStrokeWidth },
     { "-qt-style-features", QtStyleFeatures },
     { "-qt-table-type", QtTableType },
     { "-qt-user-state", QtUserState },
+    { "accent-color", QtAccent },
     { "alternate-background-color", QtAlternateBackground },
     { "background", Background },
     { "background-attachment", BackgroundAttachment },
@@ -155,6 +166,7 @@ static const QCssKnownValue values[NumKnownValues - 1] = {
     { "always", Value_Always },
     { "auto", Value_Auto },
     { "base", Value_Base },
+    { "beveljoin", Value_BevelJoin},
     { "bold", Value_Bold },
     { "bottom", Value_Bottom },
     { "bright-text", Value_BrightText },
@@ -171,6 +183,7 @@ static const QCssKnownValue values[NumKnownValues - 1] = {
     { "dot-dot-dash", Value_DotDotDash },
     { "dotted", Value_Dotted },
     { "double", Value_Double },
+    { "flatcap", Value_FlatCap},
     { "groove", Value_Groove },
     { "highlight", Value_Highlight },
     { "highlighted-text", Value_HighlightedText },
@@ -189,6 +202,7 @@ static const QCssKnownValue values[NumKnownValues - 1] = {
     { "mid", Value_Mid },
     { "middle", Value_Middle },
     { "midlight", Value_Midlight },
+    { "miterjoin", Value_MiterJoin},
     { "native", Value_Native },
     { "none", Value_None },
     { "normal", Value_Normal },
@@ -203,14 +217,18 @@ static const QCssKnownValue values[NumKnownValues - 1] = {
     { "pre-wrap", Value_PreWrap },
     { "ridge", Value_Ridge },
     { "right", Value_Right },
+    { "roundcap", Value_RoundCap},
+    { "roundjoin", Value_RoundJoin},
     { "selected", Value_Selected },
     { "shadow", Value_Shadow },
     { "small" , Value_Small },
     { "small-caps", Value_SmallCaps },
     { "solid", Value_Solid },
     { "square", Value_Square },
+    { "squarecap", Value_SquareCap},
     { "sub", Value_Sub },
     { "super", Value_Super },
+    { "svgmiterjoin", Value_SvgMiterJoin},
     { "text", Value_Text },
     { "top", Value_Top },
     { "transparent", Value_Transparent },
@@ -226,10 +244,10 @@ static const QCssKnownValue values[NumKnownValues - 1] = {
 };
 
 //Map id to strings as they appears in the 'values' array above
-static const short indexOfId[NumKnownValues] = { 0, 41, 48, 42, 49, 50, 55, 35, 26, 71, 72, 25, 43, 5, 64, 48,
-    29, 59, 60, 27, 52, 62, 6, 10, 39, 56, 19, 13, 17, 18, 20, 21, 51, 24, 46, 68, 37, 3, 2, 40, 63, 16,
-    11, 58, 14, 32, 65, 33, 66, 56, 67, 34, 70, 8, 28, 38, 12, 36, 61, 7, 9, 4, 69, 54, 22, 23, 30, 31,
-    1, 15, 0, 53, 45, 44 };
+static const short indexOfId[NumKnownValues] = { 0, 44, 51, 45, 52, 53, 60, 37, 28, 78, 79, 27, 46, 6, 71, 50,
+    31, 65, 66, 29, 55, 69, 7, 11, 42, 62, 20, 14, 18, 19, 21, 23, 54, 26, 49, 75, 39, 3, 2, 43, 70, 17, 12,
+    63, 15, 34, 72, 35, 73, 61, 74, 36, 64, 22, 56, 41, 5, 57, 67, 77, 9, 30, 40, 13, 38, 68, 8, 10, 4, 76,
+    59, 24, 25, 32, 33, 1, 16, 0, 58, 48, 47 };
 
 QString Value::toString() const
 {
@@ -392,6 +410,8 @@ LengthData ValueExtractor::lengthValue(const Value& v)
 
     if (data.unit != LengthData::None)
         s.chop(2);
+    else if (v.type == Value::Percentage)
+        data.unit = LengthData::Percent;
 
     data.number = s.toDouble();
     return data;
@@ -403,6 +423,15 @@ static int lengthValueFromData(const LengthData& data, const QFont& f)
                       : data.unit == LengthData::Em ? QFontMetrics(f).height() : 1);
     // raised lower limit due to the implementation of qRound()
     return qRound(qBound(double(INT_MIN) + 0.1, scale * data.number, double(INT_MAX)));
+}
+
+QTextLength ValueExtractor::textLength(const Declaration &decl)
+{
+    const LengthData data = lengthValue(decl.d->values.at(0));
+    if (data.unit == LengthData::Percent)
+        return QTextLength(QTextLength::PercentageLength, data.number);
+
+    return QTextLength(QTextLength::FixedLength, lengthValueFromData(data, f));
 }
 
 int ValueExtractor::lengthValue(const Declaration &decl)
@@ -811,6 +840,10 @@ static BrushData parseBrushValue(const QCss::Value &v, const QPalette &pal)
     QStringList spreads;
     spreads << "pad"_L1 << "reflect"_L1 << "repeat"_L1;
 
+    int coordinateMode = -1;
+    QStringList coordinateModes;
+    coordinateModes << "logical"_L1 << "stretchtodevice"_L1 << "objectbounding"_L1 << "object"_L1;
+
     bool dependsOnThePalette = false;
     Parser parser(lst.at(1));
     while (parser.hasNext()) {
@@ -837,11 +870,12 @@ static BrushData parseBrushValue(const QCss::Value &v, const QPalette &pal)
             parser.next();
             QCss::Value value;
             (void)parser.parseTerm(&value);
-            if (attr.compare("spread"_L1, Qt::CaseInsensitive) == 0) {
+            if (attr.compare("spread"_L1, Qt::CaseInsensitive) == 0)
                 spread = spreads.indexOf(value.variant.toString());
-            } else {
+            else if (attr.compare("coordinatemode"_L1, Qt::CaseInsensitive) == 0)
+                coordinateMode = coordinateModes.indexOf(value.variant.toString());
+            else
                 vars[attr] = value.variant.toReal();
-            }
         }
         parser.skipSpace();
         (void)parser.test(COMMA);
@@ -850,7 +884,7 @@ static BrushData parseBrushValue(const QCss::Value &v, const QPalette &pal)
     if (gradType == 0) {
         QLinearGradient lg(vars.value("x1"_L1), vars.value("y1"_L1),
                            vars.value("x2"_L1), vars.value("y2"_L1));
-        lg.setCoordinateMode(QGradient::ObjectBoundingMode);
+        lg.setCoordinateMode(coordinateMode < 0 ? QGradient::ObjectBoundingMode : QGradient::CoordinateMode(coordinateMode));
         lg.setStops(stops);
         if (spread != -1)
             lg.setSpread(QGradient::Spread(spread));
@@ -864,7 +898,7 @@ static BrushData parseBrushValue(const QCss::Value &v, const QPalette &pal)
         QRadialGradient rg(vars.value("cx"_L1), vars.value("cy"_L1),
                            vars.value("radius"_L1), vars.value("fx"_L1),
                            vars.value("fy"_L1));
-        rg.setCoordinateMode(QGradient::ObjectBoundingMode);
+        rg.setCoordinateMode(coordinateMode < 0 ? QGradient::ObjectBoundingMode : QGradient::CoordinateMode(coordinateMode));
         rg.setStops(stops);
         if (spread != -1)
             rg.setSpread(QGradient::Spread(spread));
@@ -876,7 +910,7 @@ static BrushData parseBrushValue(const QCss::Value &v, const QPalette &pal)
 
     if (gradType == 2) {
         QConicalGradient cg(vars.value("cx"_L1), vars.value("cy"_L1), vars.value("angle"_L1));
-        cg.setCoordinateMode(QGradient::ObjectBoundingMode);
+        cg.setCoordinateMode(coordinateMode < 0 ? QGradient::ObjectBoundingMode : QGradient::CoordinateMode(coordinateMode));
         cg.setStops(stops);
         if (spread != -1)
             cg.setSpread(QGradient::Spread(spread));
@@ -978,9 +1012,11 @@ void ValueExtractor::borderValue(const Declaration &decl, int *width, QCss::Bord
     }
 
      data.color = parseBrushValue(decl.d->values.at(i), pal);
-     *color = brushFromData(data.color, pal);
-     if (data.color.type != BrushData::DependsOnThePalette)
-         decl.d->parsed = QVariant::fromValue<BorderData>(data);
+    if (data.color.type != BrushData::Invalid) {
+        *color = brushFromData(data.color, pal);
+        if (data.color.type != BrushData::DependsOnThePalette)
+            decl.d->parsed = QVariant::fromValue<BorderData>(data);
+    }
 }
 
 static void parseShorthandBackgroundProperty(const QList<QCss::Value> &values, BrushData *brush, QString *image, Repeat *repeat, Qt::Alignment *alignment, const QPalette &pal)
@@ -1121,7 +1157,7 @@ static bool setFontSizeFromValue(QCss::Value value, QFont *font, int *fontSizeAd
     } else if (s.endsWith("px"_L1, Qt::CaseInsensitive)) {
         s.chop(2);
         value.variant = s;
-        if (value.variant.convert(QMetaType::fromType<int>())) {
+        if (value.variant.convert(QMetaType::fromType<qreal>())) {
             font->setPixelSize(qBound(0, value.variant.toInt(), (1 << 24) - 1));
             valid = true;
         }
@@ -1341,17 +1377,23 @@ bool ValueExtractor::extractFont(QFont *font, int *fontSizeAdjustment)
     return hit;
 }
 
-bool ValueExtractor::extractPalette(QBrush *fg, QBrush *sfg, QBrush *sbg, QBrush *abg, QBrush *pfg)
+bool ValueExtractor::extractPalette(QBrush *foreground,
+                                    QBrush *selectedForeground,
+                                    QBrush *selectedBackground,
+                                    QBrush *alternateBackground,
+                                    QBrush *placeHolderTextForeground,
+                                    QBrush *accent)
 {
     bool hit = false;
     for (int i = 0; i < declarations.size(); ++i) {
         const Declaration &decl = declarations.at(i);
         switch (decl.d->propertyId) {
-        case Color: *fg = decl.brushValue(pal); break;
-        case QtSelectionForeground: *sfg = decl.brushValue(pal); break;
-        case QtSelectionBackground: *sbg = decl.brushValue(pal); break;
-        case QtAlternateBackground: *abg = decl.brushValue(pal); break;
-        case QtPlaceHolderTextColor: *pfg = decl.brushValue(pal); break;
+        case Color: *foreground = decl.brushValue(pal); break;
+        case QtSelectionForeground: *selectedForeground = decl.brushValue(pal); break;
+        case QtSelectionBackground: *selectedBackground = decl.brushValue(pal); break;
+        case QtAlternateBackground: *alternateBackground = decl.brushValue(pal); break;
+        case QtPlaceHolderTextColor: *placeHolderTextForeground = decl.brushValue(pal); break;
+        case QtAccent: *accent = decl.brushValue(pal); break;
         default: continue;
         }
         hit = true;
@@ -1804,6 +1846,35 @@ bool Declaration::borderCollapseValue() const
         return false;
     else
         return d->values.at(0).toString() == "collapse"_L1;
+}
+
+QList<qreal> Declaration::dashArray() const
+{
+    if (d->propertyId != Property::QtStrokeDashArray || d->values.empty())
+        return QList<qreal>();
+
+    bool isValid = true;
+    QList<qreal> dashes;
+    for (int i = 0; i < d->values.size(); i++) {
+        Value v = d->values[i];
+        // Separators must be at odd indices and Numbers at even indices.
+        bool isValidSeparator = (i & 1) && v.type == Value::TermOperatorComma;
+        bool isValidNumber = !(i & 1) && v.type == Value::Number;
+        if (!isValidNumber && !isValidSeparator) {
+            isValid = false;
+            break;
+        } else if (isValidNumber) {
+            bool ok;
+            dashes.append(v.variant.toReal(&ok));
+            if (!ok) {
+                isValid = false;
+                break;
+            }
+        }
+    }
+
+    isValid &= !(dashes.size() & 1);
+    return isValid ? dashes : QList<qreal>();
 }
 
 QIcon Declaration::iconValue() const

@@ -103,7 +103,6 @@
 */
 
 /*! \fn void QMovie::frameChanged(int frameNumber)
-    \since 4.1
 
     This signal is emitted when the frame number has changed to
     \a frameNumber.  You can call currentImage() or currentPixmap() to get a
@@ -144,17 +143,19 @@
 #include "qrect.h"
 #include "qelapsedtimer.h"
 #include "qtimer.h"
-#include "qpair.h"
 #include "qmap.h"
 #include "qlist.h"
 #include "qbuffer.h"
 #include "qdir.h"
+#include "qloggingcategory.h"
 #include "private/qobject_p.h"
 #include "private/qproperty_p.h"
 
 #define QMOVIE_INVALID_DELAY -1
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_LOGGING_CATEGORY(lcImageIo)
 
 class QFrameInfo
 {
@@ -306,6 +307,19 @@ QFrameInfo QMoviePrivate::infoForFrame(int frameNumber)
         return QFrameInfo(); // Invalid
     }
 
+    // For an animated image format, the tradition is that QMovie calls read()
+    // until canRead() == false, because the number of frames may not be known
+    // in advance; but if we're abusing a multi-frame format as an animation,
+    // canRead() may remain true, and we need to stop after reading the maximum
+    // number of frames that the image provides.
+    const bool supportsAnimation = reader->supportsOption(QImageIOHandler::Animation);
+    const int stopAtFrame = supportsAnimation ? -1 : frameCount();
+
+    // For an animated image format, QImageIOHandler::nextImageDelay() should
+    // provide the time to wait until showing the next frame; but multi-frame
+    // formats are not expected to provide this value, so use 1000 ms by default.
+    const auto nextFrameDelay = [&]() { return supportsAnimation ? reader->nextImageDelay() : 1000; };
+
     if (cacheMode == QMovie::CacheNone) {
         if (frameNumber != currentFrameNumber+1) {
             // Non-sequential frame access
@@ -335,8 +349,12 @@ QFrameInfo QMoviePrivate::infoForFrame(int frameNumber)
                 }
             }
         }
-        if (reader->canRead()) {
+        qCDebug(lcImageIo, "CacheNone: read frame %d of %d", frameNumber, stopAtFrame);
+        if (stopAtFrame > 0 ? (frameNumber < stopAtFrame) : reader->canRead()) {
             // reader says we can read. Attempt to actually read image
+            // But if it's a non-animated multi-frame format and we know the frame count, stop there.
+            if (stopAtFrame > 0)
+                reader->jumpToImage(frameNumber);
             QImage anImage = reader->read();
             if (anImage.isNull()) {
                 // Reading image failed.
@@ -344,7 +362,7 @@ QFrameInfo QMoviePrivate::infoForFrame(int frameNumber)
             }
             if (frameNumber > greatestFrameNumber)
                 greatestFrameNumber = frameNumber;
-            return QFrameInfo(QPixmap::fromImage(std::move(anImage)), reader->nextImageDelay());
+            return QFrameInfo(QPixmap::fromImage(std::move(anImage)), nextFrameDelay());
         } else if (frameNumber != 0) {
             // We've read all frames now. Return an end marker
             haveReadAll = true;
@@ -360,15 +378,19 @@ QFrameInfo QMoviePrivate::infoForFrame(int frameNumber)
     if (frameNumber > greatestFrameNumber) {
         // Frame hasn't been read from file yet. Try to do it
         for (int i = greatestFrameNumber + 1; i <= frameNumber; ++i) {
-            if (reader->canRead()) {
+            qCDebug(lcImageIo, "CacheAll: read frame %d of %d", frameNumber, stopAtFrame);
+            if (stopAtFrame > 0 ? (frameNumber < stopAtFrame) : reader->canRead()) {
                 // reader says we can read. Attempt to actually read image
+                // But if it's a non-animated multi-frame format and we know the frame count, stop there.
+                if (stopAtFrame > 0)
+                    reader->jumpToImage(frameNumber);
                 QImage anImage = reader->read();
                 if (anImage.isNull()) {
                     // Reading image failed.
                     return QFrameInfo(); // Invalid
                 }
                 greatestFrameNumber = i;
-                QFrameInfo info(QPixmap::fromImage(std::move(anImage)), reader->nextImageDelay());
+                QFrameInfo info(QPixmap::fromImage(std::move(anImage)), nextFrameDelay());
                 // Cache it!
                 frameMap.insert(i, info);
                 if (i == frameNumber) {
@@ -426,11 +448,7 @@ bool QMoviePrivate::next()
     }
     // Image and delay OK, update internal state
     currentFrameNumber = nextFrameNumber++;
-    QSize scaledSize = reader->scaledSize();
-    if (scaledSize.isValid() && (scaledSize != info.pixmap.size()))
-        currentPixmap = QPixmap::fromImage( info.pixmap.toImage().scaled(scaledSize) );
-    else
-        currentPixmap = info.pixmap;
+    currentPixmap = info.pixmap;
 
     if (!speed)
         return true;
@@ -954,8 +972,6 @@ void QMovie::stop()
 }
 
 /*!
-    \since 4.1
-
     Returns the scaled size of frames.
 
     \sa QImageReader::scaledSize()
@@ -967,8 +983,6 @@ QSize QMovie::scaledSize()
 }
 
 /*!
-    \since 4.1
-
     Sets the scaled frame size to \a size.
 
     \sa QImageReader::setScaledSize()
@@ -980,8 +994,6 @@ void QMovie::setScaledSize(const QSize &size)
 }
 
 /*!
-    \since 4.1
-
     Returns the list of image formats supported by QMovie.
 
     \sa QImageReader::supportedImageFormats()

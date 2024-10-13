@@ -25,7 +25,6 @@
 
 #include "qendian.h"
 #include "qhash.h"
-#include "qpair.h"
 #include "qmutex.h"
 #include "qvarlengtharray.h"
 #include "private/qlocking_p.h"
@@ -53,6 +52,7 @@ QT_BEGIN_NAMESPACE
 
 // --------------------------------------------------------------------------
 
+#if defined(Q_OS_MACOS)
 static void initializeStandardUserDefaults()
 {
     // The standard user defaults are initialized from an ordered list of domains,
@@ -65,6 +65,7 @@ static void initializeStandardUserDefaults()
     Q_UNUSED(NSUserDefaults.standardUserDefaults);
 }
 Q_CONSTRUCTOR_FUNCTION(initializeStandardUserDefaults);
+#endif
 
 // --------------------------------------------------------------------------
 
@@ -242,10 +243,20 @@ QT_USE_NAMESPACE
 QT_NAMESPACE_ALIAS_OBJC_CLASS(QMacAutoReleasePoolTracker);
 #endif // QT_DEBUG
 
+// Use the direct runtime interface to manage autorelease pools, as it
+// has less overhead then allocating NSAutoreleasePools, and allows for
+// a future where we use ARC (where NSAutoreleasePool is not allowed).
+// https://clang.llvm.org/docs/AutomaticReferenceCounting.html#runtime-support
+
+extern "C" {
+void *objc_autoreleasePoolPush(void);
+void objc_autoreleasePoolPop(void *pool);
+}
+
 QT_BEGIN_NAMESPACE
 
 QMacAutoReleasePool::QMacAutoReleasePool()
-    : pool([[NSAutoreleasePool alloc] init])
+    : pool(objc_autoreleasePoolPush())
 {
 #ifdef QT_DEBUG
     static const bool debugAutoReleasePools = qEnvironmentVariableIsSet("QT_DARWIN_DEBUG_AUTORELEASEPOOLS");
@@ -290,10 +301,7 @@ QMacAutoReleasePool::QMacAutoReleasePool()
 
 QMacAutoReleasePool::~QMacAutoReleasePool()
 {
-    // Drain behaves the same as release, with the advantage that
-    // if we're ever used in a garbage-collected environment, the
-    // drain acts as a hint to the garbage collector to collect.
-    [static_cast<NSAutoreleasePool*>(pool) drain];
+    objc_autoreleasePoolPop(pool);
 }
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -338,7 +346,7 @@ std::optional<uint32_t> qt_mac_sipConfiguration()
             return config;
 #endif
 
-        QIOType<io_registry_entry_t> nvram = IORegistryEntryFromPath(kIOMasterPortDefault, "IODeviceTree:/options");
+        QIOType<io_registry_entry_t> nvram = IORegistryEntryFromPath(kIOMainPortDefault, "IODeviceTree:/options");
         if (!nvram) {
             qWarning("Failed to locate NVRAM entry in IO registry");
             return {};
@@ -498,7 +506,7 @@ bool qt_apple_isSandboxed()
 }
 
 QT_END_NAMESPACE
-@implementation NSObject (QtSandboxHelpers)
+@implementation NSObject (QtExtras)
 - (id)qt_valueForPrivateKey:(NSString *)key
 {
     if (qt_apple_isSandboxed())
@@ -533,7 +541,7 @@ QMacRootLevelAutoReleasePool::QMacRootLevelAutoReleasePool()
     if (qEnvironmentVariableIsSet(ROOT_LEVEL_POOL_DISABLE_SWITCH))
         return;
 
-    pool.reset(new QMacAutoReleasePool);
+    pool.emplace();
 
     [[[ROOT_LEVEL_POOL_MARKER alloc] init] autorelease];
 
@@ -559,6 +567,9 @@ void qt_apple_check_os_version()
 #elif defined(__TV_OS_VERSION_MIN_REQUIRED)
     const char *os = "tvOS";
     const int version = __TV_OS_VERSION_MIN_REQUIRED;
+#elif defined(__VISION_OS_VERSION_MIN_REQUIRED)
+    const char *os = "visionOS";
+    const int version = __VISION_OS_VERSION_MIN_REQUIRED;
 #elif defined(__IPHONE_OS_VERSION_MIN_REQUIRED)
     const char *os = "iOS";
     const int version = __IPHONE_OS_VERSION_MIN_REQUIRED;
@@ -708,7 +719,7 @@ QMacVersion::VersionTuple QMacVersion::versionsForImage(const mach_header *machH
     };
 
     static auto makeVersionTuple = [](uint32_t dt, uint32_t sdk, QOperatingSystemVersion::OSType osType) {
-        return qMakePair(
+        return std::pair(
             QOperatingSystemVersion(osType, dt >> 16 & 0xffff, dt >> 8 & 0xff, dt & 0xff),
             QOperatingSystemVersion(osType, sdk >> 16 & 0xffff, sdk >> 8 & 0xff, sdk & 0xff)
         );

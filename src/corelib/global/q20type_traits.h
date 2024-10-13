@@ -3,6 +3,8 @@
 #ifndef Q20TYPE_TRAITS_H
 #define Q20TYPE_TRAITS_H
 
+#include <QtCore/qcompilerdetection.h>
+#include <QtCore/qsystemdetection.h>
 #include <QtCore/qtconfigmacros.h>
 
 //
@@ -26,6 +28,29 @@
 QT_BEGIN_NAMESPACE
 
 namespace q20 {
+// like std::is_constant_evaluated
+#ifdef __cpp_lib_is_constant_evaluated
+using std::is_constant_evaluated;
+#define QT_SUPPORTS_IS_CONSTANT_EVALUATED
+#else
+constexpr bool is_constant_evaluated() noexcept
+{
+#ifdef Q_OS_INTEGRITY
+    // Integrity complains "calling __has_builtin() from a constant expression".
+    // Avoid the __has_builtin check until we know what's going on.
+    return false;
+#elif __has_builtin(__builtin_is_constant_evaluated) || \
+    (defined(Q_CC_MSVC_ONLY) /* >= 1925, but we require 1927 in qglobal.h */)
+#  define QT_SUPPORTS_IS_CONSTANT_EVALUATED
+    return __builtin_is_constant_evaluated();
+#else
+    return false;
+#endif
+}
+#endif // __cpp_lib_is_constant_evaluated
+}
+
+namespace q20 {
 // like std::remove_cvref(_t)
 #ifdef __cpp_lib_remove_cvref
 using std::remove_cvref;
@@ -36,6 +61,19 @@ using remove_cvref = std::remove_cv<std::remove_reference_t<T>>;
 template <typename T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 #endif // __cpp_lib_remove_cvref
+}
+
+namespace q20 {
+// like std::type_identity(_t)
+#ifdef __cpp_lib_type_identity
+using std::type_identity;
+using std::type_identity_t;
+#else
+template <typename T>
+struct type_identity { using type = T; };
+template <typename T>
+using type_identity_t = typename type_identity<T>::type;
+#endif // __cpp_lib_type_identity
 }
 
 QT_END_NAMESPACE

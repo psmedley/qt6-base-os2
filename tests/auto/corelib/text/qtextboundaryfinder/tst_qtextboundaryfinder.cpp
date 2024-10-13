@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QScopedValueRollback>
@@ -8,8 +8,11 @@
 #include <qfile.h>
 #include <qdebug.h>
 #include <qlist.h>
+#include <qset.h>
 
 #include <algorithm>
+
+using namespace Qt::Literals::StringLiterals;
 
 class tst_QTextBoundaryFinder : public QObject
 {
@@ -42,7 +45,6 @@ private slots:
     void assignmentOperator();
     void isAtSoftHyphen_data();
     void isAtSoftHyphen();
-    void thaiLineBreak();
 };
 
 
@@ -72,7 +74,7 @@ inline char *toString(const QList<int> &list)
 QT_END_NAMESPACE
 
 #ifdef QT_BUILD_INTERNAL
-static void generateDataFromFile(const QString &fname)
+static void generateDataFromFile(const QString &fname, const QSet<QString> &skipSet = {})
 {
     QTest::addColumn<QString>("testString");
     QTest::addColumn<QList<int> >("expectedBreakPositions");
@@ -80,9 +82,7 @@ static void generateDataFromFile(const QString &fname)
     QString testFile = QFINDTESTDATA(fname);
     QVERIFY2(!testFile.isEmpty(), (fname.toLatin1() + QByteArray(" not found!")));
     QFile f(testFile);
-    QVERIFY(f.exists());
-
-    f.open(QIODevice::ReadOnly);
+    QVERIFY(f.open(QIODevice::ReadOnly));
 
     int linenum = 0;
     while (!f.atEnd()) {
@@ -102,7 +102,8 @@ static void generateDataFromFile(const QString &fname)
 
         QString testString;
         QList<int> expectedBreakPositions;
-        foreach (const QString &part, test.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+        const QStringList parts = test.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        for (const QString &part : parts) {
             if (part.size() == 1) {
                 if (part.at(0).unicode() == 0xf7)
                     expectedBreakPositions.append(testString.size());
@@ -123,10 +124,12 @@ static void generateDataFromFile(const QString &fname)
         QVERIFY(!testString.isEmpty());
         QVERIFY(!expectedBreakPositions.isEmpty());
 
+        bool skip = false;
+
         if (!comments.isEmpty()) {
             const QStringList lst = comments.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts);
             comments.clear();
-            foreach (const QString &part, lst) {
+            for (const QString &part : lst) {
                 if (part.size() == 1) {
                     if (part.at(0).unicode() == 0xf7)
                         comments += QLatin1Char('+');
@@ -134,13 +137,19 @@ static void generateDataFromFile(const QString &fname)
                         comments += QLatin1Char('x');
                     continue;
                 }
-                if (part.startsWith(QLatin1Char('(')) && part.endsWith(QLatin1Char(')')))
+                if (part.startsWith(QLatin1Char('(')) && part.endsWith(QLatin1Char(')'))) {
+                    skip |= skipSet.contains(part.sliced(1, part.length() - 2));
                     comments += part;
+                }
             }
         }
 
         const QByteArray nm = "line #" + QByteArray::number(linenum) + ": " + comments.toLatin1();
-        QTest::newRow(nm.constData()) << testString << expectedBreakPositions;
+
+        if (skip)
+            qDebug() << "Skipping" << nm;
+        else
+            QTest::newRow(nm.constData()) << testString << expectedBreakPositions;
     }
 }
 #endif
@@ -200,7 +209,10 @@ QT_END_NAMESPACE
 
 void tst_QTextBoundaryFinder::graphemeBoundariesDefault_data()
 {
-    generateDataFromFile("data/GraphemeBreakTest.txt");
+
+    // QTBUG-121907: We are not using Unicode grapheme segmentation for Indic scripts.
+    QSet<QString> skipSet = {u"ConjunctLinkingScripts_LinkingConsonant"_s};
+    generateDataFromFile("data/GraphemeBreakTest.txt", skipSet);
 }
 
 void tst_QTextBoundaryFinder::graphemeBoundariesDefault()
@@ -248,7 +260,10 @@ void tst_QTextBoundaryFinder::sentenceBoundariesDefault()
 
 void tst_QTextBoundaryFinder::lineBoundariesDefault_data()
 {
-    generateDataFromFile("data/LineBreakTest.txt");
+    // QTBUG-121907: Indic line breaking is not supported
+    QSet<QString> skipSet = {u"AK"_s, u"AP"_s, u"AS"_s, u"VI"_s, u"VF"_s};
+
+    generateDataFromFile("data/LineBreakTest.txt", skipSet);
 }
 
 void tst_QTextBoundaryFinder::lineBoundariesDefault()
@@ -841,96 +856,6 @@ void tst_QTextBoundaryFinder::isAtSoftHyphen()
     doTestData(testString, expectedBreakPositions, QTextBoundaryFinder::Line);
     doTestData(testString, expectedSoftHyphenPositions, QTextBoundaryFinder::Line, QTextBoundaryFinder::SoftHyphen);
 }
-
-#if QT_CONFIG(library)
-#include <qlibrary.h>
-#endif
-
-#define LIBTHAI_MAJOR   0
-typedef int (*th_brk_def) (const unsigned char*, int*, size_t);
-static th_brk_def th_brk = 0;
-
-static bool init_libthai()
-{
-#if QT_CONFIG(library)
-    static bool triedResolve = false;
-    if (!triedResolve) {
-        th_brk = (th_brk_def) QLibrary::resolve("thai", (int)LIBTHAI_MAJOR, "th_brk");
-        triedResolve = true;
-    }
-#endif
-    return th_brk != 0;
-}
-
-void tst_QTextBoundaryFinder::thaiLineBreak()
-{
-    if (!init_libthai())
-        QSKIP("This test requires libThai-0.1.1x to be installed.");
-#if 0
-    QString text = QString::fromUtf8("สวัสดีครับ นี่เป็นการงทดสอบตัวเอ");
-
-    QTextBoundaryFinder finder(QTextBoundaryFinder::Line, text);
-    finder.setPosition(0);
-    QVERIFY(finder.isAtBoundary());
-    finder.setPosition(1);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(2);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(3);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(4);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(5);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(6);
-    QVERIFY(finder.isAtBoundary());
-    finder.setPosition(7);
-    QVERIFY(finder.isAtBoundary());
-    finder.setPosition(8);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(9);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(10);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(11);
-    QVERIFY(finder.isAtBoundary());
-    finder.setPosition(12);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(13);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(14);
-    QVERIFY(finder.isAtBoundary());
-    finder.setPosition(15);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(16);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(17);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(18);
-    QVERIFY(finder.isAtBoundary());
-    finder.setPosition(19);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(20);
-    QVERIFY(finder.isAtBoundary());
-    finder.setPosition(21);
-    QVERIFY(finder.isAtBoundary());
-    finder.setPosition(22);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(23);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(24);
-    QVERIFY(!finder.isAtBoundary());
-    finder.setPosition(25);
-    QVERIFY(finder.isAtBoundary());
-    finder.setPosition(26);
-    QVERIFY(finder.isAtBoundary());
-    for (int i = 27; i < 32; ++i) {
-        finder.setPosition(i);
-        QVERIFY(!finder.isAtBoundary());
-    }
-#endif
-}
-
 
 QTEST_MAIN(tst_QTextBoundaryFinder)
 #include "tst_qtextboundaryfinder.moc"

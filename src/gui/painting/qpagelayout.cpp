@@ -39,41 +39,19 @@ Q_GUI_EXPORT qreal qt_pointMultiplier(QPageLayout::Unit unit)
 // Multiplier for converting pixels to points.
 extern qreal qt_pixelMultiplier(int resolution);
 
-QPointF qt_convertPoint(const QPointF &xy, QPageLayout::Unit fromUnits, QPageLayout::Unit toUnits)
-{
-    // If the size have the same units, or are all 0, then don't need to convert
-    if (fromUnits == toUnits || xy.isNull())
-        return xy;
-
-    // If converting to points then convert and round to 0 decimal places
-    if (toUnits == QPageLayout::Point) {
-        const qreal multiplier = qt_pointMultiplier(fromUnits);
-        return QPointF(qRound(xy.x() * multiplier),
-                       qRound(xy.y() * multiplier));
-    }
-
-    // If converting to other units, need to convert to unrounded points first
-    QPointF pointXy = (fromUnits == QPageLayout::Point) ? xy : xy * qt_pointMultiplier(fromUnits);
-
-    // Then convert from points to required units rounded to 2 decimal places
-    const qreal multiplier = qt_pointMultiplier(toUnits);
-    return QPointF(qRound(pointXy.x() * 100 / multiplier) / 100.0,
-                   qRound(pointXy.y() * 100 / multiplier) / 100.0);
-}
-
 Q_GUI_EXPORT QMarginsF qt_convertMargins(const QMarginsF &margins, QPageLayout::Unit fromUnits, QPageLayout::Unit toUnits)
 {
     // If the margins have the same units, or are all 0, then don't need to convert
     if (fromUnits == toUnits || margins.isNull())
         return margins;
 
-    // If converting to points then convert and round to 0 decimal places
+    // If converting to points then convert and round up to 2 decimal places
     if (toUnits == QPageLayout::Point) {
-        const qreal multiplier = qt_pointMultiplier(fromUnits);
-        return QMarginsF(qRound(margins.left() * multiplier),
-                         qRound(margins.top() * multiplier),
-                         qRound(margins.right() * multiplier),
-                         qRound(margins.bottom() * multiplier));
+        const qreal multiplierX100 = qt_pointMultiplier(fromUnits) * 100;
+        return QMarginsF(qCeil(margins.left() * multiplierX100) / 100.0,
+                         qCeil(margins.top() * multiplierX100) / 100.0,
+                         qCeil(margins.right() * multiplierX100) / 100.0,
+                         qCeil(margins.bottom() * multiplierX100) / 100.0);
     }
 
     // If converting to other units, need to convert to unrounded points first
@@ -101,10 +79,10 @@ public:
 
     bool isValid() const;
 
-    void clampMargins(const QMarginsF &margins);
+    QMarginsF clampMargins(const QMarginsF &margins) const;
 
     QMarginsF margins(QPageLayout::Unit units) const;
-    QMargins marginsPoints() const;
+    QMarginsF marginsPoints() const;
     QMargins marginsPixels(int resolution) const;
 
     void setDefaultMargins(const QMarginsF &minMargins);
@@ -173,12 +151,12 @@ bool QPageLayoutPrivate::isValid() const
     return m_pageSize.isValid();
 }
 
-void QPageLayoutPrivate::clampMargins(const QMarginsF &margins)
+QMarginsF QPageLayoutPrivate::clampMargins(const QMarginsF &margins) const
 {
-    m_margins = QMarginsF(qBound(m_minMargins.left(),   margins.left(),   m_maxMargins.left()),
-                          qBound(m_minMargins.top(),    margins.top(),    m_maxMargins.top()),
-                          qBound(m_minMargins.right(),  margins.right(),  m_maxMargins.right()),
-                          qBound(m_minMargins.bottom(), margins.bottom(), m_maxMargins.bottom()));
+    return QMarginsF(qBound(m_minMargins.left(),   margins.left(),   m_maxMargins.left()),
+                     qBound(m_minMargins.top(),    margins.top(),    m_maxMargins.top()),
+                     qBound(m_minMargins.right(),  margins.right(),  m_maxMargins.right()),
+                     qBound(m_minMargins.bottom(), margins.bottom(), m_maxMargins.bottom()));
 }
 
 QMarginsF QPageLayoutPrivate::margins(QPageLayout::Unit units) const
@@ -186,14 +164,14 @@ QMarginsF QPageLayoutPrivate::margins(QPageLayout::Unit units) const
     return qt_convertMargins(m_margins, m_units, units);
 }
 
-QMargins QPageLayoutPrivate::marginsPoints() const
+QMarginsF QPageLayoutPrivate::marginsPoints() const
 {
-    return qt_convertMargins(m_margins, m_units, QPageLayout::Point).toMargins();
+    return qt_convertMargins(m_margins, m_units, QPageLayout::Point);
 }
 
 QMargins QPageLayoutPrivate::marginsPixels(int resolution) const
 {
-    return marginsPoints() / qt_pixelMultiplier(resolution);
+    return QMarginsF(marginsPoints() / qt_pixelMultiplier(resolution)).toMargins();
 }
 
 void QPageLayoutPrivate::setDefaultMargins(const QMarginsF &minMargins)
@@ -204,7 +182,7 @@ void QPageLayoutPrivate::setDefaultMargins(const QMarginsF &minMargins)
                              qMax(m_fullSize.width() - m_minMargins.left(), qreal(0)),
                              qMax(m_fullSize.height() - m_minMargins.top(), qreal(0)));
     if (m_mode == QPageLayout::StandardMode)
-        clampMargins(m_margins);
+        m_margins = clampMargins(m_margins);
 }
 
 QSizeF QPageLayoutPrivate::fullSizeUnits(QPageLayout::Unit units) const
@@ -310,6 +288,27 @@ QRectF QPageLayoutPrivate::paintRect() const
 
     \value StandardMode Paint Rect includes margins, margins must fall between the minimum and maximum.
     \value FullPageMode Paint Rect excludes margins, margins can be any value and must be managed manually.
+
+    In StandardMode, when setting margins, use \l{QPageLayout::OutOfBoundsPolicy::}{Clamp} to
+    automatically clamp the margins to fall between the minimum and maximum
+    allowed values.
+
+    \sa OutOfBoundsPolicy
+*/
+
+/*!
+    \enum QPageLayout::OutOfBoundsPolicy
+    \since 6.8
+
+    Defines the policy for margins that are out of bounds
+
+    \value Reject The margins must fall within the minimum and maximum values,
+                  otherwise they will be rejected.
+    \value Clamp  The margins are clamped between the minimum and maximum
+                  values to ensure they are valid.
+
+    \note The policy has no effect in \l{QPageLayout::Mode}{FullPageMode},
+          where all margins are accepted.
 */
 
 /*!
@@ -547,39 +546,52 @@ QPageLayout::Unit QPageLayout::units() const
 }
 
 /*!
-    Sets the page margins of the page layout to \a margins
+    Sets the page margins of the page layout to \a margins.
     Returns true if the margins were successfully set.
 
     The units used are those currently defined for the layout.  To use different
     units then call setUnits() first.
 
-    If in the default StandardMode then all the new margins must fall between the
-    minimum margins set and the maximum margins allowed by the page size,
-    otherwise the margins will not be set.
-
-    If in FullPageMode then any margin values will be accepted.
+    Since Qt 6.8, the optional \a outOfBoundsPolicy can be used to specify how
+    margins that are out of bounds are handled.
 
     \sa margins(), units()
 */
 
-bool QPageLayout::setMargins(const QMarginsF &margins)
+bool QPageLayout::setMargins(const QMarginsF &margins, OutOfBoundsPolicy outOfBoundsPolicy)
 {
     if (d->m_mode == FullPageMode) {
-        d.detach();
-        d->m_margins = margins;
-        return true;
-    } else if (margins.left() >= d->m_minMargins.left()
-               && margins.right() >= d->m_minMargins.right()
-               && margins.top() >= d->m_minMargins.top()
-               && margins.bottom() >= d->m_minMargins.bottom()
-               && margins.left() <= d->m_maxMargins.left()
-               && margins.right() <= d->m_maxMargins.right()
-               && margins.top() <= d->m_maxMargins.top()
-               && margins.bottom() <= d->m_maxMargins.bottom()) {
-        d.detach();
-        d->m_margins = margins;
+        if (margins != d->m_margins) {
+            d.detach();
+            d->m_margins = margins;
+        }
         return true;
     }
+
+    if (outOfBoundsPolicy == OutOfBoundsPolicy::Clamp) {
+        const QMarginsF clampedMargins = d->clampMargins(margins);
+        if (clampedMargins != d->m_margins) {
+            d.detach();
+            d->m_margins = clampedMargins;
+        }
+        return true;
+    }
+
+    if (margins.left() >= d->m_minMargins.left()
+        && margins.right() >= d->m_minMargins.right()
+        && margins.top() >= d->m_minMargins.top()
+        && margins.bottom() >= d->m_minMargins.bottom()
+        && margins.left() <= d->m_maxMargins.left()
+        && margins.right() <= d->m_maxMargins.right()
+        && margins.top() <= d->m_maxMargins.top()
+        && margins.bottom() <= d->m_maxMargins.bottom()) {
+        if (margins != d->m_margins) {
+            d.detach();
+            d->m_margins = margins;
+        }
+        return true;
+    }
+
     return false;
 }
 
@@ -590,23 +602,27 @@ bool QPageLayout::setMargins(const QMarginsF &margins)
     The units used are those currently defined for the layout.  To use different
     units call setUnits() first.
 
-    If in the default StandardMode then the new margin must fall between the
-    minimum margin set and the maximum margin allowed by the page size,
-    otherwise the margin will not be set.
-
-    If in FullPageMode then any margin values will be accepted.
+    Since Qt 6.8, the optional \a outOfBoundsPolicy can be used to specify how
+    margins that are out of bounds are handled.
 
     \sa setMargins(), margins()
 */
 
-bool QPageLayout::setLeftMargin(qreal leftMargin)
+bool QPageLayout::setLeftMargin(qreal leftMargin, OutOfBoundsPolicy outOfBoundsPolicy)
 {
+    if (d->m_mode == StandardMode && outOfBoundsPolicy == OutOfBoundsPolicy::Clamp)
+        leftMargin = qBound(d->m_minMargins.left(), leftMargin, d->m_maxMargins.left());
+
+    if (qFuzzyCompare(leftMargin, d->m_margins.left()))
+        return true;
+
     if (d->m_mode == FullPageMode
         || (leftMargin >= d->m_minMargins.left() && leftMargin <= d->m_maxMargins.left())) {
         d.detach();
         d->m_margins.setLeft(leftMargin);
         return true;
     }
+
     return false;
 }
 
@@ -617,23 +633,27 @@ bool QPageLayout::setLeftMargin(qreal leftMargin)
     The units used are those currently defined for the layout.  To use different
     units call setUnits() first.
 
-    If in the default StandardMode then the new margin must fall between the
-    minimum margin set and the maximum margin allowed by the page size,
-    otherwise the margin will not be set.
-
-    If in FullPageMode then any margin values will be accepted.
+    Since Qt 6.8, the optional \a outOfBoundsPolicy can be used to specify how
+    margins that are out of bounds are handled.
 
     \sa setMargins(), margins()
 */
 
-bool QPageLayout::setRightMargin(qreal rightMargin)
+bool QPageLayout::setRightMargin(qreal rightMargin, OutOfBoundsPolicy outOfBoundsPolicy)
 {
+    if (d->m_mode == StandardMode && outOfBoundsPolicy == OutOfBoundsPolicy::Clamp)
+        rightMargin = qBound(d->m_minMargins.right(), rightMargin, d->m_maxMargins.right());
+
+    if (qFuzzyCompare(rightMargin, d->m_margins.right()))
+        return true;
+
     if (d->m_mode == FullPageMode
         || (rightMargin >= d->m_minMargins.right() && rightMargin <= d->m_maxMargins.right())) {
         d.detach();
         d->m_margins.setRight(rightMargin);
         return true;
     }
+
     return false;
 }
 
@@ -644,23 +664,27 @@ bool QPageLayout::setRightMargin(qreal rightMargin)
     The units used are those currently defined for the layout.  To use different
     units call setUnits() first.
 
-    If in the default StandardMode then the new margin must fall between the
-    minimum margin set and the maximum margin allowed by the page size,
-    otherwise the margin will not be set.
-
-    If in FullPageMode then any margin values will be accepted.
+    Since Qt 6.8, the optional \a outOfBoundsPolicy can be used to specify how
+    margins that are out of bounds are handled.
 
     \sa setMargins(), margins()
 */
 
-bool QPageLayout::setTopMargin(qreal topMargin)
+bool QPageLayout::setTopMargin(qreal topMargin, OutOfBoundsPolicy outOfBoundsPolicy)
 {
+    if (d->m_mode == StandardMode && outOfBoundsPolicy == OutOfBoundsPolicy::Clamp)
+        topMargin = qBound(d->m_minMargins.top(), topMargin, d->m_maxMargins.top());
+
+    if (qFuzzyCompare(topMargin, d->m_margins.top()))
+        return true;
+
     if (d->m_mode == FullPageMode
         || (topMargin >= d->m_minMargins.top() && topMargin <= d->m_maxMargins.top())) {
         d.detach();
         d->m_margins.setTop(topMargin);
         return true;
     }
+
     return false;
 }
 
@@ -671,23 +695,27 @@ bool QPageLayout::setTopMargin(qreal topMargin)
     The units used are those currently defined for the layout.  To use different
     units call setUnits() first.
 
-    If in the default StandardMode then the new margin must fall between the
-    minimum margin set and the maximum margin allowed by the page size,
-    otherwise the margin will not be set.
-
-    If in FullPageMode then any margin values will be accepted.
+    Since Qt 6.8, the optional \a outOfBoundsPolicy can be used to specify how
+    margins that are out of bounds are handled.
 
     \sa setMargins(), margins()
 */
 
-bool QPageLayout::setBottomMargin(qreal bottomMargin)
+bool QPageLayout::setBottomMargin(qreal bottomMargin, OutOfBoundsPolicy outOfBoundsPolicy)
 {
+    if (d->m_mode == StandardMode && outOfBoundsPolicy == OutOfBoundsPolicy::Clamp)
+        bottomMargin = qBound(d->m_minMargins.bottom(), bottomMargin, d->m_maxMargins.bottom());
+
+    if (qFuzzyCompare(bottomMargin, d->m_margins.bottom()))
+        return true;
+
     if (d->m_mode == FullPageMode
         || (bottomMargin >= d->m_minMargins.bottom() && bottomMargin <= d->m_maxMargins.bottom())) {
         d.detach();
         d->m_margins.setBottom(bottomMargin);
         return true;
     }
+
     return false;
 }
 
@@ -721,7 +749,7 @@ QMarginsF QPageLayout::margins(Unit units) const
 
 QMargins QPageLayout::marginsPoints() const
 {
-    return d->marginsPoints();
+    return d->marginsPoints().toMargins();
 }
 
 /*!
@@ -888,7 +916,7 @@ QRect QPageLayout::paintRectPoints() const
     if (!isValid())
         return QRect();
     return d->m_mode == FullPageMode ? d->fullRectPoints()
-                                                  : d->fullRectPoints() - d->marginsPoints();
+                                                  : d->fullRectPoints() - d->marginsPoints().toMargins();
 }
 
 /*!

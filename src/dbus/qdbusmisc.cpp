@@ -8,6 +8,7 @@
 #include <QtCore/qlist.h>
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qvariant.h>
+#include <private/qurl_p.h>
 
 #include "qdbusutil_p.h"
 #include "qdbusconnection_p.h"
@@ -58,23 +59,42 @@ QString qDBusInterfaceFromMetaObject(const QMetaObject *mo)
         } else if (!QCoreApplication::instance()||
                    QCoreApplication::instance()->applicationName().isEmpty()) {
             interface.prepend("local."_L1);
-         } else {
-            interface.prepend(u'.').prepend(QCoreApplication::instance()->applicationName());
+        } else {
+            QString domainName = QCoreApplication::instance()->applicationName();
             const QString organizationDomain = QCoreApplication::instance()->organizationDomain();
-            const auto domainName = QStringView{organizationDomain}.split(u'.', Qt::SkipEmptyParts);
-            if (domainName.isEmpty()) {
-                 interface.prepend("local."_L1);
-            } else {
-                QString composedDomain;
-                // + 1 for additional dot, e.g. organizationDomain equals "example.com",
-                // then composedDomain will be equal "com.example."
-                composedDomain.reserve(organizationDomain.size() + 1);
-                for (auto it = domainName.rbegin(), end = domainName.rend(); it != end; ++it)
-                    composedDomain += *it + u'.';
+            if (organizationDomain.isEmpty())
+                domainName.append(".local"_L1);
+            else
+                domainName.append(u'.').append(organizationDomain);
 
-                interface.prepend(composedDomain);
+            // Domain names used to produce interface names should be IDN-encoded.
+            QString encodedDomainName = qt_ACE_do(domainName, ToAceOnly, ForbidLeadingDot);
+            if (encodedDomainName.isEmpty()) {
+                interface.prepend("local."_L1);
+                return interface;
             }
-         }
+
+            // Hyphens are not allowed in interface names and should be replaced
+            // by underscores.
+            encodedDomainName.replace(u'-', u'_');
+
+            auto nameParts = QStringView{ encodedDomainName }.split(u'.', Qt::SkipEmptyParts);
+
+            QString composedDomain;
+            // + 1 for additional dot, e.g. domainName equals "App.example.com",
+            // then composedDomain will be equal "com.example.App."
+            composedDomain.reserve(encodedDomainName.size() + nameParts.size() + 1);
+            for (auto it = nameParts.rbegin(), end = nameParts.rend(); it != end; ++it) {
+                // An interface name cannot start with a digit, and cannot
+                // contain digits immediately following a period. Prefix such
+                // digits with underscores.
+                if (it->first().isDigit())
+                    composedDomain += u'_';
+                composedDomain += *it + u'.';
+            }
+
+            interface.prepend(composedDomain);
+        }
      }
 
     return interface;
@@ -103,7 +123,19 @@ bool qDBusInterfaceInObject(QObject *obj, const QString &interface_name)
 // sig must be the normalised signature for the method
 int qDBusParametersForMethod(const QMetaMethod &mm, QList<QMetaType> &metaTypes, QString &errorMsg)
 {
-    return qDBusParametersForMethod(mm.parameterTypes(), metaTypes, errorMsg);
+    QList<QByteArray> parameterTypes;
+    parameterTypes.reserve(mm.parameterCount());
+
+    // Not using QMetaMethod::parameterTypes() since we call QMetaType::fromName below
+    // where we need any typedefs resolved already.
+    for (int i = 0; i < mm.parameterCount(); ++i) {
+        QByteArray typeName = mm.parameterMetaType(i).name();
+        if (typeName.isEmpty())
+            typeName = mm.parameterTypeName(i);
+        parameterTypes.append(typeName);
+    }
+
+    return qDBusParametersForMethod(parameterTypes, metaTypes, errorMsg);
 }
 
 #endif // QT_BOOTSTRAPPED
@@ -117,10 +149,7 @@ int qDBusParametersForMethod(const QList<QByteArray> &parameterTypes, QList<QMet
     metaTypes.append(QMetaType());        // return type
     int inputCount = 0;
     bool seenMessage = false;
-    QList<QByteArray>::ConstIterator it = parameterTypes.constBegin();
-    QList<QByteArray>::ConstIterator end = parameterTypes.constEnd();
-    for ( ; it != end; ++it) {
-        QByteArray type = *it;
+    for (QByteArray type : parameterTypes) {
         if (type.endsWith('*')) {
             errorMsg = "Pointers are not supported: "_L1 + QLatin1StringView(type);
             return -1;

@@ -41,6 +41,9 @@
 #include <private/qgesture_p.h>
 #include <qpa/qplatformbackingstore.h>
 #include <QtGui/private/qbackingstorerhisupport_p.h>
+#include <private/qapplication_p.h>
+
+#include <QtCore/qpointer.h>
 
 #include <vector>
 #include <memory>
@@ -48,6 +51,7 @@
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(lcWidgetPainting);
+Q_DECLARE_LOGGING_CATEGORY(lcWidgetShowHide);
 
 // Extra QWidget data
 //  - to minimize memory usage for members that are seldom used.
@@ -65,6 +69,7 @@ class QUnifiedToolbarSurface;
 
 // implemented in qshortcut.cpp
 bool qWidgetShortcutContextMatcher(QObject *object, Qt::ShortcutContext context);
+void qSendWindowChangeToTextureChildrenRecursively(QWidget *widget, QEvent::Type eventType);
 
 class QUpdateLaterEvent : public QEvent
 {
@@ -74,13 +79,10 @@ public:
     {
     }
 
-    ~QUpdateLaterEvent()
-    {
-    }
-
     inline const QRegion &region() const { return m_region; }
 
 protected:
+    friend class QApplication;
     QRegion m_region;
 };
 
@@ -107,7 +109,7 @@ struct QTLWExtra {
     QRect frameStrut;
     QRect normalGeometry; // used by showMin/maximized/FullScreen
     Qt::WindowFlags savedFlags; // Save widget flags while showing fullscreen
-    QScreen *initialScreen; // Screen when passing a QDesktop[Screen]Widget as parent.
+    QPointer<QScreen> initialScreen; // Screen when passing a QDesktop[Screen]Widget as parent.
 
     std::vector<std::unique_ptr<QPlatformTextureList>> widgetTextures;
 
@@ -219,6 +221,8 @@ public:
     QPainter *sharedPainter() const;
     void setSharedPainter(QPainter *painter);
     QWidgetRepaintManager *maybeRepaintManager() const;
+
+    QRhi *rhi() const;
 
     enum class WindowHandleMode {
         Direct,
@@ -367,6 +371,8 @@ public:
     void showChildren(bool spontaneous);
     void hideChildren(bool spontaneous);
     void setParent_sys(QWidget *parent, Qt::WindowFlags);
+    void reparentWidgetWindows(QWidget *parentWithWindow, Qt::WindowFlags windowFlags = {});
+    void reparentWidgetWindowChildren(QWidget *parentWithWindow);
     void scroll_sys(int dx, int dy);
     void scroll_sys(int dx, int dy, const QRect &r);
     void deactivateWidgetCleanup();
@@ -379,8 +385,9 @@ public:
     void show_sys();
     void hide_sys();
     void hide_helper();
+    bool isExplicitlyHidden() const;
     void _q_showIfNotHidden();
-    void setVisible(bool);
+    virtual void setVisible(bool);
 
     void setEnabled_helper(bool);
     static void adjustFlags(Qt::WindowFlags &flags, QWidget *w = nullptr);
@@ -413,9 +420,9 @@ public:
     bool setMinimumSize_helper(int &minw, int &minh);
     bool setMaximumSize_helper(int &maxw, int &maxh);
     void setConstraints_sys();
-    bool pointInsideRectAndMask(const QPoint &) const;
-    QWidget *childAt_helper(const QPoint &, bool) const;
-    QWidget *childAtRecursiveHelper(const QPoint &p, bool) const;
+    bool pointInsideRectAndMask(const QPointF &) const;
+    QWidget *childAt_helper(const QPointF &, bool) const;
+    QWidget *childAtRecursiveHelper(const QPointF &p, bool) const;
     void updateGeometry_helper(bool forceUpdate);
 
     void getLayoutItemMargins(int *left, int *top, int *right, int *bottom) const;
@@ -633,6 +640,8 @@ public:
 
     std::string flagsForDumping() const override;
 
+    QWidget *closestParentWidgetWithWindowHandle() const;
+
     // Variables.
     // Regular pointers (keep them together to avoid gaps on 64 bit architectures).
     std::unique_ptr<QWExtra> extra;
@@ -724,6 +733,41 @@ public:
     uint usesRhiFlush : 1;
     uint childrenHiddenByWState : 1;
     uint childrenShownByExpose : 1;
+    uint dontSetExplicitShowHide : 1;
+
+    // *************************** Focus abstraction ************************************
+    enum class FocusDirection {
+        Previous,
+        Next,
+    };
+
+    enum class FocusChainRemovalRule {
+        EnsureFocusOut = 0x01,
+        AssertConsistency = 0x02,
+    };
+    Q_DECLARE_FLAGS(FocusChainRemovalRules, FocusChainRemovalRule)
+
+    // Getters
+    QWidget *nextPrevElementInFocusChain(FocusDirection direction) const;
+
+    // manipulators
+    bool removeFromFocusChain(FocusChainRemovalRules rules = FocusChainRemovalRules(),
+                              FocusDirection direction = FocusDirection::Next);
+    bool insertIntoFocusChain(FocusDirection direction, QWidget *position);
+    static bool insertIntoFocusChain(const QWidgetList &toBeInserted, FocusDirection direction, QWidget *position);
+    bool insertIntoFocusChainBefore(QWidget *position)
+    { return insertIntoFocusChain(FocusDirection::Previous, position); }
+    bool insertIntoFocusChainAfter(QWidget *position)
+    { return insertIntoFocusChain(FocusDirection::Next, position); }
+    static QWidgetList takeFromFocusChain(QWidget *from, QWidget *to,
+                                          FocusDirection direction = FocusDirection::Next);
+    void reparentFocusChildren(FocusDirection direction);
+    QWidget *determineLastFocusChild(QWidget *noFurtherThan);
+
+    // Initialization and tests
+    void initFocusChain();
+    bool isInFocusChain() const;
+    bool isFocusChainConsistent() const;
 
     // *************************** Platform specific ************************************
 #if defined(Q_OS_WIN)
@@ -735,6 +779,7 @@ public:
 
     bool stealKeyboardGrab(bool grab);
     bool stealMouseGrab(bool grab);
+    bool hasChildWithFocusPolicy(Qt::FocusPolicy policy, const QWidget *excludeChildrenOf = nullptr) const;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QWidgetPrivate::DrawWidgetFlags)
@@ -839,11 +884,14 @@ inline void QWidgetPrivate::setSharedPainter(QPainter *painter)
     x->sharedPainter = painter;
 }
 
-inline bool QWidgetPrivate::pointInsideRectAndMask(const QPoint &p) const
+inline bool QWidgetPrivate::pointInsideRectAndMask(const QPointF &p) const
 {
     Q_Q(const QWidget);
-    return q->rect().contains(p) && (!extra || !extra->hasMask || q->testAttribute(Qt::WA_MouseNoMask)
-                                     || extra->mask.contains(p));
+    // Use QRectF::contains so that (0, -0.1) isn't in, with p.toPoint() it would be
+    // The adjusted matches QRect semantics: (160,160) isn't contained in QRect(0, 0, 160, 160)
+    return QRectF(q->rect().adjusted(0, 0, -1, -1)).contains(p)
+            && (!extra || !extra->hasMask || q->testAttribute(Qt::WA_MouseNoMask)
+                || extra->mask.contains(p.toPoint() /* incorrect for the -0.1 case */));
 }
 
 inline QWidgetRepaintManager *QWidgetPrivate::maybeRepaintManager() const

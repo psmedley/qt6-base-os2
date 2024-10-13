@@ -21,14 +21,13 @@ class QIOSWindow : public QObject, public QPlatformWindow
     Q_OBJECT
 
 public:
-    explicit QIOSWindow(QWindow *window);
+    explicit QIOSWindow(QWindow *window, WId nativeHandle = 0);
     ~QIOSWindow();
 
     void setGeometry(const QRect &rect) override;
 
     void setWindowState(Qt::WindowStates state) override;
     void setParent(const QPlatformWindow *window) override;
-    void handleContentOrientationChange(Qt::ScreenOrientation orientation) override;
     void setVisible(bool visible) override;
     void setOpacity(qreal level) override;
 
@@ -56,21 +55,25 @@ public:
 
     void requestUpdate() override;
 
+    void setMask(const QRegion &region) override;
+
 #if QT_CONFIG(opengl)
     CAEAGLLayer *eaglLayer() const;
 #endif
+
+    bool isForeignWindow() const override;
+    UIView *view() const;
 
 private:
     void applicationStateChanged(Qt::ApplicationState state);
     void applyGeometry(const QRect &rect);
 
-    QUIView *m_view;
+    UIView *m_view;
 
     QRect m_normalGeometry;
-    int m_windowLevel;
 
     void raiseOrLower(bool raise);
-    void updateWindowLevel();
+    int windowLevel() const;
     bool blockedByModal();
 
     friend class QIOSScreen;
@@ -79,6 +82,8 @@ private:
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug debug, const QIOSWindow *window);
 #endif
+
+QT_MANGLE_NAMESPACE(QUIView) *quiview_cast(UIView *view);
 
 QT_END_NAMESPACE
 

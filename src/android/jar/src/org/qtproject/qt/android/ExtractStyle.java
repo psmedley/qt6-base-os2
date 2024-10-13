@@ -5,8 +5,10 @@
 package org.qtproject.qt.android;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
@@ -34,7 +36,6 @@ import android.graphics.drawable.ScaleDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.graphics.drawable.VectorDrawable;
 import android.os.Build;
-import android.os.Bundle;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.TypedValue;
@@ -60,7 +61,7 @@ import java.util.Map;
 import java.util.Objects;
 
 
-public class ExtractStyle {
+class ExtractStyle {
 
     // This used to be retrieved from android.R.styleable.ViewDrawableStates field via reflection,
     // but since the access to that is restricted, we need to have hard-coded here.
@@ -136,29 +137,59 @@ public class ExtractStyle {
     Context m_context;
     private final HashMap<String, DrawableCache> m_drawableCache = new HashMap<>();
 
-    private static final String EXTRACT_STYLE_KEY = "extract.android.style";
-    private static final String EXTRACT_STYLE_MINIMAL_KEY = "extract.android.style.option";
-
     private static boolean m_missingNormalStyle = false;
     private static boolean m_missingDarkStyle = false;
     private static String  m_stylePath = null;
     private static boolean m_extractMinimal = false;
 
-    public static void setup(Bundle loaderParams) {
-        if (loaderParams.containsKey(EXTRACT_STYLE_KEY)) {
-            m_stylePath = loaderParams.getString(EXTRACT_STYLE_KEY);
+    private static final String QtTAG = "QtExtractStyle";
 
-            boolean darkModeFileMissing = !(new File(m_stylePath + "darkUiMode/style.json").exists());
-            m_missingDarkStyle = Build.VERSION.SDK_INT > 28 && darkModeFileMissing;
-
-            m_missingNormalStyle = !(new File(m_stylePath + "style.json").exists());
-
-            m_extractMinimal = loaderParams.containsKey(EXTRACT_STYLE_MINIMAL_KEY) &&
-                               loaderParams.getBoolean(EXTRACT_STYLE_MINIMAL_KEY);
-        }
+    private static boolean isUiModeDark(Configuration config)
+    {
+        return (config.uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    public static void runIfNeeded(Context context, boolean extractDarkMode) {
+    static String setup(Context context, String extractOption, int dpi) {
+
+        String dataDir = context.getApplicationInfo().dataDir;
+        m_stylePath = dataDir + "/qt-reserved-files/android-style/" + dpi + "/";
+
+        if (extractOption.equals("none"))
+            return m_stylePath;
+
+        if (extractOption.isEmpty())
+            extractOption = "minimal";
+
+        if (!extractOption.equals("default") && !extractOption.equals("full")
+                && !extractOption.equals("minimal") && !extractOption.equals("none")) {
+            Log.e(QtTAG, "Invalid extract_android_style option \"" + extractOption
+                    + "\", defaulting to \"minimal\"");
+            extractOption = "minimal";
+        }
+
+        // QTBUG-69810: The extraction code will trigger compatibility warnings on Android
+        // SDK version >= 28 when the target SDK version is set to something lower then 28,
+        // so default to "none" and issue a warning if that is the case.
+        if (extractOption.equals("default")) {
+            int targetSdk = context.getApplicationInfo().targetSdkVersion;
+            if (targetSdk < 28 && Build.VERSION.SDK_INT >= 28) {
+                Log.e(QtTAG, "extract_android_style option set to \"none\" when " +
+                        "targetSdkVersion is less then 28");
+                extractOption = "none";
+            }
+        }
+
+        boolean darkModeFileMissing = !(new File(m_stylePath + "darkUiMode/style.json").exists());
+        m_missingDarkStyle = Build.VERSION.SDK_INT > 28 && darkModeFileMissing;
+        m_missingNormalStyle = !(new File(m_stylePath + "style.json").exists());
+        m_extractMinimal = extractOption.equals("minimal");
+
+        ExtractStyle.runIfNeeded(context, isUiModeDark(context.getResources().getConfiguration()));
+
+        return m_stylePath;
+    }
+
+    static void runIfNeeded(Context context, boolean extractDarkMode) {
         if (m_stylePath == null)
             return;
         if (extractDarkMode) {
@@ -172,7 +203,7 @@ public class ExtractStyle {
         }
     }
 
-    public ExtractStyle(Context context, String extractPath, boolean minimal) {
+    ExtractStyle(Context context, String extractPath, boolean minimal) {
         m_minimal = minimal;
         m_extractPath = extractPath + "/";
         boolean dirCreated = new File(m_extractPath).mkdirs();
@@ -739,7 +770,7 @@ public class ExtractStyle {
         return json;
     }
 
-    public JSONObject getDrawable(Object drawable, String filename, Rect padding) {
+    JSONObject getDrawable(Object drawable, String filename, Rect padding) {
         if (drawable == null || m_minimal)
             return null;
 
@@ -920,11 +951,11 @@ public class ExtractStyle {
         return sortedAttrs;
     }
 
-    public void extractViewInformation(int styleName, JSONObject json, String qtClassName) {
+    void extractViewInformation(int styleName, JSONObject json, String qtClassName) {
         extractViewInformation(styleName, json, qtClassName, null);
     }
 
-    public void extractViewInformation(int styleName, JSONObject json, String qtClassName, AttributeSet attributeSet) {
+    void extractViewInformation(int styleName, JSONObject json, String qtClassName, AttributeSet attributeSet) {
         try {
             TypedValue typedValue = new TypedValue();
             Context ctx = new ContextThemeWrapper(m_context, m_theme);
@@ -1046,13 +1077,13 @@ public class ExtractStyle {
         }
     }
 
-    public JSONObject extractTextAppearance(int styleName)
+    JSONObject extractTextAppearance(int styleName)
     {
         return extractTextAppearance(styleName, false);
     }
 
     @SuppressLint("ResourceType")
-    public JSONObject extractTextAppearance(int styleName, boolean subStyle)
+    JSONObject extractTextAppearance(int styleName, boolean subStyle)
     {
         final int[] attributes = new int[]{
                 android.R.attr.textSize,
@@ -1104,15 +1135,11 @@ public class ExtractStyle {
         return json;
     }
 
-    public JSONObject extractTextAppearanceInformation(int styleName, String qtClass, AttributeSet attributeSet) {
-        return extractTextAppearanceInformation(styleName, qtClass, android.R.attr.textAppearance, attributeSet);
-    }
-
-    public JSONObject extractTextAppearanceInformation(int styleName, String qtClass) {
+    JSONObject extractTextAppearanceInformation(int styleName, String qtClass) {
         return extractTextAppearanceInformation(styleName, qtClass, android.R.attr.textAppearance, null);
     }
 
-    public JSONObject extractTextAppearanceInformation(int styleName, String qtClass, int textAppearance, AttributeSet attributeSet) {
+    JSONObject extractTextAppearanceInformation(int styleName, String qtClass, int textAppearance, AttributeSet attributeSet) {
         JSONObject json = new JSONObject();
         extractViewInformation(styleName, json, qtClass, attributeSet);
 
@@ -1344,7 +1371,7 @@ public class ExtractStyle {
         return json;
     }
 
-    public JSONObject extractImageViewInformation(int styleName, String qtClassName) {
+    JSONObject extractImageViewInformation(int styleName, String qtClassName) {
         JSONObject json = new JSONObject();
         try {
             extractViewInformation(styleName, json, qtClassName);
@@ -1778,11 +1805,11 @@ public class ExtractStyle {
         private boolean m_addComma = false;
         private int m_indentLevel = 0;
 
-        public SimpleJsonWriter(String filePath) throws FileNotFoundException {
+        SimpleJsonWriter(String filePath) throws FileNotFoundException {
             m_writer = new OutputStreamWriter(new FileOutputStream(filePath));
         }
 
-        public void close() throws IOException {
+        void close() throws IOException {
             m_writer.close();
         }
 
@@ -1823,7 +1850,7 @@ public class ExtractStyle {
     static class DrawableCache {
         JSONObject object;
         Object drawable;
-        public DrawableCache(JSONObject json, Object drawable) {
+        DrawableCache(JSONObject json, Object drawable) {
             object = json;
             this.drawable = drawable;
         }

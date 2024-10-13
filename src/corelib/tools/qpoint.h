@@ -4,13 +4,20 @@
 #ifndef QPOINT_H
 #define QPOINT_H
 
+#include <QtCore/qcompare.h>
 #include <QtCore/qnamespace.h>
+#include <QtCore/qnumeric.h>
+
+#include <QtCore/q20type_traits.h>
+#include <QtCore/q23utility.h>
 
 #if defined(Q_OS_DARWIN) || defined(Q_QDOC)
 struct CGPoint;
 #endif
 
 QT_BEGIN_NAMESPACE
+
+QT_ENABLE_P0846_SEMANTICS_FOR(get)
 
 class QPointF;
 
@@ -46,10 +53,10 @@ public:
     constexpr static inline int dotProduct(const QPoint &p1, const QPoint &p2)
     { return p1.xp * p2.xp + p1.yp * p2.yp; }
 
-    friend constexpr inline bool operator==(const QPoint &p1, const QPoint &p2) noexcept
+private:
+    friend constexpr bool comparesEqual(const QPoint &p1, const QPoint &p2) noexcept
     { return p1.xp == p2.xp && p1.yp == p2.yp; }
-    friend constexpr inline bool operator!=(const QPoint &p1, const QPoint &p2) noexcept
-    { return p1.xp != p2.xp || p1.yp != p2.yp; }
+    Q_DECLARE_EQUALITY_COMPARABLE_LITERAL_TYPE(QPoint)
     friend constexpr inline QPoint operator+(const QPoint &p1, const QPoint &p2) noexcept
     { return QPoint(p1.xp + p2.xp, p1.yp + p2.yp); }
     friend constexpr inline QPoint operator-(const QPoint &p1, const QPoint &p2) noexcept
@@ -73,6 +80,7 @@ public:
     friend constexpr inline QPoint operator/(const QPoint &p, qreal c)
     { return QPoint(qRound(p.xp / c), qRound(p.yp / c)); }
 
+public:
 #if defined(Q_OS_DARWIN) || defined(Q_QDOC)
     [[nodiscard]] Q_CORE_EXPORT CGPoint toCGPoint() const noexcept;
 #endif
@@ -86,13 +94,13 @@ private:
     template <std::size_t I,
               typename P,
               std::enable_if_t<(I < 2), bool> = true,
-              std::enable_if_t<std::is_same_v<std::decay_t<P>, QPoint>, bool> = true>
+              std::enable_if_t<std::is_same_v<q20::remove_cvref_t<P>, QPoint>, bool> = true>
     friend constexpr decltype(auto) get(P &&p) noexcept
     {
         if constexpr (I == 0)
-            return (std::forward<P>(p).xp);
+            return q23::forward_like<P>(p.xp);
         else if constexpr (I == 1)
-            return (std::forward<P>(p).yp);
+            return q23::forward_like<P>(p.yp);
     }
 };
 
@@ -236,19 +244,25 @@ public:
         return p1.xp * p2.xp + p1.yp * p2.yp;
     }
 
+private:
     QT_WARNING_PUSH
     QT_WARNING_DISABLE_FLOAT_COMPARE
-    friend constexpr inline bool operator==(const QPointF &p1, const QPointF &p2)
+    friend constexpr bool qFuzzyCompare(const QPointF &p1, const QPointF &p2) noexcept
     {
         return ((!p1.xp || !p2.xp) ? qFuzzyIsNull(p1.xp - p2.xp) : qFuzzyCompare(p1.xp, p2.xp))
             && ((!p1.yp || !p2.yp) ? qFuzzyIsNull(p1.yp - p2.yp) : qFuzzyCompare(p1.yp, p2.yp));
     }
-    friend constexpr inline bool operator!=(const QPointF &p1, const QPointF &p2)
-    {
-        return !(p1 == p2);
-    }
     QT_WARNING_POP
-
+    friend constexpr bool qFuzzyIsNull(const QPointF &point) noexcept
+    {
+        return qFuzzyIsNull(point.xp) && qFuzzyIsNull(point.yp);
+    }
+    friend constexpr bool comparesEqual(const QPointF &p1, const QPointF &p2) noexcept
+    { return qFuzzyCompare(p1, p2); }
+    Q_DECLARE_EQUALITY_COMPARABLE_LITERAL_TYPE(QPointF)
+    friend constexpr bool comparesEqual(const QPointF &p1, const QPoint &p2) noexcept
+    { return comparesEqual(p1, p2.toPointF()); }
+    Q_DECLARE_EQUALITY_COMPARABLE_LITERAL_TYPE(QPointF, QPoint)
     friend constexpr inline QPointF operator+(const QPointF &p1, const QPointF &p2)
     { return QPointF(p1.xp + p2.xp, p1.yp + p2.yp); }
     friend constexpr inline QPointF operator-(const QPointF &p1, const QPointF &p2)
@@ -267,6 +281,7 @@ public:
         return QPointF(p.xp / divisor, p.yp / divisor);
     }
 
+public:
     constexpr QPoint toPoint() const;
 
 #if defined(Q_OS_DARWIN) || defined(Q_QDOC)
@@ -283,13 +298,13 @@ private:
     template <std::size_t I,
               typename P,
               std::enable_if_t<(I < 2), bool> = true,
-              std::enable_if_t<std::is_same_v<std::decay_t<P>, QPointF>, bool> = true>
+              std::enable_if_t<std::is_same_v<q20::remove_cvref_t<P>, QPointF>, bool> = true>
     friend constexpr decltype(auto) get(P &&p) noexcept
     {
         if constexpr (I == 0)
-            return (std::forward<P>(p).xp);
+            return q23::forward_like<P>(p.xp);
         else if constexpr (I == 1)
-            return (std::forward<P>(p).yp);
+            return q23::forward_like<P>(p.yp);
     }
 };
 

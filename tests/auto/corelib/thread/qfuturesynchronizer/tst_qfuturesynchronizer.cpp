@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
@@ -39,7 +39,7 @@ void tst_QFutureSynchronizer::setFutureAliasingExistingMember()
     //
     // GIVEN: a QFutureSynchronizer with one QFuture:
     //
-    QFutureSynchronizer synchronizer(QtFuture::makeReadyFuture(42));
+    QFutureSynchronizer synchronizer(QtFuture::makeReadyValueFuture(42));
 
     //
     // WHEN: calling setFuture() with an alias of the QFuture already in `synchronizer`:

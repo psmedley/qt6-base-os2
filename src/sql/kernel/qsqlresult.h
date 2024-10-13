@@ -8,9 +8,6 @@
 #include <QtCore/qvariant.h>
 #include <QtCore/qcontainerfwd.h>
 
-// for testing:
-class tst_QSqlQuery;
-
 QT_BEGIN_NAMESPACE
 
 
@@ -26,8 +23,6 @@ class Q_SQL_EXPORT QSqlResult
     Q_DECLARE_PRIVATE(QSqlResult)
     friend class QSqlQuery;
     friend class QSqlTableModelPrivate;
-    // for testing:
-    friend class ::tst_QSqlQuery;
 
 public:
     virtual ~QSqlResult();
@@ -69,8 +64,14 @@ protected:
     QSql::ParamType bindValueType(const QString& placeholder) const;
     QSql::ParamType bindValueType(int pos) const;
     int boundValueCount() const;
+#if QT_SQL_REMOVED_SINCE(6, 6)
     QList<QVariant> &boundValues() const;
+#endif
+    QVariantList &boundValues(QT6_DECL_NEW_OVERLOAD);
+    QVariantList boundValues(QT6_DECL_NEW_OVERLOAD) const;
+
     QString executedQuery() const;
+    QStringList boundValueNames() const;
     QString boundValueName(int pos) const;
     void clear();
     bool hasOutValues() const;
@@ -96,6 +97,8 @@ protected:
     virtual void detachFromResultSet();
     virtual void setNumericalPrecisionPolicy(QSql::NumericalPrecisionPolicy policy);
     QSql::NumericalPrecisionPolicy numericalPrecisionPolicy() const;
+    void setPositionalBindingEnabled(bool enable);
+    bool isPositionalBindingEnabled() const;
     virtual bool nextResult();
     void resetBindCount(); // HACK
 
