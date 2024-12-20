@@ -1276,7 +1276,7 @@ void QProcessPrivate::killProcess()
         DosKillProcess(DKP_PROCESS, pid);
 }
 
-bool QProcessPrivate::waitForStarted(const QDeadlineTimer &deadline)
+bool QProcessPrivate::waitForStarted(const QDeadlineTimer &deadline __attribute__ ((unused)))
 {
     if (processState == QProcess::Running)
         return true;

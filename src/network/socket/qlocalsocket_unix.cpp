@@ -34,6 +34,9 @@ static QString pathNameForConnection(const QString &connectingName,
                                      QLocalSocket::SocketOptions options)
 {
 #ifdef Q_OS_OS2
+    // suppress "unused parameter" warning without changing non-OS/2 code
+    (void)options;
+
     // Local OS/2 sockets must always start with "\socket\"
     QString connectingPathName;
 

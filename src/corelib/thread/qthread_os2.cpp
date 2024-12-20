@@ -175,7 +175,7 @@ static void qt_adopted_thread_watcher_function(void *)
         lock.relock();
 
         if (arc == NO_ERROR) {
-            int i = qt_adopted_thread_tids.indexOf (tid);
+            int i = qt_adopted_thread_tids.indexOf (static_cast<int>(tid));
             if (i >= 0) {
                 QThreadData *data = QThreadData::get2(qt_adopted_qthreads.at(i));
 

@@ -509,7 +509,7 @@ QList<QOS2Mime::MimeCFPair> QOS2MimeText::mimesForFormats(const QList<ULONG> &fo
     // prefer unicode over local8Bit
     if (formats.contains(CF_TextUnicode))
         mimes << MimeCFPair(QLatin1String("text/plain"), CF_TextUnicode);
-    if (formats.contains(CF_TEXT))
+    if (formats.contains(static_cast<long unsigned int>(CF_TEXT)))
         mimes << MimeCFPair(QLatin1String("text/plain"), CF_TEXT);
     return mimes;
 }
@@ -545,7 +545,7 @@ QVariant QOS2MimeText::convertFromFormat(ULONG format, ULONG flags, ULONG data,
         }
         str = QString::fromLocal8Bit(r);
     } else if (format == CF_TextUnicode || CF_TextHtml) {
-        str = QString::fromUtf16((const unsigned short *)data);
+        str = QString::fromUtf16((const char16_t *)data);
         str.replace(QLatin1String("\r\n"), QLatin1String("\n"));
     }
 
