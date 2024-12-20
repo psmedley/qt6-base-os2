@@ -807,13 +807,21 @@ void QOS2Window::setWindowTitle(const QString &title)
     qCInfo(lcQpaWindows) << this << DV(title);
 
     if (mHwndFrame) {
-        QByteArray title8bit = title.toLocal8Bit();
-        WinSetWindowText(mHwndFrame, title8bit);
+        QByteArray titleText;
+
+        // convert the title to UTF8 for CP1208
+        // and to "plain text" otherwise
+        if (WinQueryCp(1) == 1208)
+            titleText = title.toUtf8();
+        else
+            titleText = title.toLocal8Bit();
+        WinSetWindowText(mHwndFrame, titleText);
 
         if (mSwEntry) {
             SWCNTRL swc;
             WinQuerySwitchEntry(mSwEntry, &swc);
-            strncpy(swc.szSwtitle, title8bit, sizeof(swc.szSwtitle)-1);
+            QByteArray title8Bit = title.toLocal8Bit();
+            strncpy(swc.szSwtitle, title8Bit, sizeof(swc.szSwtitle)-1);
             swc.szSwtitle[sizeof(swc.szSwtitle)-1] = 0;
             WinChangeSwitchEntry(mSwEntry, &swc);
         }
