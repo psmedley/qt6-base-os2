@@ -23,6 +23,10 @@
 #ifndef QT_BOOTSTRAPPED
 #include <QtCore/qvarlengtharray.h>
 #endif // !QT_BOOTSTRAPPED
+#else
+#ifdef Q_OS_OS2
+#include <unicode/ucnv.h>
+#endif
 #endif
 
 #if __has_include(<bit>) && __cplusplus > 201703L
@@ -1247,6 +1251,184 @@ QChar *QUtf32::convertToUnicode(QChar *out, QByteArrayView in, QStringConverter:
     return out;
 }
 
+#if defined(Q_OS_OS2) && !defined(QT_BOOTSTRAPPED)
+
+QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::State *state)
+{
+    const char *src    = in.data();
+    qsizetype   srcLen = in.size();
+
+    if (!src || !srcLen)
+        return QString();
+
+    Q_ASSERT(srcLen < INT_MAX);
+    Q_ASSERT(state);
+
+    // handle a single stateless ASCII character such as a keystroke
+    if (srcLen == 1 && ((unsigned char)src[0] < 0x80) && state->remainingChars == 0) {
+        char chr[4] = {0};
+        chr[0] = src[0];
+        return QString(reinterpret_cast<QChar*>(chr));
+    }
+
+    // open an ICU converter
+    UErrorCode  err = U_ZERO_ERROR;
+    UConverter *conv = ucnv_open(0, &err);
+    if (U_FAILURE(err)) {
+        qWarning("convertToUnicode_sys: ucnv_open() failed - err= %d\n", err);
+        return QString();
+    }
+
+    // create a big output buffer
+    QVarLengthArray<UChar, 4096> ua(4096);
+    UChar     *tgt    = (UChar*)ua.data();
+    qsizetype  tgtLen = ua.size();
+    int        len;
+
+    // convert any pending character
+    QString sp;
+    bool prepend = false;
+
+    // this doesn't consume the 1st char of the source
+    // if the conversion fails - should it?
+    if (!(state->flags & QStringConverter::Flag::Stateless) &&
+        state->remainingChars) {
+        state->remainingChars = 0;
+
+        char prev[3] = {0};
+        prev[0] = (char)state->state_data[0];
+        prev[1] = src[0];
+        len = ucnv_toUChars(conv, tgt, tgtLen, prev, 2, &err);
+
+        if (len) {
+            sp.append(QChar(tgt[0]));
+            if (srcLen == 1) {
+                ucnv_close(conv);
+                return sp;
+            }
+            prepend = true;
+            src++;
+            srcLen--;
+            tgt[0] = 0;
+        }
+    }
+
+    // try the conversion
+    ucnv_toUnicode(conv, &tgt, &tgt[tgtLen], &src, &src[srcLen], 0, true, &err);
+
+    // if conversion failed due to buffer overflow, double the size of the buffer
+    // and continue where we left off; if that fails, don't even try to recover
+    if (U_FAILURE(err)) {
+        if (err == U_BUFFER_OVERFLOW_ERROR) {
+            ua.resize(2 * tgtLen);
+            tgt = (UChar*)ua.data();
+            tgt += tgtLen;
+            tgtLen = ua.size();
+            err = U_ZERO_ERROR;
+            ucnv_toUnicode(conv, &tgt, &tgt[tgtLen],
+                           &src, &src[srcLen], NULL, true, &err);
+        }
+        else
+        if (err == U_TRUNCATED_CHAR_FOUND) {
+            // the last byte in the buffer is assumed to be
+            // the lead byte of a 2-byte sequence - save it
+            if (!(state->flags & QStringConverter::Flag::Stateless)) {
+                state->state_data[0] = *src;
+                state->remainingChars = 1;
+            }
+        }
+        else {
+            qWarning("convertToUnicode_sys: ucnv_ToUnicode() failed - err= %d\n", err);
+        }
+    }
+
+    // shut 'er down
+    ucnv_close(conv);
+
+    // return an empty string if no chars were output
+    len = tgt - ua.data();
+    if (len <= 0)
+        return QString();
+
+    QString s((QChar*)ua.data(), len);
+    if (prepend)
+        return sp+s;
+
+    return s;
+}
+
+// this is patterned after the Windows implementation which appears to
+// ignore the possibility that a surrogate pair could be split across
+// two chunks - as such, the conversion is always stateless (we hope)
+
+QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, QStringConverter::State *state)
+{
+    const UChar *src    = (const UChar*)in.data();
+    qsizetype    srcLen = in.size();
+
+    Q_UNUSED(state);
+    Q_ASSERT(srcLen < INT_MAX);
+
+    if (!src)
+        return QByteArray();
+    if (srcLen == 0)
+        return QByteArray("");
+
+    // handle a single ASCII character
+    if (srcLen == 1 && src[0] < 0x80)
+        return QByteArray(reinterpret_cast<const char*>(src), 1);
+
+    // open an ICU converter
+    UErrorCode  err = U_ZERO_ERROR;
+    UConverter *conv = ucnv_open(0, &err);
+    if (U_FAILURE(err)) {
+        qWarning("convertFromUnicode_sys: ucnv_open() failed - err= %d\n", err);
+        return QByteArray("");
+    }
+
+    // set the default error character to a "mid dot" (0x00B7 in Unicode,
+    // 0xFA in CP850) if the current CP supports it, otherwise use a '?'
+    char        cpSub[2] = "";
+    const UChar uniSub[2] = {0xB7, 0x00};
+    if (!ucnv_fromUChars(conv, cpSub, 2, uniSub, 1, &err) || U_FAILURE(err))
+        cpSub[0] = '?';
+    ucnv_setSubstChars(conv, cpSub, 1, &err);
+
+    // create a target buffer with some slop
+    QByteArray   ba(srcLen + 1 + srcLen/10, 0);
+    char        *tgt    = ba.data();
+    qsizetype    tgtLen = ba.size();
+
+    // try the conversion; if it fails, double the size of the buffer and
+    // continue where we left off; if that fails, don't even try to recover
+    ucnv_fromUnicode(conv, &tgt, &tgt[tgtLen],
+                     &src, &src[srcLen], NULL, true, &err);
+
+    if (err == U_BUFFER_OVERFLOW_ERROR) {
+        ba.resize(2 * tgtLen);
+        tgt = ba.data();
+        tgt += tgtLen;
+        tgtLen = ba.size();
+        err = U_ZERO_ERROR;
+        ucnv_fromUnicode(conv, &tgt, &tgt[tgtLen],
+                         &src, &src[srcLen], NULL, true, &err);
+    }
+
+    // on failure, return an empty buffer; otherwise, resize to actual length
+    if (U_FAILURE(err)) {
+        ba.resize(0);
+        qWarning("convertFromUnicode_sys: ucnv_fromUnicode() failed - err= %d\n", err);
+    }
+    else {
+        ba.resize(tgt - ba.data());
+    }
+
+    // close converter & return buffer
+    ucnv_close(conv);
+    return ba;
+}
+
+#else
 #if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED)
 int QLocal8Bit::checkUtf8()
 {
@@ -1435,6 +1617,7 @@ QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, QStringConverter::
     mb.resize(len);
     return mb;
 }
+#endif
 #endif
 
 void QStringConverter::State::clear() noexcept

@@ -302,6 +302,17 @@ struct QUtf32
 
 struct Q_CORE_EXPORT QLocal8Bit
 {
+#if defined(Q_OS_OS2) && !defined(QT_BOOTSTRAPPED)
+    static QString convertToUnicode_sys(QByteArrayView, QStringConverter::State *);
+    static QString convertToUnicode(QByteArrayView in, QStringConverter::State *state)
+    { return convertToUnicode_sys(in, state); }
+
+    static QByteArray convertFromUnicode_sys(QStringView, QStringConverter::State *);
+    static QByteArray convertFromUnicode(QStringView in, QStringConverter::State *state)
+    {
+      return convertFromUnicode_sys(in, state);
+    }
+#else
 #if !defined(Q_OS_WIN) || defined(QT_BOOTSTRAPPED)
     static QString convertToUnicode(QByteArrayView in, QStringConverter::State *state)
     { return QUtf8::convertToUnicode(in, state); }
@@ -334,6 +345,7 @@ struct Q_CORE_EXPORT QLocal8Bit
             return QUtf8::convertFromUnicode(in, state);
         return convertFromUnicode_sys(in, state);
     }
+#endif
 #endif
 };
 
