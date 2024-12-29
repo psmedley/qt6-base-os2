@@ -123,9 +123,26 @@ instructions:
         variableName: TARGET_ARCHITECTURE
         variableValue: x64_arm64
         enable_if:
-          condition: property
-          property: target.arch
-          equals_value: ARM64
+          condition: and
+          conditions:
+            - condition: property
+              property: target.arch
+              equals_value: ARM64
+            - condition: property
+              property: host.arch
+              equals_value: X86_64
+      - type: EnvironmentVariable
+        variableName: TARGET_ARCHITECTURE
+        variableValue: arm64
+        enable_if:
+          condition: and
+          conditions:
+            - condition: property
+              property: target.arch
+              in_values: ["AARCH64", "ARM64"]
+            - condition: property
+              property: host
+              equals_property: target
       - type: EnvironmentVariable
         # HACK. Overwrite TARGET_ARCHITECTURE as we do not use standard MSVC cross
         # compilation targets here. The target architecture will be detected by Qt.
@@ -587,3 +604,18 @@ instructions:
       condition: property
       property: host.os
       equals_value: Windows
+
+  - type: EnvironmentVariable
+    variableName: COIN_COMMAND_OUTPUT_TIMEOUT
+    variableValue: "900"
+    disable_if:
+      condition: property
+      property: features
+      contains_value: UseAddressSanitizer
+  - type: EnvironmentVariable
+    variableName: COIN_COMMAND_OUTPUT_TIMEOUT
+    variableValue: "10800"
+    enable_if:
+      condition: property
+      property: features
+      contains_value: UseAddressSanitizer

@@ -11,6 +11,7 @@
 #endif
 #include <QScopeGuard>
 #include <QVersionNumber>
+#include <QSemaphore>
 
 #include <qcoreapplication.h>
 #include <qfileinfo.h>
@@ -103,6 +104,8 @@ private slots:
     void asyncReadDatagram();
     void writeInHostLookupState();
 
+    void readyReadConnectionThrottling();
+
 protected slots:
     void empty_readyReadSlot();
     void empty_connectedSlot();
@@ -121,6 +124,7 @@ private:
     QList<QHostAddress> allAddresses;
     QHostAddress multicastGroup4, multicastGroup6;
     QList<QHostAddress> linklocalMulticastGroups;
+    QNetworkInterface ifaceWithIPv6;
     QUdpSocket *m_asyncSender;
     QUdpSocket *m_asyncReceiver;
 };
@@ -171,26 +175,7 @@ QNetworkInterface tst_QUdpSocket::interfaceForGroup(const QHostAddress &multicas
     if (!scope.isEmpty())
         return QNetworkInterface::interfaceFromName(scope);
 
-    static QNetworkInterface ipv6if = [&]() {
-        // find any link local address in the allAddress list
-        for (const QHostAddress &addr: std::as_const(allAddresses)) {
-            if (addr.isLoopback())
-                continue;
-
-            QString scope = addr.scopeId();
-            if (!scope.isEmpty()) {
-                QNetworkInterface iface = QNetworkInterface::interfaceFromName(scope);
-                qDebug() << "Will bind IPv6 sockets to" << iface;
-                return iface;
-            }
-        }
-
-        qWarning("interfaceForGroup(%s) could not find any link-local IPv6 address! "
-                 "Make sure this test is behind a check of QtNetworkSettings::hasIPv6().",
-                 qUtf8Printable(multicastGroup.toString()));
-        return QNetworkInterface();
-    }();
-    return ipv6if;
+    return ifaceWithIPv6;
 }
 
 bool tst_QUdpSocket::shouldWorkaroundLinuxKernelBug()
@@ -275,9 +260,16 @@ void tst_QUdpSocket::initTestCase()
             continue;
         llbase.setScopeId(scope);
         linklocalMulticastGroups << llbase;
+        if (!ifaceWithIPv6.isValid()) {
+            // Remember the first interface we've found that has IPv6 so we can
+            // bind non-link-local sockets to it (the first is least likely to
+            // be some weird virtual interface).
+            ifaceWithIPv6 = QNetworkInterface::interfaceFromName(scope);
+        }
     }
 
     qDebug() << "Will use multicast groups" << multicastGroup4 << multicastGroup6 << linklocalMulticastGroups;
+    qDebug() << "Will bind IPv6 sockets to" << ifaceWithIPv6;
 
     m_workaroundLinuxKernelBug = shouldWorkaroundLinuxKernelBug();
     if (QTestPrivate::isRunningArmOnX86())
@@ -1906,6 +1898,79 @@ void tst_QUdpSocket::writeInHostLookupState()
     socket.connectToHost("nosuchserver.qt-project.org", 80);
     QCOMPARE(socket.state(), QUdpSocket::HostLookupState);
     QVERIFY(!socket.putChar('0'));
+}
+
+void tst_QUdpSocket::readyReadConnectionThrottling()
+{
+    QFETCH_GLOBAL(bool, setProxy);
+    if (setProxy)
+        return;
+    using namespace std::chrono_literals;
+
+    // QTBUG-105871:
+    // We have some signal/slot connection throttling in QAbstractSocket, but it
+    // was caring about the bytes, not about the datagrams.
+    // Test that we don't disable read notifications until we have at least one
+    // datagram available. Otherwise our good users who use the datagram APIs
+    // can get into scenarios where they no longer get the readyRead signal
+    // unless they call a read function once in a while.
+
+    QUdpSocket receiver;
+    QVERIFY(receiver.bind(QHostAddress(QHostAddress::LocalHost), 0));
+
+    QSemaphore semaphore;
+
+    // Repro-ing deterministically eludes me, so we are bruteforcing it:
+    // The thread acts as a remote sender, flooding the receiver with datagrams,
+    // and at some point the receiver would get into the broken state mentioned
+    // earlier.
+    std::unique_ptr<QThread> thread(QThread::create([&semaphore, port = receiver.localPort()]() {
+        QUdpSocket sender;
+        sender.connectToHost(QHostAddress(QHostAddress::LocalHost), port);
+        QCOMPARE(sender.state(), QUdpSocket::ConnectedState);
+
+        constexpr qsizetype PayloadSize = 242;
+        const QByteArray payload(PayloadSize, 'a');
+
+        semaphore.acquire(); // Wait for main thread to be ready
+        while (true) {
+            // We send 100 datagrams at a time, then sleep.
+            // This is mostly to let the main thread catch up between bursts so
+            // it doesn't get stuck in the loop.
+            for (int i = 0; i < 100; ++i) {
+                [[maybe_unused]]
+                qsizetype sent = sender.write(payload);
+                Q_ASSERT(sent > 0);
+            }
+            if (QThread::currentThread()->isInterruptionRequested())
+                break;
+            QThread::sleep(20ms);
+        }
+    }));
+    thread->start();
+    auto threadStopAndWaitGuard = qScopeGuard([&thread] {
+        thread->requestInterruption();
+        thread->quit();
+        thread->wait();
+    });
+
+    qsizetype count = 0;
+    QObject::connect(&receiver, &QUdpSocket::readyRead, &receiver,
+            [&] {
+                while (receiver.hasPendingDatagrams()) {
+                    receiver.readDatagram(nullptr, 0);
+                    ++count;
+                }
+                // If this prints `false, xxxx` we were pretty much guaranteed
+                // that we would not get called again:
+                // qDebug() << receiver.hasPendingDatagrams() << receiver.bytesAvailable();
+            },
+            Qt::QueuedConnection);
+
+    semaphore.release();
+    constexpr qsizetype MaxCount = 500;
+    QVERIFY2(QTest::qWaitFor([&] { return count >= MaxCount; }, 10'000),
+             QByteArray::number(count).constData());
 }
 
 QTEST_MAIN(tst_QUdpSocket)

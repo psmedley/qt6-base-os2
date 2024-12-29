@@ -333,6 +333,38 @@ private Q_SLOTS:
 
 private:
     template <typename Container>
+    void copesWithValueTypesWithConstMembers_impl();
+
+    struct ConstMember {
+    #ifndef __cpp_aggregate_paren_init // also check that we can emplace aggregates (C++20 only)
+        explicit ConstMember(int n) : n(n) {}
+    #endif
+        const int n;
+
+        friend bool operator==(const ConstMember &lhs, const ConstMember &rhs) noexcept
+        { return lhs.n == rhs.n; }
+        friend bool operator!=(const ConstMember &lhs, const ConstMember &rhs) noexcept
+        { return !(lhs == rhs); }
+    };
+
+private Q_SLOTS:
+    void copesWithValueTypesWithConstMembers_std_vector() { copesWithValueTypesWithConstMembers_impl<std::vector<ConstMember>>(); }
+    void copesWithValueTypesWithConstMembers_QVarLengthArray() { copesWithValueTypesWithConstMembers_impl<QVarLengthArray<ConstMember, 2>>(); }
+
+private:
+    template <typename Container>
+    void assign_impl() const;
+
+private Q_SLOTS:
+    void assign_std_vector() { assign_impl<std::vector<int>>(); };
+    void assign_std_string() { assign_impl<std::string>(); }
+    void assign_QVarLengthArray() { assign_impl<QVarLengthArray<int, 4>>(); };
+    void assign_QList() { assign_impl<QList<int>>(); }
+    void assign_QByteArray() { assign_impl<QByteArray>(); }
+    void assign_QString() { assign_impl<QString>(); }
+
+private:
+    template <typename Container>
     void front_back_impl() const;
 
 private Q_SLOTS:
@@ -760,7 +792,172 @@ void tst_ContainerApiSymmetry::resize_impl() const
     }
 }
 
+template <typename T>
+[[maybe_unused]]
+constexpr bool is_vector_v = false;
+template <typename...Args>
+constexpr bool is_vector_v<std::vector<Args...>> = true;
+
+template <typename Container, typename Value>
+void wrap_resize(Container &c, typename Container::size_type n, const Value &v)
+{
+#ifdef __GLIBCXX__ // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83981
+    if constexpr (is_vector_v<Container>) {
+        while (c.size() < n)
+            c.push_back(v);
+    } else
+#endif
+    {
+        c.resize(n, v);
+    }
+}
+
 template <typename Container>
+void tst_ContainerApiSymmetry::copesWithValueTypesWithConstMembers_impl()
+{
+    // The problem:
+    //
+    //   using V = ConstMember;
+    //   V v{42};
+    //   assert(v.n == 42); // OK
+    //   new (&v) V{24};
+    //   assert(v.n == 24); // UB in C++17: v.n could still be 42 (C++17 [basic.life]/8)
+    //                      // OK in C++20 (C++20 [basic.life]/8)
+    //   assert(std::launder(&v)->n == 24); // OK
+    //   assert(v.n == 24); // _still_ UB!
+    //
+    // Containers:
+    // - must not expose this problem
+    // - must compile in the first place, even though V
+    //   - is not assignable
+    //   - is not default-constructible
+
+    using S = typename Container::size_type;
+    using V = typename Container::value_type;
+
+    Container c;
+    // the following are all functions that by rights should not require the type to be
+    // - default-constructible
+    // - assignable
+    // make sure they work
+    c.reserve(S(5));
+    c.shrink_to_fit();
+    wrap_resize(c, 1, V(42));
+    QCOMPARE(c[0], V(42));
+    wrap_resize(c, 2, V(48));
+    QCOMPARE(c[0], V(42));
+    QCOMPARE(c[1], V(48));
+    c.clear();
+    c.emplace_back(24);
+    QCOMPARE(c.front(), V(24));
+    c.push_back(V(41));
+    QCOMPARE(c.back(), V(41));
+    {
+        const auto v142 = V(142);
+        c.push_back(v142);
+    }
+    QCOMPARE(c.size(), S(3));
+    QCOMPARE(c[0],  V(24));
+    QCOMPARE(c[1],  V(41));
+    QCOMPARE(c[2], V(142));
+}
+
+template <typename Container>
+void tst_ContainerApiSymmetry::assign_impl() const
+{
+#define CHECK(Arr, ComparisonData, Sz_n, Sz_e)               \
+    QCOMPARE(Sz_n, Sz_e);                                    \
+    for (const auto &e : Arr)                                \
+        QCOMPARE(e, ComparisonData)                          \
+    /*end*/
+#define RET_CHECK(...)                                           \
+    do {                                                         \
+        if constexpr (std::is_void_v<decltype( __VA_ARGS__ )>) { \
+            /* e.g. std::vector */                               \
+            __VA_ARGS__ ;                                        \
+        } else {                                                 \
+            /* e.g. std::basic_string */                         \
+            auto &&r = __VA_ARGS__ ;                             \
+            QCOMPARE_EQ(&r, &c);                                 \
+        }                                                        \
+    } while (false)                                              \
+    /* end */
+    using V = typename Container::value_type;
+    using S = typename Container::size_type;
+    auto tData = V(65);
+    {
+        // fill version
+        auto c = make<Container>(4);
+        const S oldCapacity = c.capacity();
+        RET_CHECK(c.assign(4, tData));
+        CHECK(c, tData, c.size(), S(4));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+
+        tData = V(66);
+        c.assign(8, tData); // may reallocate
+        CHECK(c, tData, c.size(), S(8));
+
+        const S grownCapacity = c.capacity();
+        c.assign(0, tData);
+        CHECK(c, tData, c.size(), S(0));
+        QCOMPARE_EQ(c.capacity(), grownCapacity);
+    }
+    {
+        // range version for non input iterator
+        auto c = make<Container>(4);
+        auto iter = make<Container>(1);
+
+        iter.assign(8, tData);
+        RET_CHECK(c.assign(iter.begin(), iter.end())); // may reallocate
+        CHECK(c, tData, c.size(), S(8));
+
+        const S oldCapacity = c.capacity();
+        c.assign(iter.begin(), iter.begin());
+        CHECK(c, tData, c.size(), S(0));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+    }
+    {
+        // range version for input iterator
+        auto c = make<Container>(4);
+        const S oldCapacity = c.capacity();
+
+        std::stringstream ss;
+        ss << tData << ' ' << tData << ' ';
+        RET_CHECK(c.assign(std::istream_iterator<V>{ss}, std::istream_iterator<V>{}));
+        CHECK(c, tData, c.size(), S(2));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+
+        ss.str("");
+        ss.clear();
+        tData = V(66);
+        ss << tData << ' ' << tData << ' ' << tData << ' ' << tData << ' ';
+        c.assign(std::istream_iterator<V>{ss}, std::istream_iterator<V>{});
+        CHECK(c, tData, c.size(), S(4));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+
+        ss.str("");
+        ss.clear();
+        tData = V(67);
+        ss << tData << ' ' << tData << ' ' << tData << ' ' << tData << ' '
+           << tData << ' ' << tData << ' ' << tData << ' ';
+        c.assign(std::istream_iterator<V>{ss}, std::istream_iterator<V>{}); // may reallocate
+        CHECK(c, tData, c.size(), S(7));
+    }
+    {
+        // initializer-list version
+        auto c = make<Container>(4);
+        const S oldCapacity = c.capacity();
+        std::initializer_list<V> list = {tData, tData, tData};
+        RET_CHECK(c.assign(list));
+        CHECK(c, tData, c.size(), S(3));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+    }
+
+#undef RET_CHECK
+#undef CHECK
+}
+
+template<typename Container>
 void tst_ContainerApiSymmetry::front_back_impl() const
 {
     using V = typename Container::value_type;

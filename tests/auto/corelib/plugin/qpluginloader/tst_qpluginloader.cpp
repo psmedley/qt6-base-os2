@@ -287,7 +287,7 @@ void tst_QPluginLoader::errorString()
     QVERIFY(!unloaded);
     }
 
-#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(Q_OS_HPUX) && !defined(Q_OS_OS2)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_DARWIN) && !defined(Q_OS_HPUX) && !defined(Q_OS_OS2)
     {
     QPluginLoader loader( sys_qualifiedLibraryName("almostplugin"));     //a plugin with unresolved symbols
     loader.setLoadHints(QLibrary::ResolveAllSymbolsHint);

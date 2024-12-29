@@ -65,7 +65,7 @@ bool Qt::mightBeRichText(const QString& text)
 {
     if (text.isEmpty())
         return false;
-    int start = 0;
+    qsizetype start = 0;
 
     while (start < text.size() && text.at(start).isSpace())
         ++start;
@@ -88,7 +88,7 @@ bool Qt::mightBeRichText(const QString& text)
 
     if (QStringView{text}.mid(start, 5).compare("<!doc"_L1, Qt::CaseInsensitive) == 0)
         return true;
-    int open = start;
+    qsizetype open = start;
     while (open < text.size() && text.at(open) != u'<'
             && text.at(open) != u'\n') {
         if (text.at(open) == u'&' &&  QStringView{text}.mid(open + 1, 3) == "lt;"_L1)
@@ -96,7 +96,7 @@ bool Qt::mightBeRichText(const QString& text)
         ++open;
     }
     if (open < text.size() && text.at(open) == u'<') {
-        const int close = text.indexOf(u'>', open);
+        const qsizetype close = text.indexOf(u'>', open);
         if (close > -1) {
             QString tag;
             for (int i = open+1; i < close; ++i) {
@@ -131,12 +131,12 @@ bool Qt::mightBeRichText(const QString& text)
 */
 QString Qt::convertFromPlainText(const QString &plain, Qt::WhiteSpaceMode mode)
 {
-    int col = 0;
+    qsizetype col = 0;
     QString rich;
     rich += "<p>"_L1;
-    for (int i = 0; i < plain.size(); ++i) {
+    for (qsizetype i = 0; i < plain.size(); ++i) {
         if (plain[i] == u'\n'){
-            int c = 1;
+            qsizetype c = 1;
             while (i+1 < plain.size() && plain[i+1] == u'\n') {
                 i++;
                 c++;
@@ -1267,6 +1267,8 @@ void QTextDocument::setHtml(const QString &html)
     d->enableUndoRedo(false);
     d->beginEditBlock();
     d->clear();
+    // ctor calls parse() to build up QTextHtmlParser::nodes list
+    // then import() populates the QTextDocument from those
     QTextHtmlImporter(this, html, QTextHtmlImporter::ImportToDocument).import();
     d->endEditBlock();
     d->enableUndoRedo(previousState);
@@ -1471,6 +1473,10 @@ static bool findInBlock(const QTextBlock &block, const QRegularExpression &expr,
 
     If the \a from position is 0 (the default) the search begins from the beginning
     of the document; otherwise it begins at the specified position.
+
+    \warning For historical reasons, the case sensitivity option set on
+    \a expr is ignored. Instead, the \a options are used to determine
+    if the search is case sensitive or not.
 */
 QTextCursor QTextDocument::find(const QRegularExpression &expr, int from, FindFlags options) const
 {
@@ -1826,9 +1832,10 @@ void QTextDocument::setBaselineOffset(qreal baseline)
     \fn qreal QTextDocument::baselineOffset() const
     \since 6.0
 
-    Returns the the baseline offset in % used in the document layout.
+    Returns the baseline offset in % used in the document layout.
 
-    \sa setBaselineOffset(), setSubScriptBaseline(), subScriptBaseline(), setSuperScriptBaseline(), superScriptBaseline()
+    \sa setBaselineOffset(), setSubScriptBaseline(), subScriptBaseline(), setSuperScriptBaseline(),
+   superScriptBaseline()
 */
 qreal QTextDocument::baselineOffset() const
 {
@@ -2995,16 +3002,23 @@ void QTextHtmlExporter::emitBlock(const QTextBlock &block)
         if (list->itemNumber(block) == 0) { // first item? emit <ul> or appropriate
             const QTextListFormat format = list->format();
             const int style = format.style();
+            bool ordered = false;
             switch (style) {
-                case QTextListFormat::ListDecimal: html += "<ol"_L1; break;
                 case QTextListFormat::ListDisc: html += "<ul"_L1; break;
                 case QTextListFormat::ListCircle: html += "<ul type=\"circle\""_L1; break;
                 case QTextListFormat::ListSquare: html += "<ul type=\"square\""_L1; break;
-                case QTextListFormat::ListLowerAlpha: html += "<ol type=\"a\""_L1; break;
-                case QTextListFormat::ListUpperAlpha: html += "<ol type=\"A\""_L1; break;
-                case QTextListFormat::ListLowerRoman: html += "<ol type=\"i\""_L1; break;
-                case QTextListFormat::ListUpperRoman: html += "<ol type=\"I\""_L1; break;
+                case QTextListFormat::ListDecimal: html += "<ol"_L1; ordered = true; break;
+                case QTextListFormat::ListLowerAlpha: html += "<ol type=\"a\""_L1; ordered = true; break;
+                case QTextListFormat::ListUpperAlpha: html += "<ol type=\"A\""_L1; ordered = true; break;
+                case QTextListFormat::ListLowerRoman: html += "<ol type=\"i\""_L1; ordered = true; break;
+                case QTextListFormat::ListUpperRoman: html += "<ol type=\"I\""_L1; ordered = true; break;
                 default: html += "<ul"_L1; // ### should not happen
+            }
+
+            if (ordered && format.start() != 1) {
+                html += " start=\""_L1;
+                html += QString::number(format.start());
+                html += u'"';
             }
 
             QString styleString = QString::fromLatin1("margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px;");
@@ -3437,7 +3451,7 @@ void QTextHtmlExporter::emitFrameStyle(const QTextFrameFormat &format, FrameType
 {
     const auto styleAttribute = " style=\""_L1;
     html += styleAttribute;
-    const int originalHtmlLength = html.size();
+    const qsizetype originalHtmlLength = html.size();
 
     if (frameType == TextFrame)
         html += "-qt-table-type: frame;"_L1;

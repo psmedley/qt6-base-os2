@@ -381,8 +381,36 @@ constexpr QFileDevice::Permissions toSpecificPermissions(PermissionTag tag,
 } // anonymous namespace
 #endif // QT_CONFIG(fslibs)
 
+#if QT_DEPRECATED_SINCE(6,6)
+int qt_ntfs_permission_lookup = 0;
+#endif
 
-Q_CORE_EXPORT int qt_ntfs_permission_lookup = 0;
+static QBasicAtomicInt qt_ntfs_permission_lookup_v2 = Q_BASIC_ATOMIC_INITIALIZER(0);
+
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+
+bool qEnableNtfsPermissionChecks() noexcept
+{
+    return qt_ntfs_permission_lookup_v2.fetchAndAddRelaxed(1)
+QT_IF_DEPRECATED_SINCE(6, 6, /*nothing*/, + qt_ntfs_permission_lookup)
+        != 0;
+}
+
+bool qDisableNtfsPermissionChecks() noexcept
+{
+    return qt_ntfs_permission_lookup_v2.fetchAndSubRelaxed(1)
+QT_IF_DEPRECATED_SINCE(6, 6, /*nothing*/, + qt_ntfs_permission_lookup)
+        == 1;
+}
+
+bool qAreNtfsPermissionChecksEnabled() noexcept
+{
+    return qt_ntfs_permission_lookup_v2.loadRelaxed()
+QT_IF_DEPRECATED_SINCE(6, 6, /*nothing*/, + qt_ntfs_permission_lookup)
+        ;
+}
+QT_WARNING_POP
 
 /*!
     \class QNativeFilePermissions
@@ -794,9 +822,10 @@ public:
         return (dwFlags & TSF_DELETE_RECYCLE_IF_POSSIBLE) ? S_OK : E_FAIL;
     }
     HRESULT STDMETHODCALLTYPE PostDeleteItem(DWORD /* dwFlags */, IShellItem * /* psiItem */,
-                                             HRESULT /* hrDelete */,
+                                             HRESULT hrDelete,
                                              IShellItem *psiNewlyCreated) override
     {
+        deleteResult = hrDelete;
         if (psiNewlyCreated) {
             wchar_t *pszName = nullptr;
             psiNewlyCreated->GetDisplayName(SIGDN_FILESYSPATH, &pszName);
@@ -817,6 +846,7 @@ public:
     HRESULT STDMETHODCALLTYPE ResumeTimer() override { return S_OK; }
 
     QString targetPath;
+    HRESULT deleteResult = S_OK;
 private:
     ULONG ref;
 };
@@ -856,6 +886,18 @@ void QFileSystemEngine::clearWinStatData(QFileSystemMetaData &data)
 QFileSystemEntry QFileSystemEngine::getLinkTarget(const QFileSystemEntry &link,
                                                   QFileSystemMetaData &data)
 {
+    QFileSystemEntry ret = getRawLinkPath(link, data);
+    if (!ret.isEmpty() && ret.isRelative()) {
+        QString target = absoluteName(link).path() + u'/' + ret.filePath();
+        ret = QFileSystemEntry(QDir::cleanPath(target));
+    }
+    return ret;
+}
+
+//static
+QFileSystemEntry QFileSystemEngine::getRawLinkPath(const QFileSystemEntry &link,
+                                                   QFileSystemMetaData &data)
+{
     Q_CHECK_FILE_NAME(link, link);
 
     if (data.missingFlags(QFileSystemMetaData::LinkType))
@@ -866,12 +908,7 @@ QFileSystemEntry QFileSystemEngine::getLinkTarget(const QFileSystemEntry &link,
         target = readLink(link);
     else if (data.isLink())
         target = readSymLink(link);
-    QFileSystemEntry ret(target);
-    if (!target.isEmpty() && ret.isRelative()) {
-        target.prepend(absoluteName(link).path() + u'/');
-        ret = QFileSystemEntry(QDir::cleanPath(target));
-    }
-    return ret;
+    return QFileSystemEntry(target);
 }
 
 //static
@@ -1071,8 +1108,7 @@ QString QFileSystemEngine::owner(const QFileSystemEntry &entry, QAbstractFileEng
 {
     QString name;
 #if QT_CONFIG(fslibs)
-    extern int qt_ntfs_permission_lookup;
-    if (qt_ntfs_permission_lookup > 0) {
+    if (qAreNtfsPermissionChecksEnabled()) {
         initGlobalSid();
         {
             PSID pOwner = 0;
@@ -1126,7 +1162,7 @@ bool QFileSystemEngine::fillPermissions(const QFileSystemEntry &entry, QFileSyst
                                         QFileSystemMetaData::MetaDataFlags what)
 {
 #if QT_CONFIG(fslibs)
-    if (qt_ntfs_permission_lookup > 0) {
+    if (qAreNtfsPermissionChecksEnabled()) {
         initGlobalSid();
 
         QString fname = entry.nativeFilePath();
@@ -1781,8 +1817,12 @@ bool QFileSystemEngine::moveFileToTrash(const QFileSystemEntry &source,
     hres = pfo->PerformOperations();
     if (!SUCCEEDED(hres))
         return false;
-    newLocation = QFileSystemEntry(sink->targetPath);
 
+    if (!SUCCEEDED(sink->deleteResult)) {
+        error = QSystemError(sink->deleteResult, QSystemError::NativeError);
+        return false;
+    }
+    newLocation = QFileSystemEntry(sink->targetPath);
     return true;
 }
 

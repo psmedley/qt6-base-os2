@@ -36,7 +36,6 @@ class QPlatformGraphicsBuffer;
 class QRhi;
 class QRhiTexture;
 class QRhiResourceUpdateBatch;
-class QRhiSwapChain;
 
 struct Q_GUI_EXPORT QPlatformBackingStoreRhiConfig
 {
@@ -45,6 +44,7 @@ struct Q_GUI_EXPORT QPlatformBackingStoreRhiConfig
         Metal,
         Vulkan,
         D3D11,
+        D3D12,
         Null
     };
 
@@ -172,7 +172,6 @@ public:
 
     void setRhiConfig(const QPlatformBackingStoreRhiConfig &config);
     QRhi *rhi() const;
-    QRhiSwapChain *rhiSwapChain() const;
     void surfaceAboutToBeDestroyed();
     void graphicsDeviceReportedLost();
 

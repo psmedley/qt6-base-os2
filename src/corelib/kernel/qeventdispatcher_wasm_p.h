@@ -24,6 +24,8 @@
 #include <optional>
 #include <tuple>
 
+#include <emscripten/proxying.h>
+
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(lcEventDispatcher);
@@ -50,10 +52,12 @@ public:
     void interrupt() override;
     void wakeUp() override;
 
+    static void runOnMainThread(std::function<void(void)> fn);
+    static void runOnMainThreadAsync(std::function<void(void)> fn);
     static void socketSelect(int timeout, int socket, bool waitForRead, bool waitForWrite,
                             bool *selectForRead, bool *selectForWrite, bool *socketDisconnect);
 protected:
-    virtual void processWindowSystemEvents(QEventLoop::ProcessEventsFlags flags);
+    virtual bool processPostedEvents();
 
 private:
     bool isMainThreadEventDispatcher();
@@ -64,7 +68,7 @@ private:
     void handleDialogExec();
     bool wait(int timeout = -1);
     bool wakeEventDispatcherThread();
-    static void callProcessEvents(void *eventDispatcher);
+    static void callProcessPostedEvents(void *eventDispatcher);
 
     void processTimers();
     void updateNativeTimer();
@@ -86,8 +90,6 @@ private:
 
     static void run(std::function<void(void)> fn);
     static void runAsync(std::function<void(void)> fn);
-    static void runOnMainThread(std::function<void(void)> fn);
-    static void runOnMainThreadAsync(std::function<void(void)> fn);
 
     static QEventDispatcherWasm *g_mainThreadEventDispatcher;
 
@@ -106,6 +108,8 @@ private:
 
     static QVector<QEventDispatcherWasm *> g_secondaryThreadEventDispatchers;
     static std::mutex g_staticDataMutex;
+    static emscripten::ProxyingQueue g_proxyingQueue;
+    static pthread_t g_mainThread;
 
     // Note on mutex usage: the global g_staticDataMutex protects the global (g_ prefixed) data,
     // while the per eventdispatcher m_mutex protects the state accociated with blocking and waking

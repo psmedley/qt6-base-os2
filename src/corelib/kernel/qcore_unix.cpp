@@ -14,7 +14,7 @@
 #  include <unistd.h>
 #endif
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
 #include <mach/mach_time.h>
 #endif
 
@@ -83,6 +83,34 @@ int qt_open64(const char *pathname, int flags, mode_t mode)
 
 #ifndef QT_BOOTSTRAPPED
 
+static inline void do_gettime(qint64 *sec, qint64 *frac)
+{
+    timespec ts;
+    clockid_t clk = CLOCK_REALTIME;
+#if defined(CLOCK_MONOTONIC_RAW)
+    clk = CLOCK_MONOTONIC_RAW;
+#elif defined(CLOCK_MONOTONIC)
+    clk = CLOCK_MONOTONIC;
+#endif
+
+    clock_gettime(clk, &ts);
+    *sec = ts.tv_sec;
+    *frac = ts.tv_nsec;
+}
+
+// also used in qeventdispatcher_unix.cpp
+struct timespec qt_gettime() noexcept
+{
+    qint64 sec, frac;
+    do_gettime(&sec, &frac);
+
+    timespec tv;
+    tv.tv_sec = sec;
+    tv.tv_nsec = frac;
+
+    return tv;
+}
+
 #if QT_CONFIG(poll_pollts)
 #  define ppoll pollts
 #endif
@@ -97,13 +125,15 @@ static inline bool time_update(struct timespec *tv, const struct timespec &start
     return tv->tv_sec >= 0;
 }
 
-#if QT_CONFIG(poll_poll)
+[[maybe_unused]]
 static inline int timespecToMillisecs(const struct timespec *ts)
 {
-    return (ts == NULL) ? -1 :
-           (ts->tv_sec * 1000) + (ts->tv_nsec / 1000000);
+    using namespace std::chrono;
+    if (!ts)
+        return -1;
+    auto ms = ceil<milliseconds>(timespecToChrono<nanoseconds>(*ts));
+    return int(ms.count());
 }
-#endif
 
 // defined in qpoll.cpp
 int qt_poll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout_ts);
@@ -134,7 +164,7 @@ int qt_safe_poll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout
     if (!timeout_ts) {
         // no timeout -> block forever
         int ret;
-        EINTR_LOOP(ret, qt_ppoll(fds, nfds, nullptr));
+        QT_EINTR_LOOP(ret, qt_ppoll(fds, nfds, nullptr));
         return ret;
     }
 

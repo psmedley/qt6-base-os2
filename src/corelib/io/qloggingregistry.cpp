@@ -67,7 +67,7 @@ int QLoggingRule::pass(QLatin1StringView cat, QtMsgType msgType) const
             return 0;
     }
 
-    const int idx = cat.indexOf(category);
+    const qsizetype idx = cat.indexOf(category);
     if (idx >= 0) {
         if (flags == MidFilter) {
             // matches somewhere
@@ -194,7 +194,7 @@ void QLoggingSettingsParser::parseNextLine(QStringView line)
     }
 
     if (m_inRulesSection) {
-        int equalPos = line.indexOf(u'=');
+        const qsizetype equalPos = line.indexOf(u'=');
         if (equalPos != -1) {
             if (line.lastIndexOf(u'=') == equalPos) {
                 const auto key = line.left(equalPos).trimmed();
@@ -347,8 +347,8 @@ void QLoggingRegistry::unregisterCategory(QLoggingCategory *cat)
     for enabling debugging by default for category \a categoryName. The
     category name must start with "qt."
 */
-void QLoggingRegistry::registerEnvironmentOverrideForCategory(QByteArrayView categoryName,
-                                                              QByteArrayView environment)
+void QLoggingRegistry::registerEnvironmentOverrideForCategory(const char *categoryName,
+                                                              const char *environment)
 {
     qtCategoryEnvironmentOverrides.insert(categoryName, environment);
 }
@@ -442,7 +442,7 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
             if (it == reg->qtCategoryEnvironmentOverrides.end())
                 debug = false;
             else
-                debug = qEnvironmentVariableIntValue(it.value().data());
+                debug = qEnvironmentVariableIntValue(it.value());
         }
     }
 

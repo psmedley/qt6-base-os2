@@ -25,6 +25,7 @@
 #include <qstyle.h>
 #include <qdebug.h>
 #include <qpainter.h>
+#include <qmimedata.h>
 
 #include <private/qwidget_p.h>
 #if QT_CONFIG(toolbar)
@@ -36,6 +37,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 class QMainWindowPrivate : public QWidgetPrivate
 {
     Q_DECLARE_PUBLIC(QMainWindow)
@@ -46,7 +49,7 @@ public:
             , useUnifiedToolBar(false)
 #endif
     { }
-    QMainWindowLayout *layout;
+    QPointer<QMainWindowLayout> layout;
     QSize iconSize;
     bool explicitIconSize;
     Qt::ToolButtonStyle toolButtonStyle;
@@ -57,7 +60,7 @@ public:
 
     static inline QMainWindowLayout *mainWindowLayout(const QMainWindow *mainWindow)
     {
-        return mainWindow ? mainWindow->d_func()->layout : static_cast<QMainWindowLayout *>(nullptr);
+        return mainWindow ? mainWindow->d_func()->layout.data() : static_cast<QMainWindowLayout *>(nullptr);
     }
 };
 
@@ -121,6 +124,7 @@ void QMainWindowPrivate::init()
     const int metric = q->style()->pixelMetric(QStyle::PM_ToolBarIconSize, nullptr, q);
     iconSize = QSize(metric, metric);
     q->setAttribute(Qt::WA_Hover);
+    q->setAcceptDrops(true);
 }
 
 /*
@@ -276,8 +280,7 @@ void QMainWindowPrivate::init()
     is the position and size (relative to the size of the main window)
     of the toolbars and dock widgets that are stored.
 
-    \sa QMenuBar, QToolBar, QStatusBar, QDockWidget,
-    {Menus Example}
+    \sa QMenuBar, QToolBar, QStatusBar, QDockWidget, {Menus Example}
 */
 
 /*!
@@ -1120,21 +1123,8 @@ void QMainWindow::tabifyDockWidget(QDockWidget *first, QDockWidget *second)
 
 QList<QDockWidget*> QMainWindow::tabifiedDockWidgets(QDockWidget *dockwidget) const
 {
-    QList<QDockWidget*> ret;
-    const QDockAreaLayoutInfo *info = d_func()->layout->layoutState.dockAreaLayout.info(dockwidget);
-    if (info && info->tabbed && info->tabBar) {
-        for(int i = 0; i < info->item_list.size(); ++i) {
-            const QDockAreaLayoutItem &item = info->item_list.at(i);
-            if (item.widgetItem) {
-                if (QDockWidget *dock = qobject_cast<QDockWidget*>(item.widgetItem->widget())) {
-                    if (dock != dockwidget) {
-                        ret += dock;
-                    }
-                }
-            }
-        }
-    }
-    return ret;
+    Q_D(const QMainWindow);
+    return d->layout ? d->layout->tabifiedDockWidgets(dockwidget) : QList<QDockWidget *>();
 }
 #endif // QT_CONFIG(tabbar)
 
@@ -1295,6 +1285,28 @@ bool QMainWindow::event(QEvent *event)
             if (!d->explicitIconSize)
                 setIconSize(QSize());
             break;
+#if QT_CONFIG(draganddrop)
+        case QEvent::DragEnter:
+        case QEvent::Drop:
+            if (!d->layout->draggingWidget)
+                break;
+            event->accept();
+            return true;
+        case QEvent::DragMove: {
+            if (!d->layout->draggingWidget)
+                break;
+            auto dragMoveEvent = static_cast<QDragMoveEvent *>(event);
+            d->layout->hover(d->layout->draggingWidget,
+                             mapToGlobal(dragMoveEvent->position()).toPoint());
+            event->accept();
+            return true;
+        }
+        case QEvent::DragLeave:
+            if (!d->layout->draggingWidget)
+                break;
+            d->layout->hover(d->layout->draggingWidget, pos() - QPoint(-1, -1));
+            return true;
+#endif
         default:
             break;
     }

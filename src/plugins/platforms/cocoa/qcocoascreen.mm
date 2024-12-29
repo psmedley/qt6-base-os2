@@ -466,6 +466,25 @@ void QCocoaScreen::deliverUpdateRequests()
             if (!platformWindow->updatesWithDisplayLink())
                 continue;
 
+            // QTBUG-107198: Skip updates in a live resize for a better resize experience.
+            if (platformWindow->isContentView() && platformWindow->view().inLiveResize) {
+                const QSurface::SurfaceType surfaceType = window->surfaceType();
+                const bool usesMetalLayer = surfaceType == QWindow::MetalSurface || surfaceType == QWindow::VulkanSurface;
+                const bool usesNonDefaultContentsPlacement = [platformWindow->view() layerContentsPlacement]
+                        != NSViewLayerContentsPlacementScaleAxesIndependently;
+                if (usesMetalLayer && usesNonDefaultContentsPlacement) {
+                    static bool deliverDisplayLinkUpdatesDuringLiveResize =
+                            qEnvironmentVariableIsSet("QT_MAC_DISPLAY_LINK_UPDATE_IN_RESIZE");
+                    if (!deliverDisplayLinkUpdatesDuringLiveResize) {
+                        // Must keep the link running, we do not know what the event
+                        // handlers for UpdateRequest (which is not sent now) would do,
+                        // would they trigger a new requestUpdate() or not.
+                        pauseUpdates = false;
+                        continue;
+                    }
+                }
+            }
+
             platformWindow->deliverUpdateRequest();
 
             // Another update request was triggered, keep the display link running
@@ -523,7 +542,12 @@ QWindow *QCocoaScreen::topLevelAt(const QPoint &point) const
             if (!w->isVisible())
                 return;
 
-            if (!QHighDpi::toNativePixels(w->geometry(), w).contains(point))
+            auto nativeGeometry = QHighDpi::toNativePixels(w->geometry(), w);
+            if (!nativeGeometry.contains(point))
+                return;
+
+            QRegion mask = QHighDpi::toNativeLocalPosition(w->mask(), w);
+            if (!mask.isEmpty() && !mask.contains(point - nativeGeometry.topLeft()))
                 return;
 
             window = w;

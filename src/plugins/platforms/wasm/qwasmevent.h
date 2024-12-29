@@ -35,6 +35,7 @@ enum class EventType {
 enum class PointerType {
     Mouse,
     Touch,
+    Pen,
     Other,
 };
 
@@ -214,6 +215,10 @@ struct PointerEvent : public MouseEvent
     PointerType pointerType;
     int pointerId;
     qreal pressure;
+    qreal tiltX;
+    qreal tiltY;
+    qreal tangentialPressure;
+    qreal twist;
     qreal width;
     qreal height;
     bool isPrimary;

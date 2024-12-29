@@ -84,14 +84,14 @@ public:
     QPlainTextEditPrivate();
 
     void init(const QString &txt = QString());
-    void _q_repaintContents(const QRectF &contentsRect);
-    void _q_updatePlaceholderVisibility();
+    void repaintContents(const QRectF &contentsRect);
+    void updatePlaceholderVisibility();
 
     inline QPoint mapToContents(const QPoint &point) const
         { return QPoint(point.x() + horizontalOffset(), point.y() + verticalOffset()); }
 
-    void _q_adjustScrollbars();
-    void _q_verticalScrollbarActionTriggered(int action);
+    void adjustScrollbars();
+    void verticalScrollbarActionTriggered(int action);
     void ensureViewportLayouted();
     void relayoutDocument();
 
@@ -128,8 +128,8 @@ public:
     uint centerOnScroll : 1;
     uint inDrag : 1;
     uint clickCausedFocus : 1;
-    uint placeholderVisible : 1;
     uint pageUpDownLastCursorYIsValid : 1;
+    uint placeholderTextShown : 1;
 
     void setTopLine(int visualTopLine, int dx = 0);
     void setTopBlock(int newTopBlock, int newTopLine, int dx = 0);
@@ -142,8 +142,13 @@ public:
 
     void append(const QString &text, Qt::TextFormat format = Qt::AutoText);
 
-    void _q_cursorPositionChanged();
-    void _q_modificationChanged(bool);
+    void cursorPositionChanged();
+    void modificationChanged(bool);
+    inline bool placeHolderTextToBeShown() const
+    {
+        Q_Q(const QPlainTextEdit);
+        return q->document()->isEmpty() && !q->placeholderText().isEmpty();
+    }
 };
 
 QT_END_NAMESPACE

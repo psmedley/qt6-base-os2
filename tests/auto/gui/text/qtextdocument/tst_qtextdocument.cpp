@@ -181,6 +181,7 @@ private slots:
     void insertHtmlWithComments();
 
     void delayedLayout();
+    void undoContentChangeIndices();
 
 private:
     void backgroundImage_checkExpectedHtml(const QTextDocument &doc);
@@ -1779,6 +1780,22 @@ void tst_QTextDocument::toHtml_data()
                        "<li style=\" margin-top:12px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">bullet</li>\n"
                        "<li class=\"unchecked\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">unchecked item</li>\n"
                        "<li class=\"checked\" style=\" margin-top:0px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">checked item</li></ul>");
+    }
+
+    {
+        CREATE_DOC_AND_CURSOR();
+
+        QTextListFormat fmt;
+        fmt.setStyle(QTextListFormat::ListDecimal);
+        fmt.setStart(4);
+        cursor.insertList(fmt);
+        cursor.insertText("Blah");
+        cursor.insertBlock();
+        cursor.insertText("Bleh");
+
+        QTest::newRow("ordered list with start") << QTextDocumentFragment(&doc)
+            << QString("EMPTYBLOCK") +
+               QString("<ol start=\"4\" style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 1;\">\n<li style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</li>\n<li style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Bleh</li></ol>");
     }
 }
 
@@ -3963,6 +3980,62 @@ void tst_QTextDocument::delayedLayout()
 
     doc.setLayoutEnabled(true);
     QCOMPARE(layout->lineCount(), 1); // layout happened
+}
+
+void tst_QTextDocument::undoContentChangeIndices() // QTBUG-113865
+{
+    QTextDocument doc;
+    QTestDocumentLayout *layout = new QTestDocumentLayout(&doc);
+    QString content = QString("<html><body>"
+                              "<ul><li>Undo</li></ul>"
+                              "<ul><li>operation</li></ul>"
+                              "<ul><li>of</li></ul>"
+                              "<ul><li>unnumbered</li></ul>"
+                              "<ul><li>lists</li></ul>"
+                              "<ul><li>shows</li></ul>"
+                              "<ul><li>invalid</li></ul>"
+                              "<ul><li>content</li></ul>"
+                              "<ul><li>indices</li></ul>"
+                              "</body></html>");
+    doc.setDocumentLayout(layout);
+    doc.setHtml(content);
+
+    // Select the entire document content
+    QTextCursor cursor(&doc);
+    cursor.select(QTextCursor::Document);
+    cursor.removeSelectedText();
+
+    // Undo above operation
+    doc.undo();
+
+    // Move the cursor to the end
+    cursor.movePosition(QTextCursor::End);
+    cursor.insertHtml(content);
+
+    // Select the whole document and remove the content
+    cursor.select(QTextCursor::Document);
+    cursor.removeSelectedText();
+
+    int documentLength = 0;
+    int changeRemoved = 0;
+    int changeAdded = 0;
+    int changePos = 0;
+    connect(&doc, &QTextDocument::contentsChange, this, [&](int pos, int removed, int added){
+        documentLength = doc.characterCount();
+        changeRemoved = removed;
+        changeAdded = added;
+        changePos = pos;
+    });
+
+    // Undo above operation
+    doc.undo();
+
+    const int changeEnd = changeAdded + changeRemoved;
+
+    QVERIFY(documentLength > 0);
+    QCOMPARE(changePos, 0);
+    QVERIFY(changeRemoved >= 0);
+    QVERIFY(documentLength >= changeEnd);
 }
 
 QTEST_MAIN(tst_QTextDocument)

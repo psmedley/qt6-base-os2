@@ -1,8 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
-#include "qpalette.h"
-#include "qguiapplication.h"
+#include "qpalette_p.h"
 #include "qguiapplication_p.h"
 #include "qdatastream.h"
 #include "qvariant.h"
@@ -12,59 +11,26 @@
 
 QT_BEGIN_NAMESPACE
 
-static int qt_palette_count = 1;
-
-static constexpr QPalette::ResolveMask colorRoleOffset(QPalette::ColorGroup colorGroup)
+constexpr QPalette::ResolveMask QPalettePrivate::colorRoleOffset(QPalette::ColorGroup colorGroup)
 {
-    return qToUnderlying(QPalette::NColorRoles) * qToUnderlying(colorGroup);
+    // Exclude NoRole; that bit is used for Accent
+    return (qToUnderlying(QPalette::NColorRoles) - 1) * qToUnderlying(colorGroup);
 }
 
-static constexpr QPalette::ResolveMask bitPosition(QPalette::ColorGroup colorGroup,
-                                                   QPalette::ColorRole colorRole)
+constexpr QPalette::ResolveMask QPalettePrivate::bitPosition(QPalette::ColorGroup colorGroup,
+                                                             QPalette::ColorRole colorRole)
 {
+    // Map Accent into NoRole for resolving purposes
+    if (colorRole == QPalette::Accent)
+        colorRole = QPalette::NoRole;
+
     return colorRole + colorRoleOffset(colorGroup);
 }
 
-static_assert(bitPosition(QPalette::ColorGroup(QPalette::NColorGroups - 1),
+static_assert(QPalettePrivate::bitPosition(QPalette::ColorGroup(QPalette::NColorGroups - 1),
                               QPalette::ColorRole(QPalette::NColorRoles - 1))
                   < sizeof(QPalette::ResolveMask) * CHAR_BIT,
                   "The resolve mask type is not wide enough to fit the entire bit mask.");
-
-class QPalettePrivate
-{
-public:
-    class Data : public QSharedData {
-    public:
-        // Every instance of Data has to have a unique serial number, even
-        // if it gets created by copying another - we wouldn't create a copy
-        // in the first place if the serial number should be the same!
-        Data(const Data &other)
-            : QSharedData(other)
-        {
-            for (int grp = 0; grp < int(QPalette::NColorGroups); grp++) {
-                for (int role = 0; role < int(QPalette::NColorRoles); role++)
-                    br[grp][role] = other.br[grp][role];
-            }
-        }
-        Data() = default;
-
-        QBrush br[QPalette::NColorGroups][QPalette::NColorRoles];
-        const int ser_no = qt_palette_count++;
-    };
-
-    QPalettePrivate(const QExplicitlySharedDataPointer<Data> &data)
-        : ref(1), data(data)
-    { }
-    QPalettePrivate()
-        : QPalettePrivate(QExplicitlySharedDataPointer<Data>(new Data))
-    { }
-
-    QAtomicInt ref;
-    QPalette::ResolveMask resolveMask = {0};
-    static inline int qt_palette_private_count = 0;
-    int detach_no = ++qt_palette_private_count;
-    QExplicitlySharedDataPointer<Data> data;
-};
 
 static QColor qt_mix_colors(QColor a, QColor b)
 {
@@ -100,6 +66,24 @@ static void qt_placeholder_from_text(QPalette &pal, int alpha = 50)
     }
 }
 
+static void qt_ensure_default_accent_color(QPalette &pal)
+{
+    // have a lighter/darker factor handy, depending on dark/light heuristics
+    const int lighter = pal.base().color().lightness() > pal.text().color().lightness() ? 130 : 70;
+
+    // Act only for color groups where no accent color is set
+    for (int i = 0; i < QPalette::NColorGroups; ++i) {
+        const QPalette::ColorGroup group = static_cast<QPalette::ColorGroup>(i);
+        if (!pal.isBrushSet(group, QPalette::Accent)) {
+            // Default to highlight if available, otherwise use a shade of base
+            const QBrush accentBrush = pal.isBrushSet(group, QPalette::Highlight)
+                                     ? pal.brush(group, QPalette::Highlight)
+                                     : pal.brush(group, QPalette::Base).color().lighter(lighter);
+            pal.setBrush(group, QPalette::Accent, accentBrush);
+        }
+    }
+}
+
 static void qt_palette_from_color(QPalette &pal, const QColor &button)
 {
     int h, s, v;
@@ -124,6 +108,7 @@ static void qt_palette_from_color(QPalette &pal, const QColor &button)
                       whiteBrush, buttonBrush, buttonBrush);
 
     qt_placeholder_from_text(pal);
+    qt_ensure_default_accent_color(pal);
 }
 
 /*!
@@ -320,6 +305,15 @@ static void qt_palette_from_color(QPalette &pal, const QColor &button)
     \fn const QBrush & QPalette::highlightedText() const
 
     Returns the highlighted text brush of the current color group.
+
+    \sa ColorRole, brush()
+*/
+
+/*!
+    \fn const QBrush & QPalette::accent() const
+    \since 6.6
+
+    Returns the accent brush of the current color group.
 
     \sa ColorRole, brush()
 */
@@ -524,6 +518,13 @@ static void qt_palette_from_color(QPalette &pal, const QColor &button)
                        item. By default, the highlight color is
                        Qt::darkBlue.
 
+    \value [since 6.6] Accent
+                       A color that typically contrasts or complements
+                       Base, Window and Button colors. It usually represents
+                       the users' choice of desktop personalisation.
+                       Styling of interactive components is a typical use case.
+                       Unless explicitly set, it defaults to Highlight.
+
     \value HighlightedText  A text color that contrasts with \c Highlight.
                             By default, the highlighted text color is Qt::white.
 
@@ -613,6 +614,7 @@ QPalette::QPalette(const QBrush &windowText, const QBrush &button,
                   base, window);
 
     qt_placeholder_from_text(*this);
+    qt_ensure_default_accent_color(*this);
 }
 
 
@@ -670,6 +672,7 @@ QPalette::QPalette(const QColor &button, const QColor &window)
                   whiteBrush, baseBrush, windowBrush);
 
     qt_placeholder_from_text(*this);
+    qt_ensure_default_accent_color(*this);
 }
 
 /*!
@@ -807,7 +810,7 @@ void QPalette::setBrush(ColorGroup cg, ColorRole cr, const QBrush &b)
         cg = Active;
     }
 
-    const auto newResolveMask = d->resolveMask | ResolveMask(1) << bitPosition(cg, cr);
+    const auto newResolveMask = d->resolveMask | ResolveMask(1) << QPalettePrivate::bitPosition(cg, cr);
     const auto valueChanged = d->data->br[cg][cr] != b;
 
     if (valueChanged) {
@@ -837,6 +840,10 @@ void QPalette::setBrush(ColorGroup cg, ColorRole cr, const QBrush &b)
 */
 bool QPalette::isBrushSet(ColorGroup cg, ColorRole cr) const
 {
+    // NoRole has no resolve mask and should never be set anyway
+    if (cr == NoRole)
+        return false;
+
     if (cg == Current)
         cg = currentGroup;
 
@@ -850,7 +857,7 @@ bool QPalette::isBrushSet(ColorGroup cg, ColorRole cr) const
         return false;
     }
 
-    return d->resolveMask & (ResolveMask(1) << bitPosition(cg, cr));
+    return d->resolveMask & (ResolveMask(1) << QPalettePrivate::bitPosition(cg, cr));
 }
 
 /*!
@@ -885,8 +892,11 @@ void QPalette::detach()
     Returns \c true (usually quickly) if this palette is equal to \a p;
     otherwise returns \c false (slowly).
 
-    \note The current ColorGroup is not taken into account when
-    comparing palettes
+    \note The following is not taken into account when comparing palettes:
+    \list
+    \li the \c current ColorGroup
+    \li ColorRole NoRole \since 6.6
+    \endlist
 
     \sa operator!=()
 */
@@ -896,6 +906,9 @@ bool QPalette::operator==(const QPalette &p) const
         return true;
     for(int grp = 0; grp < (int)NColorGroups; grp++) {
         for(int role = 0; role < (int)NColorRoles; role++) {
+            // Dont't verify NoRole, because it has no resolve bit
+            if (role == NoRole)
+                continue;
             if (d->data->br[grp][role] != p.d->data->br[grp][role])
                 return false;
         }
@@ -953,7 +966,7 @@ static constexpr QPalette::ResolveMask allResolveMask()
     QPalette::ResolveMask mask = {0};
     for (int role = 0; role < int(QPalette::NColorRoles); ++role) {
         for (int grp = 0; grp < int(QPalette::NColorGroups); ++grp) {
-            mask |= (QPalette::ResolveMask(1) << bitPosition(QPalette::ColorGroup(grp), QPalette::ColorRole(role)));
+            mask |= (QPalette::ResolveMask(1) << QPalettePrivate::bitPosition(QPalette::ColorGroup(grp), QPalette::ColorRole(role)));
         }
     }
     return mask;
@@ -979,8 +992,12 @@ QPalette QPalette::resolve(const QPalette &other) const
     palette.detach();
 
     for (int role = 0; role < int(NColorRoles); ++role) {
+        // Don't resolve NoRole, its bits are needed for Accent (see bitPosition)
+        if (role == NoRole)
+            continue;
+
         for (int grp = 0; grp < int(NColorGroups); ++grp) {
-            if (!(d->resolveMask & (ResolveMask(1) << bitPosition(ColorGroup(grp), ColorRole(role))))) {
+            if (!(d->resolveMask & (ResolveMask(1) << QPalettePrivate::bitPosition(ColorGroup(grp), ColorRole(role))))) {
                 palette.d->data.detach();
                 palette.d->data->br[grp][role] = other.d->data->br[grp][role];
             }
@@ -1054,6 +1071,9 @@ QDataStream &operator<<(QDataStream &s, const QPalette &p)
                 max = QPalette::AlternateBase + 1;
             else if (s.version() <= QDataStream::Qt_5_11)
                 max = QPalette::ToolTipText + 1;
+            else if (s.version() <= QDataStream::Qt_6_5)
+                max = QPalette::PlaceholderText + 1;
+
             for (int r = 0; r < max; r++)
                 s << p.d->data->br[grp][r];
         }
@@ -1097,15 +1117,25 @@ QDataStream &operator>>(QDataStream &s, QPalette &p)
         } else if (s.version() <= QDataStream::Qt_5_11) {
             p = QPalette();
             max = QPalette::ToolTipText + 1;
+        } else if (s.version() <= QDataStream::Qt_6_5) {
+            p = QPalette();
+            max = QPalette::PlaceholderText + 1;
         }
+
 
         QBrush tmp;
         for(int grp = 0; grp < (int)QPalette::NColorGroups; ++grp) {
+            const QPalette::ColorGroup group = static_cast<QPalette::ColorGroup>(grp);
             for(int role = 0; role < max; ++role) {
                 s >> tmp;
-                p.setBrush((QPalette::ColorGroup)grp, (QPalette::ColorRole)role, tmp);
+                p.setBrush(group, (QPalette::ColorRole)role, tmp);
             }
+
+            // Accent defaults to Highlight for stream versions that don't have it.
+            if (s.version() < QDataStream::Qt_6_6)
+                p.setBrush(group, QPalette::Accent, p.brush(group, QPalette::Highlight));
         }
+
     }
     return s;
 }
@@ -1152,10 +1182,10 @@ void QPalette::setColorGroup(ColorGroup cg, const QBrush &windowText, const QBru
     for (int cr = Highlight; cr <= LinkVisited; ++cr) {
         if (cg == All) {
             for (int group = Active; group < NColorGroups; ++group) {
-                d->resolveMask &= ~(ResolveMask(1) << bitPosition(ColorGroup(group), ColorRole(cr)));
+                d->resolveMask &= ~(ResolveMask(1) << QPalettePrivate::bitPosition(ColorGroup(group), ColorRole(cr)));
             }
         } else {
-            d->resolveMask &= ~(ResolveMask(1) << bitPosition(ColorGroup(cg), ColorRole(cr)));
+            d->resolveMask &= ~(ResolveMask(1) << QPalettePrivate::bitPosition(ColorGroup(cg), ColorRole(cr)));
         }
     }
 }

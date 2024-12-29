@@ -25,10 +25,13 @@ endfunction()
 # The function checks if add_custom_command has the support of the DEPFILE argument.
 function(_qt_internal_check_depfile_support out_var)
     if(CMAKE_GENERATOR MATCHES "Ninja" OR
-        CMAKE_VERSION VERSION_GREATER_EQUAL 3.20 AND CMAKE_GENERATOR MATCHES "Makefiles"
-        OR CMAKE_VERSION VERSION_GREATER_EQUAL 3.21
+        (CMAKE_VERSION VERSION_GREATER_EQUAL 3.20 AND CMAKE_GENERATOR MATCHES "Makefiles")
+        OR (CMAKE_VERSION VERSION_GREATER_EQUAL 3.21
         AND (CMAKE_GENERATOR MATCHES "Xcode"
-            OR CMAKE_GENERATOR MATCHES "Visual Studio ([0-9]+)" AND CMAKE_MATCH_1 GREATER_EQUAL 12))
+            OR (CMAKE_GENERATOR MATCHES "Visual Studio ([0-9]+)" AND CMAKE_MATCH_1 GREATER_EQUAL 12)
+            )
+        )
+    )
         set(${out_var} TRUE)
     else()
         set(${out_var} FALSE)
@@ -90,4 +93,58 @@ function(__qt_internal_prefix_paths_to_roots out_var prefix_paths)
         list(APPEND result "${path}")
     endforeach()
     set("${out_var}" "${result}" PARENT_SCOPE)
+endfunction()
+
+# This function gets all targets below this directory
+#
+# Multi-value Arguments:
+#     EXCLUDE list of target types that should be filtered from resulting list.
+#
+#     INCLUDE list of target types that should be filtered from resulting list.
+#             EXCLUDE has higher priority than INCLUDE.
+function(_qt_internal_collect_buildsystem_targets result dir)
+    cmake_parse_arguments(arg "" "" "EXCLUDE;INCLUDE" ${ARGN})
+
+    if(NOT _qt_internal_collect_buildsystem_targets_inner)
+        set(${result} "")
+        set(_qt_internal_collect_buildsystem_targets_inner TRUE)
+    endif()
+
+    set(forward_args "")
+    if(arg_EXCLUDE)
+        set(forward_args APPEND EXCLUDE ${arg_EXCLUDE})
+    endif()
+
+    if(arg_INCLUDE)
+        set(forward_args APPEND INCLUDE ${arg_INCLUDE})
+    endif()
+
+    get_property(subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+
+    # Make sure that we don't hit endless recursion when running qt-cmake-standalone-test on a
+    # in-source test dir, where the currently processed directory lists itself in its SUBDIRECTORIES
+    # property.
+    # See https://bugreports.qt.io/browse/QTBUG-119998
+    # and https://gitlab.kitware.com/cmake/cmake/-/issues/25489
+    # Do it only when QT_INTERNAL_IS_STANDALONE_TEST is set, to avoid the possible slowdown when
+    # processing many subdirectores when configuring all standalone tests rather than just one.
+    if(QT_INTERNAL_IS_STANDALONE_TEST)
+        list(REMOVE_ITEM subdirs "${dir}")
+    endif()
+
+    foreach(subdir IN LISTS subdirs)
+        _qt_internal_collect_buildsystem_targets(${result} "${subdir}" ${forward_args})
+    endforeach()
+    get_property(sub_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    set(real_targets "")
+    if(sub_targets)
+        foreach(target IN LISTS sub_targets)
+            get_target_property(target_type ${target} TYPE)
+            if((NOT arg_INCLUDE OR target_type IN_LIST arg_INCLUDE) AND
+                (NOT arg_EXCLUDE OR (NOT target_type IN_LIST arg_EXCLUDE)))
+                list(APPEND real_targets ${target})
+            endif()
+        endforeach()
+    endif()
+    set(${result} ${${result}} ${real_targets} PARENT_SCOPE)
 endfunction()

@@ -142,7 +142,7 @@ void QThreadPipe::wakeUp()
             // eventfd
             eventfd_t value = 1;
             int ret;
-            EINTR_LOOP(ret, eventfd_write(fds[0], value));
+            QT_EINTR_LOOP(ret, eventfd_write(fds[0], value));
             return;
         }
 #endif
@@ -299,7 +299,7 @@ void QEventDispatcherUNIX::registerTimer(int timerId, qint64 interval, Qt::Timer
 #endif
 
     Q_D(QEventDispatcherUNIX);
-    d->timerList.registerTimer(timerId, interval, timerType, obj);
+    d->timerList.registerTimer(timerId, std::chrono::milliseconds{ interval }, timerType, obj);
 }
 
 /*!

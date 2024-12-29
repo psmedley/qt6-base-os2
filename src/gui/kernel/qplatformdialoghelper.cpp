@@ -768,7 +768,7 @@ public:
     {}
 
     QString windowTitle;
-    QMessageDialogOptions::Icon icon;
+    QMessageDialogOptions::StandardIcon icon;
     QString text;
     QString informativeText;
     QString detailedText;
@@ -778,6 +778,9 @@ public:
     QPixmap iconPixmap;
     QString checkBoxLabel;
     Qt::CheckState checkBoxState = Qt::Unchecked;
+    int defaultButtonId = 0;
+    int escapeButtonId = 0;
+    QMessageDialogOptions::Options options;
 };
 
 QMessageDialogOptions::QMessageDialogOptions(QMessageDialogOptionsPrivate *dd)
@@ -819,12 +822,12 @@ void QMessageDialogOptions::setWindowTitle(const QString &title)
     d->windowTitle = title;
 }
 
-QMessageDialogOptions::Icon QMessageDialogOptions::icon() const
+QMessageDialogOptions::StandardIcon QMessageDialogOptions::standardIcon() const
 {
     return d->icon;
 }
 
-void QMessageDialogOptions::setIcon(Icon icon)
+void QMessageDialogOptions::setStandardIcon(StandardIcon icon)
 {
     d->icon = icon;
 }
@@ -880,9 +883,9 @@ QPlatformDialogHelper::StandardButtons QMessageDialogOptions::standardButtons() 
 }
 
 int QMessageDialogOptions::addButton(const QString &label, QPlatformDialogHelper::ButtonRole role,
-                                     void *buttonImpl)
+                                     void *buttonImpl, int buttonId)
 {
-    const CustomButton b(d->nextCustomButtonId++, label, role, buttonImpl);
+    const CustomButton b(buttonId ? buttonId : d->nextCustomButtonId++, label, role, buttonImpl);
     d->customButtons.append(b);
     return b.id;
 }
@@ -900,6 +903,11 @@ void QMessageDialogOptions::removeButton(int id)
 const QList<QMessageDialogOptions::CustomButton> &QMessageDialogOptions::customButtons()
 {
     return d->customButtons;
+}
+
+void QMessageDialogOptions::clearCustomButtons()
+{
+    d->customButtons.clear();
 }
 
 const QMessageDialogOptions::CustomButton *QMessageDialogOptions::customButton(int id)
@@ -923,6 +931,49 @@ Qt::CheckState QMessageDialogOptions::checkBoxState() const
 {
     return d->checkBoxState;
 }
+
+void QMessageDialogOptions::setDefaultButton(int id)
+{
+    d->defaultButtonId = id;
+}
+
+int QMessageDialogOptions::defaultButton() const
+{
+    return d->defaultButtonId;
+}
+
+void QMessageDialogOptions::setEscapeButton(int id)
+{
+    d->escapeButtonId = id;
+}
+
+int QMessageDialogOptions::escapeButton() const
+{
+    return d->escapeButtonId;
+}
+
+void QMessageDialogOptions::setOption(QMessageDialogOptions::Option option, bool on)
+{
+    if (!(d->options & option) != !on)
+        setOptions(d->options ^ option);
+}
+
+bool QMessageDialogOptions::testOption(QMessageDialogOptions::Option option) const
+{
+    return d->options & option;
+}
+
+void QMessageDialogOptions::setOptions(QMessageDialogOptions::Options options)
+{
+    if (options != d->options)
+        d->options = options;
+}
+
+QMessageDialogOptions::Options QMessageDialogOptions::options() const
+{
+    return d->options;
+}
+
 
 QPlatformDialogHelper::ButtonRole QPlatformDialogHelper::buttonRole(QPlatformDialogHelper::StandardButton button)
 {

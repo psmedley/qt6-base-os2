@@ -93,24 +93,43 @@ function(_qt_internal_create_moc_command infile outfile moc_flags moc_options
         set(extra_output_files "${outfile}.json")
         set(${out_json_file} "${extra_output_files}" PARENT_SCOPE)
     endif()
-    string (REPLACE ";" "\n" _moc_parameters "${_moc_parameters}")
 
     if(moc_target)
         set(_moc_parameters_file ${_moc_parameters_file}$<$<BOOL:$<CONFIG>>:_$<CONFIG>>)
         set(targetincludes "$<TARGET_PROPERTY:${moc_target},INCLUDE_DIRECTORIES>")
         set(targetdefines "$<TARGET_PROPERTY:${moc_target},COMPILE_DEFINITIONS>")
 
-        set(targetincludes "$<$<BOOL:${targetincludes}>:-I$<JOIN:$<REMOVE_DUPLICATES:${targetincludes}>,\n-I>\n>")
-        set(targetdefines "$<$<BOOL:${targetdefines}>:-D$<JOIN:$<REMOVE_DUPLICATES:${targetdefines}>,\n-D>\n>")
+        set(targetincludes "$<$<BOOL:${targetincludes}>:-I$<JOIN:${targetincludes},;-I>>")
+        set(targetdefines "$<$<BOOL:${targetdefines}>:-D$<JOIN:${targetdefines},;-D>>")
+        set(_moc_parameters_list_without_genex)
+        set(_moc_parameters_list_with_genex)
+        foreach(_moc_parameter ${_moc_parameters})
+            if(_moc_parameter MATCHES "\\\$<")
+                list(APPEND _moc_parameters_list_with_genex ${_moc_parameter})
+            else()
+                list(APPEND _moc_parameters_list_without_genex ${_moc_parameter})
+            endif()
+        endforeach()
+
+        string(REPLACE ">" "$<ANGLE-R>" _moc_escaped_parameters "${_moc_parameters_list_without_genex}")
+        string(REPLACE "," "$<COMMA>"   _moc_escaped_parameters "${_moc_escaped_parameters}")
+        string(REPLACE ";" "$<SEMICOLON>" _moc_escaped_parameters "${_moc_escaped_parameters}")
+        set(concatenated "$<$<BOOL:${targetincludes}>:${targetincludes};>$<$<BOOL:${targetdefines}>:${targetdefines};>$<$<BOOL:${_moc_escaped_parameters}>:${_moc_escaped_parameters};>")
+
+        list(APPEND concatenated ${_moc_parameters_list_with_genex})
+        set(concatenated "$<FILTER:$<REMOVE_DUPLICATES:${concatenated}>,EXCLUDE,^-[DI]$>")
+        set(concatenated "$<JOIN:${concatenated},\n>")
 
         file (GENERATE
             OUTPUT ${_moc_parameters_file}
-            CONTENT "${targetdefines}${targetincludes}${_moc_parameters}\n"
+            CONTENT "${concatenated}"
         )
 
+        set(concatenated)
         set(targetincludes)
         set(targetdefines)
     else()
+        string (REPLACE ";" "\n" _moc_parameters "${_moc_parameters}")
         file(WRITE ${_moc_parameters_file} "${_moc_parameters}\n")
     endif()
 
@@ -121,8 +140,12 @@ function(_qt_internal_create_moc_command infile outfile moc_flags moc_options
                        ${_moc_working_dir}
                        VERBATIM)
     set_source_files_properties(${infile} PROPERTIES SKIP_AUTOMOC ON)
-    set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOMOC ON)
-    set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOUIC ON)
+    set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOMOC ON
+                                                      SKIP_AUTOUIC ON
+    )
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.27")
+        set_source_files_properties(${outfile} PROPERTIES SKIP_LINTING ON)
+    endif()
 endfunction()
 
 function(qt6_generate_moc infile outfile )
@@ -434,6 +457,9 @@ function(qt6_add_big_resources outfiles )
 
         _qt6_parse_qrc_file(${infile} _out_depends _rc_depends)
         set_source_files_properties(${infile} PROPERTIES SKIP_AUTOGEN ON)
+        if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.27")
+            set_source_files_properties(${tmpoutfile} PROPERTIES SKIP_LINTING ON)
+        endif()
         add_custom_command(OUTPUT ${tmpoutfile}
                            COMMAND ${QT_CMAKE_EXPORT_NAMESPACE}::rcc ${rcc_options} --name ${outfilename} --pass 1 --output ${tmpoutfile} ${infile}
                            DEPENDS ${infile} ${_rc_depends} "${out_depends}" ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
@@ -568,6 +594,21 @@ function(qt6_add_executable target)
     endif()
 endfunction()
 
+# Just like for qt_add_resources, we should disable zstd compression when cross-compiling to a
+# target that doesn't support zstd decompression, even if the host tool supports it.
+# Allow an opt out via a QT_NO_AUTORCC_ZSTD variable.
+function(_qt_internal_disable_autorcc_zstd_when_not_supported target)
+    if(TARGET "${target}"
+            AND DEFINED QT_FEATURE_zstd
+            AND NOT QT_FEATURE_zstd
+            AND NOT QT_NO_AUTORCC_ZSTD)
+        get_target_property(target_type ${target} TYPE)
+        if(NOT target_type STREQUAL "INTERFACE_LIBRARY")
+            set_property(TARGET "${target}" APPEND PROPERTY AUTORCC_OPTIONS "--no-zstd")
+        endif()
+    endif()
+endfunction()
+
 function(_qt_internal_create_executable target)
     if(ANDROID)
         list(REMOVE_ITEM ARGN "WIN32" "MACOSX_BUNDLE")
@@ -588,6 +629,7 @@ function(_qt_internal_create_executable target)
         add_executable("${target}" ${ARGN})
     endif()
 
+    _qt_internal_disable_autorcc_zstd_when_not_supported("${target}")
     _qt_internal_set_up_static_runtime_library("${target}")
 endfunction()
 
@@ -660,6 +702,26 @@ function(_qt_internal_finalize_executable target)
     endif()
 endfunction()
 
+function(_cat IN_FILE OUT_FILE)
+  file(READ ${IN_FILE} CONTENTS)
+  file(APPEND ${OUT_FILE} "${CONTENTS}\n")
+endfunction()
+
+function(_qt_internal_finalize_batch name)
+    find_package(Qt6 ${PROJECT_VERSION} CONFIG REQUIRED COMPONENTS Core)
+
+    set(generated_blacklist_file "${CMAKE_CURRENT_BINARY_DIR}/BLACKLIST")
+    get_target_property(blacklist_files "${name}" _qt_blacklist_files)
+    file(WRITE "${generated_blacklist_file}" "")
+    foreach(blacklist_file ${blacklist_files})
+        _cat("${blacklist_file}" "${generated_blacklist_file}")
+    endforeach()
+    qt_internal_add_resource(${name} "batch_blacklist"
+        PREFIX "/"
+        FILES "${CMAKE_CURRENT_BINARY_DIR}/BLACKLIST"
+        BASE ${CMAKE_CURRENT_BINARY_DIR})
+endfunction()
+
 # If a task needs to run before any targets are finalized in the current directory
 # scope, call this function and pass the ID of that task as the argument.
 function(_qt_internal_delay_finalization_until_after defer_id)
@@ -667,6 +729,7 @@ function(_qt_internal_delay_finalization_until_after defer_id)
 endfunction()
 
 function(qt6_finalize_target target)
+    set_property(TARGET ${target} PROPERTY _qt_expects_finalization FALSE)
     if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
         cmake_language(DEFER GET_CALL_IDS ids_queued)
         get_directory_property(wait_for_ids qt_internal_finalizers_wait_for_ids)
@@ -707,6 +770,20 @@ function(qt6_finalize_target target)
 
     if(target_type STREQUAL "EXECUTABLE" OR is_android_executable)
         _qt_internal_finalize_executable(${ARGV})
+    endif()
+
+    if(APPLE)
+        # Tell CMake to generate run-scheme for the executable when generating
+        # Xcode projects. This avoids Xcode auto-generating default schemes for
+        # all targets, which includes internal and build-only targets.
+        get_target_property(generate_scheme "${target}" XCODE_GENERATE_SCHEME)
+        if(generate_scheme MATCHES "-NOTFOUND" AND (
+            target_type STREQUAL "EXECUTABLE" OR
+            target_type STREQUAL "SHARED_LIBRARY" OR
+            target_type STREQUAL "STATIC_LIBRARY" OR
+            target_type STREQUAL "MODULE_LIBRARY"))
+            set_property(TARGET "${target}" PROPERTY XCODE_GENERATE_SCHEME TRUE)
+        endif()
     endif()
 
     set_target_properties(${target} PROPERTIES _qt_is_finalized TRUE)
@@ -1108,7 +1185,7 @@ function(qt6_extract_metatypes target)
         VERBATIM
     )
 
-    if(CMAKE_GENERATOR MATCHES "Unix Makefiles")
+    if(CMAKE_GENERATOR MATCHES " Makefiles" OR CMAKE_GENERATOR MATCHES "^Visual Studio")
         # Work around https://gitlab.kitware.com/cmake/cmake/-/issues/19005 to trigger the command
         # that generates ${metatypes_file}.
         add_custom_command(
@@ -1485,6 +1562,13 @@ function(__qt_get_relative_resource_path_for_file output_alias file)
     get_property(alias SOURCE ${file} PROPERTY QT_RESOURCE_ALIAS)
     if (NOT alias)
         set(alias "${file}")
+        if(IS_ABSOLUTE "${file}")
+            message(FATAL_ERROR
+                "The source file '${file}' was specified with an absolute path and is used in a Qt "
+                "resource. Please set the QT_RESOURCE_ALIAS property on that source file to a "
+                "relative path to make the file properly accessible via the resource system."
+            )
+        endif()
     endif()
     set(${output_alias} ${alias} PARENT_SCOPE)
 endfunction()
@@ -1670,6 +1754,11 @@ function(__qt_propagate_generated_resource target resource_name generated_source
 
         set(resource_target "${target}_resources_${resource_count}")
         add_library("${resource_target}" OBJECT "${generated_source_code}")
+        set_target_properties(${resource_target} PROPERTIES
+            AUTOMOC FALSE
+            AUTOUIC FALSE
+            AUTORCC FALSE
+        )
         target_compile_definitions("${resource_target}" PRIVATE
             "$<TARGET_PROPERTY:${QT_CMAKE_EXPORT_NAMESPACE}::Core,INTERFACE_COMPILE_DEFINITIONS>"
         )
@@ -1887,6 +1976,7 @@ function(_qt_internal_process_resource target resourceName)
         return()
     endif()
     set(generatedResourceFile "${CMAKE_CURRENT_BINARY_DIR}/.rcc/${resourceName}.qrc")
+    _qt_internal_expose_source_file_to_ide(${target} ${generatedResourceFile})
 
     # Generate .qrc file:
 
@@ -1907,10 +1997,15 @@ function(_qt_internal_process_resource target resourceName)
             set(file "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
         endif()
 
+        get_property(is_empty SOURCE ${file} PROPERTY QT_DISCARD_FILE_CONTENTS)
+
         ### FIXME: escape file paths to be XML conform
         # <file ...>...</file>
-        string(APPEND qrcContents "    <file alias=\"${file_resource_path}\">")
-        string(APPEND qrcContents "${file}</file>\n")
+        string(APPEND qrcContents "    <file alias=\"${file_resource_path}\"")
+        if(is_empty)
+            string(APPEND qrcContents " empty=\"true\"")
+        endif()
+        string(APPEND qrcContents ">${file}</file>\n")
         list(APPEND files "${file}")
 
         set(scope_args)
@@ -2017,6 +2112,9 @@ function(_qt_internal_process_resource target resourceName)
         SKIP_UNITY_BUILD_INCLUSION TRUE
         SKIP_PRECOMPILE_HEADERS TRUE
     )
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.27")
+        set_source_files_properties(${generatedOutfile} ${scope_args} PROPERTIES SKIP_LINTING ON)
+    endif()
 
     get_target_property(target_source_dir ${target} SOURCE_DIR)
     if(NOT target_source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -2301,6 +2399,7 @@ function(_qt_internal_add_library target)
     endif()
 
     add_library(${target} ${type_to_create} ${arg_UNPARSED_ARGUMENTS})
+    _qt_internal_disable_autorcc_zstd_when_not_supported("${target}")
     _qt_internal_set_up_static_runtime_library(${target})
 
     if(NOT type_to_create STREQUAL "INTERFACE" AND NOT type_to_create STREQUAL "OBJECT")
@@ -2539,6 +2638,18 @@ function(_qt_internal_setup_deploy_support)
         set(__QT_DEPLOY_TOOL "")
     endif()
 
+    # Determine whether this is a multi-config build with a Debug configuration.
+    set(is_multi_config_build_with_debug_config FALSE)
+    get_target_property(target_is_imported ${target} IMPORTED)
+    if(target_is_imported)
+        get_target_property(target_imported_configs ${target} IMPORTED_CONFIGURATIONS)
+        list(LENGTH target_imported_configs target_imported_configs_length)
+        if(target_imported_configs_length GREATER "1"
+                AND "DEBUG" IN_LIST target_imported_configs)
+            set(is_multi_config_build_with_debug_config TRUE)
+        endif()
+    endif()
+
     _qt_internal_add_deploy_support("${CMAKE_CURRENT_LIST_DIR}/Qt6CoreDeploySupport.cmake")
 
     set(deploy_ignored_lib_dirs "")
@@ -2586,6 +2697,20 @@ function(_qt_internal_setup_deploy_support)
         endif()
     endif()
 
+    # Generate path to the target (not host) qtpaths file. Needed for windeployqt when
+    # cross-compiling from an x86_64 host to an arm64 target, so it knows which architecture
+    # libraries should be deployed.
+    if(CMAKE_HOST_WIN32)
+        if(CMAKE_CROSSCOMPILING)
+            set(qt_paths_ext ".bat")
+        else()
+            set(qt_paths_ext ".exe")
+        endif()
+    else()
+        set(qt_paths_ext "")
+    endif()
+    set(target_qtpaths_path "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}/qtpaths${qt_paths_ext}")
+
     file(GENERATE OUTPUT "${QT_DEPLOY_SUPPORT}" CONTENT
 "cmake_minimum_required(VERSION 3.16...3.21)
 
@@ -2630,12 +2755,17 @@ set(__QT_DEFAULT_MAJOR_VERSION \"${QT_DEFAULT_MAJOR_VERSION}\")
 set(__QT_DEPLOY_QT_ADDITIONAL_PACKAGES_PREFIX_PATH \"${QT_ADDITIONAL_PACKAGES_PREFIX_PATH}\")
 set(__QT_DEPLOY_QT_INSTALL_PREFIX \"${QT6_INSTALL_PREFIX}\")
 set(__QT_DEPLOY_QT_INSTALL_BINS \"${QT6_INSTALL_BINS}\")
+set(__QT_DEPLOY_QT_INSTALL_DATA \"${QT6_INSTALL_DATA}\")
+set(__QT_DEPLOY_QT_INSTALL_LIBEXECS \"${QT6_INSTALL_LIBEXECS}\")
 set(__QT_DEPLOY_QT_INSTALL_PLUGINS \"${QT6_INSTALL_PLUGINS}\")
 set(__QT_DEPLOY_QT_INSTALL_TRANSLATIONS \"${QT6_INSTALL_TRANSLATIONS}\")
+set(__QT_DEPLOY_TARGET_QT_PATHS_PATH \"${target_qtpaths_path}\")
 set(__QT_DEPLOY_PLUGINS \"\")
 set(__QT_DEPLOY_MUST_ADJUST_PLUGINS_RPATH \"${must_adjust_plugins_rpath}\")
 set(__QT_DEPLOY_USE_PATCHELF \"${QT_DEPLOY_USE_PATCHELF}\")
 set(__QT_DEPLOY_PATCHELF_EXECUTABLE \"${QT_DEPLOY_PATCHELF_EXECUTABLE}\")
+set(__QT_DEPLOY_QT_IS_MULTI_CONFIG_BUILD_WITH_DEBUG \"${is_multi_config_build_with_debug_config}\")
+set(__QT_DEPLOY_QT_DEBUG_POSTFIX \"${QT6_DEBUG_POSTFIX}\")
 
 # Define the CMake commands to be made available during deployment.
 set(__qt_deploy_support_files
@@ -2804,8 +2934,8 @@ macro(qt6_standard_project_setup)
             endif()
         endforeach()
 
-        # Enable folder support for IDEs. A future CMake version might enable this by default.
-        # See CMake issue #21695.
+        # Enable folder support for IDEs. CMake >= 3.26 enables USE_FOLDERS by default but this is
+        # guarded by CMake policy CMP0143.
         get_property(__qt_use_folders GLOBAL PROPERTY USE_FOLDERS)
         if(__qt_use_folders OR "${__qt_use_folders}" STREQUAL "")
             set_property(GLOBAL PROPERTY USE_FOLDERS ON)

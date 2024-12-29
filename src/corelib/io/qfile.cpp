@@ -459,6 +459,24 @@ QFile::remove(const QString &fileName)
     and sets the fileName() to the path at which the file can be found within the trash;
     otherwise returns \c false.
 
+//! [move-to-trash-common]
+    The time for this function to run is independent of the size of the file
+    being trashed. If this function is called on a directory, it may be
+    proportional to the number of files being trashed.
+
+    This function uses the Windows and \macos APIs to perform the trashing on
+    those two operating systems. Elsewhere (Unix systems), this function
+    implements the \l{FreeDesktop.org Trash specification version 1.0}.
+
+    \note When using the FreeDesktop.org Trash implementation, this function
+    will fail if it is unable to move the files to the trash location by way of
+    file renames and hardlinks. This condition arises if the file being trashed
+    resides on a volume (mount point) on which the current user does not have
+    permission to create the \c{.Trash} directory, or with some unusual
+    filesystem types or configurations (such as sub-volumes that aren't
+    themselves mount points).
+//! [move-to-trash-common]
+
     \note On systems where the system API doesn't report the location of the file in the
     trash, fileName() will be set to the null string once the file has been moved. On
     systems that don't have a trash can, this function always returns false.
@@ -496,9 +514,12 @@ QFile::moveToTrash()
     and sets \a pathInTrash (if provided) to the path at which the file can be found within
     the trash; otherwise returns \c false.
 
+    \include qfile.cpp move-to-trash-common
+
     \note On systems where the system API doesn't report the path of the file in the
     trash, \a pathInTrash will be set to the null string once the file has been moved.
     On systems that don't have a trash can, this function always returns false.
+
 */
 bool
 QFile::moveToTrash(const QString &fileName, QString *pathInTrash)
@@ -1249,6 +1270,107 @@ qint64 QFile::size() const
     \overload
 */
 
+
+/*!
+    \class QNtfsPermissionCheckGuard
+    \since 6.6
+    \inmodule QtCore
+    \brief The QNtfsPermissionCheckGuard class is a RAII class to manage NTFS
+    permission checking.
+
+    \ingroup io
+
+    For performance reasons, QFile, QFileInfo, and related classes do not
+    perform full ownership and permission (ACL) checking on NTFS file systems
+    by default. During the lifetime of any instance of this class, that
+    default is overridden and advanced checking is performed. This provides
+    a safe and easy way to manage enabling and disabling this change to the
+    default behavior.
+
+    Example:
+
+    \snippet ntfsp.cpp raii
+
+    This class is available only on Windows.
+
+    \section1 qt_ntfs_permission_lookup
+
+    Prior to Qt 6.6, the user had to directly manipulate the global variable
+    \c qt_ntfs_permission_lookup. However, this was a non-atomic global
+    variable and as such it was prone to data races.
+
+    The variable \c qt_ntfs_permission_lookup is therefore deprecated since Qt
+    6.6.
+*/
+
+/*!
+    \fn QNtfsPermissionCheckGuard::QNtfsPermissionCheckGuard()
+
+    Creates a guard and calls the function qEnableNtfsPermissionChecks().
+*/
+
+/*!
+    \fn QNtfsPermissionCheckGuard::~QNtfsPermissionCheckGuard()
+
+    Destroys the guard and calls the function qDisableNtfsPermissionChecks().
+*/
+
+
+/*!
+    \fn bool qEnableNtfsPermissionChecks()
+    \since 6.6
+    \threadsafe
+    \relates QNtfsPermissionCheckGuard
+
+    Enables permission checking on NTFS file systems. Returns \c true if the check
+    was already enabled before the call to this function, meaning that there
+    are other users.
+
+    This function is only available on Windows and makes the direct
+    manipulation of \l qt_ntfs_permission_lookup obsolete.
+
+    This is a low-level function, please consider the RAII class
+    \l QNtfsPermissionCheckGuard instead.
+
+    \note The thread-safety of this function holds only as long as there are no
+    concurrent updates to \l qt_ntfs_permission_lookup.
+*/
+
+/*!
+    \fn bool qDisableNtfsPermissionChecks()
+    \since 6.6
+    \threadsafe
+    \relates QNtfsPermissionCheckGuard
+
+    Disables permission checking on NTFS file systems. Returns \c true if the
+    check is disabled, meaning that there are no more users.
+
+    This function is only available on Windows and makes the direct
+    manipulation of \l qt_ntfs_permission_lookup obsolete.
+
+    This is a low-level function and must (only) be called to match one earlier
+    call to qEnableNtfsPermissionChecks(). Please consider the RAII class
+    \l QNtfsPermissionCheckGuard instead.
+
+    \note The thread-safety of this function holds only as long as there are no
+    concurrent updates to \l qt_ntfs_permission_lookup.
+*/
+
+/*!
+    \fn bool qAreNtfsPermissionChecksEnabled()
+    \since 6.6
+    \threadsafe
+    \relates QNtfsPermissionCheckGuard
+
+    Checks the status of the permission checks on NTFS file systems. Returns
+    \c true if the check is enabled.
+
+    This function is only available on Windows and makes the direct
+    manipulation of \l qt_ntfs_permission_lookup obsolete.
+
+    \note The thread-safety of this function holds only as long as there are no
+    concurrent updates to \l qt_ntfs_permission_lookup.
+*/
 
 QT_END_NAMESPACE
 

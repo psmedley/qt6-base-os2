@@ -48,6 +48,7 @@
 #include <private/qinputmethod_p.h>
 
 #include <QtTest/private/qtesthelpers_p.h>
+#include <QtTest/private/qemulationdetector_p.h>
 
 #include <QtWidgets/private/qapplication_p.h>
 
@@ -1505,42 +1506,70 @@ void tst_QComboBox::currentTextChanged()
     testWidget->addItems(QStringList() << "foo" << "bar");
     QCOMPARE(testWidget->count(), 2);
 
-    QSignalSpy spy(testWidget, SIGNAL(currentTextChanged(QString)));
+    QSignalSpy textChangedSpy(testWidget, &QComboBox::currentTextChanged);
 
     testWidget->setEditable(editable);
 
     // set text in list
     testWidget->setCurrentIndex(0);
     QCOMPARE(testWidget->currentIndex(), 0);
-    spy.clear();
+    textChangedSpy.clear();
     testWidget->setCurrentText(QString("bar"));
-    QCOMPARE(spy.size(), 1);
-    QCOMPARE(qvariant_cast<QString>(spy.at(0).at(0)), QString("bar"));
+    QCOMPARE(textChangedSpy.size(), 1);
+    QCOMPARE(qvariant_cast<QString>(textChangedSpy.at(0).at(0)), QString("bar"));
 
     // set text not in list
     testWidget->setCurrentIndex(0);
     QCOMPARE(testWidget->currentIndex(), 0);
-    spy.clear();
+    textChangedSpy.clear();
     testWidget->setCurrentText(QString("qt"));
     if (editable) {
-        QCOMPARE(spy.size(), 1);
-        QCOMPARE(qvariant_cast<QString>(spy.at(0).at(0)), QString("qt"));
+        QCOMPARE(textChangedSpy.size(), 1);
+        QCOMPARE(qvariant_cast<QString>(textChangedSpy.at(0).at(0)), QString("qt"));
     } else {
-        QCOMPARE(spy.size(), 0);
+        QCOMPARE(textChangedSpy.size(), 0);
     }
 
     // item changed
     testWidget->setCurrentIndex(0);
     QCOMPARE(testWidget->currentIndex(), 0);
-    spy.clear();
+    textChangedSpy.clear();
     testWidget->setItemText(0, QString("ape"));
-    QCOMPARE(spy.size(), 1);
-    QCOMPARE(qvariant_cast<QString>(spy.at(0).at(0)), QString("ape"));
+    QCOMPARE(textChangedSpy.size(), 1);
+    QCOMPARE(qvariant_cast<QString>(textChangedSpy.at(0).at(0)), QString("ape"));
+
     // change it back
-    spy.clear();
+    textChangedSpy.clear();
     testWidget->setItemText(0, QString("foo"));
-    QCOMPARE(spy.size(), 1);
-    QCOMPARE(qvariant_cast<QString>(spy.at(0).at(0)), QString("foo"));
+    QCOMPARE(textChangedSpy.size(), 1);
+    QCOMPARE(qvariant_cast<QString>(textChangedSpy.at(0).at(0)), QString("foo"));
+
+    // currentIndexChanged vs. currentTextChanged
+    testWidget->clear();
+    testWidget->addItems(QStringList() << "first" << "second" << "third" << "fourth" << "fourth");
+    testWidget->setCurrentIndex(4);
+    textChangedSpy.clear();
+    QSignalSpy indexChangedSpy(testWidget, &QComboBox::currentIndexChanged);
+
+    // Index change w/o text change
+    testWidget->removeItem(3);
+    QCOMPARE(textChangedSpy.count(), 0);
+    QCOMPARE(indexChangedSpy.count(), 1);
+
+    // Index and text change
+    testWidget->setCurrentIndex(0);
+    QCOMPARE(textChangedSpy.count(), 1);
+    QCOMPARE(indexChangedSpy.count(), 2);
+
+    // remove item above current index
+    testWidget->removeItem(2);
+    QCOMPARE(textChangedSpy.count(), 1);
+    QCOMPARE(indexChangedSpy.count(), 2);
+
+    // Text change w/o index change
+    testWidget->setItemText(0, "first class");
+    QCOMPARE(textChangedSpy.count(), 2);
+    QCOMPARE(indexChangedSpy.count(), 2);
 }
 
 void tst_QComboBox::editTextChanged()
@@ -3176,31 +3205,55 @@ void tst_QComboBox::task_QTBUG_54191_slotOnEditTextChangedSetsComboBoxToReadOnly
     QCOMPARE(cb.currentIndex(), 1);
 }
 
+class ComboBox : public QComboBox {
+public:
+    using QComboBox::QComboBox;
+
+    void keyPressEvent(QKeyEvent *e) override
+    {
+        QComboBox::keyPressEvent(e);
+        accepted = e->isAccepted();
+    }
+    bool accepted = false;
+};
+
 void tst_QComboBox::keyboardSelection()
 {
-    QComboBox comboBox;
+    ComboBox comboBox;
     const int keyboardInterval = QApplication::keyboardInputInterval();
-    QStringList list;
-    list << "OA" << "OB" << "OC" << "OO" << "OP" << "PP";
+    const QStringList list = {"OA", "OB", "OC", "OO", "OP", "PP"};
     comboBox.addItems(list);
 
     // Clear any remaining keyboard input from previous tests.
     QTest::qWait(keyboardInterval);
     QTest::keyClicks(&comboBox, "oo", Qt::NoModifier, 50);
     QCOMPARE(comboBox.currentText(), list.at(3));
+    QCOMPARE(comboBox.accepted, true);
 
     QTest::qWait(keyboardInterval);
     QTest::keyClicks(&comboBox, "op", Qt::NoModifier, 50);
     QCOMPARE(comboBox.currentText(), list.at(4));
+    QCOMPARE(comboBox.accepted, true);
 
     QTest::keyClick(&comboBox, Qt::Key_P, Qt::NoModifier, keyboardInterval);
     QCOMPARE(comboBox.currentText(), list.at(5));
+    QCOMPARE(comboBox.accepted, true);
 
     QTest::keyClick(&comboBox, Qt::Key_O, Qt::NoModifier, keyboardInterval);
     QCOMPARE(comboBox.currentText(), list.at(0));
+    QCOMPARE(comboBox.accepted, true);
 
     QTest::keyClick(&comboBox, Qt::Key_O, Qt::NoModifier, keyboardInterval);
     QCOMPARE(comboBox.currentText(), list.at(1));
+    QCOMPARE(comboBox.accepted, true);
+
+    QTest::keyClick(&comboBox, Qt::Key_Tab, Qt::NoModifier, keyboardInterval);
+    QCOMPARE(comboBox.currentText(), list.at(1));
+    QCOMPARE(comboBox.accepted, false);
+
+    QTest::keyClick(&comboBox, Qt::Key_Tab, Qt::ControlModifier, keyboardInterval);
+    QCOMPARE(comboBox.currentText(), list.at(1));
+    QCOMPARE(comboBox.accepted, false);
 }
 
 void tst_QComboBox::updateDelegateOnEditableChange()
@@ -3372,6 +3425,8 @@ void tst_QComboBox::popupPositionAfterStyleChange()
     const bool usePopup = qApp->style()->styleHint(QStyle::SH_ComboBox_Popup, &opt, &box);
     if (!usePopup)
         QSKIP("This test is only relevant for styles that centers the popup on top of the combo!");
+    if (QTestPrivate::isRunningArmOnX86())
+        QSKIP("Flaky on QEMU, QTBUG-114760");
 
     box.addItems({"first", "middle", "last"});
     box.show();

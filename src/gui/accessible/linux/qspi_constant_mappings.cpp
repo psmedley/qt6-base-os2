@@ -36,6 +36,8 @@ quint64 spiStatesFromQState(QAccessible::State state)
         setSpiStateBit(&spiState, ATSPI_STATE_FOCUSED);
     if (state.pressed)
         setSpiStateBit(&spiState, ATSPI_STATE_PRESSED);
+    if (state.checkable)
+        setSpiStateBit(&spiState, ATSPI_STATE_CHECKABLE);
     if (state.checked)
         setSpiStateBit(&spiState, ATSPI_STATE_CHECKED);
     if (state.checkStateMixed)
@@ -75,7 +77,8 @@ quint64 spiStatesFromQState(QAccessible::State state)
     if (state.extSelectable)
         setSpiStateBit(&spiState, ATSPI_STATE_SELECTABLE);
     //        if (state.Protected)
-    //        if (state.HasPopup)
+    if (state.hasPopup)
+        setSpiStateBit(&spiState, ATSPI_STATE_HAS_POPUP);
     if (state.modal)
         setSpiStateBit(&spiState, ATSPI_STATE_MODAL);
     if (state.multiLine)
@@ -97,6 +100,7 @@ QSpiUIntList spiStateSetFromSpiStates(quint64 states)
 
 AtspiRelationType qAccessibleRelationToAtSpiRelation(QAccessible::Relation relation)
 {
+    // direction of the relation is "inversed" in Qt and AT-SPI
     switch (relation) {
     case QAccessible::Label:
         return ATSPI_RELATION_LABELLED_BY;
@@ -106,6 +110,14 @@ AtspiRelationType qAccessibleRelationToAtSpiRelation(QAccessible::Relation relat
         return ATSPI_RELATION_CONTROLLED_BY;
     case QAccessible::Controlled:
         return ATSPI_RELATION_CONTROLLER_FOR;
+    case QAccessible::DescriptionFor:
+        return ATSPI_RELATION_DESCRIBED_BY;
+    case QAccessible::Described:
+        return ATSPI_RELATION_DESCRIPTION_FOR;
+    case QAccessible::FlowsFrom:
+        return ATSPI_RELATION_FLOWS_TO;
+    case QAccessible::FlowsTo:
+        return ATSPI_RELATION_FLOWS_FROM;
     default:
         qWarning() << "Cannot return AT-SPI relation for:" << relation;
     }

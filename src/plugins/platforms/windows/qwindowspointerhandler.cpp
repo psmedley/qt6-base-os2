@@ -739,20 +739,20 @@ bool QWindowsPointerHandler::translateMouseEvent(QWindow *window,
 {
     *result = 0;
 
-    QPoint eventPos(GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
-    if ((et & QtWindows::NonClientEventFlag) == 0 && QWindowsBaseWindow::isRtlLayout(hwnd))  {
-        RECT clientArea;
-        GetClientRect(hwnd, &clientArea);
-        eventPos.setX(clientArea.right - eventPos.x());
-    }
-
     QPoint localPos;
     QPoint globalPos;
+    QPoint eventPos(GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 
     if ((et == QtWindows::MouseWheelEvent) || (et & QtWindows::NonClientEventFlag)) {
         globalPos = eventPos;
         localPos = QWindowsGeometryHint::mapFromGlobal(hwnd, eventPos);
     } else {
+        if (QWindowsBaseWindow::isRtlLayout(hwnd))  {
+            RECT clientArea;
+            GetClientRect(hwnd, &clientArea);
+            eventPos.setX(clientArea.right - eventPos.x());
+        }
+
         globalPos = QWindowsGeometryHint::mapToGlobal(hwnd, eventPos);
         auto targetHwnd = hwnd;
         if (auto *pw = window->handle())
@@ -822,19 +822,16 @@ bool QWindowsPointerHandler::translateMouseEvent(QWindow *window,
     if (m_lastEventType == QEvent::NonClientAreaMouseButtonPress
             && (mouseEvent.type == QEvent::NonClientAreaMouseMove || mouseEvent.type == QEvent::MouseMove)
             && (m_lastEventButton & mouseButtons) == 0) {
-            if (mouseEvent.type == QEvent::NonClientAreaMouseMove) {
-                QWindowSystemInterface::handleFrameStrutMouseEvent(window, device, localPos, globalPos, mouseButtons, m_lastEventButton,
-                                                                   QEvent::NonClientAreaMouseButtonRelease, keyModifiers, source);
-            } else {
-                QWindowSystemInterface::handleMouseEvent(window, device, localPos, globalPos, mouseButtons, m_lastEventButton,
-                                                         QEvent::MouseButtonRelease, keyModifiers, source);
-            }
+            auto releaseType = mouseEvent.type == QEvent::NonClientAreaMouseMove ?
+                QEvent::NonClientAreaMouseButtonRelease : QEvent::MouseButtonRelease;
+            QWindowSystemInterface::handleMouseEvent(window, device, localPos, globalPos, mouseButtons, m_lastEventButton,
+                                                     releaseType, keyModifiers, source);
     }
     m_lastEventType = mouseEvent.type;
     m_lastEventButton = mouseEvent.button;
 
     if (mouseEvent.type >= QEvent::NonClientAreaMouseMove && mouseEvent.type <= QEvent::NonClientAreaMouseButtonDblClick) {
-        QWindowSystemInterface::handleFrameStrutMouseEvent(window, device, localPos, globalPos, mouseButtons,
+        QWindowSystemInterface::handleMouseEvent(window, device, localPos, globalPos, mouseButtons,
                                                            mouseEvent.button, mouseEvent.type, keyModifiers, source);
         return false; // Allow further event processing
     }

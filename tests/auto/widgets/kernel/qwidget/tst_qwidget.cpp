@@ -174,6 +174,7 @@ private slots:
     void appFocusWidgetWhenLosingFocusProxy();
     void explicitTabOrderWithComplexWidget();
     void explicitTabOrderWithSpinBox_QTBUG81097();
+    void tabOrderList();
     void tabOrderComboBox_data();
     void tabOrderComboBox();
 #if defined(Q_OS_WIN)
@@ -431,6 +432,8 @@ private slots:
 #ifdef Q_OS_ANDROID
     void showFullscreenAndroid();
 #endif
+
+    void setVisibleDuringDestruction();
 
 private:
     const QString m_platform;
@@ -1932,6 +1935,26 @@ public:
     QLineEdit *lineEdit3;
 };
 
+static QList<QWidget *> getFocusChain(QWidget *start, bool bForward)
+{
+    QList<QWidget *> ret;
+    QWidget *cur = start;
+    // detect infinite loop
+    int count = 100;
+    auto loopGuard = qScopeGuard([]{
+        QFAIL("Inifinite loop detected in focus chain");
+    });
+    do {
+        ret += cur;
+        auto widgetPrivate = static_cast<QWidgetPrivate *>(qt_widget_private(cur));
+        cur = bForward ? widgetPrivate->focus_next : widgetPrivate->focus_prev;
+        if (!--count)
+            return ret;
+    } while (cur != start);
+    loopGuard.dismiss();
+    return ret;
+}
+
 void tst_QWidget::defaultTabOrder()
 {
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
@@ -2051,6 +2074,17 @@ void tst_QWidget::reverseTabOrder()
     QVERIFY(firstEdit->hasFocus());
 }
 
+void tst_QWidget::tabOrderList()
+{
+    Composite c;
+    QCOMPARE(getFocusChain(&c, true),
+             QList<QWidget *>({&c, c.lineEdit1, c.lineEdit2, c.lineEdit3}));
+    QWidget::setTabOrder({c.lineEdit3, c.lineEdit2, c.lineEdit1});
+    // not starting with 3 like one would maybe expect, but still 3, 2, 1
+    QCOMPARE(getFocusChain(&c, true),
+             QList<QWidget *>({&c, c.lineEdit1, c.lineEdit3, c.lineEdit2}));
+}
+
 void tst_QWidget::tabOrderComboBox_data()
 {
     QTest::addColumn<const bool>("editableAtBeginning");
@@ -2059,26 +2093,6 @@ void tst_QWidget::tabOrderComboBox_data()
 
     QTest::addRow("3 not editable") << false << QList<int>{2, 1, 0} << QList<int>{0, 1, 2};
     QTest::addRow("4 editable") << true << QList<int>{2, 1, 0, 3} << QList<int>{3, 0, 2, 1};
-}
-
-static QList<QWidget *> getFocusChain(QWidget *start, bool bForward)
-{
-    QList<QWidget *> ret;
-    QWidget *cur = start;
-    // detect infinite loop
-    int count = 100;
-    auto loopGuard = qScopeGuard([]{
-        QFAIL("Inifinite loop detected in focus chain");
-    });
-    do {
-        ret += cur;
-        auto widgetPrivate = static_cast<QWidgetPrivate *>(qt_widget_private(cur));
-        cur = bForward ? widgetPrivate->focus_next : widgetPrivate->focus_prev;
-        if (!--count)
-            return ret;
-    } while (cur != start);
-    loopGuard.dismiss();
-    return ret;
 }
 
 QWidgetList expectedFocusChain(const QList<QComboBox *> &boxes, const QList<int> &sequence)
@@ -2099,13 +2113,14 @@ QWidgetList expectedFocusChain(const QList<QComboBox *> &boxes, const QList<int>
 
 QWidgetList realFocusChain(const QList<QComboBox *> &boxes, const QList<int> &sequence)
 {
-    QWidgetList widgets = getFocusChain(boxes.at(sequence.at(0)), true);
+    const QWidgetList all = getFocusChain(boxes.at(sequence.at(0)), true);
+    QWidgetList chain;
     // Filter everything with NoFocus
-    for (auto *widget : widgets) {
-        if (widget->focusPolicy() == Qt::NoFocus)
-            widgets.removeOne(widget);
+    for (auto *widget : all) {
+        if (widget->focusPolicy() != Qt::NoFocus)
+            chain << widget;
     }
-    return widgets;
+    return chain;
 }
 
 void setTabOrder(const QList<QComboBox *> &boxes, const QList<int> &sequence)
@@ -2132,6 +2147,7 @@ void tst_QWidget::tabOrderComboBox()
     QFETCH(const QList<int>, secondTabOrder);
     const int count = firstTabOrder.count();
     Q_ASSERT(count == secondTabOrder.count());
+    Q_ASSERT(count > 1);
 
     QWidget w;
     w.setObjectName("MainWidget");
@@ -2163,6 +2179,31 @@ void tst_QWidget::tabOrderComboBox()
     }
 
     COMPARE(secondTabOrder);
+
+    // Remove the focus proxy of the first combobox's line edit.
+    QComboBox *box = boxes.at(0);
+    QLineEdit *lineEdit = box->lineEdit();
+    QWidgetPrivate *lePriv = QWidgetPrivate::get(lineEdit);
+    const QWidget *prev = lePriv->focus_prev;
+    const QWidget *next = lePriv->focus_next;
+    const QWidget *proxy = lePriv->extra->focus_proxy;
+    QCOMPARE(proxy, box);
+    lineEdit->setFocusProxy(nullptr);
+    QCOMPARE(lePriv->extra->focus_proxy, nullptr);
+    QCOMPARE(lePriv->focus_prev, prev);
+    QCOMPARE(lePriv->focus_next, next);
+
+    // Remove first item and check chain consistency
+    boxes.removeFirst();
+    delete box;
+
+    // Create new list with 0 removed and other indexes updated
+    QList<int> thirdTabOrder(secondTabOrder);
+    thirdTabOrder.removeIf([](int i){ return i == 0; });
+    for (int &i : thirdTabOrder)
+        --i;
+
+    COMPARE(thirdTabOrder);
 
 #undef COMPARE
 }
@@ -2557,9 +2598,9 @@ void tst_QWidget::tabOrderWithCompoundWidgetsInflection()
         qCritical() << " Actual  :" << forwardChain;
         qCritical() << " Expected:" << expectedFocusChain;
     });
-    for (qsizetype i = 0; i < expectedFocusChain.size() - 2; ++i) {
-        QVERIFY(forwardChain.indexOf(expectedFocusChain.at(i)) <
-                forwardChain.indexOf(expectedFocusChain.at(i + 1)));
+        for (qsizetype i = 0; i < expectedFocusChain.size() - 2; ++i) {
+        QCOMPARE_LT(forwardChain.indexOf(expectedFocusChain.at(i)),
+                    forwardChain.indexOf(expectedFocusChain.at(i + 1)));
     }
     logger.dismiss();
 }
@@ -4854,7 +4895,7 @@ private:
 
 /*
     Test that widget resizes and moves can be done with minimal repaints when WA_StaticContents
-    and WA_OpaquePaintEvent is set. Test is mac-only for now.
+    and WA_OpaquePaintEvent is set.
 */
 void tst_QWidget::optimizedResizeMove()
 {
@@ -11507,11 +11548,12 @@ void tst_QWidget::imEnabledNotImplemented()
     QVERIFY(imEnabled.isValid());
     QVERIFY(imEnabled.toBool());
 
-    // ...even if it's read-only
+    // ImEnabled should be false when a lineedit is read-only since
+    // ImEnabled indicates the widget accepts input method _input_.
     edit.setReadOnly(true);
     imEnabled = QApplication::inputMethod()->queryFocusObject(Qt::ImEnabled, QVariant());
     QVERIFY(imEnabled.isValid());
-    QVERIFY(imEnabled.toBool());
+    QVERIFY(!imEnabled.toBool());
 }
 
 #ifdef QT_BUILD_INTERNAL
@@ -13364,6 +13406,32 @@ void tst_QWidget::showFullscreenAndroid()
     QCOMPARE(img, expectedImg);
 }
 #endif // Q_OS_ANDROID
+
+void tst_QWidget::setVisibleDuringDestruction()
+{
+    CreateDestroyWidget widget;
+    widget.create();
+    QVERIFY(widget.windowHandle());
+
+    QSignalSpy signalSpy(widget.windowHandle(), &QWindow::visibleChanged);
+    EventSpy<QWindow> showEventSpy(widget.windowHandle(), QEvent::Show);
+    widget.show();
+    QTRY_COMPARE(showEventSpy.count(), 1);
+    QTRY_COMPARE(signalSpy.count(), 1);
+
+    EventSpy<QWindow> hideEventSpy(widget.windowHandle(), QEvent::Hide);
+    widget.hide();
+    QTRY_COMPARE(hideEventSpy.count(), 1);
+    QTRY_COMPARE(signalSpy.count(), 2);
+
+    widget.show();
+    QTRY_COMPARE(showEventSpy.count(), 2);
+    QTRY_COMPARE(signalSpy.count(), 3);
+
+    widget.destroy();
+    QTRY_COMPARE(hideEventSpy.count(), 2);
+    QTRY_COMPARE(signalSpy.count(), 4);
+}
 
 QTEST_MAIN(tst_QWidget)
 #include "tst_qwidget.moc"

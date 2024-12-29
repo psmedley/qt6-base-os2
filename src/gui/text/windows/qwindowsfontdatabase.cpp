@@ -32,6 +32,8 @@
 #  include "qwindowsfontenginedirectwrite_p.h"
 #endif
 
+#include <mutex>
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
@@ -561,18 +563,10 @@ static bool addFontToDatabase(QString familyName,
             writingSystems.setSupported(ws);
     }
 
-    // We came here from populating a different font family, so we have
-    // to ensure the entire typographic family is populated before we
-    // mark it as such inside registerFont()
-    if (!subFamilyName.isEmpty()
-            && familyName != subFamilyName
-            && sfp->populatedFontFamily != familyName
-            && !QPlatformFontDatabase::isFamilyPopulated(familyName)) {
-        sfp->windowsFontDatabase->populateFamily(familyName);
-    }
-
+    const bool wasPopulated = QPlatformFontDatabase::isFamilyPopulated(familyName);
     QPlatformFontDatabase::registerFont(familyName, styleName, foundryName, weight,
                                         style, stretch, antialias, scalable, size, fixed, writingSystems, createFontFile(faceName));
+
 
     // add fonts windows can generate for us:
     if (weight <= QFont::DemiBold && styleName.isEmpty())
@@ -584,6 +578,16 @@ static bool addFontToDatabase(QString familyName,
     if (weight <= QFont::DemiBold && style != QFont::StyleItalic && styleName.isEmpty())
         QPlatformFontDatabase::registerFont(familyName, QString(), foundryName, QFont::Bold,
                                             QFont::StyleItalic, stretch, antialias, scalable, size, fixed, writingSystems, createFontFile(faceName));
+
+    // We came here from populating a different font family, so we have
+    // to ensure the entire typographic family is populated before we
+    // mark it as such inside registerFont()
+    if (!subFamilyName.isEmpty()
+            && familyName != subFamilyName
+            && sfp->populatedFontFamily != familyName
+            && !wasPopulated) {
+        sfp->windowsFontDatabase->populateFamily(familyName);
+    }
 
     if (!subFamilyName.isEmpty() && familyName != subFamilyName) {
         QPlatformFontDatabase::registerFont(subFamilyName, subFamilyStyle, foundryName, weight,
@@ -847,7 +851,10 @@ QT_WARNING_POP
                     UniqueFontData uniqueData;
                     uniqueData.handle = fontHandle;
                     uniqueData.refCount.ref();
-                    m_uniqueFontData[uniqueFamilyName] = uniqueData;
+                    {
+                        const std::scoped_lock lock(m_uniqueFontDataMutex);
+                        m_uniqueFontData[uniqueFamilyName] = uniqueData;
+                    }
                 }
             } else {
                 RemoveFontMemResourceEx(fontHandle);
@@ -868,36 +875,70 @@ QT_WARNING_POP
     return fontEngine;
 }
 
-static QList<quint32> getTrueTypeFontOffsets(const uchar *fontData)
+static QList<quint32> getTrueTypeFontOffsets(const uchar *fontData, const uchar *fileEndSentinel)
 {
     QList<quint32> offsets;
-    const quint32 headerTag = *reinterpret_cast<const quint32 *>(fontData);
+    if (fileEndSentinel - fontData < 12) {
+        qCWarning(lcQpaFonts) << "Corrupted font data detected";
+        return offsets;
+    }
+
+    const quint32 headerTag = qFromUnaligned<quint32>(fontData);
     if (headerTag != MAKE_TAG('t', 't', 'c', 'f')) {
         if (headerTag != MAKE_TAG(0, 1, 0, 0)
             && headerTag != MAKE_TAG('O', 'T', 'T', 'O')
             && headerTag != MAKE_TAG('t', 'r', 'u', 'e')
-            && headerTag != MAKE_TAG('t', 'y', 'p', '1'))
+            && headerTag != MAKE_TAG('t', 'y', 'p', '1')) {
             return offsets;
+        }
         offsets << 0;
         return offsets;
     }
+
+    const quint32 maximumNumFonts = 0xffff;
     const quint32 numFonts = qFromBigEndian<quint32>(fontData + 8);
-    for (uint i = 0; i < numFonts; ++i) {
-        offsets << qFromBigEndian<quint32>(fontData + 12 + i * 4);
+    if (numFonts > maximumNumFonts) {
+        qCWarning(lcQpaFonts) << "Font collection of" << numFonts << "fonts is too large. Aborting.";
+        return offsets;
     }
+
+    if (quintptr(fileEndSentinel - fontData) > 12 + (numFonts - 1) * 4) {
+        for (quint32 i = 0; i < numFonts; ++i)
+            offsets << qFromBigEndian<quint32>(fontData + 12 + i * 4);
+    } else {
+        qCWarning(lcQpaFonts) << "Corrupted font data detected";
+    }
+
     return offsets;
 }
 
-static void getFontTable(const uchar *fileBegin, const uchar *data, quint32 tag, const uchar **table, quint32 *length)
+static void getFontTable(const uchar *fileBegin, const uchar *fileEndSentinel, const uchar *data, quint32 tag, const uchar **table, quint32 *length)
 {
-    const quint16 numTables = qFromBigEndian<quint16>(data + 4);
-    for (uint i = 0; i < numTables; ++i) {
-        const quint32 offset = 12 + 16 * i;
-        if (*reinterpret_cast<const quint32 *>(data + offset) == tag) {
-            *table = fileBegin + qFromBigEndian<quint32>(data + offset + 8);
-            *length = qFromBigEndian<quint32>(data + offset + 12);
-            return;
+    if (fileEndSentinel - data >= 6) {
+        const quint16 numTables = qFromBigEndian<quint16>(data + 4);
+        if (fileEndSentinel - data >= 28 + 16 * (numTables - 1)) {
+            for (quint32 i = 0; i < numTables; ++i) {
+                const quint32 offset = 12 + 16 * i;
+                if (qFromUnaligned<quint32>(data + offset) == tag) {
+                    const quint32 tableOffset = qFromBigEndian<quint32>(data + offset + 8);
+                    if (quintptr(fileEndSentinel - fileBegin) <= tableOffset) {
+                        qCWarning(lcQpaFonts) << "Corrupted font data detected";
+                        break;
+                    }
+                    *table = fileBegin + tableOffset;
+                    *length = qFromBigEndian<quint32>(data + offset + 12);
+                    if (quintptr(fileEndSentinel - *table) < *length) {
+                        qCWarning(lcQpaFonts) << "Corrupted font data detected";
+                        break;
+                    }
+                    return;
+                }
+            }
+        } else {
+            qCWarning(lcQpaFonts) << "Corrupted font data detected";
         }
+    } else {
+        qCWarning(lcQpaFonts) << "Corrupted font data detected";
     }
     *table = 0;
     *length = 0;
@@ -910,8 +951,9 @@ static void getFamiliesAndSignatures(const QByteArray &fontData,
                                      QList<QFontValues> *values)
 {
     const uchar *data = reinterpret_cast<const uchar *>(fontData.constData());
+    const uchar *dataEndSentinel = data + fontData.size();
 
-    QList<quint32> offsets = getTrueTypeFontOffsets(data);
+    QList<quint32> offsets = getTrueTypeFontOffsets(data, dataEndSentinel);
     if (offsets.isEmpty())
         return;
 
@@ -919,7 +961,7 @@ static void getFamiliesAndSignatures(const QByteArray &fontData,
         const uchar *font = data + offsets.at(i);
         const uchar *table;
         quint32 length;
-        getFontTable(data, font, MAKE_TAG('n', 'a', 'm', 'e'), &table, &length);
+        getFontTable(data, dataEndSentinel, font, MAKE_TAG('n', 'a', 'm', 'e'), &table, &length);
         if (!table)
             continue;
         QFontNames names = qt_getCanonicalFontNames(table, length);
@@ -929,7 +971,7 @@ static void getFamiliesAndSignatures(const QByteArray &fontData,
         families->append(std::move(names));
 
         if (values || signatures)
-            getFontTable(data, font, MAKE_TAG('O', 'S', '/', '2'), &table, &length);
+            getFontTable(data, dataEndSentinel, font, MAKE_TAG('O', 'S', '/', '2'), &table, &length);
 
         if (values) {
             QFontValues fontValues;
@@ -1107,18 +1149,22 @@ bool QWindowsFontDatabase::fontsAlwaysScalable() const
 
 void QWindowsFontDatabase::derefUniqueFont(const QString &uniqueFont)
 {
-    if (m_uniqueFontData.contains(uniqueFont)) {
-        if (!m_uniqueFontData[uniqueFont].refCount.deref()) {
-            RemoveFontMemResourceEx(m_uniqueFontData[uniqueFont].handle);
-            m_uniqueFontData.remove(uniqueFont);
+    const std::scoped_lock lock(m_uniqueFontDataMutex);
+    const auto it = m_uniqueFontData.find(uniqueFont);
+    if (it != m_uniqueFontData.end()) {
+        if (!it->refCount.deref()) {
+            RemoveFontMemResourceEx(it->handle);
+            m_uniqueFontData.erase(it);
         }
     }
 }
 
 void QWindowsFontDatabase::refUniqueFont(const QString &uniqueFont)
 {
-    if (m_uniqueFontData.contains(uniqueFont))
-        m_uniqueFontData[uniqueFont].refCount.ref();
+    const std::scoped_lock lock(m_uniqueFontDataMutex);
+    const auto it = m_uniqueFontData.find(uniqueFont);
+    if (it != m_uniqueFontData.end())
+        it->refCount.ref();
 }
 
 QStringList QWindowsFontDatabase::fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script) const
@@ -1186,6 +1232,7 @@ QFontEngine *QWindowsFontDatabase::createEngine(const QFontDef &request, const Q
             HRESULT hr = data->directWriteGdiInterop->CreateFontFaceFromHdc(data->hdc, &directWriteFontFace);
             if (SUCCEEDED(hr)) {
                 bool isColorFont = false;
+                bool needsSimulation = false;
 #if QT_CONFIG(direct2d)
                 IDWriteFontFace2 *directWriteFontFace2 = nullptr;
                 if (SUCCEEDED(directWriteFontFace->QueryInterface(__uuidof(IDWriteFontFace2),
@@ -1193,10 +1240,12 @@ QFontEngine *QWindowsFontDatabase::createEngine(const QFontDef &request, const Q
                     if (directWriteFontFace2->IsColorFont())
                         isColorFont = directWriteFontFace2->GetPaletteEntryCount() > 0;
 
+                    needsSimulation = directWriteFontFace2->GetSimulations() != DWRITE_FONT_SIMULATIONS_NONE;
+
                     directWriteFontFace2->Release();
                 }
 #endif // direct2d
-                useDw = useDw || useDirectWrite(hintingPreference, fam, isColorFont);
+                useDw = useDw || useDirectWrite(hintingPreference, fam, isColorFont) || needsSimulation;
                 qCDebug(lcQpaFonts)
                         << __FUNCTION__ << request.families.first() << request.pointSize << "pt"
                         << "hintingPreference=" << hintingPreference << "color=" << isColorFont

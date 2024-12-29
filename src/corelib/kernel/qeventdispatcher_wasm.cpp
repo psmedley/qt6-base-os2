@@ -116,6 +116,8 @@ Q_CONSTINIT QEventDispatcherWasm *QEventDispatcherWasm::g_mainThreadEventDispatc
 #if QT_CONFIG(thread)
 Q_CONSTINIT QVector<QEventDispatcherWasm *> QEventDispatcherWasm::g_secondaryThreadEventDispatchers;
 Q_CONSTINIT std::mutex QEventDispatcherWasm::g_staticDataMutex;
+emscripten::ProxyingQueue QEventDispatcherWasm::g_proxyingQueue;
+pthread_t QEventDispatcherWasm::g_mainThread;
 #endif
 // ### dynamic initialization:
 std::multimap<int, QSocketNotifier *> QEventDispatcherWasm::g_socketNotifiers;
@@ -144,6 +146,9 @@ QEventDispatcherWasm::QEventDispatcherWasm()
         // dispatchers so we set a global pointer to it.
         Q_ASSERT(g_mainThreadEventDispatcher == nullptr);
         g_mainThreadEventDispatcher = this;
+#if QT_CONFIG(thread)
+        g_mainThread = pthread_self();
+#endif
     } else {
 #if QT_CONFIG(thread)
         std::lock_guard<std::mutex> lock(g_staticDataMutex);
@@ -218,8 +223,16 @@ bool QEventDispatcherWasm::processEvents(QEventLoop::ProcessEventsFlags flags)
             handleApplicationExec();
     }
 
-    QCoreApplication::sendPostedEvents();
-    processWindowSystemEvents(flags);
+#if QT_CONFIG(thread)
+    {
+        // Reset wakeUp state: if wakeUp() was called at some point before
+        // this then processPostedEvents() below will service that call.
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_wakeUpCalled = false;
+    }
+#endif
+
+    processPostedEvents();
 
     // The processPostedEvents() call above may process an event which deletes the
     // application object and the event dispatcher; stop event processing in that case.
@@ -240,11 +253,6 @@ bool QEventDispatcherWasm::processEvents(QEventLoop::ProcessEventsFlags flags)
     }
 
     return false;
-}
-
-void QEventDispatcherWasm::processWindowSystemEvents(QEventLoop::ProcessEventsFlags flags)
-{
-    Q_UNUSED(flags);
 }
 
 void QEventDispatcherWasm::registerSocketNotifier(QSocketNotifier *notifier)
@@ -370,7 +378,7 @@ void QEventDispatcherWasm::wakeUp()
             m_pendingProcessEvents = true;
         }
         runOnMainThreadAsync([this](){
-            QEventDispatcherWasm::callProcessEvents(this);
+            QEventDispatcherWasm::callProcessPostedEvents(this);
         });
     }
 }
@@ -414,7 +422,12 @@ bool QEventDispatcherWasm::wait(int timeout)
     if (isSecondaryThreadEventDispatcher()) {
         std::unique_lock<std::mutex> lock(m_mutex);
 
-        m_wakeUpCalled = false;
+        // If wakeUp() was called there might be pending events in the event
+        // queue which should be processed. Don't block, instead return
+        // so that the event loop can spin and call processEvents() again.
+        if (m_wakeUpCalled)
+            return true;
+
         auto wait_time = timeout > 0 ? timeout * 1ms : std::chrono::duration<int, std::micro>::max();
         bool wakeUpCalled = m_moreEvents.wait_for(lock, wait_time, [=] { return m_wakeUpCalled; });
         return wakeUpCalled;
@@ -462,7 +475,7 @@ bool QEventDispatcherWasm::wakeEventDispatcherThread()
 
 // Process event activation callbacks for the main thread event dispatcher.
 // Must be called on the main thread.
-void QEventDispatcherWasm::callProcessEvents(void *context)
+void QEventDispatcherWasm::callProcessPostedEvents(void *context)
 {
     Q_ASSERT(emscripten_is_main_runtime_thread());
 
@@ -470,7 +483,7 @@ void QEventDispatcherWasm::callProcessEvents(void *context)
     if (!g_mainThreadEventDispatcher)
         return;
 
-    // In the unlikely event that we get a callProcessEvents() call for
+    // In the unlikely event that we get a callProcessPostedEvents() call for
     // a previous main thread event dispatcher (i.e. the QApplication
     // object was deleted and created again): just ignore it and return.
     if (context != g_mainThreadEventDispatcher)
@@ -480,7 +493,14 @@ void QEventDispatcherWasm::callProcessEvents(void *context)
         LOCK_GUARD(g_mainThreadEventDispatcher->m_mutex);
         g_mainThreadEventDispatcher->m_pendingProcessEvents = false;
     }
-    g_mainThreadEventDispatcher->processEvents(QEventLoop::AllEvents);
+
+    g_mainThreadEventDispatcher->processPostedEvents();
+}
+
+bool QEventDispatcherWasm::processPostedEvents()
+{
+    QCoreApplication::sendPostedEvents();
+    return false;
 }
 
 void QEventDispatcherWasm::processTimers()
@@ -504,13 +524,13 @@ void QEventDispatcherWasm::updateNativeTimer()
     // access to m_timerInfo), and then call native API to set the new
     // wakeup time on the main thread.
 
-    auto timespecToNanosec = [](timespec ts) -> uint64_t {
+    auto timespecToMsec = [](timespec ts) -> uint64_t {
         return ts.tv_sec * 1000 + ts.tv_nsec / (1000 * 1000);
     };
     timespec toWait;
     bool hasTimer = m_timerInfo->timerWait(toWait);
-    uint64_t currentTime = timespecToNanosec(m_timerInfo->currentTime);
-    uint64_t toWaitDuration = timespecToNanosec(toWait);
+    uint64_t currentTime = timespecToMsec(m_timerInfo->currentTime);
+    uint64_t toWaitDuration = timespecToMsec(toWait);
     uint64_t newTargetTime = currentTime + toWaitDuration;
 
     auto maintainNativeTimer = [this, hasTimer, toWaitDuration, newTargetTime]() {
@@ -820,7 +840,9 @@ void QEventDispatcherWasm::runOnMainThread(std::function<void(void)> fn)
 #if QT_CONFIG(thread)
     if (!emscripten_is_main_runtime_thread()) {
         void *context = new std::function<void(void)>(fn);
-        emscripten_async_run_in_main_runtime_thread_(EM_FUNC_SIG_VI, reinterpret_cast<void *>(trampoline), context);
+        g_proxyingQueue.proxyAsync(g_mainThread, [context]{
+            trampoline(context);
+        });
         return;
     }
 #endif
@@ -834,7 +856,9 @@ void QEventDispatcherWasm::runOnMainThreadAsync(std::function<void(void)> fn)
     void *context = new std::function<void(void)>(fn);
 #if QT_CONFIG(thread)
     if (!emscripten_is_main_runtime_thread()) {
-        emscripten_async_run_in_main_runtime_thread_(EM_FUNC_SIG_VI, reinterpret_cast<void *>(trampoline), context);
+        g_proxyingQueue.proxyAsync(g_mainThread, [context]{
+            trampoline(context);
+        });
         return;
     }
 #endif

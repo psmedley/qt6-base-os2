@@ -23,7 +23,7 @@
 QT_BEGIN_NAMESPACE
 
 template <typename T>
-class [[nodiscard]] QAtomicScopedValueRollback
+class QAtomicScopedValueRollback
 {
     std::atomic<T> &m_atomic;
     T m_value;
@@ -31,7 +31,7 @@ class [[nodiscard]] QAtomicScopedValueRollback
 
     Q_DISABLE_COPY_MOVE(QAtomicScopedValueRollback)
 
-    constexpr std::memory_order store_part(std::memory_order mo) noexcept
+    static constexpr std::memory_order store_part(std::memory_order mo) noexcept
     {
         switch (mo) {
         case std::memory_order_relaxed:
@@ -41,7 +41,25 @@ class [[nodiscard]] QAtomicScopedValueRollback
         case std::memory_order_acq_rel: return std::memory_order_release;
         case std::memory_order_seq_cst: return std::memory_order_seq_cst;
         }
-        // GCC 8.x does not tread __builtin_unreachable() as constexpr
+        // GCC 8.x does not treat __builtin_unreachable() as constexpr
+#if !defined(Q_CC_GNU_ONLY) || (Q_CC_GNU >= 900)
+        // NOLINTNEXTLINE(qt-use-unreachable-return): Triggers on Clang, breaking GCC 8
+        Q_UNREACHABLE();
+#endif
+        return std::memory_order_seq_cst;
+    }
+
+    static constexpr std::memory_order load_part(std::memory_order mo) noexcept
+    {
+        switch (mo) {
+        case std::memory_order_relaxed:
+        case std::memory_order_release: return std::memory_order_relaxed;
+        case std::memory_order_consume: return std::memory_order_consume;
+        case std::memory_order_acquire:
+        case std::memory_order_acq_rel: return std::memory_order_acquire;
+        case std::memory_order_seq_cst: return std::memory_order_seq_cst;
+        }
+        // GCC 8.x does not treat __builtin_unreachable() as constexpr
 #if !defined(Q_CC_GNU_ONLY) || (Q_CC_GNU >= 900)
         // NOLINTNEXTLINE(qt-use-unreachable-return): Triggers on Clang, breaking GCC 8
         Q_UNREACHABLE();
@@ -52,11 +70,13 @@ public:
     //
     // std::atomic:
     //
+    Q_NODISCARD_CTOR
     explicit constexpr
     QAtomicScopedValueRollback(std::atomic<T> &var,
                                std::memory_order mo = std::memory_order_seq_cst)
-        : m_atomic(var), m_value(var.load(mo)), m_mo(mo) {}
+        : m_atomic(var), m_value(var.load(load_part(mo))), m_mo(mo) {}
 
+    Q_NODISCARD_CTOR
     explicit constexpr
     QAtomicScopedValueRollback(std::atomic<T> &var, T value,
                                std::memory_order mo = std::memory_order_seq_cst)
@@ -65,11 +85,13 @@ public:
     //
     // Q(Basic)AtomicInteger:
     //
+    Q_NODISCARD_CTOR
     explicit constexpr
     QAtomicScopedValueRollback(QBasicAtomicInteger<T> &var,
                                std::memory_order mo = std::memory_order_seq_cst)
         : QAtomicScopedValueRollback(var._q_value, mo) {}
 
+    Q_NODISCARD_CTOR
     explicit constexpr
     QAtomicScopedValueRollback(QBasicAtomicInteger<T> &var, T value,
                                std::memory_order mo = std::memory_order_seq_cst)
@@ -78,11 +100,13 @@ public:
     //
     // Q(Basic)AtomicPointer:
     //
+    Q_NODISCARD_CTOR
     explicit constexpr
     QAtomicScopedValueRollback(QBasicAtomicPointer<std::remove_pointer_t<T>> &var,
                                std::memory_order mo = std::memory_order_seq_cst)
         : QAtomicScopedValueRollback(var._q_value, mo) {}
 
+    Q_NODISCARD_CTOR
     explicit constexpr
     QAtomicScopedValueRollback(QBasicAtomicPointer<std::remove_pointer_t<T>> &var, T value,
                                std::memory_order mo = std::memory_order_seq_cst)
@@ -98,7 +122,7 @@ public:
 
     constexpr void commit()
     {
-        m_value = m_atomic.load(m_mo);
+        m_value = m_atomic.load(load_part(m_mo));
     }
 };
 

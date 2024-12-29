@@ -149,13 +149,6 @@ void QTestResult::finishedCurrentTestData()
         addFailure("QEXPECT_FAIL was called without any subsequent verification statements");
 
     clearExpectFail();
-
-    if (!QTest::hasFailed() && QTestLog::unhandledIgnoreMessages()) {
-        QTestLog::printUnhandledIgnoreMessages();
-        addFailure("Not all expected messages were received");
-    }
-    QTestLog::clearIgnoreMessages();
-    QTestLog::clearFailOnWarnings();
 }
 
 /*!
@@ -175,6 +168,11 @@ void QTestResult::finishedCurrentTestData()
 */
 void QTestResult::finishedCurrentTestDataCleanup()
 {
+    if (!QTest::hasFailed() && QTestLog::unhandledIgnoreMessages()) {
+        QTestLog::printUnhandledIgnoreMessages();
+        addFailure("Not all expected messages were received");
+    }
+
     // If the current test hasn't failed or been skipped, then it passes.
     if (!QTest::hasFailed() && !QTest::skipCurrentTest) {
         if (QTest::blacklistCurrentTest)
@@ -289,21 +287,27 @@ void QTestResult::fail(const char *msg, const char *file, int line)
     checkStatement(false, msg, file, line);
 }
 
+// QPalette's << operator produces 1363 characters. A comparison failure
+// involving two palettes can therefore require 2726 characters, not including
+// the other output produced by QTest. Users might also have their own types
+// with large amounts of output, so use a sufficiently high value here.
+static constexpr size_t maxMsgLen = 4096;
+
 bool QTestResult::verify(bool statement, const char *statementStr,
                          const char *description, const char *file, int line)
 {
     QTEST_ASSERT(statementStr);
 
-    char msg[1024];
+    char msg[maxMsgLen];
     msg[0] = '\0';
 
     if (QTestLog::verboseLevel() >= 2) {
-        qsnprintf(msg, 1024, "QVERIFY(%s)", statementStr);
+        qsnprintf(msg, maxMsgLen, "QVERIFY(%s)", statementStr);
         QTestLog::info(msg, file, line);
     }
 
     if (statement == !!QTest::expectFailMode) {
-        qsnprintf(msg, 1024,
+        qsnprintf(msg, maxMsgLen,
                   statement ? "'%s' returned TRUE unexpectedly. (%s)" : "'%s' returned FALSE. (%s)",
                   statementStr, description ? description : "");
     }
@@ -313,12 +317,12 @@ bool QTestResult::verify(bool statement, const char *statementStr,
 
 static const char *leftArgNameForOp(QTest::ComparisonOperation op)
 {
-    return op == QTest::ComparisonOperation::CustomCompare ? "Actual   " : "Left   ";
+    return op == QTest::ComparisonOperation::CustomCompare ? "Actual   " : "Computed ";
 }
 
 static const char *rightArgNameForOp(QTest::ComparisonOperation op)
 {
-    return op == QTest::ComparisonOperation::CustomCompare ? "Expected " : "Right  ";
+    return op == QTest::ComparisonOperation::CustomCompare ? "Expected " : "Baseline ";
 }
 
 // Overload to format failures for "const char *" - no need to strdup().
@@ -371,7 +375,6 @@ static bool compareHelper(bool success, const char *failureMsg,
                           const char *file, int line,
                           bool hasValues = true)
 {
-    const size_t maxMsgLen = 1024;
     char msg[maxMsgLen];
     msg[0] = '\0';
 
@@ -534,7 +537,8 @@ bool QTestResult::compare(bool success, const char *failureMsg,
 void QTestResult::addFailure(const char *message, const char *file, int line)
 {
     clearExpectFail();
-    QTestEventLoop::instance().exitLoop();
+    if (qApp && QThread::currentThread() == qApp->thread())
+        QTestEventLoop::instance().exitLoop();
 
     if (QTest::blacklistCurrentTest)
         QTestLog::addBFail(message, file, line);
@@ -609,17 +613,17 @@ static const char *failureMessageForOp(QTest::ComparisonOperation op)
     case ComparisonOperation::CustomCompare:
         return "Compared values are not the same"; /* not used */
     case ComparisonOperation::Equal:
-        return "Left value is expected to be equal to right value, but is not";
+        return "The computed value is expected to be equal to the baseline, but is not";
     case ComparisonOperation::NotEqual:
-        return "Left value is expected to be different from right value, but is not";
+        return "The computed value is expected to be different from the baseline, but is not";
     case ComparisonOperation::LessThan:
-        return "Left value is expected to be less than right value, but is not";
+        return "The computed value is expected to be less than the baseline, but is not";
     case ComparisonOperation::LessThanOrEqual:
-        return "Left value is expected to be less than or equal to right value, but is not";
+        return "The computed value is expected to be less than or equal to the baseline, but is not";
     case ComparisonOperation::GreaterThan:
-        return "Left value is expected to be greater than right value, but is not";
+        return "The computed value is expected to be greater than the baseline, but is not";
     case ComparisonOperation::GreaterThanOrEqual:
-        return "Left value is expected to be greater than or equal to right value, but is not";
+        return "The computed value is expected to be greater than or equal to the baseline, but is not";
     }
     Q_UNREACHABLE_RETURN("");
 }
@@ -630,7 +634,6 @@ bool QTestResult::reportResult(bool success, qxp::function_ref<const char *()> l
                                QTest::ComparisonOperation op, const char *file, int line,
                                const char *failureMessage)
 {
-    const size_t maxMsgLen = 1024;
     char msg[maxMsgLen];
     msg[0] = '\0';
 

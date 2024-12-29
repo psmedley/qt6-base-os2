@@ -281,17 +281,21 @@ void QMenuBarPrivate::popupAction(QAction *action, bool activateFirst)
     if (action->isEnabled() && action->menu()->isEnabled()) {
         closePopupMode = 0;
         activeMenu = action->menu();
-        activeMenu->d_func()->causedPopup.widget = q;
-        activeMenu->d_func()->causedPopup.action = action;
+        auto *activeMenuPriv = activeMenu->d_func();
+        activeMenuPriv->causedPopup.widget = q;
+        activeMenuPriv->causedPopup.action = action;
 
         QRect adjustedActionRect = actionRect(action);
         QPoint pos(q->mapToGlobal(QPoint(adjustedActionRect.left(), adjustedActionRect.bottom() + 1)));
-        QSize popup_size = activeMenu->sizeHint();
         //we put the popup menu on the screen containing the bottom-center of the action rect
         QScreen *menubarScreen = q->window()->windowHandle()->screen();
-        QScreen *popupScreen = menubarScreen->virtualSiblingAt(pos + QPoint(adjustedActionRect.width() / 2, 0));
+        QPointer<QScreen> popupScreen = menubarScreen->virtualSiblingAt(pos + QPoint(adjustedActionRect.width() / 2, 0));
         if (!popupScreen)
             popupScreen = menubarScreen;
+        std::swap(popupScreen, activeMenuPriv->popupScreen);
+        const QSize popup_size = activeMenu->sizeHint();
+        std::swap(popupScreen, activeMenuPriv->popupScreen);
+
         QRect screenRect = popupScreen->geometry();
         pos = QPoint(qMax(pos.x(), screenRect.x()), qMax(pos.y(), screenRect.y()));
         const bool fitUp = (pos.y() - popup_size.height() >= screenRect.top());
@@ -596,11 +600,13 @@ void QMenuBar::initStyleOption(QStyleOptionMenuItem *option, const QAction *acti
 
     Qt for \macos also provides a menu bar merging feature to make
     QMenuBar conform more closely to accepted \macos menu bar layout.
-    The merging functionality is based on string matching the title of
-    a QMenu entry. These strings are translated (using QObject::tr())
-    in the "QMenuBar" context. If an entry is moved its slots will still
-    fire as if it was in the original place. The table below outlines
-    the strings looked for and where the entry is placed if matched:
+    If an entry is moved its slots will still fire as if it was in the
+    original place.
+
+    The merging functionality is based on the QAction::menuRole() of
+    the menu entries. If an item has QAction::TextHeuristicRole,
+    the role is determined by string matching the title using the
+    following heuristics:
 
     \table
     \header \li String matches \li Placement \li Notes
@@ -618,8 +624,8 @@ void QMenuBar::initStyleOption(QStyleOptionMenuItem *option, const QAction *acti
             created to call QCoreApplication::quit()
     \endtable
 
-    You can override this behavior by using the QAction::menuRole()
-    property.
+    You can override this behavior by setting the QAction::menuRole()
+    property to QAction::NoRole.
 
     If you want all windows in a Mac application to share one menu
     bar, you must create a menu bar that does not have a parent.
@@ -912,7 +918,7 @@ void QMenuBar::paintEvent(QPaintEvent *e)
         frame.rect = rect();
         frame.palette = palette();
         frame.state = QStyle::State_None;
-        frame.lineWidth = style()->pixelMetric(QStyle::PM_MenuBarPanelWidth, &frame);
+        frame.lineWidth = style()->pixelMetric(QStyle::PM_MenuBarPanelWidth, &frame, this);
         frame.midLineWidth = 0;
         style()->drawPrimitive(QStyle::PE_PanelMenuBar, &frame, &p, this);
     }

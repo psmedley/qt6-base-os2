@@ -174,15 +174,6 @@ qt_internal_extend_target(Network CONDITION UNIX
         kernel/qhostinfo_unix.cpp
         socket/qnativesocketengine_unix.cpp
         socket/qnet_unix_p.h
-    NO_UNITY_BUILD_SOURCES
-        kernel/qhostinfo_unix.cpp # Temporary exclusion until, this,
-                                  # https://codereview.qt-project.org/c/qt/qtbase/+/463670
-                                  # is merged.
-)
-
-qt_internal_extend_target(Network CONDITION QT_FEATURE_dlopen AND UNIX
-    LIBRARIES
-        ${CMAKE_DL_LIBS}
 )
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_linux_netlink AND UNIX
@@ -193,11 +184,6 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_linux_netlink AND UNIX
 qt_internal_extend_target(Network CONDITION UNIX AND NOT QT_FEATURE_linux_netlink
     SOURCES
         kernel/qnetworkinterface_unix.cpp
-)
-
-qt_internal_extend_target(Network CONDITION ANDROID AND QT_FEATURE_dnslookup
-    SOURCES
-        kernel/qdnslookup_android.cpp
 )
 
 qt_internal_extend_target(Network CONDITION WIN32
@@ -228,15 +214,32 @@ qt_internal_extend_target(Network CONDITION OS2
         QT_NO_IPV6
 )
 
+qt_internal_extend_target(Network CONDITION APPLE AND NOT UIKIT
+    LIBRARIES
+        ${FWCoreServices}
+        ${FWSystemConfiguration}
+)
+
+qt_internal_extend_target(Network CONDITION APPLE
+    LIBRARIES
+        ${FWCFNetwork}
+)
+
+qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND QT_FEATURE_libresolv
+    SOURCES
+        kernel/qdnslookup_unix.cpp
+    LIBRARIES
+        WrapResolv::WrapResolv
+)
+
 qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND WIN32
     SOURCES
         kernel/qdnslookup_win.cpp
 )
 
-qt_internal_extend_target(Network CONDITION APPLE AND NOT UIKIT
-    LIBRARIES
-        ${FWCoreServices}
-        ${FWSystemConfiguration}
+qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND NOT QT_FEATURE_libresolv AND NOT WIN32
+    SOURCES
+        kernel/qdnslookup_dummy.cpp
 )
 
 qt_internal_extend_target(Network CONDITION IOS OR MACOS
@@ -266,9 +269,9 @@ qt_internal_extend_target(Network CONDITION UIKIT
         kernel/qnetworkinterface_uikit_p.h
 )
 
-qt_internal_extend_target(Network CONDITION MACOS
+qt_internal_extend_target(Network CONDITION APPLE
     SOURCES
-        kernel/qnetworkproxy_mac.cpp
+        kernel/qnetworkproxy_darwin.cpp
 )
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_libproxy AND UNIX AND NOT MACOS
@@ -284,7 +287,7 @@ qt_internal_extend_target(Network CONDITION ANDROID
         kernel/qnetworkproxy_android.cpp
 )
 
-qt_internal_extend_target(Network CONDITION UNIX AND NOT ANDROID AND NOT MACOS AND NOT QT_FEATURE_libproxy AND (UNIX OR WINRT)
+qt_internal_extend_target(Network CONDITION UNIX AND NOT ANDROID AND NOT APPLE AND NOT QT_FEATURE_libproxy AND (UNIX OR WINRT)
     SOURCES
         kernel/qnetworkproxy_generic.cpp
 )
@@ -337,6 +340,11 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_localserver AND WIN32
         socket/qlocalsocket_win.cpp
 )
 
+qt_internal_extend_target(Network CONDITION QT_FEATURE_openssl_linked AND QT_FEATURE_opensslv30
+    LIBRARIES
+        WrapOpenSSL::WrapOpenSSL
+)
+
 qt_internal_extend_target(Network CONDITION QT_FEATURE_system_proxies
     DEFINES
         QT_USE_SYSTEM_PROXIES
@@ -366,17 +374,15 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_ocsp AND QT_FEATURE_opens
         ssl/qocsp_p.h
 )
 
-qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND UNIX AND NOT ANDROID
-    SOURCES
-        kernel/qdnslookup_unix.cpp
-)
 qt_internal_add_docs(Network
     doc/qtnetwork.qdocconf
 )
 
-qt_internal_extend_target(Network CONDITION WIN32 PUBLIC_LIBRARIES ws2_32) # special case: mkspecs/common/msvc-desktop.conf
+# See mkspecs/common/msvc-desktop.conf
+qt_internal_extend_target(Network CONDITION WIN32 PUBLIC_LIBRARIES ws2_32)
 
-qt_internal_extend_target(Network CONDITION QNX PUBLIC_LIBRARIES socket) # special case: mkspecs/common/qcc-base-qnx.conf
+# See mkspecs/common/qcc-base-qnx.conf
+qt_internal_extend_target(Network CONDITION QNX PUBLIC_LIBRARIES socket)
 
 qt_internal_extend_target(Network CONDITION SOLARIS PUBLIC_LIBRARIES socket nsl)
 
@@ -402,3 +408,11 @@ qt_internal_extend_target(Network CONDITION WIN32
 if(QT_FEATURE_private_tests)
     add_subdirectory(doc/snippets/network)
 endif()
+
+qt_internal_extend_target(Network
+    # Workaround for QTBUG-118229:
+    # Function called by inline methods taking a pointer to a private class as a parameter
+    EXTRA_LINKER_SCRIPT_EXPORTS
+        # QNetworkDatagram::destroy(QNetworkDatagramPrivate *d)
+        "_ZN*16QNetworkDatagram7destroyEP*23QNetworkDatagramPrivate*"
+)

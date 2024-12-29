@@ -8140,7 +8140,7 @@ class Qtbug25280Server : public MiniHttpServer
 public:
     Qtbug25280Server(QByteArray qba) : MiniHttpServer(qba, false) {}
     QSet<QTcpSocket*> receivedSockets;
-    virtual void reply()
+    void reply() override
     {
         // Save sockets in a list
         receivedSockets.insert((QTcpSocket*)sender());
@@ -10116,13 +10116,20 @@ void tst_QNetworkReply::qtbug68821proxyError_data()
 
 void tst_QNetworkReply::qtbug68821proxyError()
 {
-    QTcpServer proxyServer;
-    QVERIFY(proxyServer.listen());
-    quint16 proxyPort = proxyServer.serverPort();
-    proxyServer.close();
+    auto getUnusedPort = []() -> std::optional<quint16> {
+        QTcpServer probeServer;
+        if (!probeServer.listen())
+            return std::nullopt;
+        // If we can listen on it, it was unused, and hopefully is also
+        // still unused after we stop listening.
+        return probeServer.serverPort();
+    };
+
+    auto proxyPort = getUnusedPort();
+    QVERIFY(proxyPort);
 
     QFETCH(QString, proxyHost);
-    QNetworkProxy proxy(QNetworkProxy::HttpProxy, proxyHost, proxyPort);
+    QNetworkProxy proxy(QNetworkProxy::HttpProxy, proxyHost, proxyPort.value());
 
     manager.setProxy(proxy);
 

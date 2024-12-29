@@ -72,7 +72,7 @@ QProcessEnvironment QProcessEnvironmentPrivate::fromList(const QStringList &list
     QStringList::ConstIterator it = list.constBegin(),
                               end = list.constEnd();
     for ( ; it != end; ++it) {
-        int pos = it->indexOf(u'=', 1);
+        const qsizetype pos = it->indexOf(u'=', 1);
         if (pos < 1)
             continue;
 
@@ -802,6 +802,76 @@ void QProcessPrivate::Channel::clear()
     \c CreateProcessArgumentModifier functions.
 
     \sa QProcess::CreateProcessArgumentModifier
+*/
+
+/*!
+    \class QProcess::UnixProcessParameters
+    \inmodule QtCore
+    \note This struct is only available on Unix platforms
+    \since 6.6
+
+    This struct can be used to pass extra, Unix-specific configuration for the
+    child process using QProcess::setUnixProcessParameters().
+
+    Its members are:
+    \list
+    \li UnixProcessParameters::flags    Flags, see QProcess::UnixProcessFlags
+    \li UnixProcessParameters::lowestFileDescriptorToClose  The lowest file
+            descriptor to close.
+    \endlist
+
+    When the QProcess::UnixProcessFlags::CloseFileDescriptors flag is set in
+    the \c flags field, QProcess closes the application's open file descriptors
+    before executing the child process. The descriptors 0, 1, and 2 (that is,
+    \c stdin, \c stdout, and \c stderr) are left alone, along with the ones
+    numbered lower than the value of the \c lowestFileDescriptorToClose field.
+
+    All of the settings above can also be manually achieved by calling the
+    respective POSIX function from a handler set with
+    QProcess::setChildProcessModifier(). This structure allows QProcess to deal
+    with any platform-specific differences, benefit from certain optimizations,
+    and reduces code duplication. Moreover, if any of those functions fail,
+    QProcess will enter QProcess::FailedToStart state, while the child process
+    modifier callback is not allowed to fail.
+
+    \sa QProcess::setUnixProcessParameters(), QProcess::setChildProcessModifier()
+*/
+
+/*!
+    \enum QProcess::UnixProcessFlag
+    \since 6.6
+
+    These flags can be used in the \c flags field of \l UnixProcessParameters.
+
+    \value CloseFileDescriptors  Close all file descriptors above the threshold
+           defined by \c lowestFileDescriptorToClose, preventing any currently
+           open descriptor in the parent process from accidentally leaking to the
+           child. The \c stdin, \c stdout, and \c stderr file descriptors are
+           never closed.
+
+    \value IgnoreSigPipe    Always sets the \c SIGPIPE signal to ignored
+           (\c SIG_IGN), even if the \c ResetSignalHandlers flag was set. By
+           default, if the child attempts to write to its standard output or
+           standard error after the respective channel was closed with
+           QProcess::closeReadChannel(), it would get the \c SIGPIPE signal and
+           terminate immediately; with this flag, the write operation fails
+           without a signal and the child may continue executing.
+
+    \value ResetSignalHandlers  Resets all Unix signal handlers back to their
+           default state (that is, pass \c SIG_DFL to \c{signal(2)}). This flag
+           is useful to ensure any ignored (\c SIG_IGN) signal does not affect
+           the child's behavior.
+
+    \value UseVFork  Requests that QProcess use \c{vfork(2)} to start the child
+           process. Use this flag to indicate that the callback function set
+           with setChildProcessModifier() is safe to execute in the child side of
+           a \c{vfork(2)}; that is, the callback does not modify any non-local
+           variables (directly or through any function it calls), nor attempts
+           to communicate with the parent process. It is implementation-defined
+           if QProcess will actually use \c{vfork(2)} and if \c{vfork(2)} is
+           different from standard \c{fork(2)}.
+
+    \sa setUnixProcessParameters(), unixProcessParameters()
 */
 
 /*!
@@ -1569,7 +1639,7 @@ void QProcess::setCreateProcessArgumentsModifier(CreateProcessArgumentModifier m
 
     \note This function is only available on Unix platforms.
 
-    \sa setChildProcessModifier()
+    \sa setChildProcessModifier(), unixProcessParameters()
 */
 std::function<void(void)> QProcess::childProcessModifier() const
 {
@@ -1583,12 +1653,9 @@ std::function<void(void)> QProcess::childProcessModifier() const
     Sets the \a modifier function for the child process, for Unix systems
     (including \macos; for Windows, see setCreateProcessArgumentsModifier()).
     The function contained by the \a modifier argument will be invoked in the
-    child process after \c{fork()} or \c{vfork()} is completed and QProcess has set up the
-    standard file descriptors for the child process, but before \c{execve()},
-    inside start(). The modifier is useful to change certain properties of the
-    child process, such as setting up additional file descriptors or closing
-    others, changing the nice level, disconnecting from the controlling TTY,
-    etc.
+    child process after \c{fork()} or \c{vfork()} is completed and QProcess has
+    set up the standard file descriptors for the child process, but before
+    \c{execve()}, inside start().
 
     The following shows an example of setting up a child process to run without
     privileges:
@@ -1598,22 +1665,32 @@ std::function<void(void)> QProcess::childProcessModifier() const
     If the modifier function needs to exit the process, remember to use
     \c{_exit()}, not \c{exit()}.
 
+    Certain properties of the child process, such as closing all extraneous
+    file descriptors or disconnecting from the controlling TTY, can be more
+    readily achieved by using setUnixProcessParameters(), which can detect
+    failure and report a \l{QProcess::}{FailedToStart} condition. The modifier
+    is useful to change certain uncommon properties of the child process, such
+    as setting up additional file descriptors. If both a child process modifier
+    and Unix process parameters are set, the modifier is run before these
+    parameters are applied.
+
     \note In multithreaded applications, this function must be careful not to
     call any functions that may lock mutexes that may have been in use in
     other threads (in general, using only functions defined by POSIX as
     "async-signal-safe" is advised). Most of the Qt API is unsafe inside this
     callback, including qDebug(), and may lead to deadlocks.
 
-    \note On some systems (notably, Linux), QProcess will use \c{vfork()}
-    semantics to start the child process, so this function must obey even
-    stricter constraints. First, because it is still sharing memory with the
-    parent process, it must not write to any non-local variable and must obey
-    proper ordering semantics when reading from them, to avoid data races.
-    Second, even more library functions may misbehave; therefore, this function
-    should only make use of low-level system calls, such as \c{read()},
+    \note If the UnixProcessParameters::UseVFork flag is set via
+    setUnixProcessParameters(), QProcess may use \c{vfork()} semantics to
+    start the child process, so this function must obey even stricter
+    constraints. First, because it is still sharing memory with the parent
+    process, it must not write to any non-local variable and must obey proper
+    ordering semantics when reading from them, to avoid data races. Second,
+    even more library functions may misbehave; therefore, this function should
+    only make use of low-level system calls, such as \c{read()},
     \c{write()}, \c{setsid()}, \c{nice()}, and similar.
 
-    \sa childProcessModifier()
+    \sa childProcessModifier(), setUnixProcessParameters()
 */
 void QProcess::setChildProcessModifier(const std::function<void(void)> &modifier)
 {
@@ -1621,6 +1698,67 @@ void QProcess::setChildProcessModifier(const std::function<void(void)> &modifier
     if (!d->unixExtras)
         d->unixExtras.reset(new QProcessPrivate::UnixExtras);
     d->unixExtras->childProcessModifier = modifier;
+}
+
+/*!
+    \since 6.6
+    Returns the \l UnixProcessParameters object describing extra flags and
+    settings that will be applied to the child process on Unix systems. The
+    default settings correspond to a default-constructed UnixProcessParameters.
+
+    \note This function is only available on Unix platforms.
+
+    \sa childProcessModifier()
+*/
+auto QProcess::unixProcessParameters() const noexcept -> UnixProcessParameters
+{
+    Q_D(const QProcess);
+    return d->unixExtras ? d->unixExtras->processParameters : UnixProcessParameters{};
+}
+
+/*!
+    \since 6.6
+    Sets the extra settings and parameters for the child process on Unix
+    systems to be \a params. This function can be used to ask QProcess to
+    modify the child process before launching the target executable.
+
+    This function can be used to change certain properties of the child
+    process, such as closing all extraneous file descriptors, changing the nice
+    level of the child, or disconnecting from the controlling TTY. For more
+    fine-grained control of the child process or to modify it in other ways,
+    use the setChildProcessModifier() function. If both a child process
+    modifier and Unix process parameters are set, the modifier is run before
+    these parameters are applied.
+
+    \note This function is only available on Unix platforms.
+
+    \sa unixProcessParameters(), setChildProcessModifier()
+*/
+void QProcess::setUnixProcessParameters(const UnixProcessParameters &params)
+{
+    Q_D(QProcess);
+    if (!d->unixExtras)
+        d->unixExtras.reset(new QProcessPrivate::UnixExtras);
+    d->unixExtras->processParameters = params;
+}
+
+/*!
+    \since 6.6
+    \overload
+
+    Sets the extra settings for the child process on Unix systems to \a
+    flagsOnly. This is the same as the overload with just the \c flags field
+    set.
+    \note This function is only available on Unix platforms.
+
+    \sa unixProcessParameters(), setChildProcessModifier()
+*/
+void QProcess::setUnixProcessParameters(UnixProcessFlags flagsOnly)
+{
+    Q_D(QProcess);
+    if (!d->unixExtras)
+        d->unixExtras.reset(new QProcessPrivate::UnixExtras);
+    d->unixExtras->processParameters = { flagsOnly };
 }
 #endif
 
@@ -1865,7 +2003,8 @@ QProcessEnvironment QProcess::processEnvironment() const
 
     Returns \c true if the process was started successfully; otherwise
     returns \c false (if the operation timed out or if an error
-    occurred).
+    occurred). If the process had already started successfully before this
+    function, it returns immediately.
 
     This function can operate without an event loop. It is
     useful when writing non-GUI applications and when performing
@@ -1875,9 +2014,6 @@ QProcessEnvironment QProcess::processEnvironment() const
     might cause your user interface to freeze.
 
     If msecs is -1, this function will not time out.
-
-    \note On some UNIX operating systems, this function may return true but
-    the process may later report a QProcess::FailedToStart error.
 
     \sa started(), waitForReadyRead(), waitForBytesWritten(), waitForFinished()
 */
@@ -2044,18 +2180,22 @@ QByteArray QProcess::readAllStandardError()
 /*!
     Starts the given \a program in a new process, passing the command line
     arguments in \a arguments. See setProgram() for information about how
-    QProcess searches for the executable to be run.
+    QProcess searches for the executable to be run. The OpenMode is set to \a
+    mode. No further splitting of the arguments is performed.
 
     The QProcess object will immediately enter the Starting state. If the
     process starts successfully, QProcess will emit started(); otherwise,
-    errorOccurred() will be emitted.
+    errorOccurred() will be emitted. Do note that on platforms that are able to
+    start child processes synchronously (notably Windows), those signals will
+    be emitted before this function returns and this QProcess object will
+    transition to either QProcess::Running or QProcess::NotRunning state,
+    respectively. On others paltforms, the started() and errorOccurred()
+    signals will be delayed.
 
-    \note Processes are started asynchronously, which means the started()
-    and errorOccurred() signals may be delayed. Call waitForStarted() to make
-    sure the process has started (or has failed to start) and those signals
-    have been emitted.
-
-    \note No further splitting of the arguments is performed.
+    Call waitForStarted() to make sure the process has started (or has failed
+    to start) and those signals have been emitted. It is safe to call that
+    function even if the process starting state is already known, though the
+    signal will not be emitted again.
 
     \b{Windows:} The arguments are quoted and joined into a command line
     that is compatible with the \c CommandLineToArgvW() Windows function.
@@ -2063,8 +2203,6 @@ QByteArray QProcess::readAllStandardError()
     you need to use setNativeArguments(). One notable program that does
     not follow the \c CommandLineToArgvW() rules is cmd.exe and, by
     consequence, all batch scripts.
-
-    The OpenMode is set to \a mode.
 
     If the QProcess object is already running a process, a warning may be
     printed at the console, and the existing process will continue running

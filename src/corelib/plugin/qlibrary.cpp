@@ -16,7 +16,7 @@
 #include <qoperatingsystemversion.h>
 #include <qstringlist.h>
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
 #  include <private/qcore_mac_p.h>
 #endif
 #include <private/qcoreapplication_p.h>
@@ -395,26 +395,34 @@ QLibraryStore *QLibraryStore::instance()
 inline QLibraryPrivate *QLibraryStore::findOrCreate(const QString &fileName, const QString &version,
                                                     QLibrary::LoadHints loadHints)
 {
+    auto lazyNewLib = [&] {
+        auto result = new QLibraryPrivate(fileName, version, loadHints);
+        result->libraryRefCount.ref();
+        return result;
+    };
+
+    if (fileName.isEmpty())   // request for empty d-pointer in QLibrary::setLoadHints();
+        return lazyNewLib();  // must return an independent (new) object
+
     QMutexLocker locker(&qt_library_mutex);
     QLibraryStore *data = instance();
 
+    if (Q_UNLIKELY(!data)) {
+        locker.unlock();
+        return lazyNewLib();
+    }
+
     QString mapName = version.isEmpty() ? fileName : fileName + u'\0' + version;
 
-    // check if this library is already loaded
-    QLibraryPrivate *lib = nullptr;
-    if (Q_LIKELY(data)) {
-        lib = data->libraryMap.value(mapName);
-        if (lib)
-            lib->mergeLoadHints(loadHints);
+    QLibraryPrivate *&lib = data->libraryMap[std::move(mapName)];
+    if (lib) {
+        // already loaded
+        lib->libraryRefCount.ref();
+        lib->mergeLoadHints(loadHints);
+    } else {
+        lib = lazyNewLib();
     }
-    if (!lib)
-        lib = new QLibraryPrivate(fileName, version, loadHints);
 
-    // track this library
-    if (Q_LIKELY(data) && !fileName.isEmpty())
-        data->libraryMap.insert(mapName, lib);
-
-    lib->libraryRefCount.ref();
     return lib;
 }
 
@@ -712,7 +720,7 @@ void QLibraryPrivate::updatePluginState()
 
     bool success = false;
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN)
     if (fileName.endsWith(".debug"_L1)) {
         // refuse to load a file that ends in .debug
         // these are the debug symbols from the libraries
@@ -836,13 +844,17 @@ bool QLibrary::unload()
 }
 
 /*!
-    Returns \c true if the library is loaded; otherwise returns \c false.
+    Returns \c true if load() succeeded; otherwise returns \c false.
+
+    \note Prior to Qt 6.6, this function would return \c true even without a
+    call to load() if another QLibrary object on the same library had caused it
+    to be loaded.
 
     \sa load()
  */
 bool QLibrary::isLoaded() const
 {
-    return d && d->pHnd.loadRelaxed();
+    return d.tag() == Loaded;
 }
 
 
@@ -982,8 +994,7 @@ void QLibrary::setFileNameAndVersion(const QString &fileName, const QString &ver
         d->release();
     }
     QLibraryPrivate *dd = QLibraryPrivate::findOrCreate(fileName, version, lh);
-    d = dd;
-    d.setTag(isLoaded() ? Loaded : NotLoaded);
+    d = QTaggedPointer(dd, NotLoaded);      // we haven't load()ed
 }
 
 /*!

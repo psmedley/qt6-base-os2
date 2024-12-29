@@ -23,9 +23,12 @@ qt_add_executable(androidnotifier
     main.cpp
     notificationclient.cpp
     notificationclient.h
+    android/src/org/qtproject/example/androidnotifier/NotificationClient.java
+    android/AndroidManifest.xml
 )
 
 target_link_libraries(androidnotifier PRIVATE
+    Qt6::CorePrivate
     Qt6::Widgets
 )
 

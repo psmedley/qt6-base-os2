@@ -418,7 +418,7 @@ QPlainTextEditControl::QPlainTextEditControl(QPlainTextEdit *parent)
     setAcceptRichText(false);
 }
 
-void QPlainTextEditPrivate::_q_cursorPositionChanged()
+void QPlainTextEditPrivate::cursorPositionChanged()
 {
     pageUpDownLastCursorYIsValid = false;
     Q_Q(QPlainTextEdit);
@@ -429,11 +429,18 @@ void QPlainTextEditPrivate::_q_cursorPositionChanged()
     emit q->cursorPositionChanged();
 }
 
-void QPlainTextEditPrivate::_q_verticalScrollbarActionTriggered(int action) {
-    if (action == QAbstractSlider::SliderPageStepAdd) {
+void QPlainTextEditPrivate::verticalScrollbarActionTriggered(int action) {
+
+    const auto a = static_cast<QAbstractSlider::SliderAction>(action);
+    switch (a) {
+    case QAbstractSlider::SliderPageStepAdd:
         pageUpDown(QTextCursor::Down, QTextCursor::MoveAnchor, false);
-    } else if (action == QAbstractSlider::SliderPageStepSub) {
+        break;
+    case QAbstractSlider::SliderPageStepSub:
         pageUpDown(QTextCursor::Up, QTextCursor::MoveAnchor, false);
+        break;
+    default:
+        break;
     }
 }
 
@@ -718,9 +725,14 @@ void QPlainTextEditPrivate::updateViewport()
 }
 
 QPlainTextEditPrivate::QPlainTextEditPrivate()
-    : tabChangesFocus(false), showCursorOnInitialShow(false), backgroundVisible(false),
-      centerOnScroll(false), inDrag(false), clickCausedFocus(false), placeholderVisible(true),
-      pageUpDownLastCursorYIsValid(false)
+    : tabChangesFocus(false)
+    , showCursorOnInitialShow(false)
+    , backgroundVisible(false)
+    , centerOnScroll(false)
+    , inDrag(false)
+    , clickCausedFocus(false)
+    , pageUpDownLastCursorYIsValid(false)
+    , placeholderTextShown(false)
 {
 }
 
@@ -736,23 +748,28 @@ void QPlainTextEditPrivate::init(const QString &txt)
 
     control->setPalette(q->palette());
 
-    QObject::connect(vbar, SIGNAL(actionTriggered(int)), q, SLOT(_q_verticalScrollbarActionTriggered(int)));
-
-    QObject::connect(control, SIGNAL(microFocusChanged()), q, SLOT(updateMicroFocus()));
-    QObject::connect(control, SIGNAL(documentSizeChanged(QSizeF)), q, SLOT(_q_adjustScrollbars()));
-    QObject::connect(control, SIGNAL(blockCountChanged(int)), q, SIGNAL(blockCountChanged(int)));
-    QObject::connect(control, SIGNAL(updateRequest(QRectF)), q, SLOT(_q_repaintContents(QRectF)));
-    QObject::connect(control, SIGNAL(modificationChanged(bool)), q, SIGNAL(modificationChanged(bool)));
-
-    QObject::connect(control, SIGNAL(textChanged()), q, SIGNAL(textChanged()));
-    QObject::connect(control, SIGNAL(undoAvailable(bool)), q, SIGNAL(undoAvailable(bool)));
-    QObject::connect(control, SIGNAL(redoAvailable(bool)), q, SIGNAL(redoAvailable(bool)));
-    QObject::connect(control, SIGNAL(copyAvailable(bool)), q, SIGNAL(copyAvailable(bool)));
-    QObject::connect(control, SIGNAL(selectionChanged()), q, SIGNAL(selectionChanged()));
-    QObject::connect(control, SIGNAL(cursorPositionChanged()), q, SLOT(_q_cursorPositionChanged()));
-
-    QObject::connect(control, SIGNAL(textChanged()), q, SLOT(_q_updatePlaceholderVisibility()));
-    QObject::connect(control, SIGNAL(textChanged()), q, SLOT(updateMicroFocus()));
+    QObjectPrivate::connect(vbar, &QAbstractSlider::actionTriggered,
+                            this, &QPlainTextEditPrivate::verticalScrollbarActionTriggered);
+    QObject::connect(control, &QWidgetTextControl::microFocusChanged, q,
+                     [q](){q->updateMicroFocus(); });
+    QObjectPrivate::connect(control, &QWidgetTextControl::documentSizeChanged,
+                            this, &QPlainTextEditPrivate::adjustScrollbars);
+    QObject::connect(control, &QWidgetTextControl::blockCountChanged,
+                     q, &QPlainTextEdit::blockCountChanged);
+    QObjectPrivate::connect(control, &QWidgetTextControl::updateRequest,
+                            this, &QPlainTextEditPrivate::repaintContents);
+    QObject::connect(control, &QWidgetTextControl::modificationChanged,
+                     q, &QPlainTextEdit::modificationChanged);
+    QObject::connect(control, &QWidgetTextControl::textChanged, q, &QPlainTextEdit::textChanged);
+    QObject::connect(control, &QWidgetTextControl::undoAvailable, q, &QPlainTextEdit::undoAvailable);
+    QObject::connect(control, &QWidgetTextControl::redoAvailable, q, &QPlainTextEdit::redoAvailable);
+    QObject::connect(control, &QWidgetTextControl::copyAvailable, q, &QPlainTextEdit::copyAvailable);
+    QObject::connect(control, &QWidgetTextControl::selectionChanged, q, &QPlainTextEdit::selectionChanged);
+    QObjectPrivate::connect(control, &QWidgetTextControl::cursorPositionChanged,
+                            this, &QPlainTextEditPrivate::cursorPositionChanged);
+    QObjectPrivate::connect(control, &QWidgetTextControl::textChanged,
+                            this, &QPlainTextEditPrivate::updatePlaceholderVisibility);
+    QObject::connect(control, &QWidgetTextControl::textChanged, q, [q](){q->updateMicroFocus(); });
 
     // set a null page size initially to avoid any relayouting until the textedit
     // is shown. relayoutDocument() will take care of setting the page size to the
@@ -780,26 +797,19 @@ void QPlainTextEditPrivate::init(const QString &txt)
 #endif
 }
 
-void QPlainTextEditPrivate::_q_updatePlaceholderVisibility()
+void QPlainTextEditPrivate::updatePlaceholderVisibility()
 {
-    Q_Q(QPlainTextEdit);
-
     // We normally only repaint the part of view that contains text in the
-    // document that has changed (in _q_repaintContents). But the placeholder
+    // document that has changed (in repaintContents). But the placeholder
     // text is not a part of the document, but is drawn on separately. So whenever
     // we either show or hide the placeholder text, we issue a full update.
-    bool placeholderCurrentyVisible = placeholderVisible;
-
-    placeholderVisible = !placeholderText.isEmpty()
-            && q->document()->isEmpty()
-            && (!q->firstVisibleBlock().isValid() ||
-                 q->firstVisibleBlock().layout()->preeditAreaText().isEmpty());
-
-    if (placeholderCurrentyVisible != placeholderVisible)
+    if (placeholderTextShown != placeHolderTextToBeShown()) {
         viewport->update();
+        placeholderTextShown = placeHolderTextToBeShown();
+    }
 }
 
-void QPlainTextEditPrivate::_q_repaintContents(const QRectF &contentsRect)
+void QPlainTextEditPrivate::repaintContents(const QRectF &contentsRect)
 {
     Q_Q(QPlainTextEdit);
     if (!contentsRect.isValid()) {
@@ -932,7 +942,7 @@ void QPlainTextEditPrivate::pageUpDown(QTextCursor::MoveOperation op, QTextCurso
 
 #if QT_CONFIG(scrollbar)
 
-void QPlainTextEditPrivate::_q_adjustScrollbars()
+void QPlainTextEditPrivate::adjustScrollbars()
 {
     Q_Q(QPlainTextEdit);
     QTextDocument *doc = control->document();
@@ -985,8 +995,6 @@ void QPlainTextEditPrivate::_q_adjustScrollbars()
         int lineSpacing = q->fontMetrics().lineSpacing();
         vSliderLength = lineSpacing != 0 ? viewport->height() / lineSpacing : 0;
     }
-
-
 
     QSizeF documentSize = documentLayout->documentSize();
     vbar->setRange(0, qMax(0, vmax));
@@ -1176,7 +1184,6 @@ void QPlainTextEditPrivate::ensureViewportLayouted()
    editor with line wrap enabled in real time. It also makes for a
    fast log viewer (see setMaximumBlockCount()).
 
-
     \sa QTextDocument, QTextCursor
         {Syntax Highlighter Example}, {Rich Text Processing}
 
@@ -1290,7 +1297,7 @@ void QPlainTextEdit::setDocument(QTextDocument *document)
     d->documentLayoutPtr = documentLayout;
     d->updateDefaultTextOption();
     d->relayoutDocument();
-    d->_q_adjustScrollbars();
+    d->adjustScrollbars();
 }
 
 /*!
@@ -1322,7 +1329,7 @@ void QPlainTextEdit::setPlaceholderText(const QString &placeholderText)
     Q_D(QPlainTextEdit);
     if (d->placeholderText != placeholderText) {
         d->placeholderText = placeholderText;
-        d->_q_updatePlaceholderVisibility();
+        d->updatePlaceholderVisibility();
     }
 }
 
@@ -1502,53 +1509,57 @@ bool QPlainTextEdit::event(QEvent *e)
 {
     Q_D(QPlainTextEdit);
 
+    switch (e->type()) {
 #ifndef QT_NO_CONTEXTMENU
-    if (e->type() == QEvent::ContextMenu
-        && static_cast<QContextMenuEvent *>(e)->reason() == QContextMenuEvent::Keyboard) {
-        ensureCursorVisible();
-        const QPoint cursorPos = cursorRect().center();
-        QContextMenuEvent ce(QContextMenuEvent::Keyboard, cursorPos, d->viewport->mapToGlobal(cursorPos));
-        ce.setAccepted(e->isAccepted());
-        const bool result = QAbstractScrollArea::event(&ce);
-        e->setAccepted(ce.isAccepted());
-        return result;
-    }
+    case QEvent::ContextMenu:
+        if (static_cast<QContextMenuEvent *>(e)->reason() == QContextMenuEvent::Keyboard) {
+            ensureCursorVisible();
+            const QPoint cursorPos = cursorRect().center();
+            QContextMenuEvent ce(QContextMenuEvent::Keyboard, cursorPos, d->viewport->mapToGlobal(cursorPos));
+            ce.setAccepted(e->isAccepted());
+            const bool result = QAbstractScrollArea::event(&ce);
+            e->setAccepted(ce.isAccepted());
+            return result;
+        }
+        break;
 #endif // QT_NO_CONTEXTMENU
-    if (e->type() == QEvent::ShortcutOverride
-               || e->type() == QEvent::ToolTip) {
+    case QEvent::ShortcutOverride:
+    case QEvent::ToolTip:
         d->sendControlEvent(e);
-    }
+        break;
 #ifdef QT_KEYPAD_NAVIGATION
-    else if (e->type() == QEvent::EnterEditFocus || e->type() == QEvent::LeaveEditFocus) {
+    case QEvent::EnterEditFocus:
+    case QEvent::LeaveEditFocus:
         if (QApplicationPrivate::keypadNavigationEnabled())
             d->sendControlEvent(e);
-    }
+        break;
 #endif
 #ifndef QT_NO_GESTURES
-    else if (e->type() == QEvent::Gesture) {
-        QGestureEvent *ge = static_cast<QGestureEvent *>(e);
-        QPanGesture *g = static_cast<QPanGesture *>(ge->gesture(Qt::PanGesture));
-        if (g) {
+    case QEvent::Gesture:
+        if (auto *g = static_cast<QGestureEvent *>(e)->gesture(Qt::PanGesture)) {
+            QPanGesture *panGesture = static_cast<QPanGesture *>(g);
             QScrollBar *hBar = horizontalScrollBar();
             QScrollBar *vBar = verticalScrollBar();
-            if (g->state() == Qt::GestureStarted)
+            if (panGesture->state() == Qt::GestureStarted)
                 d->originalOffsetY = vBar->value();
-            QPointF offset = g->offset();
+            QPointF offset = panGesture->offset();
             if (!offset.isNull()) {
                 if (QGuiApplication::isRightToLeft())
                     offset.rx() *= -1;
                 // QPlainTextEdit scrolls by lines only in vertical direction
                 QFontMetrics fm(document()->defaultFont());
                 int lineHeight = fm.height();
-                int newX = hBar->value() - g->delta().x();
+                int newX = hBar->value() - panGesture->delta().x();
                 int newY = d->originalOffsetY - offset.y()/lineHeight;
                 hBar->setValue(newX);
                 vBar->setValue(newY);
             }
         }
         return true;
-    }
 #endif // QT_NO_GESTURES
+    default:
+        break;
+    }
     return QAbstractScrollArea::event(e);
 }
 
@@ -1831,7 +1842,7 @@ void QPlainTextEdit::resizeEvent(QResizeEvent *e)
     Q_D(QPlainTextEdit);
     if (e->oldSize().width() != e->size().width())
         d->relayoutDocument();
-    d->_q_adjustScrollbars();
+    d->adjustScrollbars();
 }
 
 void QPlainTextEditPrivate::relayoutDocument()
@@ -1897,7 +1908,7 @@ void QPlainTextEdit::paintEvent(QPaintEvent *e)
     er.setRight(qMin(er.right(), maxX));
     painter.setClipRect(er);
 
-    if (d->placeholderVisible) {
+    if (d->placeHolderTextToBeShown()) {
         const QColor col = d->control->palette().placeholderText().color();
         painter.setPen(col);
         painter.setClipRect(e->rect());
@@ -2197,7 +2208,7 @@ QVariant QPlainTextEdit::inputMethodQuery(Qt::InputMethodQuery query, QVariant a
     Q_D(const QPlainTextEdit);
     switch (query) {
     case Qt::ImEnabled:
-        return isEnabled();
+        return isEnabled() && !isReadOnly();
     case Qt::ImHints:
     case Qt::ImInputItemClipRectangle:
         return QWidget::inputMethodQuery(query);
@@ -2271,7 +2282,7 @@ void QPlainTextEdit::showEvent(QShowEvent *)
         d->showCursorOnInitialShow = false;
         ensureCursorVisible();
     }
-    d->_q_adjustScrollbars();
+    d->adjustScrollbars();
 }
 
 /*! \reimp
@@ -2280,21 +2291,30 @@ void QPlainTextEdit::changeEvent(QEvent *e)
 {
     Q_D(QPlainTextEdit);
     QAbstractScrollArea::changeEvent(e);
-    if (e->type() == QEvent::ApplicationFontChange
-        || e->type() == QEvent::FontChange) {
+
+    switch (e->type()) {
+    case QEvent::ApplicationFontChange:
+    case QEvent::FontChange:
         d->control->document()->setDefaultFont(font());
-    }  else if (e->type() == QEvent::ActivationChange) {
+        break;
+    case QEvent::ActivationChange:
         d->control->setPalette(palette());
         if (!isActiveWindow())
             d->autoScrollTimer.stop();
-    } else if (e->type() == QEvent::EnabledChange) {
+        break;
+    case QEvent::EnabledChange:
         e->setAccepted(isEnabled());
         d->control->setPalette(palette());
         d->sendControlEvent(e);
-    } else if (e->type() == QEvent::PaletteChange) {
+        break;
+    case QEvent::PaletteChange:
         d->control->setPalette(palette());
-    } else if (e->type() == QEvent::LayoutDirectionChange) {
+        break;
+    case QEvent::LayoutDirectionChange:
         d->sendControlEvent(e);
+        break;
+    default:
+        break;
     }
 }
 
@@ -2580,7 +2600,7 @@ void QPlainTextEdit::insertFromMimeData(const QMimeData *source)
 bool QPlainTextEdit::isReadOnly() const
 {
     Q_D(const QPlainTextEdit);
-    return !(d->control->textInteractionFlags() & Qt::TextEditable);
+    return !d->control || !(d->control->textInteractionFlags() & Qt::TextEditable);
 }
 
 void QPlainTextEdit::setReadOnly(bool ro)
@@ -2765,7 +2785,7 @@ void QPlainTextEdit::setLineWrapMode(LineWrapMode wrap)
     d->lineWrap = wrap;
     d->updateDefaultTextOption();
     d->relayoutDocument();
-    d->_q_adjustScrollbars();
+    d->adjustScrollbars();
     ensureCursorVisible();
 }
 
@@ -2851,7 +2871,7 @@ void QPlainTextEdit::setCenterOnScroll(bool enabled)
     if (enabled == d->centerOnScroll)
         return;
     d->centerOnScroll = enabled;
-    d->_q_adjustScrollbars();
+    d->adjustScrollbars();
 }
 
 
@@ -2874,11 +2894,14 @@ bool QPlainTextEdit::find(const QString &exp, QTextDocument::FindFlags options)
     \overload
 
     Finds the next occurrence, matching the regular expression, \a exp, using the given
-    \a options. The QTextDocument::FindCaseSensitively option is ignored for this overload,
-    use QRegularExpression::CaseInsensitiveOption instead.
+    \a options.
 
     Returns \c true if a match was found and changes the cursor to select the match;
     otherwise returns \c false.
+
+    \warning For historical reasons, the case sensitivity option set on
+    \a exp is ignored. Instead, the \a options are used to determine
+    if the search is case sensitive or not.
 */
 #if QT_CONFIG(regularexpression)
 bool QPlainTextEdit::find(const QRegularExpression &exp, QTextDocument::FindFlags options)
@@ -2979,12 +3002,17 @@ void QPlainTextEditPrivate::append(const QString &text, Qt::TextFormat format)
     bool documentSizeChangedBlocked = documentLayout->priv()->blockDocumentSizeChanged;
     documentLayout->priv()->blockDocumentSizeChanged = true;
 
-    if (format == Qt::RichText)
+    switch (format) {
+    case Qt::RichText:
         control->appendHtml(text);
-    else if (format == Qt::PlainText)
+        break;
+    case Qt::PlainText:
         control->appendPlainText(text);
-    else
+        break;
+    default:
         control->append(text);
+        break;
+    }
 
     if (maximumBlockCount > 0) {
         if (document->blockCount() > maximumBlockCount) {
@@ -3006,7 +3034,7 @@ void QPlainTextEditPrivate::append(const QString &text, Qt::TextFormat format)
     }
 
     documentLayout->priv()->blockDocumentSizeChanged = documentSizeChangedBlocked;
-    _q_adjustScrollbars();
+    adjustScrollbars();
 
 
     if (atBottom) {

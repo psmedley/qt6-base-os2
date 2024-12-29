@@ -19,6 +19,7 @@
 #include <private/qhighdpiscaling_p.h>
 #include <private/qwindowsfontdatabasebase_p.h>
 #include <private/qpixmap_win_p.h>
+#include <private/quniquehandle_p.h>
 
 #include <QtGui/qscreen.h>
 
@@ -116,16 +117,22 @@ static float getMonitorSDRWhiteLevel(DISPLAYCONFIG_PATH_TARGET_INFO *targetInfo)
 
 using WindowsScreenDataList = QList<QWindowsScreenData>;
 
-struct RegistryHandleDeleter
+namespace {
+
+struct DiRegKeyHandleTraits
 {
-    void operator()(HKEY handle) const noexcept
+    using Type = HKEY;
+    static Type invalidValue()
     {
-        if (handle != nullptr && handle != INVALID_HANDLE_VALUE)
-            RegCloseKey(handle);
+        // The setupapi.h functions return INVALID_HANDLE_VALUE when failing to open a registry key
+        return reinterpret_cast<HKEY>(INVALID_HANDLE_VALUE);
     }
+    static bool close(Type handle) { return RegCloseKey(handle) == ERROR_SUCCESS; }
 };
 
-using RegistryHandlePtr = std::unique_ptr<std::remove_pointer_t<HKEY>, RegistryHandleDeleter>;
+using DiRegKeyHandle = QUniqueHandle<DiRegKeyHandleTraits>;
+
+}
 
 static void setMonitorDataFromSetupApi(QWindowsScreenData &data,
                                        const std::vector<DISPLAYCONFIG_PATH_INFO> &pathGroup)
@@ -207,10 +214,10 @@ static void setMonitorDataFromSetupApi(QWindowsScreenData &data,
             continue;
         }
 
-        const RegistryHandlePtr edidRegistryKey{ SetupDiOpenDevRegKey(
+        const DiRegKeyHandle edidRegistryKey{ SetupDiOpenDevRegKey(
                 devInfo, &deviceInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ) };
 
-        if (!edidRegistryKey || edidRegistryKey.get() == INVALID_HANDLE_VALUE)
+        if (!edidRegistryKey.isValid())
             continue;
 
         DWORD edidDataSize{ 0 };
@@ -529,10 +536,14 @@ void QWindowsScreen::handleChanges(const QWindowsScreenData &newData)
     const bool dpiChanged = !qFuzzyCompare(m_data.dpi.first, newData.dpi.first)
         || !qFuzzyCompare(m_data.dpi.second, newData.dpi.second);
     const bool orientationChanged = m_data.orientation != newData.orientation;
+    const bool primaryChanged = (newData.flags & QWindowsScreenData::PrimaryScreen)
+            && !(m_data.flags & QWindowsScreenData::PrimaryScreen);
     m_data.dpi = newData.dpi;
     m_data.orientation = newData.orientation;
     m_data.geometry = newData.geometry;
     m_data.availableGeometry = newData.availableGeometry;
+    m_data.flags = (m_data.flags & ~QWindowsScreenData::PrimaryScreen)
+            | (newData.flags & QWindowsScreenData::PrimaryScreen);
 
     if (dpiChanged) {
         QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(screen(),
@@ -545,6 +556,8 @@ void QWindowsScreen::handleChanges(const QWindowsScreenData &newData)
         QWindowSystemInterface::handleScreenGeometryChange(screen(),
                                                            newData.geometry, newData.availableGeometry);
     }
+    if (primaryChanged)
+        QWindowSystemInterface::handlePrimaryScreenChanged(this);
 }
 
 HMONITOR QWindowsScreen::handle() const
@@ -656,7 +669,8 @@ extern "C" LRESULT QT_WIN_CALLBACK qDisplayChangeObserverWndProc(HWND hwnd, UINT
         if (QWindowsTheme *t = QWindowsTheme::instance())
             t->displayChanged();
         QWindowsWindow::displayChanged();
-        QWindowsContext::instance()->screenManager().handleScreenChanges();
+        if (auto *context = QWindowsContext::instance())
+            context->screenManager().handleScreenChanges();
     }
 
     return DefWindowProc(hwnd, message, wParam, lParam);

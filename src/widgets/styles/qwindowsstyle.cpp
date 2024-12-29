@@ -265,12 +265,13 @@ int QWindowsStylePrivate::pixelMetricFromSystemDp(QStyle::PixelMetric pm, const 
     case QStyle::PM_DockWidgetFrameWidth:
         return GetSystemMetrics(SM_CXFRAME);
 
-    case QStyle::PM_TitleBarHeight:
-        if (widget && (widget->windowType() == Qt::Tool)) {
-            // MS always use one less than they say
-            return GetSystemMetrics(SM_CYSMCAPTION) - 1;
-        }
-        return GetSystemMetrics(SM_CYCAPTION) - 1;
+    case QStyle::PM_TitleBarHeight: {
+        const int resizeBorderThickness =
+            GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+        if (widget && (widget->windowType() == Qt::Tool))
+            return GetSystemMetrics(SM_CYSMCAPTION) + resizeBorderThickness;
+        return GetSystemMetrics(SM_CYCAPTION) + resizeBorderThickness;
+    }
 
     case QStyle::PM_ScrollBarExtent:
         {
@@ -358,18 +359,15 @@ static QScreen *screenOf(const QWidget *w)
 // and account for secondary screens with differing logical DPI.
 qreal QWindowsStylePrivate::nativeMetricScaleFactor(const QWidget *widget)
 {
-    const QPlatformScreen *screen = screenOf(widget)->handle();
-    const qreal scale = screen ? (screen->logicalDpi().first / screen->logicalBaseDpi().first)
-                               : QWindowsStylePrivate::appDevicePixelRatio();
+    qreal scale = QHighDpiScaling::factor(screenOf(widget));
     qreal result = qreal(1) / scale;
     if (QGuiApplicationPrivate::screen_list.size() > 1) {
         const QScreen *primaryScreen = QGuiApplication::primaryScreen();
         const QScreen *screen = screenOf(widget);
         if (screen != primaryScreen) {
-            const qreal primaryLogicalDpi = primaryScreen->handle()->logicalDpi().first;
-            const qreal logicalDpi = screen->handle()->logicalDpi().first;
-            if (!qFuzzyCompare(primaryLogicalDpi, logicalDpi))
-                result *= logicalDpi / primaryLogicalDpi;
+            qreal primaryScale = QHighDpiScaling::factor(primaryScreen);
+            if (!qFuzzyCompare(scale, primaryScale))
+                result *= scale / primaryScale;
         }
     }
     return result;
@@ -392,7 +390,7 @@ int QWindowsStyle::pixelMetric(PixelMetric pm, const QStyleOption *opt, const QW
 
     switch (pm) {
     case PM_MaximumDragDistance:
-        ret = QCommonStyle::pixelMetric(PM_MaximumDragDistance);
+        ret = QCommonStyle::pixelMetric(PM_MaximumDragDistance, opt, widget);
         if (ret == -1)
             ret = 60;
         break;
@@ -1789,7 +1787,7 @@ void QWindowsStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPai
                                     titleRect.height(), titleRect.width());
                 }
                 proxy()->drawItemText(p, titleRect,
-                            Qt::AlignLeft | Qt::AlignVCenter, palette,
+                            Qt::AlignLeft | Qt::AlignVCenter | Qt::TextHideMnemonic, palette,
                             dwOpt->state & State_Enabled, dwOpt->title,
                             floating ? (active ? QPalette::BrightText : QPalette::Window) : QPalette::WindowText);
                 p->setFont(oldFont);

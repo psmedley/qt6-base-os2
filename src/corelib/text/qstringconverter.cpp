@@ -10,6 +10,7 @@
 #include "private/qstringiterator_p.h"
 #include "private/qtools_p.h"
 #include "qbytearraymatcher.h"
+#include "qcontainertools_impl.h"
 
 #if QT_CONFIG(icu)
 #include <unicode/ucnv.h>
@@ -22,12 +23,16 @@
 #include <qt_windows.h>
 #ifndef QT_BOOTSTRAPPED
 #include <QtCore/qvarlengtharray.h>
+#include <QtCore/q20iterator.h>
+#include <QtCore/private/qnumeric_p.h>
 #endif // !QT_BOOTSTRAPPED
 #else
 #ifdef Q_OS_OS2
 #include <unicode/ucnv.h>
 #endif
 #endif
+
+#include <array>
 
 #if __has_include(<bit>) && __cplusplus > 201703L
 #include <bit>
@@ -509,7 +514,6 @@ QByteArray QUtf8::convertFromUnicode(QStringView in, QStringConverterBase::State
 char *QUtf8::convertFromUnicode(char *out, QStringView in, QStringConverter::State *state)
 {
     Q_ASSERT(state);
-    const QChar *uc = in.data();
     qsizetype len = in.size();
     if (!len)
         return out;
@@ -527,7 +531,7 @@ char *QUtf8::convertFromUnicode(char *out, QStringView in, QStringConverter::Sta
     };
 
     uchar *cursor = reinterpret_cast<uchar *>(out);
-    const char16_t *src = reinterpret_cast<const char16_t *>(uc);
+    const char16_t *src = in.utf16();
     const char16_t *const end = src + len;
 
     if (!(state->flags & QStringDecoder::Flag::Stateless)) {
@@ -613,14 +617,14 @@ QString QUtf8::convertToUnicode(QByteArrayView in)
     return result;
 }
 
-/*!
-    \since 5.7
+/*! \internal
+    \since 6.6
     \overload
 
     Converts the UTF-8 sequence of bytes viewed by \a in to a sequence of
-    QChar starting at \a buffer. The buffer is expected to be large enough
-    to hold the result. An upper bound for the size of the buffer is
-    \c in.size() QChars.
+    QChar starting at \a dst in the destination buffer. The buffer is expected
+    to be large enough to hold the result. An upper bound for the size of the
+    buffer is \c in.size() QChars.
 
     If, during decoding, an error occurs, a QChar::ReplacementCharacter is
     written.
@@ -628,11 +632,12 @@ QString QUtf8::convertToUnicode(QByteArrayView in)
     Returns a pointer to one past the last QChar written.
 
     This function never throws.
-*/
 
-QChar *QUtf8::convertToUnicode(QChar *buffer, QByteArrayView in) noexcept
+    For QChar buffers, instead of casting manually, you can use the static
+    QUtf8::convertToUnicode(QChar *, QByteArrayView) directly.
+*/
+char16_t *QUtf8::convertToUnicode(char16_t *dst, QByteArrayView in) noexcept
 {
-    char16_t *dst = reinterpret_cast<char16_t *>(buffer);
     const uchar *const start = reinterpret_cast<const uchar *>(in.data());
     const uchar *src = start;
     const uchar *end = src + in.size();
@@ -655,7 +660,7 @@ QChar *QUtf8::convertToUnicode(QChar *buffer, QByteArrayView in) noexcept
 
             do {
                 uchar b = *src++;
-                int res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, dst, src, end);
+                const qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, dst, src, end);
                 if (res < 0) {
                     // decoding error
                     *dst++ = QChar::ReplacementCharacter;
@@ -664,7 +669,7 @@ QChar *QUtf8::convertToUnicode(QChar *buffer, QByteArrayView in) noexcept
         }
     }
 
-    return reinterpret_cast<QChar *>(dst);
+    return dst;
 }
 
 QString QUtf8::convertToUnicode(QByteArrayView in, QStringConverter::State *state)
@@ -685,23 +690,22 @@ QString QUtf8::convertToUnicode(QByteArrayView in, QStringConverter::State *stat
     return result;
 }
 
-QChar *QUtf8::convertToUnicode(QChar *out, QByteArrayView in, QStringConverter::State *state)
+char16_t *QUtf8::convertToUnicode(char16_t *dst, QByteArrayView in, QStringConverter::State *state)
 {
     qsizetype len = in.size();
 
     Q_ASSERT(state);
     if (!len)
-        return out;
+        return dst;
 
 
     char16_t replacement = QChar::ReplacementCharacter;
     if (state->flags & QStringConverter::Flag::ConvertInvalidToNull)
         replacement = QChar::Null;
 
-    int res;
+    qsizetype res;
     uchar ch = 0;
 
-    char16_t *dst = reinterpret_cast<char16_t *>(out);
     const uchar *src = reinterpret_cast<const uchar *>(in.data());
     const uchar *end = src + len;
 
@@ -729,7 +733,7 @@ QChar *QUtf8::convertToUnicode(QChar *out, QByteArrayView in, QStringConverter::
                 // copy to our state and return
                 state->remainingChars = remainingCharsCount + newCharsToCopy;
                 memcpy(&state->state_data[0], remainingCharsData, state->remainingChars);
-                return out;
+                return dst;
             } else if (!headerdone) {
                 // eat the UTF-8 BOM
                 if (dst[-1] == 0xfeff)
@@ -785,7 +789,7 @@ QChar *QUtf8::convertToUnicode(QChar *out, QByteArrayView in, QStringConverter::
         state->remainingChars = 0;
     }
 
-    return reinterpret_cast<QChar *>(dst);
+    return dst;
 }
 
 struct QUtf8NoOutputTraits : public QUtf8BaseTraitsNoAscii
@@ -815,7 +819,7 @@ QUtf8::ValidUtf8Result QUtf8::isValidUtf8(QByteArrayView in)
 
             isValidAscii = false;
             QUtf8NoOutputTraits::NoOutput output;
-            int res = QUtf8Functions::fromUtf8<QUtf8NoOutputTraits>(b, output, src, end);
+            const qsizetype res = QUtf8Functions::fromUtf8<QUtf8NoOutputTraits>(b, output, src, end);
             if (res < 0) {
                 // decoding error
                 return { false, false };
@@ -842,7 +846,7 @@ int QUtf8::compareUtf8(QByteArrayView utf8, QStringView utf16, Qt::CaseSensitivi
 
             if (uc1 >= 0x80) {
                 char32_t *output = &uc1;
-                int res = QUtf8Functions::fromUtf8<QUtf8BaseTraitsNoAscii>(uc1, output, src1, end1);
+                qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraitsNoAscii>(uc1, output, src1, end1);
                 if (res < 0) {
                     // decoding error
                     uc1 = QChar::ReplacementCharacter;
@@ -877,7 +881,7 @@ int QUtf8::compareUtf8(QByteArrayView utf8, QLatin1StringView s, Qt::CaseSensiti
     while (src1 < end1 && src2 < end2) {
         uchar b = *src1++;
         char32_t *output = &uc1;
-        int res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src1, end1);
+        const qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src1, end1);
         if (res < 0) {
             // decoding error
             uc1 = QChar::ReplacementCharacter;
@@ -917,7 +921,7 @@ int QUtf8::compareUtf8(QByteArrayView lhs, QByteArrayView rhs, Qt::CaseSensitivi
     while (src1 < end1 && src2 < end2) {
         uchar b = *src1++;
         char32_t *output = &uc1;
-        int res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src1, end1);
+        qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src1, end1);
         if (res < 0) {
             // decoding error
             uc1 = QChar::ReplacementCharacter;
@@ -1435,186 +1439,353 @@ int QLocal8Bit::checkUtf8()
     return GetACP() == CP_UTF8 ? 1 : -1;
 }
 
-static QString convertToUnicodeCharByChar(QByteArrayView in, QStringConverter::State *state)
-{
-    qsizetype length = in.size();
-    const char *chars = in.data();
-
-    Q_ASSERT(state);
-    if (state->flags & QStringConverter::Flag::Stateless) // temporary
-        state = nullptr;
-
-    if (!chars || !length)
-        return QString();
-
-    qsizetype copyLocation = 0;
-    qsizetype extra = 2;
-    if (state && state->remainingChars) {
-        copyLocation = state->remainingChars;
-        extra += copyLocation;
-    }
-    qsizetype newLength = length + extra;
-    char *mbcs = new char[newLength];
-    //ensure that we have a NULL terminated string
-    mbcs[newLength-1] = 0;
-    mbcs[newLength-2] = 0;
-    memcpy(&(mbcs[copyLocation]), chars, length);
-    if (copyLocation) {
-        //copy the last character from the state
-        mbcs[0] = (char)state->state_data[0];
-        state->remainingChars = 0;
-    }
-    const char *mb = mbcs;
-    const char *next = 0;
-    QString s;
-    while ((next = CharNextExA(CP_ACP, mb, 0)) != mb) {
-        wchar_t wc[2] ={0};
-        int charlength = int(next - mb); // always just a few bytes
-        int len = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED|MB_ERR_INVALID_CHARS, mb, charlength, wc, 2);
-        if (len>0) {
-            s.append(QChar(wc[0]));
-        } else {
-            int r = GetLastError();
-            //check if the character being dropped is the last character
-            if (r == ERROR_NO_UNICODE_TRANSLATION && mb == (mbcs+newLength -3) && state) {
-                state->remainingChars = 1;
-                state->state_data[0] = (char)*mb;
-            }
-        }
-        mb = next;
-    }
-    delete [] mbcs;
-    return s;
-}
-
-
 QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::State *state)
 {
-    qsizetype length = in.size();
+    return convertToUnicode_sys(in, CP_ACP, state);
+}
 
-    Q_ASSERT(length < INT_MAX); // ### FIXME
+QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, quint32 codePage,
+                                         QStringConverter::State *state)
+{
     const char *mb = in.data();
-    int mblen = length;
+    qsizetype mblen = in.size();
+
+    Q_ASSERT(state);
+    qsizetype &invalidChars = state->invalidChars;
+    using Flag = QStringConverter::Flag;
+    const bool useNullForReplacement = !!(state->flags & Flag::ConvertInvalidToNull);
+    const char16_t replacementCharacter = useNullForReplacement ? QChar::Null
+                                                                : QChar::ReplacementCharacter;
+    if (state->flags & Flag::Stateless) {
+        Q_ASSERT(state->remainingChars == 0);
+        state = nullptr;
+    }
 
     if (!mb || !mblen)
         return QString();
 
-    QVarLengthArray<wchar_t, 4096> wc(4096);
-    int len;
-    QString sp;
-    bool prepend = false;
-    char state_data = 0;
-    int remainingChars = 0;
+    std::array<wchar_t, 4096> buf;
+    wchar_t *out = buf.data();
+    qsizetype outlen = buf.size();
 
-    //save the current state information
-    if (state) {
-        state_data = (char)state->state_data[0];
-        remainingChars = state->remainingChars;
-    }
+    int len = 0;
+    QString sp;
 
     //convert the pending character (if available)
-    if (state && remainingChars) {
-        char prev[3] = {0};
-        prev[0] = state_data;
-        prev[1] = mb[0];
-        remainingChars = 0;
-        len = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED,
-                                    prev, 2, wc.data(), wc.length());
+    if (state && state->remainingChars) {
+        // Use at most 6 characters as a guess for the longest encoded character
+        // in any multibyte encoding.
+        // Even with a total of 2 bytes of overhead that would leave around
+        // 2^(4 * 8) possible characters
+        std::array<char, 6> prev = {0};
+        Q_ASSERT(state->remainingChars <= q20::ssize(state->state_data));
+        int remainingChars = state->remainingChars;
+        for (int i = 0; i < remainingChars; ++i)
+            prev[i] = state->state_data[i];
+        do {
+            prev[remainingChars] = *mb;
+            ++mb;
+            --mblen;
+            ++remainingChars;
+            len = MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, prev.data(),
+                                      remainingChars, out, int(outlen));
+        } while (!len && mblen && remainingChars < int(prev.size()));
         if (len) {
-            sp.append(QChar(wc[0]));
-            if (mblen == 1) {
-                state->remainingChars = 0;
-                return sp;
-            }
-            prepend = true;
-            mb++;
-            mblen--;
-            wc[0] = 0;
-        }
-    }
-
-    while (!(len=MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED|MB_ERR_INVALID_CHARS,
-                mb, mblen, wc.data(), wc.length()))) {
-        int r = GetLastError();
-        if (r == ERROR_INSUFFICIENT_BUFFER) {
-                const int wclen = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED,
-                                    mb, mblen, 0, 0);
-                wc.resize(wclen);
-        } else if (r == ERROR_NO_UNICODE_TRANSLATION) {
-            //find the last non NULL character
-            while (mblen > 1  && !(mb[mblen-1]))
-                mblen--;
-            //check whether,  we hit an invalid character in the middle
-            if ((mblen <= 1) || (remainingChars && state_data))
-                return convertToUnicodeCharByChar(in, state);
-            //Remove the last character and try again...
-            state_data = mb[mblen-1];
-            remainingChars = 1;
-            mblen--;
+            state->remainingChars = 0;
+            if (mblen == 0)
+                return QStringView(out, len).toString();
+            out += len;
+            outlen -= len;
+        } else if (mblen == 0 && remainingChars <= q20::ssize(state->state_data)) {
+            // Update the state, maybe we're lucky next time
+            for (int i = state->remainingChars; i < remainingChars; ++i)
+                state->state_data[i] = prev[i];
+            state->remainingChars = remainingChars;
+            return QString();
         } else {
-            // Fail.
-            qWarning("MultiByteToWideChar: Cannot convert multibyte text");
-            break;
+            // Reset the pointer and length, since we used none of it.
+            mb = in.data();
+            mblen = in.length();
+
+            // We couldn't decode any of the characters in the saved state,
+            // so output replacement characters
+            for (int i = 0; i < state->remainingChars; ++i)
+                out[i] = replacementCharacter;
+            invalidChars += state->remainingChars;
+            out += state->remainingChars;
+            outlen -= state->remainingChars;
+            state->remainingChars = 0;
         }
     }
 
-    if (len <= 0)
-        return QString();
+    Q_ASSERT(mblen > 0);
+    Q_ASSERT(!state || state->remainingChars == 0);
 
-    if (wc[len-1] == 0) // len - 1: we don't want terminator
-        --len;
+    // Return a pointer to storage where we have enough space for `size`
+    const auto growOut = [&](qsizetype size) -> std::tuple<wchar_t *, qsizetype> {
+        if (outlen >= size)
+            return {out, outlen};
+        const bool wasStackBuffer = sp.isEmpty();
+        const auto begin = wasStackBuffer ? buf.data() : reinterpret_cast<wchar_t *>(sp.data());
+        const qsizetype offset = qsizetype(std::distance(begin, out));
+        qsizetype newSize = 0;
+        if (Q_UNLIKELY(qAddOverflow(offset, size, &newSize))) {
+            Q_CHECK_PTR(false);
+            return {nullptr, 0};
+        }
+        sp.resize(newSize);
+        auto it = reinterpret_cast<wchar_t *>(sp.data());
+        if (wasStackBuffer)
+            it = std::copy_n(buf.data(), offset, it);
+        else
+            it += offset;
+        return {it, size};
+    };
 
-    //save the new state information
-    if (state) {
-        state->state_data[0] = (char)state_data;
-        state->remainingChars = remainingChars;
+    // Need it in this scope, since we try to decrease our window size if we
+    // encounter an error
+    int nextIn = qt_saturate<int>(mblen);
+    while (mblen > 0) {
+        std::tie(out, outlen) = growOut(1); // Need space for at least one character
+        if (!out)
+            return {};
+        const int nextOut = qt_saturate<int>(outlen);
+        len = MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, mb, nextIn, out, nextOut);
+        if (len) {
+            mb += nextIn;
+            mblen -= nextIn;
+            out += len;
+            outlen -= len;
+        } else {
+            int r = GetLastError();
+            if (r == ERROR_INSUFFICIENT_BUFFER) {
+                const int wclen = MultiByteToWideChar(codePage, 0, mb, nextIn, 0, 0);
+                std::tie(out, outlen) = growOut(wclen);
+                if (!out)
+                    return {};
+            } else if (r == ERROR_NO_UNICODE_TRANSLATION) {
+                // Can't decode the current window, so either store the state,
+                // reduce window size or output a replacement character.
+
+                // Check if we can store all remaining characters in the state
+                // to be used next time we're called:
+                if (state && mblen <= q20::ssize(state->state_data)) {
+                    state->remainingChars = mblen;
+                    std::copy_n(mb, mblen, state->state_data);
+                    mb += mblen;
+                    mblen = 0;
+                    break;
+                }
+
+                // .. if not, try to find the last valid character in the window
+                // and try again with a shrunken window:
+                if (nextIn > 1) {
+                    // There may be some incomplete data at the end of our current
+                    // window, so decrease the window size and try again.
+                    // In the worst case scenario there is gigs of undecodable
+                    // garbage, but what are we supposed to do about that?
+                    const auto it = CharPrevExA(codePage, mb, mb + nextIn, 0);
+                    if (it != mb)
+                        nextIn = int(it - mb);
+                    else
+                        --nextIn;
+                    continue;
+                }
+
+                // Finally, we are forced to output a replacement character for
+                // the first byte in the window:
+                std::tie(out, outlen) = growOut(1);
+                if (!out)
+                    return {};
+                *out = replacementCharacter;
+                ++invalidChars;
+                ++out;
+                --outlen;
+                ++mb;
+                --mblen;
+            } else {
+                // Fail.
+                qWarning("MultiByteToWideChar: Cannot convert multibyte text");
+                break;
+            }
+        }
+        nextIn = qt_saturate<int>(mblen);
     }
-    QString s((QChar*)wc.data(), len);
-    if (prepend) {
-        return sp+s;
+
+    if (sp.isEmpty()) {
+        // We must have only used the stack buffer
+        if (out != buf.data()) // else: we return null-string
+            sp = QStringView(buf.data(), out).toString();
+    } else{
+        const auto begin = reinterpret_cast<wchar_t *>(sp.data());
+        sp.truncate(std::distance(begin, out));
     }
-    return s;
+
+    if (sp.size() && sp.back().isNull())
+        sp.chop(1);
+
+    if (!state && mblen > 0) {
+        // We have trailing character(s) that could not be converted, and
+        // nowhere to cache them
+        sp.resize(sp.size() + mblen, replacementCharacter);
+        invalidChars += mblen;
+    }
+    return sp;
 }
 
 QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, QStringConverter::State *state)
 {
-    const QChar *ch = in.data();
+    return convertFromUnicode_sys(in, CP_ACP, state);
+}
+
+QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, quint32 codePage,
+                                              QStringConverter::State *state)
+{
+    const wchar_t *ch = reinterpret_cast<const wchar_t *>(in.data());
     qsizetype uclen = in.size();
 
-    Q_ASSERT(uclen < INT_MAX); // ### FIXME
     Q_ASSERT(state);
-    Q_UNUSED(state); // ### Fixme
-    if (state->flags & QStringConverter::Flag::Stateless) // temporary
+    // The Windows API has a *boolean* out-parameter that says if a replacement
+    // character was used, but it gives us no way to know _how many_ were used.
+    // Since we cannot simply scan the string for replacement characters
+    // (which is potentially a question mark, and thus a valid character),
+    // we simply do not track the number of invalid characters here.
+    // auto &invalidChars = state->invalidChars;
+
+    using Flag = QStringConverter::Flag;
+    if (state->flags & Flag::Stateless) { // temporary
+        Q_ASSERT(state->remainingChars == 0);
         state = nullptr;
+    }
 
     if (!ch)
         return QByteArray();
     if (uclen == 0)
         return QByteArray("");
-    BOOL used_def;
-    QByteArray mb(4096, 0);
-    int len;
-    while (!(len=WideCharToMultiByte(CP_ACP, 0, (const wchar_t*)ch, uclen,
-                mb.data(), mb.size()-1, 0, &used_def)))
-    {
-        int r = GetLastError();
-        if (r == ERROR_INSUFFICIENT_BUFFER) {
-            mb.resize(1+WideCharToMultiByte(CP_ACP, 0,
-                                (const wchar_t*)ch, uclen,
-                                0, 0, 0, &used_def));
-                // and try again...
+
+    std::array<char, 4096> buf;
+    char *out = buf.data();
+    qsizetype outlen = buf.size();
+    QByteArray mb;
+
+    if (state && state->remainingChars > 0) {
+        Q_ASSERT(state->remainingChars == 1);
+        // Let's try to decode the pending character
+        wchar_t wc[2] = { wchar_t(state->state_data[0]), ch[0] };
+        // Check if the second character is a valid low surrogate,
+        // otherwise we'll just decode the first character, for which windows
+        // will output a replacement character.
+        const bool validCodePoint = QChar::isLowSurrogate(wc[1]);
+        int len = WideCharToMultiByte(codePage, 0, wc, validCodePoint ? 2 : 1, out, outlen, nullptr,
+                                      nullptr);
+        if (!len)
+            return {}; // Cannot recover, and I refuse to believe it was a size limitation
+        out += len;
+        outlen -= len;
+        if (validCodePoint) {
+            ++ch;
+            --uclen;
+        }
+        state->remainingChars = 0;
+        state->state_data[0] = 0;
+        if (uclen == 0)
+            return QByteArrayView(buf.data(), len).toByteArray();
+    }
+
+    if (state && QChar::isHighSurrogate(ch[uclen - 1])) {
+        // We can handle a missing low surrogate at the end of the string,
+        // so if there is one, exclude it now and store it in the state.
+        state->remainingChars = 1;
+        state->state_data[0] = ch[uclen - 1];
+        --uclen;
+        if (uclen == 0)
+            return QByteArray();
+    }
+
+    Q_ASSERT(uclen > 0);
+
+    // Return a pointer to storage where we have enough space for `size`
+    const auto growOut = [&](qsizetype size) -> std::tuple<char *, qsizetype> {
+        if (outlen >= size)
+            return {out, outlen};
+        const bool wasStackBuffer = mb.isEmpty();
+        const auto begin = wasStackBuffer ? buf.data() : mb.data();
+        const qsizetype offset = qsizetype(std::distance(begin, out));
+        qsizetype newSize = 0;
+        if (Q_UNLIKELY(qAddOverflow(offset, size, &newSize))) {
+            Q_CHECK_PTR(false);
+            return {nullptr, 0};
+        }
+        mb.resize(newSize);
+        auto it = mb.data();
+        if (wasStackBuffer)
+            it = std::copy_n(buf.data(), offset, it);
+        else
+            it += offset;
+        return {it, size};
+    };
+
+    const auto getNextWindowSize = [&]() {
+        int nextIn = qt_saturate<int>(uclen);
+        // The Windows API has some issues if the current window ends in the
+        // middle of a surrogate pair, so we avoid that:
+        if (nextIn > 1 && QChar::isHighSurrogate(ch[nextIn - 1]))
+            --nextIn;
+        return nextIn;
+    };
+
+    int len = 0;
+    while (uclen > 0) {
+        const int nextIn = getNextWindowSize();
+        std::tie(out, outlen) = growOut(1); // We need at least one byte
+        if (!out)
+            return {};
+        const int nextOut = qt_saturate<int>(outlen);
+        len = WideCharToMultiByte(codePage, 0, ch, nextIn, out, nextOut, nullptr, nullptr);
+        if (len > 0) {
+            ch += nextIn;
+            uclen -= nextIn;
+            out += len;
+            outlen -= len;
         } else {
-            // Fail.  Probably can't happen in fact (dwFlags is 0).
+            int r = GetLastError();
+            if (r == ERROR_INSUFFICIENT_BUFFER) {
+                int neededLength = WideCharToMultiByte(codePage, 0, ch, nextIn, nullptr, 0,
+                                                       nullptr, nullptr);
+                if (neededLength <= 0) {
+                    // Fail. Observed with UTF8 where the input window was max int and ended in an
+                    // incomplete sequence, probably a Windows bug. We try to avoid that from
+                    // happening by reducing the window size in that case. But let's keep this
+                    // branch just in case of other bugs.
+                    r = GetLastError();
+                    fprintf(stderr,
+                            "WideCharToMultiByte: Cannot convert multibyte text (error %d)\n", r);
+                    break;
+                }
+                std::tie(out, outlen) = growOut(neededLength);
+                if (!out)
+                    return {};
+                // and try again...
+            } else {
+                // Fail.  Probably can't happen in fact (dwFlags is 0).
 #ifndef QT_NO_DEBUG
-            // Can't use qWarning(), as it'll recurse to handle %ls
-            fprintf(stderr,
-                    "WideCharToMultiByte: Cannot convert multibyte text (error %d): %ls\n",
-                    r, reinterpret_cast<const wchar_t*>(QString(ch, uclen).utf16()));
+                // Can't use qWarning(), as it'll recurse to handle %ls
+                fprintf(stderr,
+                        "WideCharToMultiByte: Cannot convert multibyte text (error %d): %ls\n", r,
+                        reinterpret_cast<const wchar_t *>(
+                                QStringView(ch, uclen).left(100).toString().utf16()));
 #endif
-            break;
+                break;
+            }
         }
     }
-    mb.resize(len);
+    if (mb.isEmpty()) {
+        // We must have only used the stack buffer
+        if (out != buf.data()) // else: we return null-array
+            mb = QByteArrayView(buf.data(), out).toByteArray();
+    } else {
+        mb.truncate(std::distance(mb.data(), out));
+    }
     return mb;
 }
 #endif
@@ -1706,19 +1877,7 @@ static char *toUtf32LE(char *out, QStringView in, QStringConverter::State *state
     return QUtf32::convertFromUnicode(out, in, state, LittleEndianness);
 }
 
-void qt_from_latin1(char16_t *dst, const char *str, size_t size) noexcept;
-
-static QChar *fromLatin1(QChar *out, QByteArrayView in, QStringConverter::State *state)
-{
-    Q_ASSERT(state);
-    Q_UNUSED(state);
-
-    qt_from_latin1(reinterpret_cast<char16_t *>(out), in.data(), size_t(in.size()));
-    return out + in.size();
-}
-
-
-static char *toLatin1(char *out, QStringView in, QStringConverter::State *state)
+char *QLatin1::convertFromUnicode(char *out, QStringView in, QStringConverter::State *state) noexcept
 {
     Q_ASSERT(state);
     if (state->flags & QStringConverter::Flag::Stateless) // temporary
@@ -1904,28 +2063,23 @@ const QStringConverter::Interface QStringConverter::encodingInterfaces[QStringCo
     { "UTF-32", fromUtf32, fromUtf32Len, toUtf32, toUtf32Len },
     { "UTF-32LE", fromUtf32LE, fromUtf32Len, toUtf32LE, toUtf32Len },
     { "UTF-32BE", fromUtf32BE, fromUtf32Len, toUtf32BE, toUtf32Len },
-    { "ISO-8859-1", fromLatin1, fromLatin1Len, toLatin1, toLatin1Len },
+    { "ISO-8859-1", QLatin1::convertToUnicode, fromLatin1Len, QLatin1::convertFromUnicode, toLatin1Len },
     { "Locale", fromLocal8Bit, fromUtf8Len, toLocal8Bit, toUtf8Len }
 };
 
 // match names case insensitive and skipping '-' and '_'
 static bool nameMatch(const char *a, const char *b)
 {
-    while (*a && *b) {
-        if (*a == '-' || *a == '_') {
+    do {
+        while (*a == '-' || *a == '_')
             ++a;
-            continue;
-        }
-        if (*b == '-' || *b == '_') {
+        while (*b == '-' || *b == '_')
             ++b;
-            continue;
-        }
-        if (QtMiscUtils::toAsciiLower(*a) != QtMiscUtils::toAsciiLower(*b))
-            return false;
-        ++a;
-        ++b;
-    }
-    return !*a && !*b;
+        if (!*a && !*b) // end of both strings
+            return true;
+    } while (QtMiscUtils::toAsciiLower(*a++) == QtMiscUtils::toAsciiLower(*b++));
+
+    return false;
 }
 
 
@@ -2242,6 +2396,8 @@ const char *QStringConverter::name() const noexcept
 */
 std::optional<QStringConverter::Encoding> QStringConverter::encodingForName(const char *name) noexcept
 {
+    if (!name)
+        return std::nullopt;
     for (qsizetype i = 0; i < LastEncoding + 1; ++i) {
         if (nameMatch(encodingInterfaces[i].name, name))
             return QStringConverter::Encoding(i);
@@ -2451,12 +2607,14 @@ const char *QStringConverter::nameForEncoding(QStringConverter::Encoding e)
 */
 
 /*!
-    \fn QByteArray QStringEncoder::encode(const QString &in)
-    \fn QByteArray QStringEncoder::encode(QStringView in)
-    \fn QByteArray QStringEncoder::operator()(const QString &in)
-    \fn QByteArray QStringEncoder::operator()(QStringView in)
+    \fn QStringEncoder::DecodedData<const QString &> QStringEncoder::encode(const QString &in)
+    \fn QStringEncoder::DecodedData<QStringView> QStringEncoder::encode(QStringView in)
+    \fn QStringEncoder::DecodedData<const QString &> QStringEncoder::operator()(const QString &in)
+    \fn QStringEncoder::DecodedData<QStringView> QStringEncoder::operator()(QStringView in)
 
-    Converts \a in and returns the data as a byte array.
+    Converts \a in and returns a struct that is implicitly convertible to QByteArray.
+
+    \snippet code/src_corelib_text_qstringconverter.cpp 5
 */
 
 /*!
@@ -2540,12 +2698,15 @@ const char *QStringConverter::nameForEncoding(QStringConverter::Encoding e)
 */
 
 /*!
-    \fn QString QStringDecoder::operator()(const QByteArray &ba)
-    \fn QString QStringDecoder::decode(const QByteArray &ba)
-    \fn QString QStringDecoder::operator()(QByteArrayView ba)
-    \fn QString QStringDecoder::decode(QByteArrayView ba)
+    \fn QStringDecoder::EncodedData<const QByteArray &> QStringDecoder::operator()(const QByteArray &ba)
+    \fn QStringDecoder::EncodedData<const QByteArray &> QStringDecoder::decode(const QByteArray &ba)
+    \fn QStringDecoder::EncodedData<QByteArrayView> QStringDecoder::operator()(QByteArrayView ba)
+    \fn QStringDecoder::EncodedData<QByteArrayView> QStringDecoder::decode(QByteArrayView ba)
 
-    Converts \a ba and returns the data as a QString.
+    Converts \a ba and returns a struct that is implicitly convertible to QString.
+
+
+    \snippet code/src_corelib_text_qstringconverter.cpp 4
 */
 
 /*!
@@ -2568,6 +2729,12 @@ const char *QStringConverter::nameForEncoding(QStringConverter::Encoding e)
     data buffer of \c in.size() bytes.
 
     \sa requiredSpace
+*/
+
+/*!
+    \fn char16_t *QStringDecoder::appendToBuffer(char16_t *out, QByteArrayView in)
+    \since 6.6
+    \overload
 */
 
 QT_END_NAMESPACE

@@ -1353,7 +1353,7 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
     const auto platformIntegration = QGuiApplicationPrivate::platformIntegration();
     fontSmoothingGamma = platformIntegration->styleHint(QPlatformIntegration::FontSmoothingGamma).toReal();
     QCoreApplication::setAttribute(Qt::AA_DontShowShortcutsInContextMenus,
-        !platformIntegration->styleHint(QPlatformIntegration::ShowShortcutsInContextMenus).toBool());
+        !QGuiApplication::styleHints()->showShortcutsInContextMenus());
 }
 
 static void init_plugins(const QList<QByteArray> &pluginList)
@@ -1997,7 +1997,8 @@ bool QGuiApplication::notify(QObject *object, QEvent *event)
 */
 bool QGuiApplication::event(QEvent *e)
 {
-    if (e->type() == QEvent::LanguageChange) {
+    switch (e->type()) {
+    case QEvent::LanguageChange:
         // if the layout direction was set explicitly, then don't override it here
         if (layout_direction == Qt::LayoutDirectionAuto)
             setLayoutDirection(layout_direction);
@@ -2005,13 +2006,15 @@ bool QGuiApplication::event(QEvent *e)
             if (topLevelWindow->flags() != Qt::Desktop)
                 postEvent(topLevelWindow, new QEvent(QEvent::LanguageChange));
         }
-    } else if (e->type() == QEvent::ApplicationFontChange ||
-               e->type() == QEvent::ApplicationPaletteChange) {
+        break;
+    case QEvent::ApplicationFontChange:
+    case QEvent::ApplicationPaletteChange:
         for (auto *topLevelWindow : QGuiApplication::topLevelWindows()) {
             if (topLevelWindow->flags() != Qt::Desktop)
                 postEvent(topLevelWindow, new QEvent(e->type()));
         }
-    } else if (e->type() == QEvent::Quit) {
+        break;
+    case QEvent::Quit:
         // Close open windows. This is done in order to deliver de-expose
         // events while the event loop is still running.
         for (QWindow *topLevelWindow : QGuiApplication::topLevelWindows()) {
@@ -2023,8 +2026,9 @@ bool QGuiApplication::event(QEvent *e)
                 return true;
             }
         }
+    default:
+        break;
     }
-
     return QCoreApplication::event(e);
 }
 
@@ -2090,6 +2094,9 @@ void Q_TRACE_INSTRUMENT(qtgui) QGuiApplicationPrivate::processWindowSystemEvent(
         break;
     case QWindowSystemInterfacePrivate::WindowScreenChanged:
         QGuiApplicationPrivate::processWindowScreenChangedEvent(static_cast<QWindowSystemInterfacePrivate::WindowScreenChangedEvent *>(e));
+        break;
+    case QWindowSystemInterfacePrivate::WindowDevicePixelRatioChanged:
+        QGuiApplicationPrivate::processWindowDevicePixelRatioChangedEvent(static_cast<QWindowSystemInterfacePrivate::WindowDevicePixelRatioChangedEvent *>(e));
         break;
     case QWindowSystemInterfacePrivate::SafeAreaMarginsChanged:
         QGuiApplicationPrivate::processSafeAreaMarginsChangedEvent(static_cast<QWindowSystemInterfacePrivate::SafeAreaMarginsChangedEvent *>(e));
@@ -2248,12 +2255,14 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
             qAbs(globalPoint.y() - pressPos.y()) > doubleClickDistance)
             mousePressButton = Qt::NoButton;
     } else {
+        static unsigned long lastPressTimestamp = 0;
         mouse_buttons = e->buttons;
         if (mousePress) {
             ulong doubleClickInterval = static_cast<ulong>(QGuiApplication::styleHints()->mouseDoubleClickInterval());
-            doubleClick = e->timestamp - persistentEPD->eventPoint.pressTimestamp()
+            doubleClick = e->timestamp - lastPressTimestamp
                         < doubleClickInterval && button == mousePressButton;
             mousePressButton = button;
+            lastPressTimestamp = e ->timestamp;
         }
     }
 
@@ -2592,26 +2601,26 @@ void QGuiApplicationPrivate::processWindowStateChangedEvent(QWindowSystemInterfa
 
 void QGuiApplicationPrivate::processWindowScreenChangedEvent(QWindowSystemInterfacePrivate::WindowScreenChangedEvent *wse)
 {
-    if (QWindow *window  = wse->window.data()) {
-        if (window->screen() == wse->screen.data())
-            return;
-        if (QWindow *topLevelWindow = window->d_func()->topLevelWindow(QWindow::ExcludeTransients)) {
-            if (QScreen *screen = wse->screen.data())
-                topLevelWindow->d_func()->setTopLevelScreen(screen, false /* recreate */);
-            else // Fall back to default behavior, and try to find some appropriate screen
-                topLevelWindow->setScreen(nullptr);
-        }
+    QWindow *window = wse->window.data();
+    if (!window)
+        return;
 
-        // We may have changed scaling; trigger resize event if needed,
-        // except on Windows, where we send resize events during WM_DPICHANGED
-        // event handling. FIXME: unify DPI change handling across all platforms.
-#ifndef Q_OS_WIN
-        if (window->handle()) {
-            QWindowSystemInterfacePrivate::GeometryChangeEvent gce(window, QHighDpi::fromNativePixels(window->handle()->geometry(), window));
-            processGeometryChangeEvent(&gce);
-        }
-#endif
+    if (window->screen() == wse->screen.data())
+        return;
+
+    if (QWindow *topLevelWindow = window->d_func()->topLevelWindow(QWindow::ExcludeTransients)) {
+        if (QScreen *screen = wse->screen.data())
+            topLevelWindow->d_func()->setTopLevelScreen(screen, false /* recreate */);
+        else // Fall back to default behavior, and try to find some appropriate screen
+            topLevelWindow->setScreen(nullptr);
     }
+}
+
+void QGuiApplicationPrivate::processWindowDevicePixelRatioChangedEvent(QWindowSystemInterfacePrivate::WindowDevicePixelRatioChangedEvent *wde)
+{
+    if (wde->window.isNull())
+        return;
+    QWindowPrivate::get(wde->window)->updateDevicePixelRatio();
 }
 
 void QGuiApplicationPrivate::processSafeAreaMarginsChangedEvent(QWindowSystemInterfacePrivate::SafeAreaMarginsChangedEvent *wse)
@@ -3199,6 +3208,10 @@ void QGuiApplicationPrivate::processScreenLogicalDotsPerInchChange(QWindowSystem
         s->d_func()->updateGeometry();
     }
 
+    for (QWindow *window : QGuiApplication::allWindows())
+        if (window->screen() == e->screen)
+            QWindowPrivate::get(window)->updateDevicePixelRatio();
+
     resetCachedDevicePixelRatio();
 }
 
@@ -3256,6 +3269,16 @@ void QGuiApplicationPrivate::processExposeEvent(QWindowSystemInterfacePrivate::E
 
     const bool wasExposed = p->exposed;
     p->exposed = e->isExposed && window->screen();
+
+    // We expect that the platform plugins send DevicePixelRatioChange events.
+    // As a fail-safe make a final check here to make sure the cached DPR value is
+    // always up to date before sending the expose event.
+    if (e->isExposed && !e->region.isEmpty()) {
+        const bool dprWasChanged = QWindowPrivate::get(window)->updateDevicePixelRatio();
+        if (dprWasChanged)
+            qWarning() << "The cached device pixel ratio value was stale on window expose. "
+                       << "Please file a QTBUG which explains how to reproduce.";
+    }
 
     // We treat expose events for an already exposed window as paint events
     if (wasExposed && p->exposed && shouldSynthesizePaintEvents) {

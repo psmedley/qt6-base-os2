@@ -217,6 +217,8 @@ static std::string asyncSafeToString(int n)
 #endif // defined(Q_OS_UNIX)
 } // unnamed namespace
 
+[[maybe_unused]] static void blockUnixSignals();
+
 static bool alreadyDebugging()
 {
 #if defined(Q_OS_LINUX)
@@ -406,7 +408,7 @@ static void generateStackTrace()
         writeToStderr("Failed to start debugger.\n");
     } else {
         int ret;
-        EINTR_LOOP(ret, waitpid(pid, nullptr, 0));
+        QT_EINTR_LOOP(ret, waitpid(pid, nullptr, 0));
     }
 
     writeToStderr("=== End of stack trace ===\n");
@@ -534,17 +536,17 @@ static int timeout = -1;
 #endif
 static bool noCrashHandler = false;
 
-/*! \internal
-    Invoke a method of the object without generating warning if the method does not exist
-*/
-static void invokeMethod(QObject *obj, const char *methodName)
+static bool invokeTestMethodIfValid(QMetaMethod m, QObject *obj = QTest::currentTestObject)
+{
+    return m.isValid() && m.invoke(obj, Qt::DirectConnection);
+}
+
+static void invokeTestMethodIfExists(const char *methodName, QObject *obj = QTest::currentTestObject)
 {
     const QMetaObject *metaObject = obj->metaObject();
     int funcIndex = metaObject->indexOfMethod(methodName);
-    if (funcIndex >= 0) {
-        QMetaMethod method = metaObject->method(funcIndex);
-        method.invoke(obj, Qt::DirectConnection);
-    }
+    // doesn't generate a warning if it doesn't exist:
+    invokeTestMethodIfValid(metaObject->method(funcIndex), obj);
 }
 
 int defaultEventDelay()
@@ -628,7 +630,7 @@ static void qPrintDataTags(FILE *stream)
 
     // Get global data tags:
     QTestTable::globalTestTable();
-    invokeMethod(QTest::currentTestObject, "initTestCase_data()");
+    invokeTestMethodIfExists("initTestCase_data()");
     const QTestTable *gTable = QTestTable::globalTestTable();
 
     const QMetaObject *currTestMetaObj = QTest::currentTestObject->metaObject();
@@ -647,7 +649,7 @@ static void qPrintDataTags(FILE *stream)
             QByteArray member;
             member.resize(qstrlen(slot) + qstrlen("_data()") + 1);
             qsnprintf(member.data(), member.size(), "%s_data()", slot);
-            invokeMethod(QTest::currentTestObject, member.constData());
+            invokeTestMethodIfExists(member.constData());
             const int dataCount = table.dataCount();
             localTags.reserve(dataCount);
             for (int j = 0; j < dataCount; ++j)
@@ -707,7 +709,7 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, const char *const argv[], bool 
     QTest::testFunctions.clear();
     QTest::testTags.clear();
 
-#if defined(Q_OS_MAC) && defined(HAVE_XCTEST)
+#if defined(Q_OS_DARWIN) && defined(HAVE_XCTEST)
     if (QXcodeTestLogger::canLogTestProgress())
         logFormat = QTestLog::XCTest;
 #endif
@@ -1118,8 +1120,7 @@ void TestMethods::invokeTestOnData(int index) const
         bool invokeOk;
         do {
             QTest::inTestFunction = true;
-            if (m_initMethod.isValid())
-                m_initMethod.invoke(QTest::currentTestObject, Qt::DirectConnection);
+            invokeTestMethodIfValid(m_initMethod);
 
             const bool initQuit =
                 QTestResult::skipCurrentTest() || QTestResult::currentTestFailed();
@@ -1131,7 +1132,7 @@ void TestMethods::invokeTestOnData(int index) const
                 QBenchmarkGlobalData::current->context.tag = QLatin1StringView(
                     QTestResult::currentDataTag() ? QTestResult::currentDataTag() : "");
 
-                invokeOk = m_methods[index].invoke(QTest::currentTestObject, Qt::DirectConnection);
+                invokeOk = invokeTestMethodIfValid(m_methods[index]);
                 if (!invokeOk)
                     QTestResult::addFailure("Unable to execute slot", __FILE__, __LINE__);
 
@@ -1144,8 +1145,7 @@ void TestMethods::invokeTestOnData(int index) const
             QTestResult::finishedCurrentTestData();
 
             if (!initQuit) {
-                if (m_cleanupMethod.isValid())
-                    m_cleanupMethod.invoke(QTest::currentTestObject, Qt::DirectConnection);
+                invokeTestMethodIfValid(m_cleanupMethod);
 
                 // Process any deleteLater(), used by event-loop-based apps.
                 // Fixes memleak reports.
@@ -1287,6 +1287,7 @@ public:
 
     void run() override
     {
+        blockUnixSignals();
         auto locker = qt_unique_lock(mutex);
         expecting.store(TestFunctionStart, std::memory_order_release);
         waitCondition.notify_all();
@@ -1396,7 +1397,7 @@ bool TestMethods::invokeTest(int index, QLatin1StringView tag, WatchDog *watchDo
 
         if (curGlobalDataIndex == 0) {
             qsnprintf(member, 512, "%s_data()", name.constData());
-            invokeMethod(QTest::currentTestObject, member);
+            invokeTestMethodIfExists(member);
             if (QTestResult::skipCurrentTest())
                 break;
         }
@@ -1644,65 +1645,77 @@ char *toPrettyCString(const char *p, qsizetype length)
 }
 
 /*!
+    \fn char *toPrettyUnicode(QStringView string)
     \internal
     Returns the same QString but with only the ASCII characters still shown;
     everything else is replaced with \c {\uXXXX}.
 
     Similar to QDebug::putString().
 */
+
+constexpr qsizetype PrettyUnicodeMaxOutputSize = 256;
+// escape sequence, closing quote, the three dots and NUL
+constexpr qsizetype PrettyUnicodeMaxIncrement = sizeof(R"(\uXXXX"...)"); // includes NUL
+
+static char *writePrettyUnicodeChar(char16_t ch, char * const buffer)
+{
+    auto dst = buffer;
+    auto first = [&](int n) { Q_ASSERT(dst - buffer == n); return dst; };
+    if (ch < 0x7f && ch >= 0x20 && ch != '\\' && ch != '"') {
+        *dst++ = ch;
+        return first(1);
+    }
+
+    // write as an escape sequence
+    *dst++ = '\\';
+    switch (ch) {
+    case 0x22:
+    case 0x5c:
+        *dst++ = uchar(ch);
+        break;
+    case 0x8:
+        *dst++ = 'b';
+        break;
+    case 0xc:
+        *dst++ = 'f';
+        break;
+    case 0xa:
+        *dst++ = 'n';
+        break;
+    case 0xd:
+        *dst++ = 'r';
+        break;
+    case 0x9:
+        *dst++ = 't';
+        break;
+    default:
+        *dst++ = 'u';
+        *dst++ = toHexUpper(ch >> 12);
+        *dst++ = toHexUpper(ch >> 8);
+        *dst++ = toHexUpper(ch >> 4);
+        *dst++ = toHexUpper(ch);
+        return first(6);
+    }
+    return first(2);
+}
+
 char *toPrettyUnicode(QStringView string)
 {
     auto p = string.utf16();
     auto length = string.size();
     // keep it simple for the vast majority of cases
     bool trimmed = false;
-    auto buffer = std::make_unique<char[]>(256);
+    auto buffer = std::make_unique<char[]>(PrettyUnicodeMaxOutputSize);
     const auto end = p + length;
     char *dst = buffer.get();
 
     *dst++ = '"';
     for ( ; p != end; ++p) {
-        if (dst - buffer.get() > 245) {
-            // plus the quote, the three dots and NUL, it's 250, 251 or 255
+        if (dst - buffer.get() > PrettyUnicodeMaxOutputSize - PrettyUnicodeMaxIncrement) {
             trimmed = true;
             break;
         }
-
-        if (*p < 0x7f && *p >= 0x20 && *p != '\\' && *p != '"') {
-            *dst++ = *p;
-            continue;
-        }
-
-        // write as an escape sequence
-        // this means we may advance dst to buffer.data() + 246 or 250
-        *dst++ = '\\';
-        switch (*p) {
-        case 0x22:
-        case 0x5c:
-            *dst++ = uchar(*p);
-            break;
-        case 0x8:
-            *dst++ = 'b';
-            break;
-        case 0xc:
-            *dst++ = 'f';
-            break;
-        case 0xa:
-            *dst++ = 'n';
-            break;
-        case 0xd:
-            *dst++ = 'r';
-            break;
-        case 0x9:
-            *dst++ = 't';
-            break;
-        default:
-            *dst++ = 'u';
-            *dst++ = toHexUpper(*p >> 12);
-            *dst++ = toHexUpper(*p >> 8);
-            *dst++ = toHexUpper(*p >> 4);
-            *dst++ = toHexUpper(*p);
-        }
+        dst = writePrettyUnicodeChar(*p, dst);
     }
 
     *dst++ = '"';
@@ -1720,8 +1733,7 @@ void TestMethods::invokeTests(QObject *testObject) const
     const QMetaObject *metaObject = testObject->metaObject();
     QTEST_ASSERT(metaObject);
     QTestResult::setCurrentTestFunction("initTestCase");
-    if (m_initTestCaseDataMethod.isValid())
-        m_initTestCaseDataMethod.invoke(testObject, Qt::DirectConnection);
+    invokeTestMethodIfValid(m_initTestCaseDataMethod, testObject);
 
     QScopedPointer<WatchDog> watchDog;
     if (!alreadyDebugging()
@@ -1735,8 +1747,7 @@ void TestMethods::invokeTests(QObject *testObject) const
     QSignalDumper::startDump();
 
     if (!QTestResult::skipCurrentTest() && !QTestResult::currentTestFailed()) {
-        if (m_initTestCaseMethod.isValid())
-            m_initTestCaseMethod.invoke(testObject, Qt::DirectConnection);
+        invokeTestMethodIfValid(m_initTestCaseMethod, testObject);
 
         // finishedCurrentTestDataCleanup() resets QTestResult::currentTestFailed(), so use a local copy.
         const bool previousFailed = QTestResult::currentTestFailed();
@@ -1760,8 +1771,7 @@ void TestMethods::invokeTests(QObject *testObject) const
         QTestResult::setSkipCurrentTest(false);
         QTestResult::setBlacklistCurrentTest(false);
         QTestResult::setCurrentTestFunction("cleanupTestCase");
-        if (m_cleanupTestCaseMethod.isValid())
-            m_cleanupTestCaseMethod.invoke(testObject, Qt::DirectConnection);
+        invokeTestMethodIfValid(m_cleanupTestCaseMethod, testObject);
         QTestResult::finishedCurrentTestData();
         // Restore skip state as it affects decision on whether we passed:
         QTestResult::setSkipCurrentTest(wasSkipped || QTestResult::skipCurrentTest());
@@ -1783,9 +1793,8 @@ bool reportResult(bool success, qxp::function_ref<const char *()> lhs,
 
 } // namespace QTest
 
-namespace {
 #if defined(Q_OS_WIN)
-
+namespace {
 // Helper class for resolving symbol names by dynamically loading "dbghelp.dll".
 class DebugSymbolResolver
 {
@@ -1939,9 +1948,17 @@ private:
         return EXCEPTION_EXECUTE_HANDLER;
     }
 };
+} // unnamed namespace
 using FatalSignalHandler = WindowsFaultHandler;
 
+inline void blockUnixSignals()
+{
+    // Windows does have C signals, but doesn't use them for the purposes we're
+    // talking about here
+}
+
 #elif defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
+namespace {
 class FatalSignalHandler
 {
 public:
@@ -2192,11 +2209,25 @@ private:
     static bool pauseOnCrash;
 };
 bool FatalSignalHandler::pauseOnCrash = false;
+} // unnamed namespace
+
+inline void blockUnixSignals()
+{
+    // Block most Unix signals so the WatchDog thread won't be called when
+    // external signals are delivered, thus avoiding interfering with the test
+    sigset_t set;
+    sigfillset(&set);
+
+    // we allow the crashing signals, in case we have bugs
+    for (int signo : FatalSignalHandler::fatalSignals)
+        sigdelset(&set, signo);
+
+    pthread_sigmask(SIG_BLOCK, &set, nullptr);
+}
 #else // Q_OS_WASM or weird systems
 class FatalSignalHandler {};
+inline void blockUnixSignals() {}
 #endif // Q_OS_* choice
-
-} // unnamed namespace
 
 static void initEnvironment()
 {

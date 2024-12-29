@@ -26,6 +26,15 @@ static QByteArray normalizeType(const QByteArray &ba)
     return ba.size() ? normalizeTypeInternal(ba.constBegin(), ba.constEnd()) : ba;
 }
 
+const QByteArray &Moc::toFullyQualified(const QByteArray &name) const noexcept
+{
+    if (auto it = knownQObjectClasses.find(name); it != knownQObjectClasses.end())
+        return it.value();
+    if (auto it = knownGadgets.find(name); it != knownGadgets.end())
+        return it.value();
+    return name;
+}
+
 bool Moc::parseClassHead(ClassDef *def)
 {
     // figure out whether this is a class declaration, or only a
@@ -87,17 +96,17 @@ bool Moc::parseClassHead(ClassDef *def)
             else
                 test(PUBLIC);
             test(VIRTUAL);
-            const QByteArray type = parseType().name;
+            const Type type = parseType();
             // ignore the 'class Foo : BAR(Baz)' case
             if (test(LPAREN)) {
                 until(RPAREN);
             } else {
-                def->superclassList += qMakePair(type, access);
+                def->superclassList.push_back({type.name, toFullyQualified(type.name), access});
             }
         } while (test(COMMA));
 
         if (!def->superclassList.isEmpty()
-            && knownGadgets.contains(def->superclassList.constFirst().first)) {
+            && knownGadgets.contains(def->superclassList.constFirst().classname)) {
             // Q_GADGET subclasses are treated as Q_GADGETs
             knownGadgets.insert(def->classname, def->qualified);
             knownGadgets.insert(def->qualified, def->qualified);
@@ -243,7 +252,7 @@ bool Moc::parseEnum(EnumDef *def)
     }
     if (test(COLON)) { // C++11 strongly typed enum
         // enum Foo : unsigned long { ... };
-        parseType(); //ignore the result
+        def->type = normalizeType(parseType().name);
     }
     if (!test(LBRACE))
         return false;
@@ -672,8 +681,10 @@ void Moc::parse()
                             switch (next()) {
                             case NAMESPACE:
                                 if (test(IDENTIFIER)) {
-                                    while (test(SCOPE))
+                                    while (test(SCOPE)) {
+                                        test(INLINE); // ignore inline namespaces
                                         next(IDENTIFIER);
+                                    }
                                     if (test(EQ)) {
                                         // namespace Foo = Bar::Baz;
                                         until(SEMIC);
@@ -879,7 +890,10 @@ void Moc::parse()
                         error("Template classes not supported by Q_GADGET");
                     break;
                 case Q_PROPERTY_TOKEN:
-                    parseProperty(&def);
+                    parseProperty(&def, Named);
+                    break;
+                case QT_ANONYMOUS_PROPERTY_TOKEN:
+                    parseProperty(&def, Anonymous);
                     break;
                 case Q_PLUGIN_METADATA_TOKEN:
                     parsePluginData(&def);
@@ -914,7 +928,10 @@ void Moc::parse()
                     parseSlotInPrivate(&def, access);
                     break;
                 case Q_PRIVATE_PROPERTY_TOKEN:
-                    parsePrivateProperty(&def);
+                    parsePrivateProperty(&def, Named);
+                    break;
+                case QT_ANONYMOUS_PRIVATE_PROPERTY_TOKEN:
+                    parsePrivateProperty(&def, Anonymous);
                     break;
                 case ENUM: {
                     EnumDef enumDef;
@@ -976,7 +993,9 @@ void Moc::parse()
             if (!def.pluginData.iid.isEmpty())
                 def.pluginData.metaArgs = metaArgs;
 
-            checkSuperClasses(&def);
+            if (def.hasQObject && !def.superclassList.isEmpty())
+                checkSuperClasses(&def);
+
             checkProperties(&def);
 
             classList += def;
@@ -1096,9 +1115,8 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
     if (!noInclude) {
         if (includePath.size() && !includePath.endsWith('/'))
             includePath += '/';
-        for (int i = 0; i < includeFiles.size(); ++i) {
-            QByteArray inc = includeFiles.at(i);
-            if (inc.at(0) != '<' && inc.at(0) != '"') {
+        for (QByteArray inc : std::as_const(includeFiles)) {
+            if (!inc.isEmpty() && inc.at(0) != '<' && inc.at(0) != '"') {
                 if (includePath.size() && includePath != "./")
                     inc.prepend(includePath);
                 inc = '\"' + inc + '\"';
@@ -1263,7 +1281,7 @@ void Moc::parseSignals(ClassDef *def)
     }
 }
 
-void Moc::createPropertyDef(PropertyDef &propDef, int propertyIndex)
+void Moc::createPropertyDef(PropertyDef &propDef, int propertyIndex, Moc::PropertyMode mode)
 {
     propDef.location = index;
     propDef.relativeIndex = propertyIndex;
@@ -1293,8 +1311,10 @@ void Moc::createPropertyDef(PropertyDef &propDef, int propertyIndex)
 
     propDef.type = type;
 
-    next();
-    propDef.name = lexem();
+    if (mode == Moc::Named) {
+        next();
+        propDef.name = lexem();
+    }
 
     parsePropertyAttributes(propDef);
 }
@@ -1436,11 +1456,11 @@ void Moc::parsePropertyAttributes(PropertyDef &propDef)
     }
 }
 
-void Moc::parseProperty(ClassDef *def)
+void Moc::parseProperty(ClassDef *def, Moc::PropertyMode mode)
 {
     next(LPAREN);
     PropertyDef propDef;
-    createPropertyDef(propDef, int(def->propertyList.size()));
+    createPropertyDef(propDef, int(def->propertyList.size()), mode);
     next(RPAREN);
 
     def->propertyList += propDef;
@@ -1461,9 +1481,11 @@ void Moc::parsePluginData(ClassDef *def)
         } else if (l == "FILE") {
             next(STRING_LITERAL);
             QByteArray metaDataFile = unquotedLexem();
-            QFileInfo fi(QFileInfo(QString::fromLocal8Bit(currentFilenames.top().constData())).dir(), QString::fromLocal8Bit(metaDataFile.constData()));
-            for (int j = 0; j < includes.size() && !fi.exists(); ++j) {
-                const IncludePath &p = includes.at(j);
+            QFileInfo fi(QFileInfo(QString::fromLocal8Bit(currentFilenames.top())).dir(),
+                         QString::fromLocal8Bit(metaDataFile));
+            for (const IncludePath &p : std::as_const(includes)) {
+                if (fi.exists())
+                    break;
                 if (p.isFrameworkPath)
                     continue;
 
@@ -1526,7 +1548,7 @@ QByteArray Moc::parsePropertyAccessor()
     return accessor;
 }
 
-void Moc::parsePrivateProperty(ClassDef *def)
+void Moc::parsePrivateProperty(ClassDef *def, Moc::PropertyMode mode)
 {
     next(LPAREN);
     PropertyDef propDef;
@@ -1534,7 +1556,7 @@ void Moc::parsePrivateProperty(ClassDef *def)
 
     next(COMMA);
 
-    createPropertyDef(propDef, int(def->propertyList.size()));
+    createPropertyDef(propDef, int(def->propertyList.size()), mode);
 
     def->propertyList += propDef;
 }
@@ -1809,7 +1831,8 @@ bool Moc::until(Token target) {
 
 void Moc::checkSuperClasses(ClassDef *def)
 {
-    const QByteArray firstSuperclass = def->superclassList.value(0).first;
+    Q_ASSERT(!def->superclassList.isEmpty());
+    const QByteArray &firstSuperclass = def->superclassList.at(0).classname;
 
     if (!knownQObjectClasses.contains(firstSuperclass)) {
         // enable once we /require/ include paths
@@ -1833,10 +1856,9 @@ void Moc::checkSuperClasses(ClassDef *def)
     };
 
     const auto end = def->superclassList.cend();
-    auto it = std::next(def->superclassList.cbegin(),
-                        !def->superclassList.isEmpty() ? 1 : 0);
+    auto it = def->superclassList.cbegin() + 1;
     for (; it != end; ++it) {
-        const QByteArray &superClass = it->first;
+        const QByteArray &superClass = it->classname;
         if (knownQObjectClasses.contains(superClass)) {
             const QByteArray msg
                     = "Class "
@@ -1894,8 +1916,7 @@ void Moc::checkProperties(ClassDef *cdef)
             continue;
         }
 
-        for (int j = 0; j < cdef->publicList.size(); ++j) {
-            const FunctionDef &f = cdef->publicList.at(j);
+        for (const FunctionDef &f : std::as_const(cdef->publicList)) {
             if (f.name != p.read)
                 continue;
             if (!f.isConst) // get  functions must be const
@@ -1994,11 +2015,11 @@ QJsonObject ClassDef::toJson() const
     QJsonArray superClasses;
 
     for (const auto &super: std::as_const(superclassList)) {
-        const auto name = super.first;
-        const auto access = super.second;
         QJsonObject superCls;
-        superCls["name"_L1] = QString::fromUtf8(name);
-        FunctionDef::accessToJson(&superCls, access);
+        superCls["name"_L1] = QString::fromUtf8(super.classname);
+        if (super.classname != super.qualified)
+            superCls["fullyQualifiedName"_L1] = QString::fromUtf8(super.qualified);
+        FunctionDef::accessToJson(&superCls, super.access);
         superClasses.append(superCls);
     }
 
@@ -2123,6 +2144,8 @@ QJsonObject EnumDef::toJson(const ClassDef &cdef) const
     def["name"_L1] = QString::fromUtf8(name);
     if (!enumName.isEmpty())
         def["alias"_L1] = QString::fromUtf8(enumName);
+    if (!type.isEmpty())
+        def["type"_L1] = QString::fromUtf8(type);
     def["isFlag"_L1] = cdef.enumDeclarations.value(name);
     def["isClass"_L1] = isEnumClass;
 
@@ -2133,6 +2156,25 @@ QJsonObject EnumDef::toJson(const ClassDef &cdef) const
         def["values"_L1] = valueArr;
 
     return def;
+}
+
+QByteArray EnumDef::qualifiedType(const ClassDef *cdef) const
+{
+    if (name == cdef->classname) {
+        // The name of the enclosing namespace is the same as the enum class name
+        if (cdef->qualified.contains("::")) {
+            // QTBUG-112996, fully qualify by using cdef->qualified to disambiguate enum
+            // class name and enclosing namespace, e.g.:
+            // namespace A { namespace B { Q_NAMESPACE; enum class B { }; Q_ENUM_NS(B) } }
+            return cdef->qualified % "::" % name;
+        } else {
+            // Just "B"; otherwise the compiler complains about the type "B::B" inside
+            // "B::staticMetaObject" in the generated code; e.g.:
+            // namespace B { Q_NAMESPACE; enum class B { }; Q_ENUM_NS(B) }
+            return name;
+        }
+    }
+    return cdef->classname % "::" % name;
 }
 
 QT_END_NAMESPACE

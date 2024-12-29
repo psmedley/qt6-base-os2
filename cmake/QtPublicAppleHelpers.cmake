@@ -27,7 +27,7 @@ function(_qt_internal_handle_ios_launch_screen target)
     if(NOT launch_screen AND NOT QT_NO_SET_DEFAULT_IOS_LAUNCH_SCREEN)
         set(is_default_launch_screen TRUE)
         set(launch_screen
-            "${__qt_internal_cmake_ios_support_files_path}/LaunchScreen.storyboard")
+            "${__qt_internal_cmake_apple_support_files_path}/LaunchScreen.storyboard")
     endif()
 
     # Check that the launch screen exists.
@@ -554,14 +554,12 @@ function(_qt_internal_set_xcode_bitcode_enablement target)
         "NO")
 endfunction()
 
-function(_qt_internal_generate_ios_info_plist target)
+function(_qt_internal_copy_info_plist target)
     # If the project already specifies a custom file, we don't override it.
-    get_target_property(existing_plist "${target}" MACOSX_BUNDLE_INFO_PLIST)
-    if(existing_plist)
-        return()
+    get_target_property(info_plist_in "${target}" MACOSX_BUNDLE_INFO_PLIST)
+    if(NOT info_plist_in)
+        set(info_plist_in "${__qt_internal_cmake_apple_support_files_path}/Info.plist.app.in")
     endif()
-
-    set(info_plist_in "${__qt_internal_cmake_ios_support_files_path}/Info.plist.app.in")
 
     string(MAKE_C_IDENTIFIER "${target}" target_identifier)
     set(info_plist_out_dir
@@ -592,6 +590,62 @@ function(_qt_internal_generate_ios_info_plist target)
     set_target_properties("${target}" PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${info_plist_out}")
 endfunction()
 
+function(_qt_internal_plist_buddy plist_file)
+    cmake_parse_arguments(PARSE_ARGV 1 arg
+        "" "OUTPUT_VARIABLE;ERROR_VARIABLE" "COMMANDS")
+    foreach(command ${arg_COMMANDS})
+        execute_process(COMMAND "/usr/libexec/PlistBuddy"
+                                -c "${command}" "${plist_file}"
+                    OUTPUT_VARIABLE plist_buddy_output
+                    ERROR_VARIABLE plist_buddy_error)
+        string(STRIP "${plist_buddy_output}" plist_buddy_output)
+        if(arg_OUTPUT_VARIABLE)
+            list(APPEND ${arg_OUTPUT_VARIABLE} ${plist_buddy_output})
+            set(${arg_OUTPUT_VARIABLE} ${${arg_OUTPUT_VARIABLE}} PARENT_SCOPE)
+        endif()
+        if(arg_ERROR_VARIABLE)
+            list(APPEND ${arg_ERROR_VARIABLE} ${plist_buddy_error})
+            set(${arg_ERROR_VARIABLE} ${${arg_ERROR_VARIABLE}} PARENT_SCOPE)
+        endif()
+        if(plist_buddy_error)
+            return()
+        endif()
+    endforeach()
+endfunction()
+
+function(_qt_internal_set_apple_localizations target)
+    if(QT_NO_SET_PLIST_LOCALIZATIONS)
+        return()
+    endif()
+
+    get_target_property(supported_languages "${target}" _qt_apple_supported_languages)
+    if("${supported_languages}" STREQUAL "supported_languages-NOTFOUND")
+        return()
+    endif()
+    get_target_property(plist_file "${target}" MACOSX_BUNDLE_INFO_PLIST)
+    if (NOT plist_file)
+        return()
+    endif()
+
+    _qt_internal_plist_buddy("${plist_file}"
+        COMMANDS "print CFBundleLocalizations"
+        OUTPUT_VARIABLE existing_localizations
+    )
+    if(existing_localizations)
+        return()
+    endif()
+
+    list(TRANSFORM supported_languages PREPEND
+        "Add CFBundleLocalizations: string ")
+
+    _qt_internal_plist_buddy("${plist_file}"
+        COMMANDS
+            "Add CFBundleLocalizations array"
+            ${supported_languages}
+            "Delete CFBundleAllowMixedLocalizations"
+    )
+endfunction()
+
 function(_qt_internal_set_ios_simulator_arch target)
     if(CMAKE_XCODE_ATTRIBUTE_ARCHS
         OR QT_NO_SET_XCODE_ARCHS)
@@ -618,8 +672,226 @@ function(_qt_internal_set_ios_simulator_arch target)
         "x86_64")
 endfunction()
 
+# Export Apple platform sdk and xcode version requirements to Qt6ConfigExtras.cmake.
+function(_qt_internal_export_apple_sdk_and_xcode_version_requirements out_var)
+    if(NOT APPLE)
+        return()
+    endif()
+
+    if(IOS)
+        set(vars_to_assign
+            QT_SUPPORTED_MIN_IOS_SDK_VERSION
+            QT_SUPPORTED_MAX_IOS_SDK_VERSION
+            QT_SUPPORTED_MIN_IOS_XCODE_VERSION
+        )
+    else()
+        set(vars_to_assign
+            QT_SUPPORTED_MIN_MACOS_SDK_VERSION
+            QT_SUPPORTED_MAX_MACOS_SDK_VERSION
+            QT_SUPPORTED_MIN_MACOS_XCODE_VERSION
+        )
+    endif()
+
+    set(assignments "")
+    foreach(var IN LISTS vars_to_assign)
+        set(value "${${var}}")
+        list(APPEND assignments
+            "
+if(NOT ${var})
+    set(${var} \"${value}\")
+endif()")
+    endforeach()
+
+    list(JOIN assignments "\n" assignments)
+    set(${out_var} "${assignments}" PARENT_SCOPE)
+endfunction()
+
+function(_qt_internal_get_apple_sdk_version out_var)
+    if(APPLE)
+        if(CMAKE_SYSTEM_NAME STREQUAL iOS)
+            set(sdk_name "iphoneos")
+        else()
+            # Default to macOS
+            set(sdk_name "macosx")
+        endif()
+        set(xcrun_version_arg "--show-sdk-version")
+        execute_process(COMMAND /usr/bin/xcrun --sdk ${sdk_name} ${xcrun_version_arg}
+                        OUTPUT_VARIABLE sdk_version
+                        ERROR_VARIABLE xcrun_error)
+        if(NOT sdk_version)
+            message(FATAL_ERROR
+                    "Can't determine darwin ${sdk_name} SDK version. Error: ${xcrun_error}")
+        endif()
+        string(STRIP "${sdk_version}" sdk_version)
+        set(${out_var} "${sdk_version}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_qt_internal_get_xcode_version_raw out_var)
+    if(APPLE)
+        execute_process(COMMAND /usr/bin/xcrun xcodebuild -version
+                        OUTPUT_VARIABLE xcode_version
+                        ERROR_VARIABLE xcrun_error)
+        string(REPLACE "\n" " " xcode_version "${xcode_version}")
+        string(STRIP "${xcode_version}" xcode_version)
+        set(${out_var} "${xcode_version}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_qt_internal_get_xcode_version out_var)
+    if(APPLE)
+        _qt_internal_get_xcode_version_raw(xcode_version_raw)
+
+        # The raw output is something like after the newlines are replaced with spaces:
+        # Xcode 14.3 Build version 14E222b
+        # We want only the '14.3' part. We could be more specific with the regex to match only
+        # digits separated by dots, but you never know how Apple might change the format.
+        string(REGEX REPLACE "Xcode (([^ ])+)" "\\2" xcode_version "${xcode_version_raw}")
+        if(xcode_version_raw MATCHES "Xcode ([^ ]+)")
+            set(xcode_version "${CMAKE_MATCH_1}")
+        else()
+            message(DEBUG "Failed to extract Xcode version from '${xcode_version_raw}'")
+            set(xcode_version "${xcode_version_raw}")
+        endif()
+
+        set(${out_var} "${xcode_version}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_qt_internal_get_cached_apple_sdk_version out_var)
+    if(QT_INTERNAL_APPLE_SDK_VERSION)
+        set(sdk_version "${QT_INTERNAL_APPLE_SDK_VERSION}")
+    else()
+        _qt_internal_get_apple_sdk_version(sdk_version)
+        set(QT_INTERNAL_APPLE_SDK_VERSION "${sdk_version}" CACHE STRING "Apple SDK version")
+    endif()
+
+    set(${out_var} "${sdk_version}" PARENT_SCOPE)
+endfunction()
+
+function(_qt_internal_get_cached_xcode_version out_var)
+    if(QT_INTERNAL_XCODE_VERSION)
+        set(xcode_version "${QT_INTERNAL_XCODE_VERSION}")
+    else()
+        _qt_internal_get_xcode_version(xcode_version)
+        set(QT_INTERNAL_XCODE_VERSION "${xcode_version}" CACHE STRING "Xcode version")
+    endif()
+
+    set(${out_var} "${xcode_version}" PARENT_SCOPE)
+endfunction()
+
+# Warn when the platform SDK or Xcode version are not supported.
+#
+# The warnings are currently only shown when building Qt, not when building user projects
+# with CMake.
+# The warnings ARE shown for qmake user projects.
+#
+# The qmake equivalent for user projects is in mkspecs/features/mac/default_post.prf.
+function(_qt_internal_check_apple_sdk_and_xcode_versions)
+    if(NOT APPLE)
+        return()
+    endif()
+
+    if(QT_NO_APPLE_SDK_AND_XCODE_CHECK)
+        return()
+    endif()
+
+    # Only run the check once in a top-level build.
+    get_property(check_done GLOBAL PROPERTY _qt_internal_apple_sdk_and_xcode_check_done)
+    if(check_done)
+        return()
+    endif()
+    set_property(GLOBAL PROPERTY _qt_internal_apple_sdk_and_xcode_check_done "TRUE")
+
+    if(IOS)
+        set(min_sdk_version "${QT_SUPPORTED_MIN_IOS_SDK_VERSION}")
+        set(max_sdk_version "${QT_SUPPORTED_MAX_IOS_SDK_VERSION}")
+        set(min_xcode_version "${QT_SUPPORTED_MIN_IOS_XCODE_VERSION}")
+    else()
+        set(min_sdk_version "${QT_SUPPORTED_MIN_MACOS_SDK_VERSION}")
+        set(max_sdk_version "${QT_SUPPORTED_MAX_MACOS_SDK_VERSION}")
+        set(min_xcode_version "${QT_SUPPORTED_MIN_MACOS_XCODE_VERSION}")
+    endif()
+
+    _qt_internal_get_cached_apple_sdk_version(sdk_version)
+    _qt_internal_get_cached_xcode_version(xcode_version)
+
+    if(NOT max_sdk_version MATCHES "^[0-9]+$")
+        message(FATAL_ERROR
+            "Invalid max SDK version: ${max_sdk_version} "
+            "It should be a major version number, without minor or patch version components.")
+    endif()
+
+    # The default differs in different branches.
+    set(failed_check_should_error FALSE)
+
+    if(failed_check_should_error)
+        # Allow downgrading the error into a warning.
+        if(QT_FORCE_WARN_APPLE_SDK_AND_XCODE_CHECK)
+            set(message_type WARNING)
+            set(extra_message " Due to QT_FORCE_WARN_APPLE_SDK_AND_XCODE_CHECK being ON "
+                "the build will continue, but it will likely fail. Use at your own risk.")
+        else()
+            set(message_type FATAL_ERROR)
+            set(extra_message " You can turn this error into a warning by configuring with "
+                "-DQT_FORCE_WARN_APPLE_SDK_AND_XCODE_CHECK=ON, but the build will likely fail. "
+                "Use at your own risk.")
+        endif()
+    else()
+        # Allow upgrading the warning into an error.
+        if(QT_FORCE_FATAL_APPLE_SDK_AND_XCODE_CHECK)
+            set(message_type FATAL_ERROR)
+            set(extra_message " Erroring out due to QT_FORCE_FATAL_APPLE_SDK_AND_XCODE_CHECK "
+                "being ON.")
+        else()
+            set(message_type WARNING)
+            set(extra_message " You can turn this warning into an error by configuring with "
+                "-DQT_FORCE_FATAL_APPLE_SDK_AND_XCODE_CHECK=ON. ")
+        endif()
+    endif()
+
+    if(sdk_version VERSION_LESS min_sdk_version AND NOT QT_NO_APPLE_SDK_MIN_VERSION_CHECK)
+        message(${message_type}
+            "Qt requires at least version ${min_sdk_version} of the platform SDK, "
+            "you're building against version ${sdk_version}. Please upgrade."
+            ${extra_message}
+        )
+    endif()
+
+    if(xcode_version VERSION_LESS min_xcode_version AND NOT QT_NO_XCODE_MIN_VERSION_CHECK)
+        message(${message_type}
+            "Qt requires at least version ${min_xcode_version} of Xcode, "
+            "you're building against version ${xcode_version}. Please upgrade."
+            ${extra_message}
+        )
+    endif()
+
+    if(QT_NO_APPLE_SDK_MAX_VERSION_CHECK)
+        return()
+    endif()
+
+    # Make sure we warn only when the current version is greater than the max supported version.
+    math(EXPR next_after_max_sdk_version "${max_sdk_version} + 1")
+    if(sdk_version VERSION_GREATER_EQUAL next_after_max_sdk_version)
+        message(WARNING
+            "Qt has only been tested with version ${max_sdk_version} "
+            "of the platform SDK, you're using ${sdk_version}. "
+            "This is an unsupported configuration. You may experience build issues, "
+            "and by using "
+            "the ${sdk_version} SDK you are opting in to new features "
+            "that Qt has not been prepared for. "
+            "Please downgrade the SDK you use to build your app to version "
+            "${max_sdk_version}, or configure "
+            "with -DQT_NO_APPLE_SDK_MAX_VERSION_CHECK=ON to silence this warning."
+        )
+    endif()
+endfunction()
+
 function(_qt_internal_finalize_apple_app target)
     # Shared between macOS and iOS apps
+
+    _qt_internal_copy_info_plist("${target}")
+    _qt_internal_set_apple_localizations("${target}")
 
     # Only set the various properties if targeting the Xcode generator, otherwise the various
     # Xcode tokens are embedded as-is instead of being dynamically evaluated.
@@ -637,12 +909,12 @@ function(_qt_internal_finalize_apple_app target)
 endfunction()
 
 function(_qt_internal_finalize_ios_app target)
-    _qt_internal_finalize_apple_app("${target}")
+    # Must be called before we generate the Info.plist
+    _qt_internal_handle_ios_launch_screen("${target}")
 
+    _qt_internal_finalize_apple_app("${target}")
     _qt_internal_set_xcode_targeted_device_family("${target}")
     _qt_internal_set_xcode_bitcode_enablement("${target}")
-    _qt_internal_handle_ios_launch_screen("${target}")
-    _qt_internal_generate_ios_info_plist("${target}")
     _qt_internal_set_ios_simulator_arch("${target}")
 endfunction()
 

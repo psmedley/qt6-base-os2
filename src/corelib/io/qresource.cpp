@@ -33,7 +33,7 @@
 #  include <zstd.h>
 #endif
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_NACL) && !defined(Q_OS_INTEGRITY)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_INTEGRITY)
 #  define QT_USE_MMAP
 #  include <sys/mman.h>
 #endif
@@ -82,7 +82,7 @@ public:
 
     inline QStringView next()
     {
-        int start = m_pos;
+        const qsizetype start = m_pos;
         while (m_pos < m_len && m_data[m_pos] != m_splitChar)
             ++m_pos;
         return QStringView(m_data + start, m_pos - start);
@@ -232,6 +232,19 @@ static inline ResourceList *resourceList()
     QResource can be created pointing into this resource data. The resource
     itself will be unmapped from memory when the last QResource that points
     to it is destroyed.
+
+    \section2 Corruption and Security
+
+    The QResource class performs some checks on the file passed to determine
+    whether it is supported by the current version of Qt. Those tests are only
+    to check the file header does not request features (such as Zstandard
+    decompression) that have not been compiled in or that the file is not of a
+    future version of Qt. They do not confirm the validity of the entire file.
+
+    QResource should not be used on files whose provenance cannot be trusted.
+    Applications should be designed to attempt to load only resource files
+    whose provenance is at least as trustworthy as that of the application
+    itself or its plugins.
 
     \sa {The Qt Resource System}, QFile, QDir, QFileInfo
 */
@@ -1478,14 +1491,14 @@ QString QResourceFileEngine::fileName(FileName file) const
 {
     Q_D(const QResourceFileEngine);
     if (file == BaseName) {
-        int slash = d->resource.fileName().lastIndexOf(u'/');
+        const qsizetype slash = d->resource.fileName().lastIndexOf(u'/');
         if (slash == -1)
             return d->resource.fileName();
         return d->resource.fileName().mid(slash + 1);
     } else if (file == PathName || file == AbsolutePathName) {
         const QString path = (file == AbsolutePathName) ? d->resource.absoluteFilePath()
                                                         : d->resource.fileName();
-        const int slash = path.lastIndexOf(u'/');
+        const qsizetype slash = path.lastIndexOf(u'/');
         if (slash == -1)
             return ":"_L1;
         else if (slash <= 1)
@@ -1495,7 +1508,7 @@ QString QResourceFileEngine::fileName(FileName file) const
     } else if (file == CanonicalName || file == CanonicalPathName) {
         const QString absoluteFilePath = d->resource.absoluteFilePath();
         if (file == CanonicalPathName) {
-            const int slash = absoluteFilePath.lastIndexOf(u'/');
+            const qsizetype slash = absoluteFilePath.lastIndexOf(u'/');
             if (slash != -1)
                 return absoluteFilePath.left(slash);
         }

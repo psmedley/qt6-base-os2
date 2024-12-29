@@ -19,8 +19,9 @@ ClientArea::ClientArea(QWasmWindow *window, QWasmScreen *screen, emscripten::val
     : m_screen(screen), m_window(window), m_element(element)
 {
     const auto callback = std::function([this](emscripten::val event) {
-        if (processPointer(*PointerEvent::fromWeb(event)))
-            event.call<void>("preventDefault");
+        processPointer(*PointerEvent::fromWeb(event));
+        event.call<void>("preventDefault");
+        event.call<void>("stopPropagation");
     });
 
     m_pointerDownCallback =
@@ -90,6 +91,31 @@ bool ClientArea::deliverEvent(const PointerEvent &event)
                         eventType, event.modifiers);
     }
 
+    if (event.pointerType == PointerType::Pen) {
+        qreal pressure;
+        switch (event.type) {
+            case EventType::PointerDown :
+            case EventType::PointerMove :
+                pressure = event.pressure;
+                break;
+            case EventType::PointerUp :
+                pressure = 0.0;
+                break;
+            default:
+                return false;
+        }
+        // Tilt in the browser is in the range +-90, but QTabletEvent only goes to +-60.
+        qreal xTilt = qBound(-60.0, event.tiltX, 60.0);
+        qreal yTilt = qBound(-60.0, event.tiltY, 60.0);
+        // Barrel rotation is reported as 0 to 359, but QTabletEvent wants a signed value.
+        qreal rotation = event.twist > 180.0 ? 360.0 - event.twist : event.twist;
+        return QWindowSystemInterface::handleTabletEvent(
+            m_window->window(), QWasmIntegration::getTimestamp(), m_screen->tabletDevice(),
+            m_window->window()->mapFromGlobal(targetPointClippedToScreen),
+            targetPointClippedToScreen, event.mouseButtons, pressure, xTilt, yTilt,
+            event.tangentialPressure, rotation, event.modifiers);
+    }
+
     QWindowSystemInterface::TouchPoint *touchPoint;
 
     QPointF pointInTargetWindowCoords =
@@ -98,7 +124,7 @@ bool ClientArea::deliverEvent(const PointerEvent &event)
                            pointInTargetWindowCoords.y() / m_window->window()->height());
 
     const auto tp = m_pointerIdToTouchPoints.find(event.pointerId);
-    if (tp != m_pointerIdToTouchPoints.end()) {
+    if (event.pointerType != PointerType::Pen && tp != m_pointerIdToTouchPoints.end()) {
         touchPoint = &tp.value();
     } else {
         touchPoint = &m_pointerIdToTouchPoints

@@ -29,12 +29,21 @@
 
 /*!
     \externalpage https://standards.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html
-    \title Icon Theme Specification
+    \title Freedesktop Icon Theme Specification
 */
 
 /*!
+    \externalpage https://specifications.freedesktop.org/icon-naming-spec/icon-naming-spec-latest.html
+    \title Freedesktop Icon Naming Specification
+*/
+/*!
     \externalpage https://standards.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html#directory_layout
     \title Icon Theme Specification - Directory Layout
+*/
+
+/*!
+    \externalpage https://freedesktop.org/
+    \title Freedesktop
 */
 
 /*!
@@ -45,4 +54,14 @@
 /*!
     \externalpage https://www.lunarg.com/vulkan-sdk/
     \title LunarG Vulkan SDK
+*/
+
+/*!
+    \externalpage https://developer.android.com/reference/androidx/core/content/FileProvider
+    \title Android: FileProvider
+*/
+
+/*!
+    \externalpage https://developer.android.com/training/secure-file-sharing/setup-sharing.html
+    \title Android: Setting up file sharing
 */

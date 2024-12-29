@@ -142,11 +142,12 @@ gbm_surface *QEglFSKmsGbmScreen::createSurface(EGLConfig eglConfig)
             }
         }
 
+        const uint32_t gbmFormat = drmFormatToGbmFormat(m_output.drm_format);
+
         // Fallback for older drivers, and when "format" is explicitly specified
         // in the output config. (not guaranteed that the requested format works
         // of course, but do what we are told to)
         if (!m_gbm_surface) {
-            uint32_t gbmFormat = drmFormatToGbmFormat(m_output.drm_format);
             if (queryFromEgl)
                 qCDebug(qLcEglfsKmsDebug, "Could not create surface with EGL_NATIVE_VISUAL_ID, falling back to format %x", gbmFormat);
             m_gbm_surface = gbm_surface_create(gbmDevice,
@@ -155,16 +156,39 @@ gbm_surface *QEglFSKmsGbmScreen::createSurface(EGLConfig eglConfig)
                                            gbmFormat,
                                            gbmFlags());
         }
+
+        // Fallback for some drivers, its required to request with modifiers
+        if (!m_gbm_surface) {
+            uint64_t modifier = DRM_FORMAT_MOD_LINEAR;
+
+            m_gbm_surface = gbm_surface_create_with_modifiers(gbmDevice,
+                                    rawGeometry().width(),
+                                    rawGeometry().height(),
+                                    gbmFormat,
+                                    &modifier, 1);
+        }
+        // Fail here, as it would fail with the next usage of the GBM surface, which is very unexpected
+        if (!m_gbm_surface)
+            qFatal("Could not create GBM surface!");
     }
     return m_gbm_surface; // not owned, gets destroyed in QEglFSKmsGbmIntegration::destroyNativeWindow() via QEglFSKmsGbmWindow::invalidateSurface()
 }
 
 void QEglFSKmsGbmScreen::resetSurface()
 {
-    m_flipPending = false;
+    m_flipPending = false; // not necessarily true but enough to keep bo_next
     m_gbm_bo_current = nullptr;
-    m_gbm_bo_next = nullptr;
     m_gbm_surface = nullptr;
+
+    // Leave m_gbm_bo_next untouched. waitForFlip() should
+    // still do its work, when called. Otherwise we end up
+    // in device-is-busy errors if there is a new QWindow
+    // created afterwards. (QTBUG-122663)
+
+    // If not using atomic, will need a new drmModeSetCrtc if a new window
+    // gets created later on (and so there's a new fb).
+    if (!device()->hasAtomicSupport())
+        needsNewModeSetForNextFb = true;
 }
 
 void QEglFSKmsGbmScreen::initCloning(QPlatformScreen *screenThisScreenClones,
@@ -194,8 +218,9 @@ void QEglFSKmsGbmScreen::ensureModeSet(uint32_t fb)
     QKmsOutput &op(output());
     const int fd = device()->fd();
 
-    if (!op.mode_set) {
+    if (!op.mode_set || needsNewModeSetForNextFb) {
         op.mode_set = true;
+        needsNewModeSetForNextFb = false;
 
         bool doModeSet = true;
         drmModeCrtcPtr currentMode = drmModeGetCrtc(fd, op.crtc_id);

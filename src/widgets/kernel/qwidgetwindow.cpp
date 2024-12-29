@@ -51,6 +51,17 @@ public:
                 widget->setAttribute(Qt::WA_WState_ExplicitShowHide, wasExplicitShowHide);
                 widget->setAttribute(Qt::WA_WState_Hidden, wasHidden);
             }
+
+            // The call to QWidgetPrivate::setVisible() above will normally
+            // recurse back into QWidgetWindow::setNativeWindowVisibility()
+            // to update the QWindow state, but during QWidget::destroy()
+            // this is not the case, as Qt::WA_WState_Created has been
+            // unset by the time we check if we should call hide_helper().
+            // We don't want to change the QWidget logic, as that has
+            // other side effects, so as a targeted fix we sync up the
+            // visibility here if needed.
+            if (q->isVisible() != visible)
+                QWindowPrivate::setVisible(visible);
         } else {
             QWindowPrivate::setVisible(visible);
         }
@@ -134,6 +145,21 @@ QWidgetWindow::QWidgetWindow(QWidget *widget)
 
 QWidgetWindow::~QWidgetWindow()
 {
+    if (!m_widget)
+        return;
+
+    QTLWExtra *topData = QWidgetPrivate::get(m_widget)->topData();
+    Q_ASSERT(topData);
+
+    // The QPlaformBackingStore may hold a reference to the window,
+    // so the backingstore needs to be deleted first.
+    topData->repaintManager.reset(nullptr);
+    delete topData->backingStore;
+    topData->backingStore = nullptr;
+    topData->widgetTextures.clear();
+
+    // Too late to do anything beyond this point
+    topData->window = nullptr;
 }
 
 #if QT_CONFIG(accessibility)
@@ -329,6 +355,10 @@ bool QWidgetWindow::event(QEvent *event)
         m_widget->repaint();
         return true;
 
+    case QEvent::DevicePixelRatioChange:
+        handleDevicePixelRatioChange();
+        break;
+
     default:
         break;
     }
@@ -451,11 +481,11 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
         QEvent::MouseButtonRelease : QEvent::MouseButtonPress;
     if (QApplicationPrivate::inPopupMode()) {
         QPointer<QWidget> activePopupWidget = QApplication::activePopupWidget();
-        QPoint mapped = event->position().toPoint();
+        QPointF mapped = event->position();
         if (activePopupWidget != m_widget)
-            mapped = activePopupWidget->mapFromGlobal(event->globalPosition().toPoint());
+            mapped = activePopupWidget->mapFromGlobal(event->globalPosition());
         bool releaseAfter = false;
-        QWidget *popupChild  = activePopupWidget->childAt(mapped);
+        QWidget *popupChild  = activePopupWidget->childAt(mapped.toPoint());
 
         if (activePopupWidget != qt_popup_down) {
             qt_button_down = nullptr;
@@ -482,15 +512,15 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
             // deliver event
             qt_replay_popup_mouse_event = false;
             QPointer<QWidget> receiver = activePopupWidget;
-            QPoint widgetPos = mapped;
+            QPointF widgetPos = mapped;
             if (qt_button_down)
                 receiver = qt_button_down;
             else if (popupChild)
                 receiver = popupChild;
             if (receiver != activePopupWidget)
-                widgetPos = receiver->mapFromGlobal(event->globalPosition().toPoint());
+                widgetPos = receiver->mapFromGlobal(event->globalPosition());
 
-            const bool reallyUnderMouse = activePopupWidget->rect().contains(mapped);
+            const bool reallyUnderMouse = activePopupWidget->rect().contains(mapped.toPoint());
             const bool underMouse = activePopupWidget->underMouse();
             if (underMouse != reallyUnderMouse) {
                 if (reallyUnderMouse) {
@@ -695,22 +725,32 @@ void QWidgetWindow::updateMargins()
     m_widget->data->fstrut_dirty = false;
 }
 
-static void sendScreenChangeRecursively(QWidget *widget)
+static void sendChangeRecursively(QWidget *widget, QEvent::Type type)
 {
-    QEvent e(QEvent::ScreenChangeInternal);
+    QEvent e(type);
     QCoreApplication::sendEvent(widget, &e);
     QWidgetPrivate *d = QWidgetPrivate::get(widget);
     for (int i = 0; i < d->children.size(); ++i) {
         QWidget *w = qobject_cast<QWidget *>(d->children.at(i));
         if (w)
-            sendScreenChangeRecursively(w);
+            sendChangeRecursively(w, type);
     }
 }
 
 void QWidgetWindow::handleScreenChange()
 {
     // Send an event recursively to the widget and its children.
-    sendScreenChangeRecursively(m_widget);
+    sendChangeRecursively(m_widget, QEvent::ScreenChangeInternal);
+
+    // Invalidate the backing store buffer and repaint immediately.
+    if (screen())
+        repaintWindow();
+}
+
+void QWidgetWindow::handleDevicePixelRatioChange()
+{
+    // Send an event recursively to the widget and its children.
+    sendChangeRecursively(m_widget, QEvent::DevicePixelRatioChange);
 
     // Invalidate the backing store buffer and repaint immediately.
     if (screen())

@@ -39,6 +39,7 @@ depends += \
     qtdoc \
     qmake \
     qtcmake \
+    qtshadertools \
     qttestlib \
     qtplatformintegration \
     qthelp
@@ -61,6 +62,8 @@ imagedirs   += images \
 # Included in qttestlib.qdocconf instead
 excludefiles += ../kernel/qtestsupport_gui.cpp \
                 ../painting/qdrawhelper_ssse3.cpp
+
+manifestmeta.highlighted.names = "QtGui/Hello Vulkan Cubes Example"
 
 navigation.landingpage = "Qt GUI"
 navigation.cppclassespage = "Qt GUI C++ Classes"

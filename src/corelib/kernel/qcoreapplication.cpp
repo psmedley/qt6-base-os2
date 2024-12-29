@@ -68,7 +68,7 @@
 #include <QtCore/qjniobject.h>
 #endif
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
 #  include "qcore_mac_p.h"
 #endif
 
@@ -124,7 +124,7 @@ Q_TRACE_POINT(qtcore, QCoreApplication_sendSpontaneousEvent, QObject *receiver, 
 Q_TRACE_POINT(qtcore, QCoreApplication_notify_entry, QObject *receiver, QEvent *event, QEvent::Type type);
 Q_TRACE_POINT(qtcore, QCoreApplication_notify_exit, bool consumed, bool filtered);
 
-#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
+#if defined(Q_OS_WIN) || defined(Q_OS_DARWIN)
 extern QString qAppFileName();
 #endif
 
@@ -301,15 +301,15 @@ static void qt_call_pre_routines()
     if (!preRList.exists())
         return;
 
-    QVFuncList list;
-    {
+    const QStartUpFuncList list = [] {
         const auto locker = qt_scoped_lock(globalRoutinesMutex);
         // Unlike qt_call_post_routines, we don't empty the list, because
         // Q_COREAPP_STARTUP_FUNCTION is a macro, so the user expects
         // the function to be executed every time QCoreApplication is created.
-        list = *preRList;
-    }
-    for (QtCleanUpFunction f : std::as_const(list))
+        return *preRList;
+    }();
+
+    for (QtStartUpFunction f : list)
         f();
 }
 
@@ -584,7 +584,9 @@ void QCoreApplicationPrivate::initConsole()
             return;
         consoleAllocated = true;
     } else if (env.compare(u"attach"_s, Qt::CaseInsensitive) == 0) {
-        if (AttachConsole(ATTACH_PARENT_PROCESS) == FALSE)
+        // If the calling process is already attached to a console,
+        // the error code returned is ERROR_ACCESS_DENIED.
+        if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::GetLastError() != ERROR_ACCESS_DENIED)
             return;
     } else {
         // Unknown input, don't make any decision for the user.
@@ -755,7 +757,8 @@ void QCoreApplicationPrivate::initLocale()
     to reset the locale that is used for number formatting to "C"-locale.
 
     \sa QGuiApplication, QAbstractEventDispatcher, QEventLoop,
-    {Semaphores Example}, {Wait Conditions Example}
+    {Producer and Consumer using Semaphores},
+    {Producer and Consumer using Wait Conditions}
 */
 
 /*!
@@ -2476,7 +2479,7 @@ QString QCoreApplication::applicationFilePath()
         if (procName != d->argv[0]) {
             // clear the cache if the procname changes, so we reprocess it.
             QCoreApplicationPrivate::clearApplicationFilePath();
-            procName = QByteArray(d->argv[0]);
+            procName.assign(d->argv[0]);
         }
     }
 
@@ -2985,11 +2988,6 @@ Q_GLOBAL_STATIC(QRecursiveMutex, libraryPathMutex)
     environment variable are always added. The plugin installation
     directory (and its existence) may change when the directory of
     the application executable becomes known.
-
-    If you want to iterate over the list, you can use the \l foreach
-    pseudo-keyword:
-
-    \snippet code/src_corelib_kernel_qcoreapplication.cpp 2
 
     \sa setLibraryPaths(), addLibraryPath(), removeLibraryPath(), QLibrary,
         {How to Create Qt Plugins}

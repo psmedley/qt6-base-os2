@@ -51,17 +51,41 @@ typedef QHash<QByteArray, QTzTimeZone> QTzTimeZoneHash;
 
 static bool isTzFile(const QString &name);
 
+// Open a named file under the zone info directory:
+static bool openZoneInfo(QString name, QFile *file)
+{
+    // At least on Linux / glibc (see man 3 tzset), $TZDIR overrides the system
+    // default location for zone info:
+    const QString tzdir = qEnvironmentVariable("TZDIR");
+    if (!tzdir.isEmpty()) {
+        file->setFileName(QDir(tzdir).filePath(name));
+        if (file->open(QIODevice::ReadOnly))
+            return true;
+    }
+    // Try modern system path first:
+    constexpr auto zoneShare = "/usr/share/zoneinfo/"_L1;
+    if (tzdir != zoneShare && tzdir != zoneShare.chopped(1)) {
+        file->setFileName(zoneShare + name);
+        if (file->open(QIODevice::ReadOnly))
+            return true;
+    }
+    // Fall back to legacy system path:
+    constexpr auto zoneLib = "/usr/lib/zoneinfo/"_L1;
+    if (tzdir != zoneLib && tzdir != zoneLib.chopped(1)) {
+        file->setFileName(zoneShare + name);
+        if (file->open(QIODevice::ReadOnly))
+            return true;
+    }
+    return false;
+}
+
 // Parse zone.tab table for territory information, read directories to ensure we
 // find all installed zones (many are omitted from zone.tab; even more from
 // zone1970.tab).
 static QTzTimeZoneHash loadTzTimeZones()
 {
-    QString path = QStringLiteral("/usr/share/zoneinfo/zone.tab");
-    if (!QFile::exists(path))
-        path = QStringLiteral("/usr/lib/zoneinfo/zone.tab");
-
-    QFile tzif(path);
-    if (!tzif.open(QIODevice::ReadOnly))
+    QFile tzif;
+    if (!openZoneInfo("zone.tab"_L1, &tzif))
         return QTzTimeZoneHash();
 
     QTzTimeZoneHash zonesHash;
@@ -91,6 +115,7 @@ static QTzTimeZoneHash loadTzTimeZones()
         }
     }
 
+    const QString path = tzif.fileName();
     const qsizetype cut = path.lastIndexOf(u'/');
     Q_ASSERT(cut > 0);
     const QDir zoneDir = QDir(path.first(cut));
@@ -384,13 +409,15 @@ static QDate calculateDowDate(int year, int month, int dayOfWeek, int week)
 
 static QDate calculatePosixDate(const QByteArray &dateRule, int year)
 {
+    Q_ASSERT(!dateRule.isEmpty());
     bool ok;
     // Can start with M, J, or a digit
     if (dateRule.at(0) == 'M') {
         // nth week in month format "Mmonth.week.dow"
         QList<QByteArray> dateParts = dateRule.split('.');
         if (dateParts.size() > 2) {
-            int month = dateParts.at(0).mid(1).toInt(&ok);
+            Q_ASSERT(!dateParts.at(0).isEmpty()); // the 'M' is its [0].
+            int month = QByteArrayView{ dateParts.at(0) }.sliced(1).toInt(&ok);
             int week = ok ? dateParts.at(1).toInt(&ok) : 0;
             int dow = ok ? dateParts.at(2).toInt(&ok) : 0;
             if (ok)
@@ -399,7 +426,7 @@ static QDate calculatePosixDate(const QByteArray &dateRule, int year)
     } else if (dateRule.at(0) == 'J') {
         // Day of Year 1...365, ignores Feb 29.
         // So March always starts on day 60.
-        int doy = dateRule.mid(1).toInt(&ok);
+        int doy = QByteArrayView{ dateRule }.sliced(1).toInt(&ok);
         if (ok && doy > 0 && doy < 366) {
             // Subtract 1 because we're adding days *after* the first of
             // January, unless it's after February in a leap year, when the leap
@@ -553,7 +580,12 @@ PosixZone PosixZone::parse(const char *&pos, const char *end)
     return {std::move(name), offset};
 }
 
-static auto validatePosixRule(const QByteArray &posixRule)
+/* Parse and check a POSIX rule.
+
+   By default a simple zone abbreviation with no offset information is accepted.
+   Set \a requireOffset to \c true to require that there be offset data present.
+*/
+static auto validatePosixRule(const QByteArray &posixRule, bool requireOffset = false)
 {
     // Format is described here:
     // http://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
@@ -565,15 +597,19 @@ static auto validatePosixRule(const QByteArray &posixRule)
         return fail;
 
     const char *begin = zoneinfo.begin();
-
-    // Updates begin to point after the name and offset it parses:
-    if (PosixZone::parse(begin, zoneinfo.end()).name.isEmpty())
-        return fail;
+    {
+        // Updates begin to point after the name and offset it parses:
+        const auto posix = PosixZone::parse(begin, zoneinfo.end());
+        if (posix.name.isEmpty())
+            return fail;
+        if (requireOffset && !posix.hasValidOffset())
+            return fail;
+    }
 
     if (good.hasDst) {
         if (begin >= zoneinfo.end())
             return fail;
-        // Expect a second name and offset after the first:
+        // Expect a second name (and optional offset) after the first:
         if (PosixZone::parse(begin, zoneinfo.end()).name.isEmpty())
             return fail;
     }
@@ -747,7 +783,7 @@ public:
     QTzTimeZoneCacheEntry fetchEntry(const QByteArray &ianaId);
 
 private:
-    QTzTimeZoneCacheEntry findEntry(const QByteArray &ianaId);
+    static QTzTimeZoneCacheEntry findEntry(const QByteArray &ianaId);
     QCache<QByteArray, QTzTimeZoneCacheEntry> m_cache;
     QMutex m_mutex;
 };
@@ -761,21 +797,14 @@ QTzTimeZoneCacheEntry QTzTimeZoneCache::findEntry(const QByteArray &ianaId)
         tzif.setFileName(QStringLiteral("/etc/localtime"));
         if (!tzif.open(QIODevice::ReadOnly))
             return ret;
-    } else {
-        // Open named tz, try modern path first, if fails try legacy path
-        tzif.setFileName("/usr/share/zoneinfo/"_L1 + QString::fromLocal8Bit(ianaId));
-        if (!tzif.open(QIODevice::ReadOnly)) {
-            tzif.setFileName("/usr/lib/zoneinfo/"_L1 + QString::fromLocal8Bit(ianaId));
-            if (!tzif.open(QIODevice::ReadOnly)) {
-                // ianaId may be a POSIX rule, taken from $TZ or /etc/TZ
-                auto check = validatePosixRule(ianaId);
-                if (check.isValid) {
-                    ret.m_hasDst = check.hasDst;
-                    ret.m_posixRule = ianaId;
-                }
-                return ret;
-            }
+    } else if (!openZoneInfo(QString::fromLocal8Bit(ianaId), &tzif)) {
+        // ianaId may be a POSIX rule, taken from $TZ or /etc/TZ
+        auto check = validatePosixRule(ianaId);
+        if (check.isValid) {
+            ret.m_hasDst = check.hasDst;
+            ret.m_posixRule = ianaId;
         }
+        return ret;
     }
 
     QDataStream ds(&tzif);
@@ -928,8 +957,8 @@ QTzTimeZoneCacheEntry QTzTimeZoneCache::findEntry(const QByteArray &ianaId)
         if (ruleIndex == -1) {
             if (rule.dstOffset != 0)
                 ret.m_hasDst = true;
+            tran.ruleIndex = ret.m_tranRules.size();
             ret.m_tranRules.append(rule);
-            tran.ruleIndex = ret.m_tranRules.size() - 1;
         } else {
             tran.ruleIndex = ruleIndex;
         }
@@ -959,6 +988,8 @@ QTzTimeZoneCacheEntry QTzTimeZoneCache::fetchEntry(const QByteArray &ianaId)
 // Create a named time zone
 QTzTimeZonePrivate::QTzTimeZonePrivate(const QByteArray &ianaId)
 {
+    if (!isTimeZoneIdAvailable(ianaId)) // Avoid pointlessly creating cache entries
+        return;
     static QTzTimeZoneCache tzCache;
     auto entry = tzCache.fetchEntry(ianaId);
     if (entry.m_tranTimes.isEmpty() && entry.m_posixRule.isEmpty())
@@ -1221,7 +1252,11 @@ QTimeZonePrivate::Data QTzTimeZonePrivate::previousTransition(qint64 beforeMSecs
 
 bool QTzTimeZonePrivate::isTimeZoneIdAvailable(const QByteArray &ianaId) const
 {
-    return tzZones->contains(ianaId);
+    // Allow a POSIX rule as long as it has offset data. (This needs to reject a
+    // plain abbreviation, without offset, since claiming to support such zones
+    // would prevent the custom QTimeZone constructor from accepting such a
+    // name, as it doesn't want a custom zone to over-ride a "real" one.)
+    return tzZones->contains(ianaId) || validatePosixRule(ianaId, true).isValid;
 }
 
 QList<QByteArray> QTzTimeZonePrivate::availableTimeZoneIds() const
@@ -1317,7 +1352,8 @@ private:
     {
         // On most distros /etc/localtime is a symlink to a real file so extract
         // name from the path
-        const auto zoneinfo = "/zoneinfo/"_L1;
+        const QString tzdir = qEnvironmentVariable("TZDIR");
+        constexpr auto zoneinfo = "/zoneinfo/"_L1;
         QString path = QStringLiteral("/etc/localtime");
         long iteration = getSymloopMax();
         // Symlink may point to another symlink etc. before being under zoneinfo/
@@ -1325,9 +1361,15 @@ private:
         // symlink, like America/Montreal pointing to America/Toronto
         do {
             path = QFile::symLinkTarget(path);
-            int index = path.indexOf(zoneinfo);
-            if (index >= 0) // Found zoneinfo file; extract zone name from path:
-                return QStringView{ path }.mid(index + zoneinfo.size()).toUtf8();
+            // If it's a zoneinfo file, extract the zone name from its path:
+            int index = tzdir.isEmpty() ? -1 : path.indexOf(tzdir);
+            if (index >= 0) {
+                const auto tail = QStringView{ path }.sliced(index + tzdir.size()).toUtf8();
+                return tail.startsWith(u'/') ? tail.sliced(1) : tail;
+            }
+            index = path.indexOf(zoneinfo);
+            if (index >= 0)
+                return QStringView{ path }.sliced(index + zoneinfo.size()).toUtf8();
         } while (!path.isEmpty() && --iteration > 0);
 
         return QByteArray();
@@ -1384,7 +1426,7 @@ QByteArray QTzTimeZonePrivate::staticSystemTimeZoneId()
     if (ianaId == ":/etc/localtime")
         ianaId.clear();
     else if (ianaId.startsWith(':'))
-        ianaId = ianaId.mid(1);
+        ianaId = ianaId.sliced(1);
 
     if (ianaId.isEmpty()) {
         Q_CONSTINIT thread_local static ZoneNameReader reader;

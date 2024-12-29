@@ -301,7 +301,6 @@ public:
     QWinEventNotifier *processFinishedNotifier = nullptr;
     Q_PROCESS_INFORMATION *pid = nullptr;
 #else
-
 #ifdef Q_OS_OS2
     enum PipeType { InPipe = 0, OutPipe = 1, ErrPipe = 2 };
     bool createPipe(PipeType type, Channel::Pipe &pipe, const char *name = 0);
@@ -310,6 +309,7 @@ public:
 #endif
     struct UnixExtras {
         std::function<void(void)> childProcessModifier;
+        QProcess::UnixProcessParameters processParameters;
     };
     std::unique_ptr<UnixExtras> unixExtras;
     QSocketNotifier *stateNotifier = nullptr;
@@ -331,7 +331,7 @@ public:
     void startProcess();
 #if defined(Q_OS_UNIX)
     void commitChannels() const;
-    void execChild(int workingDirectory, char **argv, char **envp) const;
+    void execChild(int workingDirectory, char **argv, char **envp) const noexcept;
 #endif
     bool processStarted(QString *errorMessage = nullptr);
     void processFinished();

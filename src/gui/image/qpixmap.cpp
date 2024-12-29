@@ -717,7 +717,7 @@ bool QPixmap::load(const QString &fileName, const char *format, Qt::ImageConvers
 
             QString key = "qt_pixmap"_L1
                     % info.absoluteFilePath()
-                    % HexString<uint>(info.lastModified().toSecsSinceEpoch())
+                    % HexString<uint>(info.lastModified(QTimeZone::UTC).toSecsSinceEpoch())
                     % HexString<quint64>(info.size())
                     % HexString<uint>(data ? data->pixelType() : QPlatformPixmap::PixmapType);
 
@@ -1280,8 +1280,9 @@ QPixmap QPixmap::transformed(const QTransform &transform,
     QPixmap using the fromImage(). If this is too expensive an
     operation, you can use QBitmap::fromImage() instead.
 
-    To convert a QPixmap to and from HICON you can use the QtWinExtras
-    functions QtWin::toHICON() and QtWin::fromHICON() respectively.
+    To convert a QPixmap to and from HICON you can use the
+    QImage::toHICON() and QImage::fromHICON() functions respectively
+    (after converting the QPixmap to a QImage, as explained above).
 
     \section1 Pixmap Transformations
 

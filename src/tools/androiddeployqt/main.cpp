@@ -144,6 +144,7 @@ struct Options
     QString qtQmlDirectory;
     QString qtHostDirectory;
     std::vector<QString> extraPrefixDirs;
+    QStringList androidDeployPlugins;
     // Unlike 'extraPrefixDirs', the 'extraLibraryDirs' key doesn't expect the 'lib' subfolder
     // when looking for dependencies.
     std::vector<QString> extraLibraryDirs;
@@ -163,7 +164,7 @@ struct Options
     QString versionName;
     QString versionCode;
     QByteArray minSdkVersion{"23"};
-    QByteArray targetSdkVersion{"31"};
+    QByteArray targetSdkVersion{"33"};
 
     // lib c++ path
     QString stdCppPath;
@@ -318,7 +319,6 @@ QString fileArchitecture(const Options &options, const QString &path)
     char buffer[512];
     while (fgets(buffer, sizeof(buffer), readElfCommand) != nullptr) {
         QByteArray line = QByteArray::fromRawData(buffer, qstrlen(buffer));
-        QString library;
         line = line.trimmed();
         if (line.startsWith("Arch: ")) {
             auto it = elfArchitectures.find(line.mid(6));
@@ -609,9 +609,9 @@ Optional arguments:
            from keystore password.)
          --sigfile <file>: Name of .SF/.DSA file.
          --digestalg <name>: Name of digest algorithm. Default is
-           "SHA1".
+           "SHA-256".
          --sigalg <name>: Name of signature algorithm. Default is
-           "SHA1withRSA".
+           "SHA256withRSA".
          --tsa <url>: Location of the Time Stamping Authority.
          --tsacert <alias>: Public key certificate for TSA.
          --internalsf: Include the .SF file inside the signature block.
@@ -1009,6 +1009,11 @@ bool readInputFile(Options *options)
         for (const QJsonValue prefix : extraPrefixDirs) {
             options->extraPrefixDirs.push_back(prefix.toString());
         }
+    }
+
+    {
+        const auto androidDeployPlugins = jsonObject.value("android-deploy-plugins"_L1).toString();
+        options->androidDeployPlugins = androidDeployPlugins.split(";"_L1, Qt::SkipEmptyParts);
     }
 
     {
@@ -1563,7 +1568,6 @@ bool updateLibsXml(Options *options)
     for (auto it = options->architectures.constBegin(); it != options->architectures.constEnd(); ++it) {
         if (!it->enabled)
             continue;
-        QString libsPath = "libs/"_L1 + it.key() + u'/';
 
         qtLibs += "        <item>%1;%2</item>\n"_L1.arg(it.key(), options->stdCppName);
         for (const Options::BundledFile &bundledFile : options->bundledFiles[it.key()]) {
@@ -1810,6 +1814,11 @@ static QString absoluteFilePath(const Options *options, const QString &relativeF
     }
 
     if (relativeFileName.endsWith("-android-dependencies.xml"_L1)) {
+        for (const auto &dir : options->extraLibraryDirs) {
+            const QString path = dir + u'/' + relativeFileName;
+            if (QFile::exists(path))
+                return path;
+        }
         return options->qtInstallDirectory + u'/' + options->qtLibsDirectory +
                u'/' + relativeFileName;
     }
@@ -1851,14 +1860,57 @@ QList<QtDependency> findFilesRecursively(const Options &options, const QFileInfo
 
 QList<QtDependency> findFilesRecursively(const Options &options, const QString &fileName)
 {
+    // We try to find the fileName in extraPrefixDirs first. The function behaves differently
+    // depending on what the fileName points to. If fileName is a file then we try to find the
+    // first occurrence in extraPrefixDirs and return this file. If fileName is directory function
+    // iterates over it and looks for deployment artifacts in each 'extraPrefixDirs' entry.
+    // Also we assume that if the fileName is recognized as a directory once it will be directory
+    // for every 'extraPrefixDirs' entry.
+    QList<QtDependency> deps;
     for (const auto &prefix : options.extraPrefixDirs) {
         QFileInfo info(prefix + u'/' + fileName);
-        if (info.exists())
-            return findFilesRecursively(options, info, prefix + u'/');
+        if (info.exists()) {
+            if (info.isDir())
+                deps.append(findFilesRecursively(options, info, prefix + u'/'));
+            else
+                return findFilesRecursively(options, info, prefix + u'/');
+        }
     }
-    QFileInfo info(options.qtInstallDirectory + "/"_L1 + fileName);
-    QFileInfo rootPath(options.qtInstallDirectory + "/"_L1);
-    return findFilesRecursively(options, info, rootPath.absolutePath() + u'/');
+
+    // Usually android deployment settings contain Qt install directory in extraPrefixDirs.
+    if (std::find(options.extraPrefixDirs.begin(), options.extraPrefixDirs.end(),
+                  options.qtInstallDirectory) == options.extraPrefixDirs.end()) {
+        QFileInfo info(options.qtInstallDirectory + "/"_L1 + fileName);
+        QFileInfo rootPath(options.qtInstallDirectory + "/"_L1);
+        deps.append(findFilesRecursively(options, info, rootPath.absolutePath()));
+    }
+    return deps;
+}
+
+void readDependenciesFromFiles(Options *options, const QList<QtDependency> &files,
+                               QSet<QString> &usedDependencies,
+                               QSet<QString> &remainingDependencies)
+{
+    for (const QtDependency &fileName : files) {
+        if (usedDependencies.contains(fileName.absolutePath))
+            continue;
+
+        if (fileName.absolutePath.endsWith(".so"_L1)) {
+            if (!readDependenciesFromElf(options, fileName.absolutePath, &usedDependencies,
+                                         &remainingDependencies)) {
+                fprintf(stdout, "Skipping file dependency: %s\n",
+                        qPrintable(fileName.relativePath));
+                continue;
+            }
+        }
+        usedDependencies.insert(fileName.absolutePath);
+
+        if (options->verbose) {
+            fprintf(stdout, "Appending file dependency: %s\n", qPrintable(fileName.relativePath));
+        }
+
+        options->qtDependencies[options->currentArchitecture].append(fileName);
+    }
 }
 
 bool readAndroidDependencyXml(Options *options,
@@ -1891,29 +1943,15 @@ bool readAndroidDependencyXml(Options *options,
 
                     QString file = reader.attributes().value("file"_L1).toString();
 
-                    const QList<QtDependency> fileNames = findFilesRecursively(*options, file);
-
-                    for (const QtDependency &fileName : fileNames) {
-                        if (usedDependencies->contains(fileName.absolutePath))
-                            continue;
-
-                        if (fileName.absolutePath.endsWith(".so"_L1)) {
-                            QSet<QString> remainingDependencies;
-                            if (!readDependenciesFromElf(options, fileName.absolutePath,
-                                                         usedDependencies,
-                                                         &remainingDependencies)) {
-                                fprintf(stdout, "Skipping dependencies from xml: %s\n",
-                                        qPrintable(fileName.relativePath));
-                                continue;
-                            }
-                        }
-                        usedDependencies->insert(fileName.absolutePath);
-
-                        if (options->verbose)
-                            fprintf(stdout, "Appending dependency from xml: %s\n", qPrintable(fileName.relativePath));
-
-                        options->qtDependencies[options->currentArchitecture].append(fileName);
+                    if (reader.attributes().hasAttribute("type"_L1)
+                        && reader.attributes().value("type"_L1) == "plugin_dir"_L1
+                        && !options->androidDeployPlugins.isEmpty()) {
+                        continue;
                     }
+
+                    const QList<QtDependency> fileNames = findFilesRecursively(*options, file);
+                    readDependenciesFromFiles(options, fileNames, *usedDependencies,
+                                              *remainingDependencies);
                 } else if (reader.name() == "jar"_L1) {
                     int bundling = reader.attributes().value("bundling"_L1).toInt();
                     QString fileName = QDir::cleanPath(reader.attributes().value("file"_L1).toString());
@@ -2390,6 +2428,14 @@ bool readDependencies(Options *options)
     if (!readDependenciesFromElf(options, "%1/libs/%2/lib%3_%2.so"_L1.arg(options->outputDirectory, options->currentArchitecture, options->applicationBinary), &usedDependencies, &remainingDependencies))
         return false;
 
+    QList<QtDependency> pluginDeps;
+    for (const auto &pluginPath : options->androidDeployPlugins) {
+        pluginDeps.append(findFilesRecursively(*options, QFileInfo(pluginPath),
+                                               options->qtInstallDirectory + "/"_L1));
+    }
+
+    readDependenciesFromFiles(options, pluginDeps, usedDependencies, remainingDependencies);
+
     while (!remainingDependencies.isEmpty()) {
         QSet<QString>::iterator start = remainingDependencies.begin();
         QString fileName = absoluteFilePath(options, *start);
@@ -2434,7 +2480,6 @@ bool containsApplicationBinary(Options *options)
     if (options->verbose)
         fprintf(stdout, "Checking if application binary is in package.\n");
 
-    QFileInfo applicationBinary(options->applicationBinary);
     QString applicationFileName = "lib%1_%2.so"_L1.arg(options->applicationBinary,
                                                        options->currentArchitecture);
 
@@ -2682,8 +2727,9 @@ void checkAndWarnGradleLongPaths(const QString &outputDirectory)
     QDirIterator it(outputDirectory, QStringList(QStringLiteral("*.java")), QDir::Files,
                     QDirIterator::Subdirectories);
     while (it.hasNext()) {
-        if (it.next().size() >= MAX_PATH)
-            longFileNames.append(it.next());
+        const QString &filePath = it.next();
+        if (filePath.size() >= MAX_PATH)
+            longFileNames.append(filePath);
     }
 
     if (!longFileNames.isEmpty()) {

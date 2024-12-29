@@ -19,6 +19,8 @@
 #include <qdatetime.h>
 #include <qloggingcategory.h>
 
+#include <functional>
+
 #include <limits.h>
 
 QT_BEGIN_NAMESPACE
@@ -402,7 +404,7 @@ bool QPersistentModelIndex::operator<(const QPersistentModelIndex &other) const
     if (d && other.d)
         return d->index < other.d->index;
 
-    return d < other.d;
+    return std::less<>{}(d, other.d);
 }
 
 /*!
@@ -1497,6 +1499,8 @@ void QAbstractItemModel::resetInternalData()
     rows to the model, \l{QAbstractItemModel::}{beginInsertRows()} and
     \l{QAbstractItemModel::}{endInsertRows()} must be called.
 
+    \include models.qdocinc {thread-safety-section1}{QAbstractItemModel}
+
     \sa {Model Classes}, {Model Subclassing Reference}, QModelIndex,
         QAbstractItemView, {Using drag and drop with item views},
         {Simple Tree Model Example}, {Editable Tree Model Example},
@@ -1739,7 +1743,13 @@ QAbstractItemModel::~QAbstractItemModel()
 
     For example:
 
-    \snippet ../widgets/itemviews/simpledommodel/dommodel.cpp 2
+    \code
+    int MyModel::columnCount(const QModelIndex &parent) const
+    {
+        Q_UNUSED(parent);
+        return 3;
+    }
+    \endcode
 
     \note When implementing a table based model, columnCount() should return 0
     when the parent is valid.
@@ -2538,8 +2548,10 @@ QModelIndexList QAbstractItemModel::match(const QModelIndex &start, int role,
                         }
                     }
                 } else if (matchType == Qt::MatchWildcard) {
-                    if (rx.pattern().isEmpty())
-                        rx.setPattern(QRegularExpression::wildcardToRegularExpression(value.toString()));
+                    if (rx.pattern().isEmpty()) {
+                        const QString pattern = QRegularExpression::wildcardToRegularExpression(value.toString(), QRegularExpression::NonPathWildcardConversion);
+                        rx.setPattern(pattern);
+                    }
                     if (cs == Qt::CaseInsensitive)
                         rx.setPatternOptions(QRegularExpression::CaseInsensitiveOption);
                 } else
@@ -3726,7 +3738,7 @@ void QAbstractItemModel::multiData(const QModelIndex &index, QModelRoleDataSpan 
     \note Some general guidelines for subclassing models are available in the
     \l{Model Subclassing Reference}.
 
-    \note
+    \include models.qdocinc {thread-safety-section1}{QAbstractTableModel}
 
     \sa {Model Classes}, QAbstractItemModel, QAbstractListModel
 */

@@ -131,7 +131,8 @@ public:
 
     enum WildcardConversionOption {
         DefaultWildcardConversion = 0x0,
-        UnanchoredWildcardConversion = 0x1
+        UnanchoredWildcardConversion = 0x1,
+        NonPathWildcardConversion = 0x2,
     };
     Q_DECLARE_FLAGS(WildcardConversionOptions, WildcardConversionOption)
 
@@ -174,6 +175,7 @@ private:
 Q_DECLARE_SHARED(QRegularExpression)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRegularExpression::PatternOptions)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRegularExpression::MatchOptions)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRegularExpression::WildcardConversionOptions)
 
 #ifndef QT_NO_DATASTREAM
 Q_CORE_EXPORT QDataStream &operator<<(QDataStream &out, const QRegularExpression &re);

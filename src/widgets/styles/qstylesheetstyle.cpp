@@ -434,16 +434,26 @@ struct QStyleSheetBoxData : public QSharedData
 
 struct QStyleSheetPaletteData : public QSharedData
 {
-    QStyleSheetPaletteData(const QBrush &fg, const QBrush &sfg, const QBrush &sbg,
-                           const QBrush &abg, const QBrush &pfg)
-        : foreground(fg), selectionForeground(sfg), selectionBackground(sbg),
-          alternateBackground(abg), placeholderForeground(pfg) { }
+     QStyleSheetPaletteData(const QBrush &foreground,
+                            const QBrush &selectedForeground,
+                            const QBrush &selectedBackground,
+                            const QBrush &alternateBackground,
+                            const QBrush &placeHolderTextForeground,
+                            const QBrush &accent)
+        : foreground(foreground)
+        , selectionForeground(selectedForeground)
+        , selectionBackground(selectedBackground)
+        , alternateBackground(alternateBackground)
+        , placeholderForeground(placeHolderTextForeground)
+        , accent(accent)
+     { }
 
     QBrush foreground;
     QBrush selectionForeground;
     QBrush selectionBackground;
     QBrush alternateBackground;
     QBrush placeholderForeground;
+    QBrush accent;
 };
 
 struct QStyleSheetGeometryData : public QSharedData
@@ -955,10 +965,17 @@ QRenderRule::QRenderRule(const QList<Declaration> &declarations, const QObject *
         bg = new QStyleSheetBackgroundData(brush, pixmap, repeat, alignment, origin, attachment, clip);
     }
 
-    QBrush sfg, fg, pfg;
-    QBrush sbg, abg;
-    if (v.extractPalette(&fg, &sfg, &sbg, &abg, &pfg))
-        pal = new QStyleSheetPaletteData(fg, sfg, sbg, abg, pfg);
+    QBrush foreground;
+    QBrush selectedForeground;
+    QBrush selectedBackground;
+    QBrush alternateBackground;
+    QBrush placeHolderTextForeground;
+    QBrush accent;
+    if (v.extractPalette(&foreground, &selectedForeground, &selectedBackground,
+                         &alternateBackground, &placeHolderTextForeground, &accent)) {
+        pal = new QStyleSheetPaletteData(foreground, selectedForeground, selectedBackground,
+                                         alternateBackground, placeHolderTextForeground, accent);
+    }
 
     QIcon imgIcon;
     alignment = Qt::AlignCenter;
@@ -1497,6 +1514,8 @@ void QRenderRule::configurePalette(QPalette *p, QPalette::ColorGroup cg, const Q
         p->setBrush(cg, QPalette::AlternateBase, pal->alternateBackground);
     if (pal->placeholderForeground.style() != Qt::NoBrush)
         p->setBrush(cg, QPalette::PlaceholderText, pal->placeholderForeground);
+    if (pal->accent.style() != Qt::NoBrush)
+        p->setBrush(cg, QPalette::Accent, pal->accent);
 }
 
 bool QRenderRule::hasModification() const
@@ -4108,11 +4127,13 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
             QRenderRule subRule = renderRule(w, opt, PseudoElement_HeaderViewSection);
             if (hasStyleRule(w, PseudoElement_HeaderViewUpArrow)
              || hasStyleRule(w, PseudoElement_HeaderViewDownArrow)) {
-                const QRect arrowRect = subElementRect(SE_HeaderArrow, opt, w);
-                if (hdr.orientation == Qt::Horizontal)
-                    hdr.rect.setWidth(hdr.rect.width() - arrowRect.width());
-                else
-                    hdr.rect.setHeight(hdr.rect.height() - arrowRect.height());
+                if (hdr.sortIndicator != QStyleOptionHeader::None) {
+                    const QRect arrowRect = subElementRect(SE_HeaderArrow, opt, w);
+                    if (hdr.orientation == Qt::Horizontal)
+                        hdr.rect.setWidth(hdr.rect.width() - arrowRect.width());
+                    else
+                        hdr.rect.setHeight(hdr.rect.height() - arrowRect.height());
+                }
             }
             subRule.configurePalette(&hdr.palette, QPalette::ButtonText, QPalette::Button);
             if (subRule.hasFont) {
@@ -4360,24 +4381,23 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                                             vopt->state & QStyle::State_Selected
                                                         ? QPalette::Highlight
                                                         : QPalette::Base);
-                    // only draw the indicator; no text or background
+                    // only draw the indicator; no text, icon or background
                     optIndicator.backgroundBrush = Qt::NoBrush; // no background
                     optIndicator.text.clear();
+                    optIndicator.icon = QIcon();
                     QWindowsStyle::drawControl(ce, &optIndicator, p, w);
 
-                    // If the indicator has an icon, it has been drawn now.
-                    // => don't draw it again.
-                    optCopy.icon = QIcon();
-
-                    // Now draw text, background, and highlight, but not the indicator  with the
-                    // base style. Since we can't turn off HasCheckIndicator to prevent the base
+                    // Now draw text, background,icon, and highlight, but not the indicator  with
+                    // the base style. Since we can't turn off HasCheckIndicator to prevent the base
                     // style from drawing the check indicator again (it would change how the item
                     // gets laid out) we have to clip the indicator that's already been painted.
-                    const QRect checkRect = subElementRect(QStyle::SE_ItemViewItemCheckIndicator,
-                                                           &optIndicator, w);
+                    const QRect crStyle = subElementRect(QStyle::SE_ItemViewItemCheckIndicator,
+                                                         &optIndicator, w);
+                    const QRect crBase = baseStyle()->subElementRect(QStyle::SE_ItemViewItemCheckIndicator,
+                                                                     &optIndicator, w);
                     const QRegion clipRegion = QRegion(p->hasClipping() ? p->clipRegion()
                                                                         : QRegion(optIndicator.rect))
-                                             - checkRect;
+                                             - crStyle.united(crBase);
                     p->setClipRegion(clipRegion);
                 }
                 subRule.configurePalette(&optCopy.palette, QPalette::Text, QPalette::NoRole);
@@ -6205,8 +6225,22 @@ QRect QStyleSheetStyle::subElementRect(SubElement se, const QStyleOption *opt, c
 
     case SE_HeaderLabel: {
         QRenderRule subRule = renderRule(w, opt, PseudoElement_HeaderViewSection);
-        if (subRule.hasBox() || !subRule.hasNativeBorder())
-            return subRule.contentsRect(opt->rect);
+        if (subRule.hasBox() || !subRule.hasNativeBorder()) {
+            auto r = subRule.contentsRect(opt->rect);
+            if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(opt)) {
+                // Subtract width needed for arrow, if there is one
+                if (header->sortIndicator != QStyleOptionHeader::None) {
+                    const auto arrowRect = subElementRect(SE_HeaderArrow, opt, w);
+                    if (arrowRect.isValid()) {
+                        if (opt->state & State_Horizontal)
+                            r.setWidth(r.width() - arrowRect.width());
+                        else
+                            r.setHeight(r.height() - arrowRect.height());
+                    }
+                }
+            }
+            return r;
+        }
                          }
         break;
 

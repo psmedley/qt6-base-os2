@@ -5,6 +5,7 @@
 #include <private/qguiapplication_p.h>
 #include <QtCore/qfile.h>
 #include <QtGui/private/qwindow_p.h>
+#include <QtGui/private/qhighdpiscaling_p.h>
 #include <private/qpixmapcache_p.h>
 #include <QtGui/qopenglfunctions.h>
 #include <QBuffer>
@@ -20,7 +21,6 @@
 #include "qwasmcompositor.h"
 #include "qwasmevent.h"
 #include "qwasmeventdispatcher.h"
-#include "qwasmstring.h"
 #include "qwasmaccessibility.h"
 #include "qwasmclipboard.h"
 
@@ -68,9 +68,9 @@ QWasmWindow::QWasmWindow(QWindow *w, QWasmDeadKeySupport *deadKeySupport,
 
     QWasmClipboard::installEventHandlers(m_canvas);
 
-    // set inputmode to none to stop mobile keyboard opening
+    // set inputMode to none to stop mobile keyboard opening
     // when user clicks anywhere on the canvas.
-    m_canvas.set("inputmode", std::string("none"));
+    m_canvas.set("inputMode", std::string("none"));
 
     // Hide the canvas from screen readers.
     m_canvas.call<void>("setAttribute", std::string("aria-hidden"), std::string("true"));
@@ -94,6 +94,7 @@ QWasmWindow::QWasmWindow(QWindow *w, QWasmDeadKeySupport *deadKeySupport,
     emscripten::val::module_property("specialHTMLTargets").set(canvasSelector(), m_canvas);
 
     m_compositor->addWindow(this);
+    m_flags = window()->flags();
 
     const auto pointerCallback = std::function([this](emscripten::val event) {
         if (processPointer(*PointerEvent::fromWeb(event)))
@@ -122,9 +123,22 @@ QWasmWindow::QWasmWindow(QWindow *w, QWasmDeadKeySupport *deadKeySupport,
             event.call<void>("preventDefault");
     });
 
+   emscripten::val keyFocusWindow;
+    if (QWasmIntegration::get()->inputContext()) {
+        QWasmInputContext *wasmContext =
+            static_cast<QWasmInputContext *>(QWasmIntegration::get()->inputContext());
+        // if there is an touchscreen input context,
+        // use that window for key input
+        keyFocusWindow = wasmContext->m_inputElement;
+    } else {
+        keyFocusWindow = m_qtWindow;
+    }
+
     m_keyDownCallback =
-            std::make_unique<qstdweb::EventCallback>(m_qtWindow, "keydown", keyCallback);
-    m_keyUpCallback = std::make_unique<qstdweb::EventCallback>(m_qtWindow, "keyup", keyCallback);
+            std::make_unique<qstdweb::EventCallback>(keyFocusWindow, "keydown", keyCallback);
+    m_keyUpCallback = std::make_unique<qstdweb::EventCallback>(keyFocusWindow, "keyup", keyCallback);
+
+    setParent(parent());
 }
 
 QWasmWindow::~QWasmWindow()
@@ -169,6 +183,7 @@ void QWasmWindow::onNonClientAreaInteraction()
 {
     if (!isActive())
         requestActivateWindow();
+    QGuiApplicationPrivate::instance()->closeAllPopups();
 }
 
 bool QWasmWindow::onNonClientEvent(const PointerEvent &event)
@@ -208,11 +223,13 @@ void QWasmWindow::initialize()
     const QSize targetSize = !rect.isEmpty() ? rect.size() : minimumSize;
 
     rect.setWidth(qBound(minimumSize.width(), targetSize.width(), maximumSize.width()));
-    rect.setHeight(qBound(minimumSize.width(), targetSize.height(), maximumSize.height()));
+    rect.setHeight(qBound(minimumSize.height(), targetSize.height(), maximumSize.height()));
 
     setWindowState(window()->windowStates());
     setWindowFlags(window()->flags());
     setWindowTitle(window()->title());
+    setMask(QHighDpi::toNativeLocalRegion(window()->mask(), window()));
+
     if (window()->isTopLevel())
         setWindowIcon(window()->icon());
     m_normalGeometry = rect;
@@ -265,8 +282,11 @@ void QWasmWindow::setGeometry(const QRect &rect)
         const auto screenGeometry = screen()->geometry();
 
         QRect result(rect);
-        result.moveTop(std::max(std::min(rect.y(), screenGeometry.bottom()),
+        if (!parent()) {
+            // Clamp top level windows top position to the screen bounds
+            result.moveTop(std::max(std::min(rect.y(), screenGeometry.bottom()),
                                 screenGeometry.y() + margins.top()));
+        }
         result.setSize(
                 result.size().expandedTo(windowMinimumSize()).boundedTo(windowMaximumSize()));
         return result;
@@ -339,6 +359,8 @@ void QWasmWindow::raise()
 {
     m_compositor->raise(this);
     invalidate();
+    if (QWasmIntegration::get()->inputContext())
+        m_canvas.call<void>("focus");
 }
 
 void QWasmWindow::lower()
@@ -354,12 +376,14 @@ WId QWasmWindow::winId() const
 
 void QWasmWindow::propagateSizeHints()
 {
-    QRect rect = windowGeometry();
-    if (rect.size().width() < windowMinimumSize().width()
-        && rect.size().height() < windowMinimumSize().height()) {
-        rect.setSize(windowMinimumSize());
-        setGeometry(rect);
-    }
+    // setGeometry() will take care of minimum and maximum size constraints
+    setGeometry(windowGeometry());
+    m_nonClientArea->propagateSizeHints();
+}
+
+void QWasmWindow::setOpacity(qreal level)
+{
+    m_qtWindow["style"].set("opacity", qBound(0.0, level, 1.0));
 }
 
 void QWasmWindow::invalidate()
@@ -374,6 +398,8 @@ void QWasmWindow::onActivationChanged(bool active)
 
 void QWasmWindow::setWindowFlags(Qt::WindowFlags flags)
 {
+    if (flags.testFlag(Qt::WindowStaysOnTopHint) != m_flags.testFlag(Qt::WindowStaysOnTopHint))
+        m_compositor->windowPositionPreferenceChanged(this, flags);
     m_flags = flags;
     dom::syncCSSClassWith(m_qtWindow, "frameless", !hasFrame());
     dom::syncCSSClassWith(m_qtWindow, "has-border", hasBorder());
@@ -477,7 +503,7 @@ bool QWasmWindow::processKey(const KeyEvent &event)
 
 bool QWasmWindow::processPointer(const PointerEvent &event)
 {
-    if (event.pointerType != PointerType::Mouse)
+    if (event.pointerType != PointerType::Mouse && event.pointerType != PointerType::Pen)
         return false;
 
     switch (event.type) {
@@ -569,7 +595,7 @@ bool QWasmWindow::hasFrame() const
 bool QWasmWindow::hasBorder() const
 {
     return hasFrame() && !m_state.testFlag(Qt::WindowFullScreen) && !m_flags.testFlag(Qt::SubWindow)
-            && !windowIsPopupType(m_flags);
+            && !windowIsPopupType(m_flags) && !parent();
 }
 
 bool QWasmWindow::hasTitleBar() const
@@ -603,8 +629,10 @@ void QWasmWindow::requestActivateWindow()
         return;
     }
 
-    if (window()->isTopLevel())
+    if (window()->isTopLevel()) {
         raise();
+        m_compositor->setActive(this);
+    }
 
     if (!QWasmIntegration::get()->inputContext())
         m_canvas.call<void>("focus");

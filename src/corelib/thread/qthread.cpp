@@ -262,17 +262,16 @@ QThreadPrivate::~QThreadPrivate()
     documentation for terminate() and setTerminationEnabled() for
     detailed information.
 
-    From Qt 4.8 onwards, it is possible to deallocate objects that
-    live in a thread that has just ended, by connecting the
-    finished() signal to QObject::deleteLater().
+    You often want to deallocate objects that live in a thread when
+    a thread ends. To do this, connect the finished() signal to
+    QObject::deleteLater().
 
     Use wait() to block the calling thread, until the other thread
     has finished execution (or until a specified time has passed).
 
     QThread also provides static, platform independent sleep
     functions: sleep(), msleep(), and usleep() allow full second,
-    millisecond, and microsecond resolution respectively. These
-    functions were made public in Qt 5.0.
+    millisecond, and microsecond resolution respectively.
 
     \note wait() and the sleep() functions should be unnecessary in
     general, since Qt is an event-driven framework. Instead of
@@ -294,7 +293,8 @@ QThreadPrivate::~QThreadPrivate()
     Note that this is currently not available with release builds on Windows.
 
     \sa {Thread Support in Qt}, QThreadStorage, {Synchronizing Threads},
-        Mandelbrot, {Semaphores Example}, {Wait Conditions Example}
+        Mandelbrot, {Producer and Consumer using Semaphores},
+        {Producer and Consumer using Wait Conditions}
 */
 
 /*!
@@ -757,16 +757,28 @@ QThread::Priority QThread::priority() const
 }
 
 /*!
-    \fn void QThread::sleep(unsigned long secs)
+    \fn void QThread::sleep(std::chrono::nanoseconds nsecs)
+    \since 6.6
 
-    Forces the current thread to sleep for \a secs seconds.
+    Forces the current thread to sleep for \a nsecs.
 
     Avoid using this function if you need to wait for a given condition to
     change. Instead, connect a slot to the signal that indicates the change or
     use an event handler (see \l QObject::event()).
 
     \note This function does not guarantee accuracy. The application may sleep
-    longer than \a secs under heavy load conditions.
+    longer than \a nsecs under heavy load conditions.
+*/
+
+/*!
+    \fn void QThread::sleep(unsigned long secs)
+
+    Forces the current thread to sleep for \a secs seconds.
+
+    This is an overloaded function, equivalent to calling:
+    \code
+    QThread::sleep(std::chrono::seconds{secs});
+    \endcode
 
     \sa msleep(), usleep()
 */
@@ -774,11 +786,10 @@ QThread::Priority QThread::priority() const
 /*!
     \fn void QThread::msleep(unsigned long msecs)
 
-    Forces the current thread to sleep for \a msecs milliseconds.
-
-    Avoid using this function if you need to wait for a given condition to
-    change. Instead, connect a slot to the signal that indicates the change or
-    use an event handler (see \l QObject::event()).
+    This is an overloaded function, equivalent to calling:
+    \code
+    QThread::sleep(std::chrono::milliseconds{msecs});
+    \endcode
 
     \note This function does not guarantee accuracy. The application may sleep
     longer than \a msecs under heavy load conditions. Some OSes might round \a
@@ -790,11 +801,10 @@ QThread::Priority QThread::priority() const
 /*!
     \fn void QThread::usleep(unsigned long usecs)
 
-    Forces the current thread to sleep for \a usecs microseconds.
-
-    Avoid using this function if you need to wait for a given condition to
-    change. Instead, connect a slot to the signal that indicates the change or
-    use an event handler (see \l QObject::event()).
+    This is an overloaded function, equivalent to calling:
+    \code
+    QThread::sleep(std::chrono::microseconds{secs});
+    \endcode
 
     \note This function does not guarantee accuracy. The application may sleep
     longer than \a usecs under heavy load conditions. Some OSes might round \a
@@ -993,6 +1003,10 @@ void QThread::requestInterruption()
 bool QThread::isInterruptionRequested() const
 {
     return false;
+}
+
+void QThread::setTerminationEnabled(bool)
+{
 }
 
 // No threads: so we can just use static variables

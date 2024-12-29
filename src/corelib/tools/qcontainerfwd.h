@@ -1,10 +1,11 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
-#include <QtCore/qglobal.h>
-
 #ifndef QCONTAINERFWD_H
 #define QCONTAINERFWD_H
+
+#include <QtCore/qtconfigmacros.h>
+#include <QtCore/qtypes.h>
 
 #if 0
 #pragma qt_class(QtContainerFwd)
@@ -25,7 +26,8 @@ using QPair = std::pair<T1, T2>;
 template <typename T> class QQueue;
 template <typename T> class QSet;
 template <typename T> class QStack;
-template <typename T, qsizetype Prealloc = 256> class QVarLengthArray;
+constexpr qsizetype QVarLengthArrayDefaultPrealloc = 256;
+template <typename T, qsizetype Prealloc = QVarLengthArrayDefaultPrealloc> class QVarLengthArray;
 template <typename T> class QList;
 class QString;
 #ifndef Q_QDOC

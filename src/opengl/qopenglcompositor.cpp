@@ -4,7 +4,7 @@
 #include <QtOpenGL/QOpenGLFramebufferObject>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QWindow>
-#include <QtGui/private/qrhi_p.h>
+#include <rhi/qrhi.h>
 #include <qpa/qplatformbackingstore.h>
 
 #include "qopenglcompositor_p.h"
@@ -85,10 +85,21 @@ void QOpenGLCompositor::update()
 QImage QOpenGLCompositor::grab()
 {
     Q_ASSERT(m_context && m_targetWindow);
+    QOpenGLFramebufferObject fbo(m_nativeTargetGeometry.size());
+    grabToFrameBufferObject(&fbo);
+    return fbo.toImage();
+}
+
+bool QOpenGLCompositor::grabToFrameBufferObject(QOpenGLFramebufferObject *fbo)
+{
+    Q_ASSERT(fbo);
+    if (fbo->size() != m_nativeTargetGeometry.size()
+        || fbo->format().textureTarget() != GL_TEXTURE_2D)
+        return false;
+
     m_context->makeCurrent(m_targetWindow);
-    QScopedPointer<QOpenGLFramebufferObject> fbo(new QOpenGLFramebufferObject(m_nativeTargetGeometry.size()));
-    renderAll(fbo.data());
-    return fbo->toImage();
+    renderAll(fbo);
+    return true;
 }
 
 void QOpenGLCompositor::handleRenderAllRequest()

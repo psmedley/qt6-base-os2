@@ -9,6 +9,8 @@
 #include <QtCore/qcontainerfwd.h>
 #include <QtCore/qnamespace.h>
 
+#include <iterator>         // std::distance(), std::next()
+
 #ifdef Status
 #error qdatastream.h must be included before any header file that defines Status
 #endif
@@ -68,8 +70,9 @@ public:
         Qt_6_3 = Qt_6_0,
         Qt_6_4 = Qt_6_0,
         Qt_6_5 = Qt_6_0,
-        Qt_DefaultCompiledVersion = Qt_6_5
-#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+        Qt_6_6 = 21,
+        Qt_DefaultCompiledVersion = Qt_6_6
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
 #error Add the datastream version for this Qt version and update Qt_DefaultCompiledVersion
 #endif
     };
@@ -191,6 +194,7 @@ namespace QtPrivate {
 
 class StreamStateSaver
 {
+    Q_DISABLE_COPY_MOVE(StreamStateSaver)
 public:
     inline StreamStateSaver(QDataStream *s) : stream(s), oldStatus(s->status())
     {

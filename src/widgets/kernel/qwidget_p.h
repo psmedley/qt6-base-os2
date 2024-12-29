@@ -65,6 +65,7 @@ class QUnifiedToolbarSurface;
 
 // implemented in qshortcut.cpp
 bool qWidgetShortcutContextMatcher(QObject *object, Qt::ShortcutContext context);
+void qSendWindowChangeToTextureChildrenRecursively(QWidget *widget, QEvent::Type eventType);
 
 class QUpdateLaterEvent : public QEvent
 {
@@ -81,6 +82,7 @@ public:
     inline const QRegion &region() const { return m_region; }
 
 protected:
+    friend class QApplication;
     QRegion m_region;
 };
 
@@ -219,6 +221,8 @@ public:
     QPainter *sharedPainter() const;
     void setSharedPainter(QPainter *painter);
     QWidgetRepaintManager *maybeRepaintManager() const;
+
+    QRhi *rhi() const;
 
     enum class WindowHandleMode {
         Direct,
@@ -632,6 +636,8 @@ public:
     static void setWidgetParentHelper(QObject *widgetAsObject, QObject *newParent);
 
     std::string flagsForDumping() const override;
+
+    QWidget *closestParentWidgetWithWindowHandle() const;
 
     // Variables.
     // Regular pointers (keep them together to avoid gaps on 64 bit architectures).

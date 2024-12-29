@@ -25,7 +25,6 @@ public:
         qreal border = qMax(paperSize.height(), paperSize.width()) / 25;
         brect = QRectF(QPointF(-border, -border),
                        QSizeF(paperSize)+QSizeF(2*border, 2*border));
-        setCacheMode(DeviceCoordinateCache);
     }
 
     QRectF boundingRect() const override
@@ -362,6 +361,9 @@ void QPrintPreviewWidgetPrivate::generatePreview()
     //### emit paintRequested() until the user changes some parameter
 
     Q_Q(QPrintPreviewWidget);
+    // Avoid previewing a preview
+    if (printer->d_func()->previewMode())
+        return;
     printer->d_func()->setPreviewMode(true);
     emit q->paintRequested(printer);
     printer->d_func()->setPreviewMode(false);

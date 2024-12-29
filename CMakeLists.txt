@@ -1,8 +1,6 @@
 # Copyright (C) 2022 The Qt Company Ltd.
 # SPDX-License-Identifier: BSD-3-Clause
 
-# special case skip regeneration
-
 # Need an explicit call at the top level. This is the absolute minimum version
 # needed to configure the project with any combination of enabled features.
 # The call to qt_build_repo_begin() will upgrade policies further.
@@ -179,13 +177,6 @@ if(NOT QT_BUILD_STANDALONE_TESTS)
     add_subdirectory(src)
 endif()
 
-if(QT_BUILD_TESTS)
-    add_subdirectory(tests)
-    if(NOT QT_BUILD_TESTS_BY_DEFAULT)
-        set_property(DIRECTORY tests PROPERTY EXCLUDE_FROM_ALL TRUE)
-    endif()
-endif()
-
 if(NOT QT_BUILD_STANDALONE_TESTS)
     if(QT_WILL_BUILD_TOOLS AND QT_FEATURE_settings)
         add_subdirectory(qmake)
@@ -208,6 +199,15 @@ if(NOT QT_BUILD_STANDALONE_TESTS)
                                DESTINATION ${mkspecs_install_dir})
         endif()
     endforeach()
+endif()
+
+qt_build_repo_post_process()
+
+if(QT_BUILD_TESTS)
+    add_subdirectory(tests)
+    if(NOT QT_BUILD_TESTS_BY_DEFAULT)
+        set_property(DIRECTORY tests PROPERTY EXCLUDE_FROM_ALL TRUE)
+    endif()
 endif()
 
 qt_build_repo_end()

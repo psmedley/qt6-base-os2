@@ -782,21 +782,11 @@ void checkErrorOutput(const QString &test, const QByteArray &errorOutput)
     return; // Outputs "Received signal 6 (SIGABRT)"
 #endif
 
-#if defined(Q_OS_LINUX) || defined(Q_OS_OS2)
-        // QEMU and OS/2 kLIBC output to stderr about uncaught signals
-    // QEMU outputs to stderr about uncaught signals
-#ifdef Q_OS_OS2
-    if (
-#else
-    if (QTestPrivate::isRunningArmOnX86() &&
-#endif
-        (test == "assert"
-         || test == "crashes"
-         || test == "faildatatype"
-         || test == "failfetchtype"
-         || test == "silent"
-        ))
-        return;
+#ifdef Q_OS_LINUX
+    if (test == "silent") {
+        if (QTestPrivate::isRunningArmOnX86())
+            return;         // QEMU outputs to stderr about uncaught signals
+    }
 #endif
 
     INFO(errorOutput.toStdString());
@@ -939,6 +929,7 @@ static QProcessEnvironment testEnvironment()
         const bool preserveLibPath = qEnvironmentVariableIsSet("QT_PRESERVE_TESTLIB_PATH");
         foreach (const QString &key, systemEnvironment.keys()) {
             const bool useVariable = key == "PATH" || key == "QT_QPA_PLATFORM"
+                || key == "ASAN_OPTIONS"
 #if defined(Q_OS_QNX)
                 || key == "GRAPHICS_ROOT" || key == "TZ"
 #elif defined(Q_OS_UNIX)

@@ -26,19 +26,17 @@ protected:
 };
 
 // TorrentViewDelegate is used to draw the progress bars.
-class TorrentViewDelegate : public QItemDelegate
+class TorrentViewDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
 public:
-    inline TorrentViewDelegate(MainWindow *mainWindow) : QItemDelegate(mainWindow) {}
+    inline TorrentViewDelegate(MainWindow *mainWindow) : QStyledItemDelegate(mainWindow) {}
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
                const QModelIndex &index ) const override
     {
-        const TorrentClient *client = qobject_cast<MainWindow *>(parent())->clientForRow(index.row());
-
-        if (!client || index.column() != 2) {
-            QItemDelegate::paint(painter, option, index);
+        if (index.column() != 2) {
+            QStyledItemDelegate::paint(painter, option, index);
             return;
         }
 

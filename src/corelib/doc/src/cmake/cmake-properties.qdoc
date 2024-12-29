@@ -85,6 +85,33 @@ library to the MyApp dependencies:
 add_dependencies(MyApp MyService)
 \endcode
 
+When adding per-architecture libraries to a multi-abi project,
+list all their paths explicitly, rather than rely on variables like
+\c CMAKE_ANDROID_ARCH_ABI to dynamically compute the paths.
+
+Prefer:
+
+\badcode
+set(libs
+    ${CMAKE_CURRENT_BINARY_DIR}/libA_x86so
+    ${CMAKE_CURRENT_BINARY_DIR}/libA_x86_64.so
+    ${CMAKE_CURRENT_BINARY_DIR}/libA_arm64-v8a.so
+    ${CMAKE_CURRENT_BINARY_DIR}/libA_armeabi-v7a.so
+)
+set_target_properties(MyApp PROPERTIES QT_ANDROID_EXTRA_LIBS ${libs})
+
+# When targeting precompiled libs
+target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC libA_${ANDROID_ABI})
+\endcode
+
+over:
+
+\badcode
+set_target_properties(MyApp PROPERTIES
+    QT_ANDROID_EXTRA_LIBS
+        ${CMAKE_CURRENT_BINARY_DIR}/libA_${CMAKE_ANDROID_ARCH_ABI}.so
+\endcode
+
 \sa{qt6_android_generate_deployment_settings}{qt_android_generate_deployment_settings()}
 */
 
@@ -440,6 +467,33 @@ source file properties:
 
 When using the target-based variant of \l{qt6_add_resources}{qt_add_resources}
 the property value overrides the runtime path where the resource file is found.
+
+\sa{The Qt Resource System}
+*/
+
+/*!
+\page cmake-source-file-property-qt-discard-file-contents.html
+\ingroup cmake-source-file-properties-qtcore
+
+\title QT_DISCARD_FILE_CONTENTS
+\target cmake-source-file-property-QT_DISCARD_FILE_CONTENTS
+
+\summary {Specifies that the given files should be empty in the resource file system}
+
+\cmakepropertysince 6.6
+\preliminarycmakeproperty
+
+When using the target-based variant of \l{qt6_add_resources}{qt_add_resources}
+or \l{qt_add_qml_module}, setting this property to \c TRUE causes the file
+contents to be omitted when creating the resource file system. The file name is
+retained.
+
+This is useful if you want to strip QML source code from the binary.
+
+\note If you omit the QML source code from the binary, the QML engine has to
+rely on the compilation units created by \l{qmlcachegen} or \l{qmlsc}.
+Those are tied to the specific version of Qt they were built with. If you change
+the version of Qt your application uses, they can't be loaded anymore.
 
 \sa{The Qt Resource System}
 */

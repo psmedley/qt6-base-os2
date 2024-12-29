@@ -1082,7 +1082,7 @@ public:
     }
 };
 
-// mostly the same as qdbusintegrator.cpp:connectionCapabilies
+// mostly the same as qdbusintegrator.cpp:connectionCapabilities
 static bool canSendUnixFd(DBusConnection *connection)
 {
     typedef dbus_bool_t (*can_send_type_t)(DBusConnection *, int);
@@ -1145,6 +1145,7 @@ void tst_QDBusMarshall::receiveUnknownType()
         // now spin our event loop. We don't catch this call, so let's get the reply
         QEventLoop loop;
         QTimer::singleShot(200, &loop, SLOT(quit()));
+        QTest::ignoreMessage(QtWarningMsg, "QDBusConnection: couldn't handle call to theSlot, no slot matched");
         loop.exec();
 
         // now try to receive the reply

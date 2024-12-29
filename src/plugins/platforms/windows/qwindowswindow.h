@@ -78,7 +78,6 @@ struct QWindowsWindowData
 {
     Qt::WindowFlags flags;
     QRect geometry;
-    QRect preMoveGeometry;
     QRect restoreGeometry;
     QMargins fullFrameMargins; // Do not use directly for windows, see FrameDirty.
     QMargins customMargins;    // User-defined, additional frame for NCCALCSIZE
@@ -223,11 +222,6 @@ public:
     QRect restoreGeometry() const { return m_data.restoreGeometry; }
     void updateRestoreGeometry();
 
-    static QWindow *topTransientOf(QWindow *w);
-    QRect preMoveRect() const { return m_data.preMoveGeometry; }
-    void setPreMoveRect(const QRect &rect) { m_data.preMoveGeometry = rect; }
-    void moveTransientChildren();
-
     void setVisible(bool visible) override;
     bool isVisible() const;
     bool isExposed() const override { return testFlag(Exposed); }
@@ -330,7 +324,6 @@ public:
 
     void *surface(void *nativeConfig, int *err);
     void invalidateSurface() override;
-    void aboutToMakeCurrent();
 
     void setAlertState(bool enabled) override;
     bool isAlertState() const override { return testFlag(AlertState); }

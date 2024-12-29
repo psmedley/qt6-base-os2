@@ -169,9 +169,9 @@ bool QFSFileEnginePrivate::nativeSyncToDisk()
     Q_Q(QFSFileEngine);
     int ret;
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
-    EINTR_LOOP(ret, fdatasync(nativeHandle()));
+    QT_EINTR_LOOP(ret, fdatasync(nativeHandle()));
 #else
-    EINTR_LOOP(ret, fsync(nativeHandle()));
+    QT_EINTR_LOOP(ret, fsync(nativeHandle()));
 #endif
     if (ret != 0)
         q->setError(QFile::WriteError, qt_error_string(errno));
@@ -484,6 +484,12 @@ QString QFSFileEngine::fileName(FileName file) const
     case AbsoluteLinkTarget:
         if (d->isSymlink()) {
             QFileSystemEntry entry = QFileSystemEngine::getLinkTarget(d->fileEntry, d->metaData);
+            return entry.filePath();
+        }
+        return QString();
+    case RawLinkPath:
+        if (d->isSymlink()) {
+            QFileSystemEntry entry = QFileSystemEngine::getRawLinkPath(d->fileEntry, d->metaData);
             return entry.filePath();
         }
         return QString();

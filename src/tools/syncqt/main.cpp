@@ -7,8 +7,7 @@
  *     - Header file that contains the module version information, and named as <module>Vesion
  *     - LD version script if applicable
  *     - Aliases or copies of the header files sorted by the generic Qt-types: public/private/qpa
- * and stored in the corresponding directories. Also copies the aliases to the framework-specific
- *       directories.
+ * and stored in the corresponding directories.
  * Also the tool executes conformity checks on each header file if applicable, to make sure they
  * follow rules that are relevant for their header type.
  * The tool can be run in two modes: with either '-all' or '-headers' options specified. Depending
@@ -141,6 +140,12 @@ std::filesystem::path normilizedPath(const std::string &path)
     return std::filesystem::path(std::filesystem::weakly_canonical(path).generic_string());
 }
 
+void printFilesystemError(const std::filesystem::filesystem_error &fserr, std::string_view errorMsg)
+{
+    std::cerr << errorMsg << ": " << fserr.path1() << ".\n"
+              << fserr.what() << "(" << fserr.code().value() << ")" << std::endl;
+}
+
 bool createDirectories(const std::string &path, std::string_view errorMsg, bool *exists = nullptr)
 {
     bool result = true;
@@ -195,9 +200,9 @@ public:
 
     const std::string &privateIncludeDir() const { return m_privateIncludeDir; }
 
-    const std::string &frameworkIncludeDir() const { return m_frameworkIncludeDir; }
-
     const std::string &qpaIncludeDir() const { return m_qpaIncludeDir; }
+
+    const std::string &rhiIncludeDir() const { return m_rhiIncludeDir; }
 
     const std::string &stagingDir() const { return m_stagingDir; }
 
@@ -206,6 +211,8 @@ public:
     const std::set<std::string> &knownModules() const { return m_knownModules; }
 
     const std::regex &qpaHeadersRegex() const { return m_qpaHeadersRegex; }
+
+    const std::regex &rhiHeadersRegex() const { return m_rhiHeadersRegex; }
 
     const std::regex &privateHeadersRegex() const { return m_privateHeadersRegex; }
 
@@ -216,8 +223,6 @@ public:
     const std::set<std::string> &generatedHeaders() const { return m_generatedHeaders; }
 
     bool scanAllMode() const { return m_scanAllMode; }
-
-    bool isFramework() const { return m_isFramework; }
 
     bool isInternal() const { return m_isInternal; }
 
@@ -238,10 +243,9 @@ public:
     void printHelp() const
     {
         std::cout << "Usage: syncqt -sourceDir <dir> -binaryDir <dir> -module <module name>"
-                     " -includeDir <dir> -privateIncludeDir <dir> -qpaIncludeDir <dir>"
+                     " -includeDir <dir> -privateIncludeDir <dir> -qpaIncludeDir <dir> -rhiIncludeDir <dir>"
                      " -stagingDir <dir> <-headers <header list>|-all> [-debug]"
-                     " [-versionScript <path>] [-qpaHeadersFilter <regex>]"
-                     " [-framework [-frameworkIncludeDir <dir>]]"
+                     " [-versionScript <path>] [-qpaHeadersFilter <regex>] [-rhiHeadersFilter <regex>]"
                      " [-knownModules <module1> <module2>... <moduleN>]"
                      " [-nonQt] [-internal] [-copy]\n"
                      ""
@@ -262,6 +266,8 @@ public:
                      "                                  generated private header files.\n"
                      "  -qpaIncludeDir                  Module include directory for the \n"
                      "                                  generated QPA header files.\n"
+                     "  -rhiIncludeDir                  Module include directory for the \n"
+                     "                                  generated RHI header files.\n"
                      "  -stagingDir                     Temporary staging directory to collect\n"
                      "                                  artifacts that need to be installed.\n"
                      "  -knownModules                   list of known modules. syncqt uses the\n"
@@ -275,16 +281,14 @@ public:
                      "                                  from the list of 'headers'.\n"
                      "  -qpaHeadersFilter               Regex that filters qpa header files from.\n"
                      "                                  the list of 'headers'.\n"
+                     "  -rhiHeadersFilter               Regex that filters rhi header files from.\n"
+                     "                                  the list of 'headers'.\n"
                      "  -publicNamespaceFilter          Symbols that are in the specified\n"
                      "                                  namespace.\n"
                      "                                  are treated as public symbols.\n"
                      "  -versionScript                  Generate linker version script by\n"
                      "                                  provided path.\n"
                      "  -debug                          Enable debug output.\n"
-                     "  -framework                      Indicates that module is framework.\n"
-                     "  -frameworkIncludeDir            The directory to store the framework\n"
-                     "                                  header files.\n"
-                     "                                  E.g. QtCore.framework/Versions/A/Headers\n"
                      "  -copy                           Copy header files instead of creating\n"
                      "                                  aliases.\n"
                      "  -minimal                        Do not create CaMeL case headers for the\n"
@@ -312,6 +316,7 @@ private:
     [[nodiscard]] bool parseArguments(int argc, char *argv[])
     {
         std::string qpaHeadersFilter;
+        std::string rhiHeadersFilter;
         std::string privateHeadersFilter;
         std::string publicNamespaceFilter;
         static std::unordered_map<std::string, CommandLineOption<std::string>> stringArgumentMap = {
@@ -320,12 +325,13 @@ private:
             { "-binaryDir", { &m_binaryDir } },
             { "-privateHeadersFilter", { &privateHeadersFilter, true } },
             { "-qpaHeadersFilter", { &qpaHeadersFilter, true } },
+            { "-rhiHeadersFilter", { &rhiHeadersFilter, true } },
             { "-includeDir", { &m_includeDir } },
             { "-privateIncludeDir", { &m_privateIncludeDir } },
             { "-qpaIncludeDir", { &m_qpaIncludeDir } },
+            { "-rhiIncludeDir", { &m_rhiIncludeDir } },
             { "-stagingDir", { &m_stagingDir, true } },
             { "-versionScript", { &m_versionScriptFile, true } },
-            { "-frameworkIncludeDir", { &m_frameworkIncludeDir, true } },
             { "-publicNamespaceFilter", { &publicNamespaceFilter, true } },
         };
 
@@ -338,7 +344,7 @@ private:
 
         static const std::unordered_map<std::string, CommandLineOption<bool>> boolArgumentMap = {
             { "-nonQt", { &m_isNonQtModule, true } }, { "-debug", { &m_debug, true } },
-            { "-help", { &m_printHelpOnly, true } },  { "-framework", { &m_isFramework, true } },
+            { "-help", { &m_printHelpOnly, true } },
             { "-internal", { &m_isInternal, true } }, { "-all", { &m_scanAllMode, true } },
             { "-copy", { &m_copy, true } },           { "-minimal", { &m_minimal, true } },
             { "-showonly", { &m_showOnly, true } },   { "-showOnly", { &m_showOnly, true } },
@@ -437,6 +443,9 @@ private:
         if (!qpaHeadersFilter.empty())
             m_qpaHeadersRegex = std::regex(qpaHeadersFilter);
 
+        if (!rhiHeadersFilter.empty())
+            m_rhiHeadersRegex = std::regex(rhiHeadersFilter);
+
         if (!privateHeadersFilter.empty())
             m_privateHeadersRegex = std::regex(privateHeadersFilter);
 
@@ -471,7 +480,8 @@ private:
     {
         static std::array<std::string *, 8> paths = {
             &m_sourceDir,     &m_binaryDir,  &m_includeDir,        &m_privateIncludeDir,
-            &m_qpaIncludeDir, &m_stagingDir, &m_versionScriptFile, &m_frameworkIncludeDir
+            &m_qpaIncludeDir, &m_rhiIncludeDir, &m_stagingDir,
+            &m_versionScriptFile,
         };
         for (auto path : paths) {
             if (!path->empty())
@@ -485,15 +495,14 @@ private:
     std::string m_includeDir;
     std::string m_privateIncludeDir;
     std::string m_qpaIncludeDir;
+    std::string m_rhiIncludeDir;
     std::string m_stagingDir;
     std::string m_versionScriptFile;
-    std::string m_frameworkIncludeDir;
     std::set<std::string> m_knownModules;
     std::set<std::string> m_headers;
     std::set<std::string> m_generatedHeaders;
     bool m_scanAllMode = false;
     bool m_copy = false;
-    bool m_isFramework = false;
     bool m_isNonQtModule = false;
     bool m_isInternal = false;
     bool m_printHelpOnly = false;
@@ -502,6 +511,7 @@ private:
     bool m_showOnly = false;
     bool m_warningsAreErrors = false;
     std::regex m_qpaHeadersRegex;
+    std::regex m_rhiHeadersRegex;
     std::regex m_privateHeadersRegex;
     std::regex m_publicNamespaceRegex;
 
@@ -573,7 +583,7 @@ class SyncScanner
     size_t m_currentFileLineNumber = 0;
     bool m_currentFileInSourceDir = false;
 
-    enum FileType { PublicHeader = 0, PrivateHeader = 1, QpaHeader = 2, ExportHeader = 4 };
+    enum FileType { PublicHeader = 0, PrivateHeader = 1, QpaHeader = 2, ExportHeader = 4, RhiHeader = 8 };
     unsigned int m_currentFileType = PublicHeader;
 
     int m_criticalChecks = CriticalChecks;
@@ -720,13 +730,6 @@ public:
             // process eaiser.
             if (!copyGeneratedHeadersToStagingDirectory(m_commandLineArgs->stagingDir()))
                 error = SyncFailed;
-            // We also need to have a copy of the generated header files in framework include
-            // directories when building with '-framework'.
-            if (m_commandLineArgs->isFramework()) {
-                if (!copyGeneratedHeadersToStagingDirectory(
-                            m_commandLineArgs->frameworkIncludeDir(), true))
-                    error = SyncFailed;
-            }
         }
         return error;
     }
@@ -743,26 +746,31 @@ public:
             return false;
 
         if (outDirExists && !skipCleanup) {
-            for (const auto &entry :
-                 std::filesystem::recursive_directory_iterator(outputDirectory)) {
-                if (m_producedHeaders.find(entry.path().filename().generic_string())
-                    == m_producedHeaders.end()) {
-                    // Check if header file came from another module as result of the cross-module
-                    // deprecation before removing it.
-                    std::string firstLine;
-                    {
-                        std::ifstream input(entry.path(), std::ifstream::in);
-                        if (input.is_open()) {
-                            std::getline(input, firstLine);
-                            input.close();
+            try {
+                for (const auto &entry :
+                     std::filesystem::recursive_directory_iterator(outputDirectory)) {
+                    if (m_producedHeaders.find(entry.path().filename().generic_string())
+                        == m_producedHeaders.end()) {
+                        // Check if header file came from another module as result of the
+                        // cross-module deprecation before removing it.
+                        std::string firstLine;
+                        {
+                            std::ifstream input(entry.path(), std::ifstream::in);
+                            if (input.is_open()) {
+                                std::getline(input, firstLine);
+                                input.close();
+                            }
                         }
+                        if (firstLine.find("#ifndef DEPRECATED_HEADER_"
+                                           + m_commandLineArgs->moduleName())
+                                    == 0
+                            || firstLine.find("#ifndef DEPRECATED_HEADER_") != 0)
+                            std::filesystem::remove(entry.path());
                     }
-                    if (firstLine.find("#ifndef DEPRECATED_HEADER_"
-                                       + m_commandLineArgs->moduleName())
-                                == 0
-                        || firstLine.find("#ifndef DEPRECATED_HEADER_") != 0)
-                        std::filesystem::remove(entry.path());
                 }
+            } catch (const std::filesystem::filesystem_error &fserr) {
+                utils::printFilesystemError(fserr, "Unable to clean the staging directory");
+                return false;
             }
         }
 
@@ -792,6 +800,9 @@ public:
 
         if (isHeaderQpa(m_currentFilename))
             m_currentFileType = QpaHeader | PrivateHeader;
+
+        if (isHeaderRhi(m_currentFilename))
+            m_currentFileType = RhiHeader | PrivateHeader;
 
         if (std::regex_match(m_currentFilename, ExportsHeaderRegex))
             m_currentFileType |= ExportHeader;
@@ -830,12 +841,14 @@ public:
 
         bool isPrivate = m_currentFileType & PrivateHeader;
         bool isQpa = m_currentFileType & QpaHeader;
+        bool isRhi = m_currentFileType & RhiHeader;
         bool isExport = m_currentFileType & ExportHeader;
         scannerDebug()
             << "processHeader:start: " << headerFile
             << " m_currentFilename: " << m_currentFilename
             << " isPrivate: " << isPrivate
             << " isQpa: " << isQpa
+            << " isRhi: " << isRhi
             << std::endl;
 
         // Chose the directory where to generate the header aliases or to copy header file if
@@ -843,6 +856,8 @@ public:
         std::string outputDir = m_commandLineArgs->includeDir();
         if (isQpa)
             outputDir = m_commandLineArgs->qpaIncludeDir();
+        else if (isRhi)
+            outputDir = m_commandLineArgs->rhiIncludeDir();
         else if (isPrivate)
             outputDir = m_commandLineArgs->privateIncludeDir();
 
@@ -851,12 +866,7 @@ public:
 
         bool headerFileExists = std::filesystem::exists(headerFile);
 
-        std::filesystem::path headerFileRootName =
-                std::filesystem::weakly_canonical(headerFile, ec).root_name();
-        std::string aliasedFilepath = !ec && headerFileRootName == m_outputRootName
-                ? std::filesystem::relative(headerFile, outputDir).generic_string()
-                : headerFile.generic_string();
-        ec.clear();
+        std::string aliasedFilepath = headerFile.generic_string();
 
         std::string aliasPath = outputDir + '/' + m_currentFilename;
 
@@ -901,7 +911,7 @@ public:
             unsigned int skipChecks = m_commandLineArgs->scanAllMode() ? AllChecks : NoChecks;
 
             // Collect checks that should skipped for the header file.
-            if (m_commandLineArgs->isNonQtModule() || is3rdParty || isQpa
+            if (m_commandLineArgs->isNonQtModule() || is3rdParty || isQpa || isRhi
                 || !m_currentFileInSourceDir || isGenerated) {
                 skipChecks = AllChecks;
             } else {
@@ -922,7 +932,7 @@ public:
 
             ParsingResult parsingResult;
             parsingResult.masterInclude = m_currentFileInSourceDir && !isExport && !is3rdParty
-                    && !isQpa && !isPrivate && !isGenerated;
+                    && !isQpa && !isRhi && !isPrivate && !isGenerated;
             if (!parseHeader(headerFile, parsingResult, skipChecks)) {
                 scannerDebug() << "parseHeader failed: " << headerFile << std::endl;
                 return false;
@@ -939,7 +949,7 @@ public:
             // Add the '#if QT_CONFIG(<feature>)' check for header files that supposed to be
             // included into the module master header only if corresponding feature is enabled.
             bool willBeInModuleMasterHeader = false;
-            if (!isQpa && !isPrivate) {
+            if (!isQpa && !isRhi && !isPrivate) {
                 if (m_currentFilename.find('_') == std::string::npos
                     && parsingResult.masterInclude) {
                     m_masterHeaderContents[m_currentFilename] = parsingResult.requireConfig;
@@ -1144,6 +1154,11 @@ public:
         std::size_t linesProcessed = 0;
         int faults = NoChecks;
 
+        const auto error = [&] () -> decltype(auto) {
+            return std::cerr << ErrorMessagePreamble << m_currentFileString
+                             << ":" << m_currentFileLineNumber << " ";
+        };
+
         // Read file line by line
         while (std::getline(input, tmpLine)) {
             ++m_currentFileLineNumber;
@@ -1232,7 +1247,7 @@ public:
             ++linesProcessed;
 
             bool skipSymbols =
-                    (m_currentFileType & PrivateHeader) || (m_currentFileType & QpaHeader);
+                    (m_currentFileType & PrivateHeader) || (m_currentFileType & QpaHeader) || (m_currentFileType & RhiHeader);
 
             // Parse pragmas
             if (std::regex_match(buffer, MacroRegex)) {
@@ -1267,9 +1282,7 @@ public:
                                                        .filename()
                                                        .generic_string())) {
                             faults |= PrivateHeaderChecks;
-                            std::cerr << ErrorMessagePreamble << m_currentFileString
-                                      << ":" << m_currentFileLineNumber
-                                      << " includes private header " << includedHeader << std::endl;
+                            error() << "includes private header " << includedHeader << std::endl;
                         }
                         for (const auto &module : m_commandLineArgs->knownModules()) {
                             std::string suggestedHeader = "Qt" + module + '/' + includedHeader;
@@ -1414,6 +1427,11 @@ public:
         return std::regex_match(headerFileName, m_commandLineArgs->qpaHeadersRegex());
     }
 
+    [[nodiscard]] bool isHeaderRhi(const std::string &headerFileName)
+    {
+        return std::regex_match(headerFileName, m_commandLineArgs->rhiHeadersRegex());
+    }
+
     [[nodiscard]] bool isHeaderPrivate(const std::string &headerFile)
     {
         return std::regex_match(headerFile, m_commandLineArgs->privateHeadersRegex());
@@ -1514,7 +1532,7 @@ public:
                 versionDisclaimer = " and will be removed in Qt " + version;
                 int minor = 0;
                 int major = 0;
-                if (!utils::parseVersion(version, minor, major)) {
+                if (!utils::parseVersion(version, major, minor)) {
                     std::cerr << ErrorMessagePreamble
                               << "Invalid version format specified for the deprecated header file "
                               << headerPath << ": '" << version
@@ -1568,12 +1586,6 @@ public:
             if (isCrossModuleDeprecation) {
                 const std::string stagingDir = outputDir + "/.syncqt_staging/";
                 writeIfDifferent(stagingDir + headerName, buffer.str());
-                if (m_commandLineArgs->isFramework()) {
-                    const std::string frameworkStagingDir = stagingDir + moduleName
-                            + ".framework/Versions/A/Headers/" QT_VERSION_STR "/"
-                            + moduleName.substr(2) + '/';
-                    writeIfDifferent(frameworkStagingDir + headerName, buffer.str());
-                }
             }
             m_producedHeaders.insert(headerName);
         }

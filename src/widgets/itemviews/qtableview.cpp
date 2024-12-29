@@ -4,7 +4,7 @@
 #include "qtableview.h"
 
 #include <qheaderview.h>
-#include <qitemdelegate.h>
+#include <qabstractitemdelegate.h>
 #include <qapplication.h>
 #include <qpainter.h>
 #include <qstyle.h>
@@ -3478,7 +3478,7 @@ void QTableView::currentChanged(const QModelIndex &current, const QModelIndex &p
 {
 #if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
-        if (current.isValid()) {
+        if (current.isValid() && hasFocus()) {
             Q_D(QTableView);
             int entry = d->accessibleTable2Index(current);
             QAccessibleEvent event(this, QAccessible::Focus);

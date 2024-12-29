@@ -15,6 +15,7 @@ qt_internal_add_test(tst_qmimedatabase-xml
         tst_qmimedatabase-xml.cpp
     LIBRARIES
         Qt::Concurrent
+        Qt::CorePrivate
 )
 
 # Resources:
@@ -23,6 +24,8 @@ qt_internal_add_test(tst_qmimedatabase-xml
     #"mime/packages/freedesktop.org.xml"
 #)
 set(testdata_resource_files
+    "../circular-inheritance.xml"
+    "../add-extension.xml"
     "../invalid-magic1.xml"
     "../invalid-magic2.xml"
     "../invalid-magic3.xml"
@@ -32,6 +35,8 @@ set(testdata_resource_files
     "../qml-again.xml"
     "../test.qml"
     "../text-x-objcsrc.xml"
+    "../text-plain-subclass.xml"
+    "../webm-glob-deleteall.xml"
     "../yast2-metapackage-handler-mimetypes.xml"
 )
 

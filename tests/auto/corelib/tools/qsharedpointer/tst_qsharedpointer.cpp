@@ -1275,6 +1275,22 @@ void tst_QSharedPointer::virtualBaseDifferentPointers()
         QVERIFY(baseptr == aBase);
     }
     safetyCheck();
+    {
+        VirtualDerived *aData = new VirtualDerived;
+
+        QSharedPointer<VirtualDerived> ptr = QSharedPointer<VirtualDerived>(aData);
+        QWeakPointer<VirtualDerived> wptr = ptr;
+
+        ptr.reset();
+        QVERIFY(wptr.toStrongRef().isNull());
+
+        QWeakPointer<Data> wptr2 = wptr;
+        QVERIFY(wptr2.toStrongRef().isNull());
+
+        QWeakPointer<Data> wptr3 = std::move(wptr);
+        QVERIFY(wptr3.toStrongRef().isNull());
+    }
+    safetyCheck();
 }
 
 #ifndef QTEST_NO_RTTI
@@ -1982,7 +1998,7 @@ class StrongThread: public QThread
 protected:
     void run() override
     {
-        usleep(QRandomGenerator::global()->bounded(2000));
+        sleep(std::chrono::microseconds{QRandomGenerator::global()->bounded(2000)});
         ptr->ref();
         ptr.clear();
     }
@@ -1995,7 +2011,7 @@ class WeakThread: public QThread
 protected:
     void run() override
     {
-        usleep(QRandomGenerator::global()->bounded(2000));
+        sleep(std::chrono::microseconds{QRandomGenerator::global()->bounded(2000)});
         QSharedPointer<ThreadData> ptr = weak;
         if (ptr)
             ptr->ref();

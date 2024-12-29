@@ -6,7 +6,7 @@
 #include <QtGui/QPainter>
 #include <qpa/qplatformbackingstore.h>
 #include <private/qwindow_p.h>
-#include <private/qrhi_p.h>
+#include <rhi/qrhi.h>
 
 #include "qopenglcompositorbackingstore_p.h"
 #include "qopenglcompositor_p.h"
@@ -137,6 +137,9 @@ void QOpenGLCompositorBackingStore::updateTexture()
 void QOpenGLCompositorBackingStore::flush(QWindow *window, const QRegion &region, const QPoint &offset)
 {
     // Called for ordinary raster windows.
+    auto *handle = dynamic_cast<QOpenGLCompositorWindow *>(window->handle());
+    if (handle && !handle->backingStore())
+        handle->setBackingStore(this);
 
     Q_UNUSED(region);
     Q_UNUSED(offset);

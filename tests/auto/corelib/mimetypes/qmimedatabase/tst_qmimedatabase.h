@@ -25,7 +25,6 @@ private slots:
     void mimeTypeForFileName();
     void mimeTypesForFileName_data();
     void mimeTypesForFileName();
-    void mimeTypesForFileName_glob_deleteall();
     void inheritance();
     void aliases();
     void listAliases_data();
@@ -36,8 +35,8 @@ private slots:
     void mimeTypeForUrl();
     void mimeTypeForData_data();
     void mimeTypeForData();
-    void mimeTypeForFileAndContent_data();
-    void mimeTypeForFileAndContent();
+    void mimeTypeForFileNameAndData_data();
+    void mimeTypeForFileNameAndData();
 #ifdef Q_OS_UNIX
     void mimeTypeForUnixSpecials_data();
     void mimeTypeForUnixSpecials();
@@ -63,6 +62,7 @@ private slots:
     //
 
     void installNewGlobalMimeType();
+    void installNewLocalMimeType_data();
     void installNewLocalMimeType();
 
 private:

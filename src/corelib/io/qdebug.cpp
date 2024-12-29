@@ -15,6 +15,8 @@
 #include <private/qtextstream_p.h>
 #include <private/qtools_p.h>
 
+#include <q20chrono.h>
+
 QT_BEGIN_NAMESPACE
 
 using namespace QtMiscUtils;
@@ -343,6 +345,95 @@ void QDebug::putByteArray(const char *begin, size_t length, Latin1Content conten
         putEscapedString(stream->ts.d_ptr.data(), reinterpret_cast<const uchar *>(begin),
                          length, content == ContainsLatin1);
     }
+}
+
+static QByteArray timeUnit(qint64 num, qint64 den)
+{
+    using namespace std::chrono;
+    using namespace q20::chrono;
+
+    if (num == 1 && den > 1) {
+        // sub-multiple of seconds
+        char prefix = '\0';
+        auto tryprefix = [&](auto d, char c) {
+            static_assert(decltype(d)::num == 1, "not an SI prefix");
+            if (den == decltype(d)::den)
+                prefix = c;
+        };
+
+        // "u" should be "µ", but debugging output is not always UTF-8-safe
+        tryprefix(std::milli{}, 'm');
+        tryprefix(std::micro{}, 'u');
+        tryprefix(std::nano{}, 'n');
+        tryprefix(std::pico{}, 'p');
+        tryprefix(std::femto{}, 'f');
+        tryprefix(std::atto{}, 'a');
+        // uncommon ones later
+        tryprefix(std::centi{}, 'c');
+        tryprefix(std::deci{}, 'd');
+        if (prefix) {
+            char unit[3] = { prefix, 's' };
+            return QByteArray(unit, sizeof(unit) - 1);
+        }
+    }
+
+    const char *unit = nullptr;
+    if (num > 1 && den == 1) {
+        // multiple of seconds - but we don't use SI prefixes
+        auto tryunit = [&](auto d, const char *name) {
+            static_assert(decltype(d)::period::den == 1, "not a multiple of a second");
+            if (unit || num % decltype(d)::period::num)
+                return;
+            unit = name;
+            num /= decltype(d)::period::num;
+        };
+        tryunit(years{}, "yr");
+        tryunit(weeks{}, "wk");
+        tryunit(days{}, "d");
+        tryunit(hours{}, "h");
+        tryunit(minutes{}, "min");
+    }
+    if (!unit)
+        unit = "s";
+
+    if (num == 1 && den == 1)
+        return unit;
+    if (Q_UNLIKELY(num < 1 || den < 1))
+        return QString::asprintf("<invalid time unit %lld/%lld>", num, den).toLatin1();
+
+    // uncommon units: will return something like "[2/3]s"
+    //  strlen("[/]min") = 6
+    char buf[2 * (std::numeric_limits<qint64>::digits10 + 2) + 10];
+    size_t len = 0;
+    auto appendChar = [&](char c) {
+        Q_ASSERT(len < sizeof(buf));
+        buf[len++] = c;
+    };
+    auto appendNumber = [&](qint64 value) {
+        if (value >= 10'000 && (value % 1000) == 0)
+            len += qsnprintf(buf + len, sizeof(buf) - len, "%.6g", double(value));  // "1e+06"
+        else
+            len += qsnprintf(buf + len, sizeof(buf) - len, "%lld", value);
+    };
+    appendChar('[');
+    appendNumber(num);
+    if (den != 1) {
+        appendChar('/');
+        appendNumber(den);
+    }
+    appendChar(']');
+    memcpy(buf + len, unit, strlen(unit));
+    return QByteArray(buf, len + strlen(unit));
+}
+
+/*!
+    \since 6.6
+    \internal
+    Helper to the std::chrono::duration debug streaming output.
+ */
+void QDebug::putTimeUnit(qint64 num, qint64 den)
+{
+    stream->ts << timeUnit(num, den); // ### optimize
 }
 
 /*!
@@ -777,6 +868,18 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
+    \since 6.6
+    \fn template <typename Rep, typename Period> QDebug &QDebug::operator<<(std::chrono::duration<Rep, Period> duration)
+
+    Prints the time duration \a duration to the stream and returns a reference
+    to the stream. The printed string is the numeric representation of the
+    period followed by the time unit, similar to what the C++ Standard Library
+    would produce with \c{std::ostream}.
+
+    The unit is not localized.
+*/
+
+/*!
     \fn template <class T> QString QDebug::toString(T &&object)
     \since 6.0
 
@@ -877,14 +980,6 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
-    \fn template <class T1, class T2> QDebug operator<<(QDebug debug, const QPair<T1, T2> &pair)
-    \relates QDebug
-
-    Writes the contents of \a pair to \a debug. Both \c T1 and
-    \c T2 need to support streaming into QDebug.
-*/
-
-/*!
     \fn template <class T1, class T2> QDebug operator<<(QDebug debug, const std::pair<T1, T2> &pair)
     \relates QDebug
 
@@ -942,7 +1037,7 @@ QDebug &QDebug::resetFormat()
 
     QDebugStateSaver is typically used in the implementation of an operator<<() for debugging:
 
-    \snippet tools/customtype/message.cpp custom type streaming operator
+    \snippet customtype/customtypeexample.cpp custom type streaming operator
 
     \since 5.1
 */
@@ -1023,7 +1118,6 @@ void qt_QMetaEnum_flagDebugOperator(QDebug &debug, size_t sizeofT, int value)
 
 #ifndef QT_NO_QOBJECT
 /*!
-    \fn QDebug qt_QMetaEnum_debugOperator(QDebug &, int value, const QMetaObject *, const char *name)
     \internal
 
     Formats the given enum \a value for debug output.
@@ -1070,7 +1164,7 @@ QDebug qt_QMetaEnum_debugOperator(QDebug &dbg, qint64 value, const QMetaObject *
             dbg << scope << u"::";
     }
 
-    const char *key = me.valueToKey(value);
+    const char *key = me.valueToKey(static_cast<int>(value));
     const bool scoped = me.isScoped() || verbosity & 1;
     if (scoped || !key)
         dbg << me.enumName() << (!key ? u"(" : u"::");
@@ -1139,7 +1233,7 @@ QDebug qt_QMetaEnum_flagDebugOperator(QDebug &debug, quint64 value, const QMetaO
         debug << '(';
     }
 
-    debug << me.valueToKeys(value);
+    debug << me.valueToKeys(static_cast<int>(value));
 
     if (enumScope)
         debug << ')';

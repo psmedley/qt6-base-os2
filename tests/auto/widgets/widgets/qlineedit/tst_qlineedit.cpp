@@ -267,6 +267,8 @@ private slots:
     void inputMethodQueryImHints_data();
     void inputMethodQueryImHints();
 
+    void inputMethodQueryEnterKeyType();
+
     void inputMethodUpdate();
 
     void undoRedoAndEchoModes_data();
@@ -291,6 +293,11 @@ private slots:
     void testQuickSelectionWithMouse();
     void inputRejected();
     void keyReleasePropagates();
+
+#if QT_CONFIG(shortcut)
+    void deleteWordByKeySequence_data();
+    void deleteWordByKeySequence();
+#endif
 
 protected slots:
     void editingFinished();
@@ -1588,44 +1595,14 @@ void tst_QLineEdit::textMask()
     QCOMPARE( testWidget->text(), insertString );
 }
 
-class LineEditChangingText : public QLineEdit
-{
-    Q_OBJECT
-
-public:
-    LineEditChangingText(QWidget *parent) : QLineEdit(parent)
-    {
-        connect(this, &QLineEdit::textEdited, this, &LineEditChangingText::onTextEdited);
-    }
-
-public slots:
-    void onTextEdited(const QString &text)
-    {
-        if (text.length() == 3)
-            setText(text + "-");
-    }
-};
-
 void tst_QLineEdit::setText()
 {
     QLineEdit *testWidget = ensureTestWidget();
-    {
-        QSignalSpy editedSpy(testWidget, &QLineEdit::textEdited);
-        QSignalSpy changedSpy(testWidget, &QLineEdit::textChanged);
-        testWidget->setText("hello");
-        QCOMPARE(editedSpy.size(), 0);
-        QCOMPARE(changedSpy.value(0).value(0).toString(), QString("hello"));
-    }
-
-    QTestEventList keys;
-    keys.addKeyClick(Qt::Key_A);
-    keys.addKeyClick(Qt::Key_B);
-    keys.addKeyClick(Qt::Key_C);
-
-    LineEditChangingText lineEdit(nullptr);
-    keys.simulate(&lineEdit);
-    QCOMPARE(lineEdit.text(), "abc-");
-    QCOMPARE(lineEdit.cursorPosition(), 4);
+    QSignalSpy editedSpy(testWidget, SIGNAL(textEdited(QString)));
+    QSignalSpy changedSpy(testWidget, SIGNAL(textChanged(QString)));
+    testWidget->setText("hello");
+    QCOMPARE(editedSpy.size(), 0);
+    QCOMPARE(changedSpy.value(0).value(0).toString(), QString("hello"));
 }
 
 void tst_QLineEdit::displayText_data()
@@ -4441,6 +4418,33 @@ void tst_QLineEdit::inputMethodQueryImHints()
     QCOMPARE(static_cast<Qt::InputMethodHints>(value.toInt()), hints);
 }
 
+void tst_QLineEdit::inputMethodQueryEnterKeyType()
+{
+    QWidget mw;
+    QVBoxLayout layout(&mw);
+    QLineEdit le1(&mw);
+    layout.addWidget(&le1);
+    mw.show();
+    QVariant enterType = le1.inputMethodQuery(Qt::ImEnterKeyType);
+    QCOMPARE(enterType.value<Qt::EnterKeyType>(), Qt::EnterKeyDefault);
+
+    mw.hide();
+    QLineEdit le2(&mw);
+    layout.addWidget(&le2);
+    mw.show();
+
+    enterType = le1.inputMethodQuery(Qt::ImEnterKeyType);
+#ifdef Q_OS_ANDROID
+    // QTBUG-61652
+    // EnterKey is changed to EnterKeyNext if the focus can be moved to widget below
+    QCOMPARE(enterType.value<Qt::EnterKeyType>(), Qt::EnterKeyNext);
+#else
+    QCOMPARE(enterType.value<Qt::EnterKeyType>(), Qt::EnterKeyDefault);
+#endif
+    enterType = le2.inputMethodQuery(Qt::ImEnterKeyType);
+    QCOMPARE(enterType.value<Qt::EnterKeyType>(), Qt::EnterKeyDefault);
+}
+
 void tst_QLineEdit::inputMethodUpdate()
 {
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
@@ -5185,6 +5189,112 @@ void tst_QLineEdit::keyReleasePropagates()
     QCOMPARE(dialog.releasedKey, Qt::Key_Alt);
 }
 
+#if QT_CONFIG(shortcut)
+
+void tst_QLineEdit::deleteWordByKeySequence_data()
+{
+    QTest::addColumn<QString>("startText");
+    QTest::addColumn<int>("selectionStart");
+    QTest::addColumn<int>("selectionEnd");
+    QTest::addColumn<int>("cursorPosition");
+    QTest::addColumn<QKeySequence::StandardKey>("key");
+    QTest::addColumn<QString>("expectedText");
+    QTest::addColumn<int>("expectedCursorPosition");
+
+    QTest::newRow("Delete start, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 9 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some ") << 5;
+    QTest::newRow("Delete end, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 5 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some ") << 5;
+    QTest::newRow("Delete start from middle, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 7 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some xt") << 5;
+    QTest::newRow("Delete end from middle, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 7 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some Te") << 7;
+    QTest::newRow("Delete end from first, no selection")
+            << QStringLiteral("Some Text") << 0 << 0 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Text") << 0;
+
+    QTest::newRow("Delete start, full selection")
+            << QStringLiteral("Some Text") << 0 << 9 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("") << 0;
+    QTest::newRow("Delete end, full selection")
+            << QStringLiteral("Some Text") << 0 << 9 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("") << 0;
+    QTest::newRow("Delete start, full selection, single word")
+            << QStringLiteral("Some") << 0 << 4 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("") << 0;
+    QTest::newRow("Delete end, full selection, single word")
+            << QStringLiteral("Some") << 0 << 4 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("") << 0;
+
+    QTest::newRow("Delete start, word selection")
+            << QStringLiteral("Some Text") << 5 << 9 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some ") << 5;
+    QTest::newRow("Delete end, word selection")
+            << QStringLiteral("Some Text") << 5 << 9 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some ") << 5;
+    QTest::newRow("Delete start, partial word selection")
+            << QStringLiteral("Some Text") << 5 << 7 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some xt") << 5;
+    QTest::newRow("Delete end, partial word selection")
+            << QStringLiteral("Some Text") << 5 << 7 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some xt") << 5;
+    QTest::newRow("Delete start, partial inner word selection")
+            << QStringLiteral("Some Text") << 6 << 8 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Some Tt") << 6;
+    QTest::newRow("Delete end, partial inner word selection")
+            << QStringLiteral("Some Text") << 6 << 8 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Some Tt") << 6;
+    QTest::newRow("Delete start, selection with space")
+            << QStringLiteral("Some Text") << 3 << 9 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Som") << 3;
+    QTest::newRow("Delete end, selection with space")
+            << QStringLiteral("Some Text") << 3 << 9 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Som") << 3;
+    QTest::newRow("Delete start, partial word selection with space")
+            << QStringLiteral("Some Text") << 3 << 7 << 0 << QKeySequence::DeleteStartOfWord
+            << QStringLiteral("Somxt") << 3;
+    QTest::newRow("Delete end, partial selection with space")
+            << QStringLiteral("Some Text") << 3 << 7 << 0 << QKeySequence::DeleteEndOfWord
+            << QStringLiteral("Somxt") << 3;
+}
+
+void tst_QLineEdit::deleteWordByKeySequence()
+{
+    QFETCH(QString, startText);
+    QFETCH(int, selectionStart);
+    QFETCH(int, selectionEnd);
+    QFETCH(int, cursorPosition);
+    QFETCH(QKeySequence::StandardKey, key);
+    QFETCH(QString, expectedText);
+    QFETCH(int, expectedCursorPosition);
+
+    QWidget widget;
+
+    QLineEdit *lineEdit = new QLineEdit(startText, &widget);
+    lineEdit->setFocus();
+    lineEdit->setCursorPosition(cursorPosition);
+    if (selectionStart != selectionEnd)
+        lineEdit->setSelection(selectionStart, selectionEnd - selectionStart);
+
+    widget.show();
+
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+
+    QTestEventList keys;
+    addKeySequenceStandardKey(keys, key);
+    keys.simulate(lineEdit);
+
+    QCOMPARE(lineEdit->text(), expectedText);
+    QCOMPARE(lineEdit->selectionStart(), -1);
+    QCOMPARE(lineEdit->selectionEnd(), -1);
+    QCOMPARE(lineEdit->cursorPosition(), expectedCursorPosition);
+}
+
+#endif // QT_CONFIG(shortcut)
 
 QTEST_MAIN(tst_QLineEdit)
 #include "tst_qlineedit.moc"

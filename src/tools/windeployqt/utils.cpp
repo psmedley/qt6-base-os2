@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "utils.h"
-#include "elfreader.h"
 
 #include <QtCore/QString>
 #include <QtCore/QDebug>
@@ -95,7 +94,7 @@ QStringList findSharedLibraries(const QDir &directory, Platform platform,
         nameFilter += u'*';
     if (debugMatchMode == MatchDebug && platformHasDebugSuffix(platform))
         nameFilter += u'd';
-    nameFilter += sharedLibrarySuffix(platform);
+    nameFilter += sharedLibrarySuffix();
     QStringList result;
     QString errorMessage;
     const QFileInfoList &dlls = directory.entryInfoList(QStringList(nameFilter), QDir::Files);
@@ -424,14 +423,18 @@ const char *qmakeInfixKey = "QT_INFIX";
 QMap<QString, QString> queryQtPaths(const QString &qtpathsBinary, QString *errorMessage)
 {
     const QString binary = !qtpathsBinary.isEmpty() ? qtpathsBinary : QStringLiteral("qtpaths");
+    const QString colonSpace = QStringLiteral(": ");
     QByteArray stdOut;
     QByteArray stdErr;
     unsigned long exitCode = 0;
-    if (!runProcess(binary, QStringList(QStringLiteral("-query")), QString(), &exitCode, &stdOut, &stdErr, errorMessage))
+    if (!runProcess(binary, QStringList(QStringLiteral("-query")), QString(), &exitCode, &stdOut,
+                    &stdErr, errorMessage)) {
+        *errorMessage = QStringLiteral("Error running binary ") + binary + colonSpace + *errorMessage;
         return QMap<QString, QString>();
+    }
     if (exitCode) {
         *errorMessage = binary + QStringLiteral(" returns ") + QString::number(exitCode)
-            + QStringLiteral(": ") + QString::fromLocal8Bit(stdErr);
+            + colonSpace + QString::fromLocal8Bit(stdErr);
         return QMap<QString, QString>();
     }
     const QString output = QString::fromLocal8Bit(stdOut).trimmed().remove(u'\r');
@@ -467,7 +470,7 @@ QMap<QString, QString> queryQtPaths(const QString &qtpathsBinary, QString *error
         }
     } else {
         std::wcerr << "Warning: Unable to read " << QDir::toNativeSeparators(qconfigPriFile.fileName())
-            << ": " << qconfigPriFile.errorString()<< '\n';
+            << colonSpace << qconfigPriFile.errorString()<< '\n';
     }
     return result;
 }
@@ -550,37 +553,6 @@ bool updateFile(const QString &sourceFileName, const QStringList &nameFilters,
     }
     if (json)
         json->addFile(sourceFileName, targetDirectory);
-    return true;
-}
-
-bool readElfExecutable(const QString &elfExecutableFileName, QString *errorMessage,
-                       QStringList *dependentLibraries, unsigned *wordSize,
-                       bool *isDebug)
-{
-    ElfReader elfReader(elfExecutableFileName);
-    const ElfData data = elfReader.readHeaders();
-    if (data.sectionHeaders.isEmpty()) {
-        *errorMessage = QStringLiteral("Unable to read ELF binary \"")
-            + QDir::toNativeSeparators(elfExecutableFileName) + QStringLiteral("\": ")
-            + elfReader.errorString();
-            return false;
-    }
-    if (wordSize)
-        *wordSize = data.elfclass == Elf_ELFCLASS64 ? 64 : 32;
-    if (dependentLibraries) {
-        dependentLibraries->clear();
-        const QList<QByteArray> libs = elfReader.dependencies();
-        if (libs.isEmpty()) {
-            *errorMessage = QStringLiteral("Unable to read dependenices of ELF binary \"")
-                + QDir::toNativeSeparators(elfExecutableFileName) + QStringLiteral("\": ")
-                + elfReader.errorString();
-                return false;
-        }
-        for (const QByteArray &l : libs)
-            dependentLibraries->push_back(QString::fromLocal8Bit(l));
-    }
-    if (isDebug)
-        *isDebug = data.symbolsType != UnknownSymbols && data.symbolsType != NoSymbols;
     return true;
 }
 
@@ -705,13 +677,23 @@ static inline MsvcDebugRuntimeResult checkMsvcDebugRuntime(const QStringList &de
         qsizetype pos = 0;
         if (lib.startsWith("MSVCR"_L1, Qt::CaseInsensitive)
             || lib.startsWith("MSVCP"_L1, Qt::CaseInsensitive)
-            || lib.startsWith("VCRUNTIME"_L1, Qt::CaseInsensitive)) {
+            || lib.startsWith("VCRUNTIME"_L1, Qt::CaseInsensitive)
+            || lib.startsWith("VCCORLIB"_L1, Qt::CaseInsensitive)
+            || lib.startsWith("CONCRT"_L1, Qt::CaseInsensitive)
+            || lib.startsWith("UCRTBASE"_L1, Qt::CaseInsensitive)) {
             qsizetype lastDotPos = lib.lastIndexOf(u'.');
             pos = -1 == lastDotPos ? 0 : lastDotPos - 1;
         }
 
-        if (pos > 0 && lib.contains("_app"_L1, Qt::CaseInsensitive))
-            pos -= 4;
+        if (pos > 0) {
+            const auto removeExtraSuffix = [&lib, &pos](const QString &suffix) -> void {
+                if (lib.contains(suffix, Qt::CaseInsensitive))
+                    pos -= suffix.size();
+            };
+            removeExtraSuffix("_app"_L1);
+            removeExtraSuffix("_atomic_wait"_L1);
+            removeExtraSuffix("_codecvt_ids"_L1);
+        }
 
         if (pos)
             return lib.at(pos).toLower() == u'd' ? MsvcDebugRuntime : MsvcReleaseRuntime;
@@ -720,32 +702,43 @@ static inline MsvcDebugRuntimeResult checkMsvcDebugRuntime(const QStringList &de
 }
 
 template <class ImageNtHeader>
+inline QStringList determineDependentLibs(const ImageNtHeader *nth, const void *fileMemory,
+                                           QString *errorMessage)
+{
+    return readImportSections(nth, fileMemory, errorMessage);
+}
+
+template <class ImageNtHeader>
+inline bool determineDebug(const ImageNtHeader *nth, const void *fileMemory,
+                           QStringList *dependentLibrariesIn, QString *errorMessage)
+{
+    if (nth->FileHeader.Characteristics & IMAGE_FILE_DEBUG_STRIPPED)
+        return false;
+
+    const QStringList dependentLibraries = dependentLibrariesIn != nullptr ?
+                *dependentLibrariesIn :
+                determineDependentLibs(nth, fileMemory, errorMessage);
+
+    const bool hasDebugEntry = nth->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].Size;
+    // When an MSVC debug entry is present, check whether the debug runtime
+    // is actually used to detect -release / -force-debug-info builds.
+    const MsvcDebugRuntimeResult msvcrt = checkMsvcDebugRuntime(dependentLibraries);
+    if (msvcrt == NoMsvcRuntime)
+        return hasDebugEntry;
+    else
+        return hasDebugEntry && msvcrt == MsvcDebugRuntime;
+}
+
+template <class ImageNtHeader>
 inline void determineDebugAndDependentLibs(const ImageNtHeader *nth, const void *fileMemory,
-                                           bool isMinGW,
                                            QStringList *dependentLibrariesIn,
                                            bool *isDebugIn, QString *errorMessage)
 {
-    const bool hasDebugEntry = nth->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].Size;
-    QStringList dependentLibraries;
-    if (dependentLibrariesIn || (isDebugIn != nullptr && hasDebugEntry && !isMinGW))
-        dependentLibraries = readImportSections(nth, fileMemory, errorMessage);
-
     if (dependentLibrariesIn)
-        *dependentLibrariesIn = dependentLibraries;
-    if (isDebugIn != nullptr) {
-        if (isMinGW) {
-            // Use logic that's used e.g. in objdump / pfd library
-            *isDebugIn = !(nth->FileHeader.Characteristics & IMAGE_FILE_DEBUG_STRIPPED);
-        } else {
-            // When an MSVC debug entry is present, check whether the debug runtime
-            // is actually used to detect -release / -force-debug-info builds.
-            const MsvcDebugRuntimeResult msvcrt = checkMsvcDebugRuntime(dependentLibraries);
-            if (msvcrt == NoMsvcRuntime)
-                *isDebugIn = hasDebugEntry;
-            else
-                *isDebugIn = hasDebugEntry && msvcrt == MsvcDebugRuntime;
-        }
-    }
+        *dependentLibrariesIn = determineDependentLibs(nth, fileMemory, errorMessage);
+
+    if (isDebugIn)
+        *isDebugIn = determineDebug(nth, fileMemory, dependentLibrariesIn, errorMessage);
 }
 
 // Read a PE executable and determine dependent libraries, word size
@@ -799,10 +792,10 @@ bool readPeExecutable(const QString &peExecutableFileName, QString *errorMessage
             *wordSizeIn = wordSize;
         if (wordSize == 32) {
             determineDebugAndDependentLibs(reinterpret_cast<const IMAGE_NT_HEADERS32 *>(ntHeaders),
-                                           fileMemory, isMinGW, dependentLibrariesIn, isDebugIn, errorMessage);
+                                           fileMemory, dependentLibrariesIn, isDebugIn, errorMessage);
         } else {
             determineDebugAndDependentLibs(reinterpret_cast<const IMAGE_NT_HEADERS64 *>(ntHeaders),
-                                           fileMemory, isMinGW, dependentLibrariesIn, isDebugIn, errorMessage);
+                                           fileMemory, dependentLibrariesIn, isDebugIn, errorMessage);
         }
 
         if (machineArchIn)

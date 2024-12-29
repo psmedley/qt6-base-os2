@@ -1097,7 +1097,7 @@ void QXcbDrag::timerEvent(QTimerEvent* e)
                 continue;
             }
             QTime currentTime = QTime::currentTime();
-            int delta = t.time.msecsTo(currentTime);
+            std::chrono::milliseconds delta{t.time.msecsTo(currentTime)};
             if (delta > XdndDropTransactionTimeout) {
                 /* delete transactions which are older than XdndDropTransactionTimeout. It could mean
                  one of these:
@@ -1231,7 +1231,7 @@ void QXcbDrag::handleSelectionRequest(const xcb_selection_request_event_t *event
 
 bool QXcbDrag::dndEnable(QXcbWindow *w, bool on)
 {
-    qCDebug(lcQpaXDnd) << "dndEnable" << w << on;
+    qCDebug(lcQpaXDnd) << "dndEnable" << static_cast<QPlatformWindow *>(w) << on;
     // Windows announce that they support the XDND protocol by creating a window property XdndAware.
     if (on) {
         QXcbWindow *window = nullptr;

@@ -192,7 +192,7 @@ Q_DECL_UNUSED static constexpr quint64 MaximumPreallocatedElementCount =
     aspects, its API is identical to QCborValue.
 
     \sa QCborArray, QCborMap, QCborStreamReader, QCborStreamWriter,
-        QJsonValue, QJsonDocument, {Convert Example}, {JSON Save Game Example}
+        QJsonValue, QJsonDocument, {Serialization Converter}, {Saving and Loading a Game}
         {Parsing and displaying CBOR data}
  */
 
@@ -404,7 +404,7 @@ Q_DECL_UNUSED static constexpr quint64 MaximumPreallocatedElementCount =
 /*!
     \fn QCborValue::QCborValue(QCborSimpleType st)
 
-    Creates a QCborValue of simple type \a st. The type can later later be retrieved
+    Creates a QCborValue of simple type \a st. The type can later be retrieved
     using toSimpleType() as well as isSimpleType(st).
 
     CBOR simple types are types that do not have any associated value, like

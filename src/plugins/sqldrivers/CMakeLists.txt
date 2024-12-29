@@ -4,6 +4,14 @@
 cmake_minimum_required(VERSION 3.16)
 if (NOT CMAKE_PROJECT_NAME STREQUAL "QtBase" AND NOT CMAKE_PROJECT_NAME STREQUAL "Qt")
     include(.cmake.conf)
+    # Store initial build type (if any is specified) to be read by
+    # qt_internal_set_cmake_build_type().
+    # See qt_internal_set_cmake_build_type() for details.
+    if(DEFINED CACHE{CMAKE_BUILD_TYPE})
+        set(__qt_internal_standalone_project_cmake_build_type_before_project_call
+            "${CMAKE_BUILD_TYPE}")
+    endif()
+
     project(QSQLiteDriverPlugins
         VERSION "${QT_REPO_MODULE_VERSION}"
         DESCRIPTION "Qt6 SQL driver plugins"
@@ -48,10 +56,6 @@ if(QT_FEATURE_sql_odbc)
     add_subdirectory(odbc)
 endif()
 
-if(QT_FEATURE_sql_tds)
-#     TODO add_subdirectory(tds)
-endif()
-
 if(QT_FEATURE_sql_oci)
     add_subdirectory(oci)
 endif()
@@ -64,12 +68,12 @@ if(QT_FEATURE_sql_sqlite)
     add_subdirectory(sqlite)
 endif()
 
-if(QT_FEATURE_sql_sqlite2)
-#     TODO add_subdirectory(sqlite2)
-endif()
-
 if(QT_FEATURE_sql_ibase)
     add_subdirectory(ibase)
+endif()
+
+if(QT_FEATURE_sql_mimer)
+    add_subdirectory(mimer)
 endif()
 
 if(NOT CMAKE_PROJECT_NAME STREQUAL "QtBase" AND NOT CMAKE_PROJECT_NAME STREQUAL "Qt")

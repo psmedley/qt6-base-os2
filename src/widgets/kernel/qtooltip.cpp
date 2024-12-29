@@ -45,15 +45,24 @@ using namespace Qt::StringLiterals;
     Rich text displayed in a tool tip is implicitly word-wrapped unless
     specified differently with \c{<p style='white-space:pre'>}.
 
-    The simplest and most common way to set a widget's tool tip is by
-    calling its QWidget::setToolTip() function.
+    UI elements that are created via \l{QAction} use the tooltip property
+    of the QAction, so for most interactive UI elements, setting that
+    property is the easiest way to provide tool tips.
+
+    \snippet tooltips/main.cpp action_tooltip
+
+    For any other widgets, the simplest and most common way to set
+    a widget's tool tip is by calling its QWidget::setToolTip() function.
+
+    \snippet tooltips/main.cpp static_tooltip
 
     It is also possible to show different tool tips for different
     regions of a widget, by using a QHelpEvent of type
     QEvent::ToolTip. Intercept the help event in your widget's \l
     {QWidget::}{event()} function and call QToolTip::showText() with
-    the text you want to display. The \l{widgets/tooltips}{Tooltips}
-    example illustrates this technique.
+    the text you want to display.
+
+    \snippet tooltips/main.cpp dynamic_tooltip
 
     If you are calling QToolTip::hideText(), or QToolTip::showText()
     with an empty string, as a result of a \l{QEvent::}{ToolTip}-event you
@@ -75,7 +84,7 @@ using namespace Qt::StringLiterals;
     \note Tool tips use the inactive color group of QPalette, because tool
     tips are not active windows.
 
-    \sa QWidget::toolTip, QAction::toolTip, {Tool Tips Example}
+    \sa QWidget::toolTip, QAction::toolTip
 */
 
 class QTipLabel : public QLabel
@@ -347,10 +356,12 @@ void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
         if (w) {
             connect(w, SIGNAL(destroyed()),
                 QTipLabel::instance, SLOT(styleSheetParentDestroyed()));
-            // QTBUG-64550: A font inherited by the style sheet might change the size,
-            // particular on Windows, where the tip is not parented on a window.
-            QTipLabel::instance->updateSize(pos);
         }
+        // QTBUG-64550: A font inherited by the style sheet might change the size,
+        // particular on Windows, where the tip is not parented on a window.
+        // The updatesSize() also makes sure that the content size be updated with
+        // correct content margin.
+        QTipLabel::instance->updateSize(pos);
     }
 #endif //QT_NO_STYLE_STYLESHEET
 

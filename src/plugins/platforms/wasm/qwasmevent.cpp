@@ -177,11 +177,17 @@ PointerEvent::PointerEvent(EventType type, emscripten::val event) : MouseEvent(t
             return PointerType::Mouse;
         if (type == "touch")
             return PointerType::Touch;
+        if (type == "pen")
+            return PointerType::Pen;
         return PointerType::Other;
     })();
     width = event["width"].as<qreal>();
     height = event["height"].as<qreal>();
     pressure = event["pressure"].as<qreal>();
+    tiltX = event["tiltX"].as<qreal>();
+    tiltY = event["tiltY"].as<qreal>();
+    tangentialPressure = event["tangentialPressure"].as<qreal>();
+    twist = event["twist"].as<qreal>();
     isPrimary = event["isPrimary"].as<bool>();
 }
 

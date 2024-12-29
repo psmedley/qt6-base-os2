@@ -9,6 +9,7 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qthread.h>
+#include <QtCore/private/qeventdispatcher_wasm_p.h>
 #include <QtCore/private/qoffsetstringarray_p.h>
 #include <QtCore/private/qtools_p.h>
 
@@ -295,7 +296,10 @@ void QNetworkReplyWasmImplPrivate::doSendRequest()
     QByteArray destinationPath = dPath.toUtf8();
     attr.destinationPath = destinationPath.constData();
 
-    m_fetch = emscripten_fetch(&attr, request.url().toString().toUtf8());
+    auto url = request.url().toString().toUtf8();
+    QEventDispatcherWasm::runOnMainThread([attr, url]() mutable {
+        emscripten_fetch(&attr, url);
+    });
     state = Working;
 }
 
@@ -538,6 +542,8 @@ void QNetworkReplyWasmImplPrivate::downloadFailed(emscripten_fetch_t *fetch)
                 reasonStr = QStringLiteral("Operation canceled");
             else
                 reasonStr = QString::fromUtf8(fetch->statusText);
+            QByteArray buffer(fetch->data, fetch->numBytes);
+            reply->dataReceived(buffer, buffer.size());
             QByteArray statusText(fetch->statusText);
             reply->setStatusCode(fetch->status, statusText);
             reply->emitReplyError(reply->statusCodeFromHttp(fetch->status, reply->request.url()), reasonStr);

@@ -212,6 +212,8 @@ public:
 
     void postEventToThread(int action, QObject *target, QEvent *event);
 
+    void enableDispatchDelayed(QObject *context);
+
 private:
     void checkThread();
     bool handleError(const QDBusErrorInternal &error);
@@ -319,11 +321,10 @@ public:
     static int findSlot(QObject *obj, const QByteArray &normalizedName, QList<QMetaType> &params,
                         QString &errorMsg);
     static bool prepareHook(QDBusConnectionPrivate::SignalHook &hook, QString &key,
-                            const QString &service,
-                            const QString &path, const QString &interface, const QString &name,
-                            const ArgMatchRules &argMatch,
-                            QObject *receiver, const char *signal, int minMIdx,
-                            bool buildSignature);
+                            const QString &service, const QString &path, const QString &interface,
+                            const QString &name, const ArgMatchRules &argMatch, QObject *receiver,
+                            const char *signal, int minMIdx, bool buildSignature,
+                            QString &errorMsg);
     static DBusHandlerResult messageFilter(DBusConnection *, DBusMessage *, void *);
     static QDBusCallDeliveryEvent *prepareReply(QDBusConnectionPrivate *target, QObject *object,
                                                 int idx, const QList<QMetaType> &metaTypes,
@@ -356,26 +357,6 @@ extern QDBusMessage qDBusPropertySet(const QDBusConnectionPrivate::ObjectTreeNod
                                      const QDBusMessage &msg);
 extern QDBusMessage qDBusPropertyGetAll(const QDBusConnectionPrivate::ObjectTreeNode &node,
                                         const QDBusMessage &msg);
-
-// can be replaced with a lambda in Qt 5.7
-class QDBusConnectionDispatchEnabler : public QObject
-{
-    Q_OBJECT
-    QDBusConnectionPrivate *con;
-public:
-    QDBusConnectionDispatchEnabler(QDBusConnectionPrivate *con) : con(con) {}
-
-public slots:
-    void execute()
-    {
-        // This call cannot race with something disabling dispatch only because dispatch is
-        // never re-disabled from Qt code on an in-use connection once it has been enabled.
-        QMetaObject::invokeMethod(con, "setDispatchEnabled", Qt::QueuedConnection, Q_ARG(bool, true));
-        if (!con->ref.deref())
-            con->deleteLater();
-        deleteLater();
-    }
-};
 
 #endif // QT_BOOTSTRAPPED
 

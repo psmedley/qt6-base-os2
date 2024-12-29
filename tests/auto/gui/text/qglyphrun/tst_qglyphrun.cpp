@@ -564,6 +564,9 @@ void tst_QGlyphRun::boundingRect()
 
 void tst_QGlyphRun::mixedScripts()
 {
+    if (QFontDatabase::families(QFontDatabase::Korean).isEmpty())
+        QSKIP("This test requires support for Hangul text");
+
     QString s;
     s += QChar(0x31); // The character '1'
     s += QChar(0xbc14); // Hangul character
@@ -967,7 +970,7 @@ void tst_QGlyphRun::objectReplacementCharacter()
     QList<QGlyphRun> glyphRuns = layout.glyphRuns();
     QCOMPARE(glyphRuns.size(), 1);
     QCOMPARE(glyphRuns.first().glyphIndexes().size(), 1);
-    QCOMPARE(glyphRuns.first().glyphIndexes().first(), 5);
+    QCOMPARE(glyphRuns.first().glyphIndexes().first(), uint(5));
 }
 
 #endif // QT_NO_RAWFONT

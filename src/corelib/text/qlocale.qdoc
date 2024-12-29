@@ -50,7 +50,7 @@
     \note For the current keyboard input locale take a look at
     QInputMethod::locale().
 
-    QLocale's data is based on Common Locale Data Repository v43.
+    QLocale's data is based on Common Locale Data Repository v44.1.
 
     \section1 Matching combinations of language, script and territory
 
@@ -102,6 +102,7 @@
     \value Amharic
     \value [since 5.1] AncientEgyptian
     \value [since 5.1] AncientGreek
+    \value [since 6.7] Anii
     \value Arabic
     \value [since 5.1] Aragonese
     \value [since 5.1] Aramaic
@@ -116,7 +117,7 @@
     \value Azerbaijani
     \value Bafia
     \value [since 5.1] Balinese
-    \value [since 6.5.3] Baluchi
+    \value [since 6.6] Baluchi
     \value Bambara
     \value [since 5.1] Bamun
     \value [since 6.0] Bangla
@@ -230,6 +231,7 @@
     \value [since 6.0] Kalaallisut
     \value Kalenjin
     \value Kamba
+    \value [since 6.7] Kangri
     \value Kannada
     \value Kanuri
     \value Kashmiri
@@ -262,7 +264,7 @@
     \value [since 5.5] Lezghian
     \value Limburgish
     \value Lingala
-    \value [since 6.5.3] Ligurian
+    \value [since 6.6] Ligurian
     \value [since 5.7] LiteraryChinese
     \value Lithuanian
     \value [since 5.12] Lojban
@@ -348,7 +350,7 @@
     \value Quechua
     \value [since 6.5] Rajasthani
     \value RhaetoRomance Obsolete, please use Romansh
-    \value [since 6.5.3] Rohingya
+    \value [since 6.6] Rohingya
     \value Romanian
     \value Romansh
     \value Rombo
@@ -411,7 +413,7 @@
     \value [since 6.5] TokiPona
     \value [since 5.7] TokPisin
     \value Tongan
-    \value [since 6.5.3] Torwali
+    \value [since 6.6] Torwali
     \value Tsonga
     \value Tswana
     \value Turkish
@@ -428,6 +430,7 @@
     \value Uzbek
     \value Vai
     \value Venda
+    \value [since 6.7] Venetian
     \value Vietnamese
     \value Volapuk
     \value Vunjo
@@ -818,7 +821,7 @@
     \value GujaratiScript
     \value GurmukhiScript
     \value [since 5.1] HangulScript
-    \value [since 6.5.3] HanifiScript
+    \value [since 6.6] HanifiScript
     \value [since 5.1] HanScript
     \value [since 5.1] HanunooScript
     \value [since 5.7] HanWithBopomofoScript

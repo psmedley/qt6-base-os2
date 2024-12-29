@@ -463,8 +463,7 @@ inline bool QStorageIterator::next()
     r = qstrntoll(ptr, stop - ptr, 10);
     if (!r.ok())
         return false;
-    int parent_id = r.result;
-    Q_UNUSED(parent_id);
+    // parent_id = r.result; // member currently not in use
 
     ptr += r.used;
     r = qstrntoll(ptr, stop - ptr, 10);
@@ -805,7 +804,7 @@ void QStorageInfoPrivate::retrieveVolumeInfo()
 {
     QT_STATFSBUF statfs_buf;
     int result;
-    EINTR_LOOP(result, QT_STATFS(QFile::encodeName(rootPath).constData(), &statfs_buf));
+    QT_EINTR_LOOP(result, QT_STATFS(QFile::encodeName(rootPath).constData(), &statfs_buf));
     if (result == 0) {
         valid = true;
         ready = true;

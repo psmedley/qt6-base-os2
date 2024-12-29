@@ -33,9 +33,6 @@ QT_BEGIN_NAMESPACE
     can maintain a list of basic timers by holding them in container
     that supports move-only types, e.g. std::vector.
 
-    The \l{widgets/tetrix}{Tetrix} example uses QBasicTimer to control
-    the rate at which pieces fall.
-
     \sa QTimer, QTimerEvent, QObject::timerEvent(), Timers, {Affine Transformations}
 */
 
@@ -86,10 +83,18 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn QBasicTimer::swap(QBasicTimer &other)
-    \fn swap(QBasicTimer &lhs, QBasicTimer &rhs)
     \since 5.14
 
-    Swaps string \a other with this string, or \a lhs with \a rhs.
+    Swaps the timer \a other with this timer.
+    This operation is very fast and never fails.
+*/
+
+/*!
+    \fn swap(QBasicTimer &lhs, QBasicTimer &rhs)
+    \relates QBasicTimer
+    \since 5.14
+
+    Swaps the timer \a lhs with \a rhs.
     This operation is very fast and never fails.
 */
 

@@ -403,9 +403,16 @@ protected:
     ~QMessageDialogOptions();
 
 public:
+    // Keep in sync with QMessageBox Option
+    enum class Option {
+        DontUseNativeDialog = 0x00000001,
+    };
+    Q_DECLARE_FLAGS(Options, Option);
+    Q_FLAG(Options);
+
     // Keep in sync with QMessageBox::Icon
-    enum Icon { NoIcon, Information, Warning, Critical, Question };
-    Q_ENUM(Icon)
+    enum StandardIcon { NoIcon, Information, Warning, Critical, Question };
+    Q_ENUM(StandardIcon)
 
     static QSharedPointer<QMessageDialogOptions> create();
     QSharedPointer<QMessageDialogOptions> clone() const;
@@ -413,8 +420,8 @@ public:
     QString windowTitle() const;
     void setWindowTitle(const QString &);
 
-    void setIcon(Icon icon);
-    Icon icon() const;
+    void setStandardIcon(StandardIcon icon);
+    StandardIcon standardIcon() const;
 
     void setIconPixmap(const QPixmap &pixmap);
     QPixmap iconPixmap() const;
@@ -427,6 +434,11 @@ public:
 
     void setDetailedText(const QString &text);
     QString detailedText() const;
+
+    void setOption(Option option, bool on = true);
+    bool testOption(Option option) const;
+    void setOptions(Options options);
+    Options options() const;
 
     void setStandardButtons(QPlatformDialogHelper::StandardButtons buttons);
     QPlatformDialogHelper::StandardButtons standardButtons() const;
@@ -446,14 +458,21 @@ public:
     };
 
     int addButton(const QString &label, QPlatformDialogHelper::ButtonRole role,
-                  void *buttonImpl = nullptr);
+                  void *buttonImpl = nullptr, int buttonId = 0);
     void removeButton(int id);
     const QList<CustomButton> &customButtons();
     const CustomButton *customButton(int id);
+    void clearCustomButtons();
 
     void setCheckBox(const QString &label, Qt::CheckState state);
     QString checkBoxLabel() const;
     Qt::CheckState checkBoxState() const;
+
+    void setEscapeButton(int id);
+    int escapeButton() const;
+
+    void setDefaultButton(int id);
+    int defaultButton() const;
 
 private:
     QMessageDialogOptionsPrivate *d;

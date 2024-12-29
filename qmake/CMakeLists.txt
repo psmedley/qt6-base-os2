@@ -58,7 +58,6 @@ qt_internal_add_tool(${target_name}
     TRY_RUN
     TOOLS_TARGET Core
     USER_FACING
-    NO_UNITY_BUILD
     INSTALL_VERSIONED_LINK
     SOURCES
         cachekeys.h
@@ -99,6 +98,9 @@ qt_internal_add_tool(${target_name}
         "qmake_pch.h"
     LIBRARIES
         QtLibraryInfo
+    NO_UNITY_BUILD_SOURCES
+        generators/win32/msvc_objectmodel.cpp # xml symbols clash with generators/win32/msbuild_objectmodel.cpp
+        library/qmakeparser.cpp               # struct statics clashes with qmakeevaluator_p.h
 )
 qt_internal_return_unless_building_tools()
 
@@ -118,7 +120,6 @@ qt_internal_extend_target(${target_name} CONDITION MACOS
         "-fconstant-cfstrings"
 )
 
-# special case big
 qt_internal_extend_target(${target_name} CONDITION WIN32
     SOURCES
         library/registry.cpp
@@ -132,18 +133,15 @@ qt_internal_extend_target(${target_name} CONDITION CLANG AND WIN32
         "-Wno-microsoft-enum-value"
 )
 
-# special case:
 set_target_properties(${target_name} PROPERTIES
     AUTOMOC OFF
     AUTORCC OFF
     AUTOUIC OFF
 )
 
-qt_internal_apply_gc_binaries(${target_name} PRIVATE) # special case
-qt_skip_warnings_are_errors(${target_name}) # special case
+qt_internal_apply_gc_binaries(${target_name} PRIVATE)
+qt_skip_warnings_are_errors(${target_name})
 
-# special case begin
 qt_internal_add_docs(${target_name}
     doc/qmake.qdocconf
 )
-# special case end

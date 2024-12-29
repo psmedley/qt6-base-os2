@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qnetworkmanagerservice.h"
+#include "qnetworkmanagernetworkinformationbackend.h"
 
 #include <QObject>
 #include <QList>
@@ -41,7 +42,7 @@ bool QNetworkManagerInterfaceBase::networkManagerAvailable()
 QNetworkManagerInterface::QNetworkManagerInterface(QObject *parent)
     : QNetworkManagerInterfaceBase(parent)
 {
-    if (!isValid())
+    if (!QDBusAbstractInterface::isValid())
         return;
 
     PropertiesDBusInterface managerPropertiesInterface(
@@ -51,22 +52,24 @@ QNetworkManagerInterface::QNetworkManagerInterface(QObject *parent)
     argumentList << NM_DBUS_INTERFACE ""_L1;
     QDBusPendingReply<QVariantMap> propsReply = managerPropertiesInterface.callWithArgumentList(
             QDBus::Block, "GetAll"_L1, argumentList);
-    if (!propsReply.isError()) {
-        propertyMap = propsReply.value();
-    } else {
-        qWarning() << "propsReply" << propsReply.error().message();
+    if (propsReply.isError()) {
+        validDBusConnection = false;
+        if (auto error = propsReply.error(); error.type() != QDBusError::AccessDenied)
+            qWarning() << "Failed to query NetworkManager properties:" << error.message();
+        return;
     }
+    propertyMap = propsReply.value();
 
-    QDBusConnection::systemBus().connect(NM_DBUS_SERVICE ""_L1, NM_DBUS_PATH ""_L1,
+    validDBusConnection = QDBusConnection::systemBus().connect(NM_DBUS_SERVICE ""_L1, NM_DBUS_PATH ""_L1,
             DBUS_PROPERTIES_INTERFACE""_L1, "PropertiesChanged"_L1, this,
-            SLOT(setProperties(QString, QMap<QString, QVariant>, QList<QString>)));
+            SLOT(setProperties(QString,QMap<QString,QVariant>,QList<QString>)));
 }
 
 QNetworkManagerInterface::~QNetworkManagerInterface()
 {
     QDBusConnection::systemBus().disconnect(NM_DBUS_SERVICE ""_L1, NM_DBUS_PATH ""_L1,
             DBUS_PROPERTIES_INTERFACE ""_L1, "PropertiesChanged"_L1, this,
-            SLOT(setProperties(QString, QMap<QString, QVariant>, QList<QString>)));
+            SLOT(setProperties(QString,QMap<QString,QVariant>,QList<QString>)));
 }
 
 QNetworkManagerInterface::NMState QNetworkManagerInterface::state() const
@@ -150,6 +153,11 @@ auto QNetworkManagerInterface::extractDeviceMetered(const QDBusObjectPath &devic
     return static_cast<NMMetered>(metered.toUInt());
 }
 
+void QNetworkManagerInterface::setBackend(QNetworkManagerNetworkInformationBackend *ourBackend)
+{
+    backend = ourBackend;
+}
+
 void QNetworkManagerInterface::setProperties(const QString &interfaceName,
                                              const QMap<QString, QVariant> &map,
                                              const QStringList &invalidatedProperties)
@@ -171,16 +179,16 @@ void QNetworkManagerInterface::setProperties(const QString &interfaceName,
         if (valueChanged) {
             if (i.key() == "State"_L1) {
                 quint32 state = i.value().toUInt();
-                Q_EMIT stateChanged(static_cast<NMState>(state));
+                backend->onStateChanged(static_cast<NMState>(state));
             } else if (i.key() == "Connectivity"_L1) {
                 quint32 state = i.value().toUInt();
-                Q_EMIT connectivityChanged(static_cast<NMConnectivityState>(state));
+                backend->onConnectivityChanged(static_cast<NMConnectivityState>(state));
             } else if (i.key() == "PrimaryConnection"_L1) {
                 const QDBusObjectPath devicePath = i->value<QDBusObjectPath>();
-                Q_EMIT deviceTypeChanged(extractDeviceType(devicePath));
-                Q_EMIT meteredChanged(extractDeviceMetered(devicePath));
+                backend->onDeviceTypeChanged(extractDeviceType(devicePath));
+                backend->onMeteredChanged(extractDeviceMetered(devicePath));
             } else if (i.key() == "Metered"_L1) {
-                Q_EMIT meteredChanged(static_cast<NMMetered>(i->toUInt()));
+                backend->onMeteredChanged(static_cast<NMMetered>(i->toUInt()));
             }
         }
     }

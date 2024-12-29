@@ -8,42 +8,20 @@
 #include "qlist.h"
 #include "qsqlfield.h"
 #include "qstring.h"
-#include "qstringlist.h"
 
 QT_BEGIN_NAMESPACE
 
-class QSqlRecordPrivate
+class QSqlRecordPrivate : public QSharedData
 {
 public:
-    QSqlRecordPrivate();
-    QSqlRecordPrivate(const QSqlRecordPrivate &other);
-
-    inline bool contains(int index) { return index >= 0 && index < fields.size(); }
-    QString createField(int index, const QString &prefix) const;
+    inline bool contains(qsizetype index) const
+    {
+      return index >= 0 && index < fields.size();
+    }
 
     QList<QSqlField> fields;
-    QAtomicInt ref;
 };
-
-QSqlRecordPrivate::QSqlRecordPrivate() : ref(1)
-{
-}
-
-QSqlRecordPrivate::QSqlRecordPrivate(const QSqlRecordPrivate &other): fields(other.fields), ref(1)
-{
-}
-
-/*! \internal
-    Just for compat
-*/
-QString QSqlRecordPrivate::createField(int index, const QString &prefix) const
-{
-    QString f;
-    if (!prefix.isEmpty())
-        f = prefix + u'.';
-    f += fields.at(index).name();
-    return f;
-}
+QT_DEFINE_QESDP_SPECIALIZATION_DTOR(QSqlRecordPrivate)
 
 /*!
     \class QSqlRecord
@@ -86,8 +64,8 @@ QString QSqlRecordPrivate::createField(int index, const QString &prefix) const
 */
 
 QSqlRecord::QSqlRecord()
+  : d(new QSqlRecordPrivate)
 {
-    d = new QSqlRecordPrivate();
 }
 
 /*!
@@ -97,11 +75,39 @@ QSqlRecord::QSqlRecord()
     of a record in \l{constant time}.
 */
 
-QSqlRecord::QSqlRecord(const QSqlRecord& other)
-{
-    d = other.d;
-    d->ref.ref();
-}
+QSqlRecord::QSqlRecord(const QSqlRecord &other)
+    = default;
+
+/*!
+    \fn QSqlRecord::QSqlRecord(QSqlRecord &&other)
+    \since 6.6
+
+    Move-constructs a new QSqlRecord from \a other.
+
+    \note The moved-from object \a other is placed in a partially-formed state,
+    in which the only valid operations are destruction and assignment of a new
+    value.
+*/
+
+/*!
+    \fn QSqlRecord &QSqlRecord::operator=(QSqlRecord &&other)
+    \since 6.6
+
+    Move-assigns \a other to this QSqlRecord instance.
+
+    \note The moved-from object \a other is placed in a partially-formed state,
+    in which the only valid operations are destruction and assignment of a new
+    value.
+*/
+
+/*!
+    \fn void QSqlRecord::swap(QSqlRecord &other)
+    \since 6.6
+
+    Swaps SQL record \a other with this SQL record. This operation is very fast
+    and never fails.
+*/
+
 
 /*!
     Sets the record equal to \a other.
@@ -110,21 +116,16 @@ QSqlRecord::QSqlRecord(const QSqlRecord& other)
     of a record in \l{constant time}.
 */
 
-QSqlRecord& QSqlRecord::operator=(const QSqlRecord& other)
-{
-    qAtomicAssign(d, other.d);
-    return *this;
-}
+QSqlRecord& QSqlRecord::operator=(const QSqlRecord &other)
+    = default;
 
 /*!
     Destroys the object and frees any allocated resources.
 */
 
 QSqlRecord::~QSqlRecord()
-{
-    if (!d->ref.deref())
-        delete d;
-}
+    = default;
+
 
 /*!
     \fn bool QSqlRecord::operator!=(const QSqlRecord &other) const
@@ -168,7 +169,7 @@ QVariant QSqlRecord::value(int index) const
     \sa indexOf()
 */
 
-QVariant QSqlRecord::value(const QString& name) const
+QVariant QSqlRecord::value(const QString &name) const
 {
     return value(indexOf(name));
 }
@@ -194,7 +195,7 @@ QString QSqlRecord::fieldName(int index) const
     \sa fieldName()
 */
 
-int QSqlRecord::indexOf(const QString& name) const
+int QSqlRecord::indexOf(const QString &name) const
 {
     QStringView tableName;
     QStringView fieldName(name);
@@ -243,7 +244,7 @@ QSqlField QSqlRecord::field(const QString &name) const
     \sa insert(), replace(), remove()
 */
 
-void QSqlRecord::append(const QSqlField& field)
+void QSqlRecord::append(const QSqlField &field)
 {
     detach();
     d->fields.append(field);
@@ -254,7 +255,7 @@ void QSqlRecord::append(const QSqlField& field)
 
     \sa append(), replace(), remove()
  */
-void QSqlRecord::insert(int pos, const QSqlField& field)
+void QSqlRecord::insert(int pos, const QSqlField &field)
 {
    detach();
    d->fields.insert(pos, field);
@@ -267,7 +268,7 @@ void QSqlRecord::insert(int pos, const QSqlField& field)
     \sa append(), insert(), remove()
 */
 
-void QSqlRecord::replace(int pos, const QSqlField& field)
+void QSqlRecord::replace(int pos, const QSqlField &field)
 {
     if (!d->contains(pos))
         return;
@@ -322,7 +323,7 @@ bool QSqlRecord::isEmpty() const
     otherwise returns \c false.
 */
 
-bool QSqlRecord::contains(const QString& name) const
+bool QSqlRecord::contains(const QString &name) const
 {
     return indexOf(name) >= 0;
 }
@@ -337,9 +338,8 @@ bool QSqlRecord::contains(const QString& name) const
 void QSqlRecord::clearValues()
 {
     detach();
-    int count = d->fields.size();
-    for (int i = 0; i < count; ++i)
-        d->fields[i].clear();
+    for (QSqlField &f : d->fields)
+        f.clear();
 }
 
 /*!
@@ -351,7 +351,7 @@ void QSqlRecord::clearValues()
     \sa isGenerated()
 */
 
-void QSqlRecord::setGenerated(const QString& name, bool generated)
+void QSqlRecord::setGenerated(const QString &name, bool generated)
 {
     setGenerated(indexOf(name), generated);
 }
@@ -389,7 +389,7 @@ bool QSqlRecord::isNull(int index) const
 
     \sa setNull()
 */
-bool QSqlRecord::isNull(const QString& name) const
+bool QSqlRecord::isNull(const QString &name) const
 {
     return isNull(indexOf(name));
 }
@@ -414,7 +414,7 @@ void QSqlRecord::setNull(int index)
     Sets the value of the field called \a name to null. If the field
     does not exist, nothing happens.
 */
-void QSqlRecord::setNull(const QString& name)
+void QSqlRecord::setNull(const QString &name)
 {
     setNull(indexOf(name));
 }
@@ -426,7 +426,7 @@ void QSqlRecord::setNull(const QString& name)
 
     \sa setGenerated()
 */
-bool QSqlRecord::isGenerated(const QString& name) const
+bool QSqlRecord::isGenerated(const QString &name) const
 {
     return isGenerated(indexOf(name));
 }
@@ -461,7 +461,7 @@ int QSqlRecord::count() const
     \sa setNull()
 */
 
-void QSqlRecord::setValue(int index, const QVariant& val)
+void QSqlRecord::setValue(int index, const QVariant &val)
 {
     if (!d->contains(index))
         return;
@@ -477,7 +477,7 @@ void QSqlRecord::setValue(int index, const QVariant& val)
     does not exist, nothing happens.
 */
 
-void QSqlRecord::setValue(const QString& name, const QVariant& val)
+void QSqlRecord::setValue(const QString &name, const QVariant &val)
 {
     setValue(indexOf(name), val);
 }
@@ -487,7 +487,7 @@ void QSqlRecord::setValue(const QString& name, const QVariant& val)
 */
 void QSqlRecord::detach()
 {
-    qAtomicDetach(d);
+    d.detach();
 }
 
 #ifndef QT_NO_DEBUG_STREAM

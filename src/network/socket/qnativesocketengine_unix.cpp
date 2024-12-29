@@ -54,6 +54,9 @@
 #include <sys/socket.h>
 #include <netinet/sctp.h>
 #endif
+#ifdef Q_OS_BSD4
+#  include <net/if_dl.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -847,7 +850,7 @@ bool QNativeSocketEnginePrivate::nativeHasPendingDatagrams() const
     // Peek 1 bytes into the next message.
     ssize_t readBytes;
     char c;
-    EINTR_LOOP(readBytes, ::recv(socketDescriptor, &c, 1, MSG_PEEK));
+    QT_EINTR_LOOP(readBytes, ::recv(socketDescriptor, &c, 1, MSG_PEEK));
 
     // If there's no error, or if our buffer was too small, there must be a
     // pending datagram.
@@ -866,7 +869,7 @@ qint64 QNativeSocketEnginePrivate::nativePendingDatagramSize() const
 #ifdef Q_OS_LINUX
     // Linux can return the actual datagram size if we use MSG_TRUNC
     char c;
-    EINTR_LOOP(recvResult, ::recv(socketDescriptor, &c, 1, MSG_PEEK | MSG_TRUNC));
+    QT_EINTR_LOOP(recvResult, ::recv(socketDescriptor, &c, 1, MSG_PEEK | MSG_TRUNC));
 #elif defined(SO_NREAD)
     // macOS can return the actual datagram size if we use SO_NREAD
     int value;

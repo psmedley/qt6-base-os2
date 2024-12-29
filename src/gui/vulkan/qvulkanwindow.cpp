@@ -1852,13 +1852,26 @@ void QVulkanWindowRenderer::logicalDeviceLost()
 {
 }
 
+QSize QVulkanWindowPrivate::surfacePixelSize() const
+{
+    Q_Q(const QVulkanWindow);
+    VkSurfaceCapabilitiesKHR surfaceCaps = {};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDevs.at(physDevIndex), surface, &surfaceCaps);
+    VkExtent2D bufferSize = surfaceCaps.currentExtent;
+    if (bufferSize.width == uint32_t(-1)) {
+        Q_ASSERT(bufferSize.height == uint32_t(-1));
+        return q->size() * q->devicePixelRatio();
+    }
+    return QSize(int(bufferSize.width), int(bufferSize.height));
+}
+
 void QVulkanWindowPrivate::beginFrame()
 {
     if (!swapChain || framePending)
         return;
 
     Q_Q(QVulkanWindow);
-    if (q->size() * q->devicePixelRatio() != swapChainImageSize) {
+    if (swapChainImageSize != surfacePixelSize()) {
         recreateSwapChain();
         if (!swapChain)
             return;
@@ -1927,7 +1940,7 @@ void QVulkanWindowPrivate::beginFrame()
     }
 
     if (frameGrabbing)
-        frameGrabTargetImage = QImage(swapChainImageSize, QImage::Format_RGBA8888);
+        frameGrabTargetImage = QImage(swapChainImageSize, QImage::Format_RGBA8888); // the format is as documented
 
     if (renderer) {
         framePending = true;
@@ -2443,6 +2456,19 @@ VkFormat QVulkanWindow::depthStencilFormat() const
     This usually matches the size of the window, but may also differ in case
     \c vkGetPhysicalDeviceSurfaceCapabilitiesKHR reports a fixed size.
 
+    In addition, it has been observed on some platforms that the
+    Vulkan-reported surface size is different with high DPI scaling active,
+    meaning the QWindow-reported
+    \l{QWindow::}{size()} multiplied with the \l{QWindow::}{devicePixelRatio()}
+    was 1 pixel less or more when compared to the value returned from here,
+    presumably due to differences in rounding. Rendering code should be aware
+    of this, and any related rendering logic must be based in the value returned
+    from here, never on the QWindow-reported size. Regardless of which pixel size
+    is correct in theory, Vulkan rendering must only ever rely on the Vulkan
+    API-reported surface size. Otherwise validation errors may occur, e.g. when
+    setting the viewport, because the application-provided values may become
+    out-of-bounds from Vulkan's perspective.
+
     \note Calling this function is only valid from the invocation of
     QVulkanWindowRenderer::initSwapChainResources() up until
     QVulkanWindowRenderer::releaseSwapChainResources().
@@ -2714,6 +2740,12 @@ bool QVulkanWindow::supportsGrab() const
     incomplete image, that has the correct size but not the content yet. The
     content will be delivered via the frameGrabbed() signal in the latter case.
 
+    The returned QImage always has a format of QImage::Format_RGBA8888. If the
+    colorFormat() is \c VK_FORMAT_B8G8R8A8_UNORM, the red and blue channels are
+    swapped automatically since this format is commonly used as the default
+    choice for swapchain color buffers. With any other color buffer format,
+    there is no conversion performed by this function.
+
     \note This function should not be called when a frame is in progress
     (that is, frameReady() has not yet been called back by the application).
 
@@ -2741,6 +2773,9 @@ QImage QVulkanWindow::grab()
 
     d->frameGrabbing = true;
     d->beginFrame();
+
+    if (d->colorFormat == VK_FORMAT_B8G8R8A8_UNORM)
+        d->frameGrabTargetImage = std::move(d->frameGrabTargetImage).rgbSwapped();
 
     return d->frameGrabTargetImage;
 }

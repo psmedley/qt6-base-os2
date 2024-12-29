@@ -275,9 +275,9 @@ void QTabBar::initStyleOption(QStyleOptionTab *option, int tabIndex) const
     returns the visual geometry of a single tab.
 
     \table 100%
-    \row \li \inlineimage fusion-tabbar.png Screenshot of a Fusion style tab bar
+    \row \li \inlineimage {fusion-tabbar.png} {Screenshot of a Fusion style tab bar}
          \li A tab bar shown in the \l{Qt Widget Gallery}{Fusion widget style}.
-    \row \li \inlineimage fusion-tabbar-truncated.png Screenshot of a truncated Fusion tab bar
+    \row \li \inlineimage {fusion-tabbar-truncated.png} {Screenshot of a truncated Fusion tab bar}
          \li A truncated tab bar shown in the Fusion widget style.
     \endtable
 
@@ -680,7 +680,10 @@ void QTabBarPrivate::makeVisible(int index)
     const int scrolledTabBarStart = qMax(1, scrollRect.left() + scrollOffset);
     const int scrolledTabBarEnd = qMin(lastTabEnd - 1, scrollRect.right() + scrollOffset);
 
-    if (tabStart < scrolledTabBarStart) {
+     if (available >= lastTabEnd) {
+        // the entire tabbar fits, reset scroll
+        scrollOffset = 0;
+    } else if (tabStart < scrolledTabBarStart) {
         // Tab is outside on the left, so scroll left.
         scrollOffset = tabStart - scrollRect.left();
     } else if (tabEnd > scrolledTabBarEnd) {
@@ -689,9 +692,6 @@ void QTabBarPrivate::makeVisible(int index)
     } else if (scrollOffset + entireScrollRect.width() > lastTabEnd + 1) {
         // fill any free space on the right without overshooting
         scrollOffset = qMax(0, lastTabEnd - entireScrollRect.width() + 1);
-    } else if (available >= lastTabEnd) {
-        // the entire tabbar fits, reset scroll
-        scrollOffset = 0;
     }
 
     leftB->setEnabled(scrollOffset > -scrollRect.left());
@@ -1883,21 +1883,30 @@ void QTabBar::paintEvent(QPaintEvent *)
         QStyleOptionTab tabOption;
         const auto tab = d->tabList.at(selected);
         initStyleOption(&tabOption, selected);
+
         if (d->paintWithOffsets && tab->dragOffset != 0) {
+            // if the drag offset is != 0, a move is in progress (drag or animation)
+            // => set the tab position to Moving to preserve the rect
+            tabOption.position = QStyleOptionTab::TabPosition::Moving;
+
             if (vertical)
                 tabOption.rect.moveTop(tabOption.rect.y() + tab->dragOffset);
             else
                 tabOption.rect.moveLeft(tabOption.rect.x() + tab->dragOffset);
         }
-        if (!d->dragInProgress)
-            p.drawControl(QStyle::CE_TabBarTab, tabOption);
-        else {
-            int taboverlap = style()->pixelMetric(QStyle::PM_TabBarTabOverlap, nullptr, this);
-            if (verticalTabs(d->shape))
-                d->movingTab->setGeometry(tabOption.rect.adjusted(0, -taboverlap, 0, taboverlap));
-            else
-                d->movingTab->setGeometry(tabOption.rect.adjusted(-taboverlap, 0, taboverlap, 0));
-        }
+
+        // Calculate the rect of a moving tab
+        const int taboverlap = style()->pixelMetric(QStyle::PM_TabBarTabOverlap, nullptr, this);
+        const QRect &movingRect = verticalTabs(d->shape)
+                ? tabOption.rect.adjusted(0, -taboverlap, 0, taboverlap)
+                : tabOption.rect.adjusted(-taboverlap, 0, taboverlap, 0);
+
+        // If a drag is in process, set the moving tab's geometry here
+        // (in an animation, it is already set)
+        if (d->dragInProgress)
+            d->movingTab->setGeometry(movingRect);
+
+        p.drawControl(QStyle::CE_TabBarTab, tabOption);
     }
 
     // Only draw the tear indicator if necessary. Most of the time we don't need too.
@@ -2237,7 +2246,7 @@ void QTabBarPrivate::setupMovableTab()
 
     QStyleOptionTab tab;
     q->initStyleOption(&tab, pressedIndex);
-    tab.position = QStyleOptionTab::OnlyOneTab;
+    tab.position = QStyleOptionTab::Moving;
     if (verticalTabs(shape))
         tab.rect.moveTopLeft(QPoint(0, taboverlap));
     else
@@ -2427,7 +2436,7 @@ void QTabBarPrivate::setCurrentNextEnabledIndex(int offset)
 {
     Q_Q(QTabBar);
     for (int index = currentIndex + offset; validIndex(index); index += offset) {
-        if (tabList.at(index)->enabled) {
+        if (tabList.at(index)->enabled && tabList.at(index)->visible) {
             q->setCurrentIndex(index);
             break;
         }

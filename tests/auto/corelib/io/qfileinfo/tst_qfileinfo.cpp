@@ -4,7 +4,6 @@
 #include <QTest>
 #include <QStandardPaths>
 #include <QScopeGuard>
-#include <QScopedValueRollback>
 
 #include <qfile.h>
 #include <qdir.h>
@@ -49,9 +48,6 @@
 #endif
 
 #if defined(Q_OS_WIN)
-QT_BEGIN_NAMESPACE
-extern Q_CORE_EXPORT int qt_ntfs_permission_lookup;
-QT_END_NAMESPACE
 bool IsUserAdmin();
 #endif
 
@@ -211,7 +207,7 @@ private slots:
 
     void isHidden_data();
     void isHidden();
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_DARWIN)
     void isHiddenFromFinder();
 #endif
 
@@ -248,6 +244,7 @@ private slots:
     void nonExistingFile();
 
     void stdfilesystem();
+    void readSymLink();
 
 private:
     const QString m_currentDir;
@@ -778,7 +775,7 @@ void tst_QFileInfo::bundleName_data()
 
     QTest::newRow("root") << "/" << "";
     QTest::newRow("etc") << "/etc" << "";
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
     QTest::newRow("safari") << "/Applications/Safari.app" << "Safari";
 #endif
 }
@@ -1039,7 +1036,7 @@ void tst_QFileInfo::compare_data()
         << m_sourceFile
 #if defined(Q_OS_DOSLIKE)
         << true;
-#elif defined(Q_OS_MAC)
+#elif defined(Q_OS_DARWIN)
         << !pathconf(QDir::currentPath().toLatin1().constData(), _PC_CASE_SENSITIVE);
 #else
         << false;
@@ -1048,7 +1045,7 @@ void tst_QFileInfo::compare_data()
 
 void tst_QFileInfo::compare()
 {
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_DARWIN)
     if (qstrcmp(QTest::currentDataTag(), "casesense1") == 0)
         QSKIP("Qt thinks all UNIX filesystems are case sensitive, see QTBUG-28246");
 #endif
@@ -1133,8 +1130,8 @@ void tst_QFileInfo::fileTimes()
     {
         // try to guess if file times on this filesystem round to the second
         QFileInfo cwd(".");
-        if (cwd.lastModified().toMSecsSinceEpoch() % 1000 == 0
-                && cwd.lastRead().toMSecsSinceEpoch() % 1000 == 0) {
+        if (cwd.lastModified(QTimeZone::UTC).toMSecsSinceEpoch() % 1000 == 0
+                && cwd.lastRead(QTimeZone::UTC).toMSecsSinceEpoch() % 1000 == 0) {
             fsClockSkew = sleepTime = 1000;
 
             noAccessTime = qIsLikelyToBeFat(fileName);
@@ -1160,7 +1157,7 @@ void tst_QFileInfo::fileTimes()
         QFile file(fileName);
         QVERIFY(file.open(QFile::WriteOnly | QFile::Text));
         QFileInfo fileInfo(fileName);
-        birthTime = fileInfo.birthTime();
+        birthTime = fileInfo.birthTime(QTimeZone::UTC);
         QVERIFY2(!birthTime.isValid() || birthTime > beforeBirth,
                  datePairString(birthTime, beforeBirth));
 
@@ -1171,9 +1168,9 @@ void tst_QFileInfo::fileTimes()
     }
     {
         QFileInfo fileInfo(fileName);
-        writeTime = fileInfo.lastModified();
+        writeTime = fileInfo.lastModified(QTimeZone::UTC);
         QVERIFY2(writeTime > beforeWrite, datePairString(writeTime, beforeWrite));
-        QCOMPARE(fileInfo.birthTime(), birthTime); // mustn't have changed
+        QCOMPARE(fileInfo.birthTime(QTimeZone::UTC), birthTime); // mustn't have changed
     }
 
     // --- Change the file's metadata
@@ -1185,7 +1182,7 @@ void tst_QFileInfo::fileTimes()
     }
     {
         QFileInfo fileInfo(fileName);
-        metadataChangeTime = fileInfo.metadataChangeTime();
+        metadataChangeTime = fileInfo.metadataChangeTime(QTimeZone::UTC);
 #ifdef Q_OS_OS2
         // OS/2 doesn't change any timestamp at all when file attributes change
         QVERIFY2(metadataChangeTime == writeTime,
@@ -1195,7 +1192,7 @@ void tst_QFileInfo::fileTimes()
                  datePairString(metadataChangeTime, beforeMetadataChange));
         QVERIFY(metadataChangeTime >= writeTime); // not all filesystems can store both times
 #endif
-        QCOMPARE(fileInfo.birthTime(), birthTime); // mustn't have changed
+        QCOMPARE(fileInfo.birthTime(QTimeZone::UTC), birthTime); // mustn't have changed
     }
 
     // --- Read the file
@@ -1210,9 +1207,9 @@ void tst_QFileInfo::fileTimes()
     }
 
     QFileInfo fileInfo(fileName);
-    readTime = fileInfo.lastRead();
-    QCOMPARE(fileInfo.lastModified(), writeTime); // mustn't have changed
-    QCOMPARE(fileInfo.birthTime(), birthTime); // mustn't have changed
+    readTime = fileInfo.lastRead(QTimeZone::UTC);
+    QCOMPARE(fileInfo.lastModified(QTimeZone::UTC), writeTime); // mustn't have changed
+    QCOMPARE(fileInfo.birthTime(QTimeZone::UTC), birthTime); // mustn't have changed
     QVERIFY(readTime.isValid());
 
 #if defined(Q_OS_QNX) || defined(Q_OS_ANDROID)
@@ -1282,7 +1279,7 @@ void tst_QFileInfo::fakeFileTimes()
     file.close();
 
     if (ok)
-        QCOMPARE(QFileInfo(file.fileName()).lastModified(), when);
+        QCOMPARE(QFileInfo(file.fileName()).lastModified(QTimeZone::UTC), when);
     else
         QSKIP("Unable to set file metadata to contrived values");
 }
@@ -1580,14 +1577,14 @@ void tst_QFileInfo::isHidden_data()
     QTest::newRow("/path/to/.hidden-directory/..") << QDir::currentPath() + QString("/.hidden-directory/..") << true;
 #endif
 
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_DARWIN)
     // /bin has the hidden attribute on OS X
     QTest::newRow("/bin/") << QString::fromLatin1("/bin/") << true;
 #elif !defined(Q_OS_DOSLIKE)
     QTest::newRow("/bin/") << QString::fromLatin1("/bin/") << false;
 #endif
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
     QTest::newRow("mac_etc") << QString::fromLatin1("/etc") << true;
     QTest::newRow("mac_private_etc") << QString::fromLatin1("/private/etc") << false;
     QTest::newRow("mac_Applications") << QString::fromLatin1("/Applications") << false;
@@ -1609,7 +1606,7 @@ void tst_QFileInfo::isHidden()
     QCOMPARE(fi.isHidden(), isHidden);
 }
 
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_DARWIN)
 void tst_QFileInfo::isHiddenFromFinder()
 {
     const char *filename = "test_foobar.txt";
@@ -1635,7 +1632,7 @@ void tst_QFileInfo::isBundle_data()
     QTest::addColumn<QString>("path");
     QTest::addColumn<bool>("isBundle");
     QTest::newRow("root") << QString::fromLatin1("/") << false;
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
     QTest::newRow("mac_Applications") << QString::fromLatin1("/Applications") << false;
     QTest::newRow("mac_Applications") << QString::fromLatin1("/Applications/Safari.app") << true;
 #endif
@@ -1689,14 +1686,14 @@ void tst_QFileInfo::refresh()
     file.flush();
 
     QFileInfo info(file);
-    QDateTime lastModified = info.lastModified();
+    QDateTime lastModified = info.lastModified(QTimeZone::UTC);
     QCOMPARE(info.size(), qint64(7));
 
     QTest::qSleep(sleepTime);
 
     QCOMPARE(file.write("JOJOJO"), qint64(6));
     file.flush();
-    QCOMPARE(info.lastModified(), lastModified);
+    QCOMPARE(info.lastModified(QTimeZone::UTC), lastModified);
 
     QCOMPARE(info.size(), qint64(7));
 #if defined(Q_OS_DOSLIKE)
@@ -1704,7 +1701,7 @@ void tst_QFileInfo::refresh()
 #endif
     info.refresh();
     QCOMPARE(info.size(), qint64(13));
-    QVERIFY(info.lastModified() > lastModified);
+    QVERIFY(info.lastModified(QTimeZone::UTC) > lastModified);
 
     QFileInfo info2 = info;
     QCOMPARE(info2.size(), info.size());
@@ -1956,8 +1953,7 @@ void tst_QFileInfo::isWritable()
 #endif
 
 #if defined (Q_OS_WIN)
-    QScopedValueRollback<int> ntfsMode(qt_ntfs_permission_lookup);
-    qt_ntfs_permission_lookup = 1;
+    QNtfsPermissionCheckGuard permissionGuard;
     QFileInfo fi2(QFile::decodeName(qgetenv("SystemRoot") + "/system.ini"));
     QVERIFY(fi2.exists());
     QCOMPARE(fi2.isWritable(), IsUserAdmin());
@@ -2063,7 +2059,7 @@ private:
 
 void tst_QFileInfo::testDecomposedUnicodeNames()
 {
-#ifndef Q_OS_MAC
+#ifndef Q_OS_DARWIN
     QSKIP("This is a OS X only test (unless you know more about filesystems, then maybe you should try it ;)");
 #else
     QFETCH(QString, filePath);
@@ -2207,7 +2203,7 @@ void tst_QFileInfo::owner()
                 NetApiBufferFree(pBuf);
         }
     }
-    qt_ntfs_permission_lookup = 1;
+    QNtfsPermissionCheckGuard permissionGuard;
 #endif
     if (userName.isEmpty())
         QSKIP("Can't retrieve the user name");
@@ -2224,9 +2220,6 @@ void tst_QFileInfo::owner()
     QCOMPARE(fi.owner(), userName);
 
     QFile::remove(fileName);
-#if defined(Q_OS_WIN)
-    qt_ntfs_permission_lookup = 0;
-#endif
 }
 
 void tst_QFileInfo::group()
@@ -2310,10 +2303,10 @@ static void stateCheck(const QFileInfo &info, const QString &dirname, const QStr
 
     QCOMPARE(info.permissions(), QFile::Permissions());
 
-    QVERIFY(!info.birthTime().isValid());
-    QVERIFY(!info.metadataChangeTime().isValid());
-    QVERIFY(!info.lastRead().isValid());
-    QVERIFY(!info.lastModified().isValid());
+    QVERIFY(!info.birthTime(QTimeZone::UTC).isValid());
+    QVERIFY(!info.metadataChangeTime(QTimeZone::UTC).isValid());
+    QVERIFY(!info.lastRead(QTimeZone::UTC).isValid());
+    QVERIFY(!info.lastModified(QTimeZone::UTC).isValid());
 };
 
 void tst_QFileInfo::invalidState_data()
@@ -2388,6 +2381,18 @@ void tst_QFileInfo::stdfilesystem()
         COMPARE_CONSTRUCTION("./filæ.txt");
 #endif
 
+        // Test unicode strings
+        QCOMPARE(QFileInfo(fs::path(u"./filæ.txt")).absoluteFilePath(),
+                 QFileInfo(u"./filæ.txt"_s).absoluteFilePath());
+        QCOMPARE(QFileInfo(base, fs::path(u"./filæ.txt")).absoluteFilePath(),
+                 QFileInfo(base, u"./filæ.txt"_s).absoluteFilePath());
+#ifdef __cpp_char8_t
+        QCOMPARE(QFileInfo(fs::path(u8"./filæ.txt")).absoluteFilePath(),
+                 QFileInfo(u8"./filæ.txt").absoluteFilePath());
+        QCOMPARE(QFileInfo(base, fs::path(u8"./filæ.txt")).absoluteFilePath(),
+                 QFileInfo(base, u8"./filæ.txt").absoluteFilePath());
+#endif
+
 #undef COMPARE_CONSTRUCTION
         {
             // One proper comparison with operator== for each ctor
@@ -2448,5 +2453,20 @@ void tst_QFileInfo::stdfilesystem()
 #endif
 }
 
+void tst_QFileInfo::readSymLink()
+{
+    QString symLinkName("./a.link");
+    const auto tidier = qScopeGuard([symLinkName]() { QFile::remove(symLinkName); });
+
+#ifdef Q_OS_WIN
+    QVERIFY2(CreateSymbolicLink(L"a.link", L"..\\..\\a",   SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)
+             != 0,
+             "Failed to create symlink for test");
+#else
+    QVERIFY2(QFile::link("../../a", symLinkName), "Failed to create symlink for test");
+#endif
+    QFileInfo info(symLinkName);
+    QCOMPARE(info.readSymLink(), QString("../../a"));
+}
 QTEST_MAIN(tst_QFileInfo)
 #include "tst_qfileinfo.moc"

@@ -22,6 +22,7 @@
 #include <QtGui/QIconEngine>
 #include <QtGui/QPixmapCache>
 #include <private/qicon_p.h>
+#include <private/qiconengine_p.h>
 #include <private/qfactoryloader_p.h>
 #include <QtCore/QHash>
 #include <QtCore/QList>
@@ -37,6 +38,7 @@ class QIconLoader;
 struct QIconDirInfo
 {
     enum Type { Fixed, Scalable, Threshold, Fallback };
+    enum Context { UnknownContext, Applications, MimeTypes };
     QIconDirInfo(const QString &_path = QString()) :
             path(_path),
             size(0),
@@ -44,7 +46,8 @@ struct QIconDirInfo
             minSize(0),
             threshold(0),
             scale(1),
-            type(Threshold) {}
+            type(Threshold),
+            context(UnknownContext) {}
     QString path;
     short size;
     short maxSize;
@@ -52,6 +55,7 @@ struct QIconDirInfo
     short threshold;
     short scale;
     Type type;
+    Context context;
 };
 Q_DECLARE_TYPEINFO(QIconDirInfo, Q_RELOCATABLE_TYPE);
 
@@ -86,6 +90,27 @@ struct QThemeIconInfo
     QString iconName;
 };
 
+class QThemeIconEngine : public QProxyIconEngine
+{
+public:
+    QThemeIconEngine(const QString& iconName = QString());
+    QIconEngine *clone() const override;
+    bool read(QDataStream &in) override;
+    bool write(QDataStream &out) const override;
+
+protected:
+    QIconEngine *proxiedEngine() const override;
+
+private:
+    QThemeIconEngine(const QThemeIconEngine &other);
+    QString key() const override;
+
+    QString m_iconName;
+    mutable uint m_themeKey = 0;
+
+    mutable std::unique_ptr<QIconEngine> m_proxiedEngine;
+};
+
 class QIconLoaderEngine : public QIconEngine
 {
 public:
@@ -96,8 +121,6 @@ public:
     QPixmap pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state) override;
     QSize actualSize(const QSize &size, QIcon::Mode mode, QIcon::State state) override;
     QIconEngine *clone() const override;
-    bool read(QDataStream &in) override;
-    bool write(QDataStream &out) const override;
 
     QString iconName() override;
     bool isNull() override;
@@ -107,14 +130,13 @@ public:
     Q_GUI_EXPORT static QIconLoaderEngineEntry *entryForSize(const QThemeIconInfo &info, const QSize &size, int scale = 1);
 
 private:
+    Q_DISABLE_COPY(QIconLoaderEngine)
+
     QString key() const override;
     bool hasIcon() const;
-    void ensureLoaded();
 
-    QIconLoaderEngine(const QIconLoaderEngine &other);
-    QThemeIconInfo m_info;
     QString m_iconName;
-    uint m_key;
+    QThemeIconInfo m_info;
 
     friend class QIconLoader;
 };
@@ -162,10 +184,14 @@ public:
     void ensureInitialized();
     bool hasUserTheme() const { return !m_userTheme.isEmpty(); }
 
+    QIconEngine *iconEngine(const QString &iconName) const;
+
 private:
+    enum DashRule { FallBack, NoFallBack };
     QThemeIconInfo findIconHelper(const QString &themeName,
                                   const QString &iconName,
-                                  QStringList &visited) const;
+                                  QStringList &visited,
+                                  DashRule rule) const;
     QThemeIconInfo lookupFallbackIcon(const QString &iconName) const;
 
     uint m_themeKey;
@@ -178,6 +204,7 @@ private:
     mutable QStringList m_iconDirs;
     mutable QHash <QString, QIconTheme> themeList;
     mutable QStringList m_fallbackDirs;
+    mutable QString m_iconName;
 };
 
 QT_END_NAMESPACE

@@ -661,8 +661,8 @@ void QAbstractItemView::setModel(QAbstractItemModel *model)
     if (d->model && d->model != QAbstractItemModelPrivate::staticEmptyModel()) {
         disconnect(d->model, SIGNAL(destroyed()),
                    this, SLOT(_q_modelDestroyed()));
-        disconnect(d->model, SIGNAL(dataChanged(QModelIndex, QModelIndex, QList<int>)), this,
-                   SLOT(dataChanged(QModelIndex, QModelIndex, QList<int>)));
+        disconnect(d->model, SIGNAL(dataChanged(QModelIndex,QModelIndex,QList<int>)), this,
+                   SLOT(dataChanged(QModelIndex,QModelIndex,QList<int>)));
         disconnect(d->model, SIGNAL(headerDataChanged(Qt::Orientation,int,int)),
                    this, SLOT(_q_headerDataChanged()));
         disconnect(d->model, SIGNAL(rowsInserted(QModelIndex,int,int)),
@@ -692,8 +692,8 @@ void QAbstractItemView::setModel(QAbstractItemModel *model)
     if (d->model != QAbstractItemModelPrivate::staticEmptyModel()) {
         connect(d->model, SIGNAL(destroyed()),
                 this, SLOT(_q_modelDestroyed()));
-        connect(d->model, SIGNAL(dataChanged(QModelIndex, QModelIndex, QList<int>)), this,
-                SLOT(dataChanged(QModelIndex, QModelIndex, QList<int>)));
+        connect(d->model, SIGNAL(dataChanged(QModelIndex,QModelIndex,QList<int>)), this,
+                SLOT(dataChanged(QModelIndex,QModelIndex,QList<int>)));
         connect(d->model, SIGNAL(headerDataChanged(Qt::Orientation,int,int)),
                 this, SLOT(_q_headerDataChanged()));
         connect(d->model, SIGNAL(rowsInserted(QModelIndex,int,int)),
@@ -1644,7 +1644,7 @@ Qt::TextElideMode QAbstractItemView::textElideMode() const
 bool QAbstractItemView::focusNextPrevChild(bool next)
 {
     Q_D(QAbstractItemView);
-    if (d->tabKeyNavigation && isEnabled() && d->viewport->isEnabled()) {
+    if (d->tabKeyNavigation && isVisible() && isEnabled() && d->viewport->isEnabled()) {
         QKeyEvent event(QEvent::KeyPress, next ? Qt::Key_Tab : Qt::Key_Backtab, Qt::NoModifier);
         keyPressEvent(&event);
         if (event.isAccepted())
@@ -2924,41 +2924,50 @@ void QAbstractItemView::closeEditor(QWidget *editor, QAbstractItemDelegate::EndE
 
     // Close the editor
     if (editor) {
-        bool isPersistent = d->persistent.contains(editor);
-        bool hadFocus = editor->hasFocus();
-        QModelIndex index = d->indexForEditor(editor);
+        const bool isPersistent = d->persistent.contains(editor);
+        const QModelIndex index = d->indexForEditor(editor);
         if (!index.isValid()) {
-            qWarning("QAbstractItemView::closeEditor called with an editor that does not belong to this view");
-            return; // the editor was not registered
-        }
-
-        // start a timer that expires immediately when we return to the event loop
-        // to identify whether this close was triggered by a mousepress-initiated
-        // focus event
-        d->pressClosedEditorWatcher.start(0, this);
-        d->lastEditedIndex = index;
-
-        if (!isPersistent) {
-            setState(NoState);
-            QModelIndex index = d->indexForEditor(editor);
-            editor->removeEventFilter(itemDelegateForIndex(index));
-            d->removeEditor(editor);
-        }
-        if (hadFocus) {
-            if (focusPolicy() != Qt::NoFocus)
-                setFocus(); // this will send a focusLost event to the editor
-            else
-                editor->clearFocus();
+            if (!editor->isVisible()) {
+                // The commit might have removed the index (e.g. it might get filtered), in
+                // which case the editor is already hidden and scheduled for deletion. We
+                // don't have to do anything, except reset the state, and continue with
+                // EndEditHint processing.
+                if (!isPersistent)
+                    setState(NoState);
+            } else {
+                qWarning("QAbstractItemView::closeEditor called with an editor that does not belong to this view");
+                return;
+            }
         } else {
-            d->checkPersistentEditorFocus();
+            const bool hadFocus = editor->hasFocus();
+            // start a timer that expires immediately when we return to the event loop
+            // to identify whether this close was triggered by a mousepress-initiated
+            // focus event
+            d->pressClosedEditorWatcher.start(0, this);
+            d->lastEditedIndex = index;
+
+            if (!isPersistent) {
+                setState(NoState);
+                QModelIndex index = d->indexForEditor(editor);
+                editor->removeEventFilter(itemDelegateForIndex(index));
+                d->removeEditor(editor);
+            }
+            if (hadFocus) {
+                if (focusPolicy() != Qt::NoFocus)
+                    setFocus(); // this will send a focusLost event to the editor
+                else
+                    editor->clearFocus();
+            } else {
+                d->checkPersistentEditorFocus();
+            }
+
+            QPointer<QWidget> ed = editor;
+            QCoreApplication::sendPostedEvents(editor, 0);
+            editor = ed;
+
+            if (!isPersistent && editor)
+                d->releaseEditor(editor, index);
         }
-
-        QPointer<QWidget> ed = editor;
-        QCoreApplication::sendPostedEvents(editor, 0);
-        editor = ed;
-
-        if (!isPersistent && editor)
-            d->releaseEditor(editor, index);
     }
 
     // The EndEditHint part
@@ -3511,10 +3520,21 @@ void QAbstractItemView::rowsAboutToBeRemoved(const QModelIndex &parent, int star
     }
 
     // Remove all affected editors; this is more efficient than waiting for updateGeometries() to clean out editors for invalid indexes
+    const auto findDirectChildOf = [](const QModelIndex &parent, QModelIndex child)
+    {
+        while (child.isValid()) {
+            const auto parentIndex = child.parent();
+            if (parentIndex == parent)
+                return child;
+            child = parentIndex;
+        }
+        return QModelIndex();
+    };
     QEditorIndexHash::iterator i = d->editorIndexHash.begin();
     while (i != d->editorIndexHash.end()) {
         const QModelIndex index = i.value();
-        if (index.row() >= start && index.row() <= end && d->model->parent(index) == parent) {
+        const QModelIndex directChild = findDirectChildOf(parent, index);
+        if (directChild.isValid() && directChild.row() >= start && directChild.row() <= end) {
             QWidget *editor = i.key();
             QEditorInfo info = d->indexEditorHash.take(index);
             i = d->editorIndexHash.erase(i);

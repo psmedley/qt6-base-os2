@@ -443,9 +443,8 @@ void tst_QHostInfo::reverseLookup()
     QFETCH(int, err);
     QFETCH(bool, ipv6);
 
-    if (ipv6 && !ipv6LookupsAvailable) {
+    if (ipv6 && !ipv6LookupsAvailable)
         QSKIP("IPv6 reverse lookups are not supported on this platform");
-    }
 
     QHostInfo info = QHostInfo::fromName(address);
 
@@ -453,7 +452,7 @@ void tst_QHostInfo::reverseLookup()
         if (!hostNames.contains(info.hostName()))
             qDebug() << "Failure: expecting" << hostNames << ",got " << info.hostName();
         QVERIFY(hostNames.contains(info.hostName()));
-        QCOMPARE(info.addresses().first(), QHostAddress(address));
+        QCOMPARE(info.addresses().constFirst(), QHostAddress(address));
     } else {
         QCOMPARE(info.hostName(), address);
         QCOMPARE(info.error(), QHostInfo::HostNotFound);
@@ -505,6 +504,7 @@ protected:
     inline void run() override
     {
          QHostInfo info = QHostInfo::fromName("a-single" TEST_DOMAIN);
+         QCOMPARE(info.errorString(), "Unknown error"); // no error
          QCOMPARE(info.error(), QHostInfo::NoError);
          QVERIFY(info.addresses().size() > 0);
          QCOMPARE(info.addresses().at(0).toString(), QString("192.0.2.1"));

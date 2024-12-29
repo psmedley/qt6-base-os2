@@ -26,15 +26,9 @@
 #include <security.h>
 #include <schnlsp.h>
 
-#if NTDDI_VERSION >= NTDDI_WINBLUE && !defined(Q_CC_MINGW)
+#if NTDDI_VERSION >= NTDDI_WINBLUE && defined(SECBUFFER_APPLICATION_PROTOCOLS)
 // ALPN = Application Layer Protocol Negotiation
 #define SUPPORTS_ALPN 1
-#endif
-
-// Redstone 5/1809 has all the API available, but TLS 1.3 is not enabled until a later version of
-// Win 10, checked at runtime in supportsTls13()
-#if defined(NTDDI_WIN10_RS5) && NTDDI_VERSION >= NTDDI_WIN10_RS5
-#define SUPPORTS_TLS13 1
 #endif
 
 // Not defined in MinGW
@@ -298,7 +292,11 @@ QList<QSslCertificate> QSchannelBackend::systemCaCertificatesImplementation()
     // Similar to non-Darwin version found in qtlsbackend_openssl.cpp,
     // QTlsPrivate::systemCaCertificates function.
     QList<QSslCertificate> systemCerts;
-    auto hSystemStore = QHCertStorePointer(CertOpenSystemStore(0, L"ROOT"));
+
+    auto hSystemStore = QHCertStorePointer(
+            CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0,
+                          CERT_STORE_READONLY_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"ROOT"));
+
     if (hSystemStore) {
         PCCERT_CONTEXT pc = nullptr;
         while ((pc = CertFindCertificateInStore(hSystemStore.get(), X509_ASN_ENCODING, 0,
@@ -317,6 +315,11 @@ QTlsPrivate::X509PemReaderPtr QSchannelBackend::X509PemReader() const
 QTlsPrivate::X509DerReaderPtr QSchannelBackend::X509DerReader() const
 {
     return QTlsPrivate::X509CertificateGeneric::certificatesFromDer;
+}
+
+QTlsPrivate::X509Pkcs12ReaderPtr QSchannelBackend::X509Pkcs12Reader() const
+{
+    return QTlsPrivate::X509CertificateSchannel::importPkcs12;
 }
 
 namespace {
@@ -383,7 +386,6 @@ QString schannelErrorToString(qint32 status)
 
 bool supportsTls13()
 {
-#ifdef SUPPORTS_TLS13
     static bool supported = []() {
         const auto current = QOperatingSystemVersion::current();
         // 20221 just happens to be the preview version I run on my laptop where I tested TLS 1.3.
@@ -391,10 +393,8 @@ bool supportsTls13()
                 QOperatingSystemVersion(QOperatingSystemVersion::Windows, 10, 0, 20221);
         return current >= minimum;
     }();
+
     return supported;
-#else
-    return false;
-#endif
 }
 
 DWORD toSchannelProtocol(QSsl::SslProtocol protocol)
@@ -459,7 +459,6 @@ QT_WARNING_POP
     return protocols;
 }
 
-#ifdef SUPPORTS_TLS13
 // In the new API that descended down upon us we are not asked which protocols we want
 // but rather which protocols we don't want. So now we have this function to disable
 // anything that is not enabled.
@@ -469,7 +468,6 @@ DWORD toSchannelProtocolNegated(QSsl::SslProtocol protocol)
     protocols &= ~toSchannelProtocol(protocol); // minus the one(s) we want
     return protocols;
 }
-#endif
 
 /*!
     \internal
@@ -679,6 +677,10 @@ qint64 checkIncompleteData(const SecBuffer &secBuffer)
     return 0;
 }
 
+DWORD defaultCredsFlag()
+{
+    return qEnvironmentVariableIsSet("QT_SCH_DEFAULT_CREDS") ? 0 : SCH_CRED_NO_DEFAULT_CREDS;
+}
 } // anonymous namespace
 
 
@@ -718,6 +720,10 @@ bool TlsCryptographSchannel::sendToken(void *token, unsigned long tokenLength, b
     Q_ASSERT(d);
     auto *plainSocket = d->plainTcpSocket();
     Q_ASSERT(plainSocket);
+    if (plainSocket->state() == QAbstractSocket::UnconnectedState || !plainSocket->isValid()
+        || !plainSocket->isOpen()) {
+        return false;
+    }
 
     const qint64 written = plainSocket->write(static_cast<const char *>(token), tokenLength);
     if (written != qint64(tokenLength)) {
@@ -834,8 +840,7 @@ bool TlsCryptographSchannel::acquireCredentialsHandle()
         certsCount = 1;
         Q_ASSERT(localCertContext);
     }
-    void *credentials = nullptr;
-#ifdef SUPPORTS_TLS13
+
     TLS_PARAMETERS tlsParameters = {
         0,
         nullptr,
@@ -844,69 +849,32 @@ bool TlsCryptographSchannel::acquireCredentialsHandle()
         nullptr,
         0
     };
-    if (supportsTls13()) {
-        SCH_CREDENTIALS *cred = new SCH_CREDENTIALS{
-            SCH_CREDENTIALS_VERSION,
-            0,
-            certsCount,
-            &localCertContext,
-            nullptr,
-            0,
-            nullptr,
-            0,
-            SCH_CRED_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT
-                    | SCH_CRED_NO_DEFAULT_CREDS,
-            1,
-            &tlsParameters
-        };
-        credentials = cred;
-    } else
-#endif // SUPPORTS_TLS13
-    {
-        SCHANNEL_CRED *cred = new SCHANNEL_CRED{
-            SCHANNEL_CRED_VERSION, // dwVersion
-            certsCount, // cCreds
-            &localCertContext, // paCred (certificate(s) containing a private key for authentication)
-            nullptr, // hRootStore
 
-            0, // cMappers (reserved)
-            nullptr, // aphMappers (reserved)
-
-            0, // cSupportedAlgs
-            nullptr, // palgSupportedAlgs (nullptr = system default)
-
-            protocols, // grbitEnabledProtocols
-            0, // dwMinimumCipherStrength (0 = system default)
-            0, // dwMaximumCipherStrength (0 = system default)
-            0, // dwSessionLifespan (0 = schannel default, 10 hours)
-            SCH_CRED_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT
-                    | SCH_CRED_NO_DEFAULT_CREDS, // dwFlags
-            0 // dwCredFormat (must be 0)
-        };
-        credentials = cred;
-    }
-    Q_ASSERT(credentials != nullptr);
+    SCH_CREDENTIALS credentials = {
+        SCH_CREDENTIALS_VERSION,
+        0,
+        certsCount,
+        &localCertContext,
+        nullptr,
+        0,
+        nullptr,
+        0,
+        SCH_CRED_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT | defaultCredsFlag(),
+        1,
+        &tlsParameters
+    };
 
     TimeStamp expiration{};
     auto status = AcquireCredentialsHandle(nullptr, // pszPrincipal (unused)
                                            const_cast<wchar_t *>(UNISP_NAME), // pszPackage
                                            isClient ? SECPKG_CRED_OUTBOUND : SECPKG_CRED_INBOUND, // fCredentialUse
                                            nullptr, // pvLogonID (unused)
-                                           credentials, // pAuthData
+                                           &credentials, // pAuthData
                                            nullptr, // pGetKeyFn (unused)
                                            nullptr, // pvGetKeyArgument (unused)
                                            &credentialHandle, // phCredential
                                            &expiration // ptsExpir
     );
-
-#ifdef SUPPORTS_TLS13
-    if (supportsTls13()) {
-        delete static_cast<SCH_CREDENTIALS *>(credentials);
-    } else
-#endif // SUPPORTS_TLS13
-    {
-        delete static_cast<SCHANNEL_CRED *>(credentials);
-    }
 
     if (status != SEC_E_OK) {
         setErrorAndEmit(d, QAbstractSocket::SslInternalError, schannelErrorToString(status));
@@ -1112,7 +1080,8 @@ bool TlsCryptographSchannel::performHandshake()
     auto *plainSocket = d->plainTcpSocket();
     Q_ASSERT(plainSocket);
 
-    if (plainSocket->state() == QAbstractSocket::UnconnectedState) {
+    if (plainSocket->state() == QAbstractSocket::UnconnectedState || !plainSocket->isValid()
+        || !plainSocket->isOpen()) {
         setErrorAndEmit(d, QAbstractSocket::RemoteHostClosedError,
                         QSslSocket::tr("The TLS/SSL connection has been closed"));
         return false;
@@ -1482,8 +1451,10 @@ void TlsCryptographSchannel::transmit()
         return; // This function should not have been called
 
     // Can happen if called through QSslSocket::abort->QSslSocket::close->QSslSocket::flush->here
-    if (plainSocket->state() == QAbstractSocket::SocketState::UnconnectedState)
+    if (plainSocket->state() == QAbstractSocket::UnconnectedState || !plainSocket->isValid()
+        || !plainSocket->isOpen()) {
         return;
+    }
 
     if (schannelState != SchannelState::Done) {
         continueHandshake();
@@ -1635,8 +1606,12 @@ void TlsCryptographSchannel::transmit()
             qCWarning(lcTlsBackendSchannel, "The internal SSPI handle is invalid!");
             Q_UNREACHABLE();
         } else if (status == SEC_E_INVALID_TOKEN) {
-            qCWarning(lcTlsBackendSchannel, "Got SEC_E_INVALID_TOKEN!");
-            Q_UNREACHABLE(); // Happened once due to a bug, but shouldn't generally happen(?)
+            // Supposedly we have an invalid token, it's under-documented what
+            // this means, so to be safe we disconnect.
+            shutdown = true;
+            disconnectFromHost();
+            setErrorAndEmit(d, QAbstractSocket::SslInternalError, schannelErrorToString(status));
+            break;
         } else if (status == SEC_E_MESSAGE_ALTERED) {
             // The message has been altered, disconnect now.
             shutdown = true; // skips sending the shutdown alert
@@ -1992,7 +1967,10 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
         // the Ca list, not just included during verification.
         // That being said, it's not trivial to add the root certificates (if and only if they
         // came from the system root store). And I don't see this mentioned in our documentation.
-        auto rootStore = QHCertStorePointer(CertOpenSystemStore(0, L"ROOT"));
+        auto rootStore = QHCertStorePointer(
+                CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0,
+                              CERT_STORE_READONLY_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"ROOT"));
+
         if (!rootStore) {
 #ifdef QSSLSOCKET_DEBUG
             qCWarning(lcTlsBackendSchannel, "Failed to open the system root CA certificate store!");
@@ -2131,6 +2109,15 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
     for (DWORD i = 0; i < verifyDepth; i++) {
         CERT_CHAIN_ELEMENT *element = chain->rgpElement[i];
         QSslCertificate certificate = getCertificateFromChainElement(element);
+        if (certificate.isNull()) {
+            const auto &previousCert = !peerCertificateChain.isEmpty() ? peerCertificateChain.last()
+                                                                       : QSslCertificate();
+            auto error = QSslError(QSslError::SslError::UnableToGetIssuerCertificate, previousCert);
+            sslErrors += error;
+            emit q->peerVerifyError(error);
+            if (previousCert.isNull() || q->state() != QAbstractSocket::ConnectedState)
+                return false;
+        }
         const QList<QSslCertificateExtension> extensions = certificate.extensions();
 
 #ifdef QSSLSOCKET_DEBUG

@@ -91,10 +91,19 @@ void QLibrarySettings::load()
     }
 }
 
+namespace {
+const QString *qtconfManualPath = nullptr;
+}
+
+void QLibraryInfoPrivate::setQtconfManualPath(const QString *path)
+{
+    qtconfManualPath = path;
+}
+
 static QSettings *findConfiguration()
 {
-    if (QLibraryInfoPrivate::qtconfManualPath)
-        return new QSettings(*QLibraryInfoPrivate::qtconfManualPath, QSettings::IniFormat);
+    if (qtconfManualPath)
+        return new QSettings(*qtconfManualPath, QSettings::IniFormat);
 
     QString qtconfig = QStringLiteral(":/qt/etc/qt.conf");
     if (QFile::exists(qtconfig))
@@ -125,8 +134,6 @@ static QSettings *findConfiguration()
     }
     return nullptr;     //no luck
 }
-
-const QString *QLibraryInfoPrivate::qtconfManualPath = nullptr;
 
 QSettings *QLibraryInfoPrivate::configuration()
 {
@@ -488,6 +495,7 @@ QLibraryInfoPrivate::LocationInfo QLibraryInfoPrivate::locationInfo(QLibraryInfo
         "Examples", "examples",
         "Tests", "tests"
     );
+    [[maybe_unused]]
     constexpr QByteArrayView dot{"."};
 
     LocationInfo result;
@@ -553,8 +561,8 @@ QString QLibraryInfoPrivate::path(QLibraryInfo::LibraryPath p, UsageMode usageMo
                 ret = v.toString();
             }
 
-            int startIndex = 0;
-            forever {
+            qsizetype startIndex = 0;
+            while (true) {
                 startIndex = ret.indexOf(u'$', startIndex);
                 if (startIndex < 0)
                     break;
@@ -564,7 +572,7 @@ QString QLibraryInfoPrivate::path(QLibraryInfo::LibraryPath p, UsageMode usageMo
                     startIndex++;
                     continue;
                 }
-                int endIndex = ret.indexOf(u')', startIndex + 2);
+                qsizetype endIndex = ret.indexOf(u')', startIndex + 2);
                 if (endIndex < 0)
                     break;
                 auto envVarName = QStringView{ret}.mid(startIndex + 2, endIndex - startIndex - 2);
@@ -756,13 +764,14 @@ extern "C" void qt_core_boilerplate() __attribute__((force_align_arg_pointer));
 void qt_core_boilerplate()
 {
     printf("This is the QtCore library version %s\n"
-           "Copyright (C) 2016 The Qt Company Ltd.\n"
-           "Contact: http://www.qt.io/licensing/\n"
+           "%s\n"
+           "Contact: https://www.qt.io/licensing/\n"
            "\n"
            "Installation prefix: %s\n"
            "Library path:        %s\n"
            "Plugin path:         %s\n",
            QT_PREPEND_NAMESPACE(qt_build_string)(),
+           QT_COPYRIGHT,
            QT_CONFIGURE_PREFIX_PATH,
            qt_configure_strs[QT_PREPEND_NAMESPACE(QLibraryInfo)::LibrariesPath - 1],
            qt_configure_strs[QT_PREPEND_NAMESPACE(QLibraryInfo)::PluginsPath - 1]);

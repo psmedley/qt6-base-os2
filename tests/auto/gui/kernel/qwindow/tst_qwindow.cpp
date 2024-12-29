@@ -30,6 +30,7 @@ private slots:
     void create();
     void setParent();
     void setVisible();
+    void setVisibleThenCreate();
     void setVisibleFalseDoesNotCreateWindow();
     void eventOrderOnShow();
     void paintEvent();
@@ -89,6 +90,11 @@ private slots:
     void qobject_castOnDestruction();
     void touchToMouseTranslationByPopup();
     void stateChangeSignal();
+#ifndef QT_NO_CURSOR
+    void enterLeaveOnWindowShowHide_data();
+    void enterLeaveOnWindowShowHide();
+#endif
+    void windowExposedAfterReparent();
 
 private:
     QPoint m_availableTopLeft;
@@ -229,6 +235,40 @@ void tst_QWindow::setVisible()
     i.setParent(&h);
     QVERIFY2(i.handle(), "Making a visible but not created child window child of a created window should create it");
     QVERIFY(QTest::qWaitForWindowExposed(&i));
+}
+
+class SurfaceCreatedWindow : public QWindow
+{
+    Q_OBJECT
+public:
+    using QWindow::QWindow;
+
+    bool eventFilter(QObject *o, QEvent *e) override
+    {
+        if (e->type() == QEvent::PlatformSurface) {
+            auto type = static_cast<QPlatformSurfaceEvent*>(e)->surfaceEventType();
+            if (type == QPlatformSurfaceEvent::SurfaceCreated)
+                ++surfaceCreatedEvents;
+        }
+        return QWindow::eventFilter(o, e);
+    }
+
+    int surfaceCreatedEvents = 0;
+};
+
+void tst_QWindow::setVisibleThenCreate()
+{
+    QWindow parent;
+    parent.setObjectName("Parent");
+    SurfaceCreatedWindow child(&parent);
+    child.installEventFilter(&child);
+    child.setObjectName("Child");
+    child.setVisible(true);
+    child.create();
+    QCOMPARE(child.surfaceCreatedEvents, 1);
+    parent.setVisible(true);
+    QCOMPARE(child.surfaceCreatedEvents, 1);
+    QVERIFY(QTest::qWaitForWindowExposed(&child));
 }
 
 void tst_QWindow::setVisibleFalseDoesNotCreateWindow()
@@ -2883,6 +2923,106 @@ void tst_QWindow::stateChangeSignal()
     QWindowSystemInterface::handleWindowStateChanged(&w, Qt::WindowMinimized, w.windowState());
     ++signalCount;
     CHECK_SIGNAL(Qt::WindowMinimized);
+}
+
+#ifndef QT_NO_CURSOR
+void tst_QWindow::enterLeaveOnWindowShowHide_data()
+{
+    QTest::addColumn<Qt::WindowType>("windowType");
+    QTest::addRow("dialog") << Qt::Dialog;
+    QTest::addRow("popup") << Qt::Popup;
+}
+
+/*!
+    Verify that we get enter and leave events if the window under the mouse
+    opens and closes a modal dialog or popup. QWindow might get multiple
+    events in a row, as the various QPA plugins need to use different techniques
+    to synthesize events if the native platform doesn't provide them for us.
+*/
+void tst_QWindow::enterLeaveOnWindowShowHide()
+{
+    if (isPlatformWayland())
+        QSKIP("Can't set cursor position and qWaitForWindowActive on Wayland");
+
+    QFETCH(Qt::WindowType, windowType);
+
+    class Window : public QWindow
+    {
+    public:
+        int numEnterEvents = 0;
+        int numLeaveEvents = 0;
+        QPoint enterPosition;
+    protected:
+        bool event(QEvent *e) override
+        {
+            switch (e->type()) {
+            case QEvent::Enter:
+                ++numEnterEvents;
+                enterPosition = static_cast<QEnterEvent*>(e)->position().toPoint();
+                break;
+            case QEvent::Leave:
+                ++numLeaveEvents;
+                break;
+            default:
+                break;
+            }
+            return QWindow::event(e);
+        }
+    };
+
+    int expectedEnter = 0;
+    int expectedLeave = 0;
+
+    Window window;
+    const QRect screenGeometry = window.screen()->availableGeometry();
+    const QPoint cursorPos = screenGeometry.topLeft() + QPoint(50, 50);
+    window.setGeometry(QRect(cursorPos - QPoint(50, 50), screenGeometry.size() / 4));
+    QCursor::setPos(cursorPos);
+
+    if (!QTest::qWaitFor([&]{ return window.geometry().contains(QCursor::pos()); }))
+        QSKIP("We can't move the cursor");
+
+    window.show();
+    window.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+
+    ++expectedEnter;
+    QTRY_COMPARE_WITH_TIMEOUT(window.numEnterEvents, expectedEnter, 250);
+    QCOMPARE(window.enterPosition, window.mapFromGlobal(QCursor::pos()));
+
+    QWindow secondary;
+    secondary.setFlag(windowType);
+    secondary.setModality(Qt::WindowModal);
+    secondary.setTransientParent(&window);
+    secondary.setPosition(cursorPos + QPoint(50, 50));
+    secondary.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&secondary));
+    ++expectedLeave;
+    QTRY_VERIFY(window.numLeaveEvents >= expectedLeave);
+    secondary.close();
+    ++expectedEnter;
+    QTRY_VERIFY(window.numEnterEvents >= expectedEnter);
+    QCOMPARE(window.enterPosition, window.mapFromGlobal(QCursor::pos()));
+}
+#endif
+
+void tst_QWindow::windowExposedAfterReparent()
+{
+    QWindow parent;
+    QWindow child(&parent);
+    child.show();
+    parent.show();
+
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+    QVERIFY(QTest::qWaitForWindowExposed(&child));
+
+    child.setParent(nullptr);
+    QCoreApplication::processEvents();
+    QVERIFY(QTest::qWaitForWindowExposed(&child));
+
+    child.setParent(&parent);
+    QCoreApplication::processEvents();
+    QVERIFY(QTest::qWaitForWindowExposed(&child));
 }
 
 #include <tst_qwindow.moc>

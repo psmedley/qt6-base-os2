@@ -57,9 +57,25 @@ Q_GLOBAL_STATIC(QThreadStorage<GenerationalCollator>, defaultCollator)
     In addition to the locale, several optional flags can be set that influence
     the result of the collation.
 
-    \note On Linux, Qt is normally compiled to use ICU. When it isn't, all
-    options are ignored and the only supported locales are the system default
-    (that \c{setlocale(LC_COLLATE, nullptr)} would report) and the "C" locale.
+    \section1 POSIX fallback implementation
+
+    On Unix systems, Qt is normally compiled to use ICU (except for \macos,
+    where Qt defaults to using an equivalent Apple API). However, if ICU was
+    not available at compile time or explicitly disabled, Qt will use a
+    fallback backend that uses the POSIX API only. This backend has several
+    limitations:
+
+    \list
+      \li Only the QLocale::c() and QLocale::system() locales are supported.
+          Consult the POSIX and C Standard Library manuals for the
+          \c{<locale.h>} header for more information on the system locale.
+      \li caseSensitivity() is not supported: only case-sensitive collation
+          can be performed.
+      \li numericMode() and ignorePunctuation() are not supported.
+    \endlist
+
+    The use of any of the unsupported options will cause a warning to be
+    printed to the application's output.
 */
 
 /*!
@@ -301,8 +317,8 @@ bool QCollator::ignorePunctuation() const
 
     Compares \a s1 with \a s2.
 
-    Returns an integer less than, equal to, or greater than zero depending on
-    whether \a s1 sorts before, with or after \a s2.
+    Returns a negative integer if \a s1 is less than \a s2, a positive integer
+    if it is greater than \a s2, and zero if they are equal.
 */
 
 /*!
@@ -325,8 +341,9 @@ bool QCollator::ignorePunctuation() const
     Compares \a s1 with \a s2. \a len1 and \a len2 specify the lengths of the
     QChar arrays pointed to by \a s1 and \a s2.
 
-    Returns an integer less than, equal to, or greater than zero depending on
-    whether \a s1 sorts before, with or after \a s2.
+    Returns a negative integer if \a s1 is less than \a s2, a positive integer
+    if it is greater than \a s2, and zero if they are equal.
+
 
     \note In Qt versions prior to 6.4, the length arguments were of type
     \c{int}, not \c{qsizetype}.

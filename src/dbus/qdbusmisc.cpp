@@ -103,7 +103,19 @@ bool qDBusInterfaceInObject(QObject *obj, const QString &interface_name)
 // sig must be the normalised signature for the method
 int qDBusParametersForMethod(const QMetaMethod &mm, QList<QMetaType> &metaTypes, QString &errorMsg)
 {
-    return qDBusParametersForMethod(mm.parameterTypes(), metaTypes, errorMsg);
+    QList<QByteArray> parameterTypes;
+    parameterTypes.reserve(mm.parameterCount());
+
+    // Not using QMetaMethod::parameterTypes() since we call QMetaType::fromName below
+    // where we need any typedefs resolved already.
+    for (int i = 0; i < mm.parameterCount(); ++i) {
+        QByteArray typeName = mm.parameterMetaType(i).name();
+        if (typeName.isEmpty())
+            typeName = mm.parameterTypeName(i);
+        parameterTypes.append(typeName);
+    }
+
+    return qDBusParametersForMethod(parameterTypes, metaTypes, errorMsg);
 }
 
 #endif // QT_BOOTSTRAPPED
@@ -117,10 +129,7 @@ int qDBusParametersForMethod(const QList<QByteArray> &parameterTypes, QList<QMet
     metaTypes.append(QMetaType());        // return type
     int inputCount = 0;
     bool seenMessage = false;
-    QList<QByteArray>::ConstIterator it = parameterTypes.constBegin();
-    QList<QByteArray>::ConstIterator end = parameterTypes.constEnd();
-    for ( ; it != end; ++it) {
-        QByteArray type = *it;
+    for (QByteArray type : parameterTypes) {
         if (type.endsWith('*')) {
             errorMsg = "Pointers are not supported: "_L1 + QLatin1StringView(type);
             return -1;

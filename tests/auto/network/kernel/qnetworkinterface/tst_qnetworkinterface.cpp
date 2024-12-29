@@ -12,6 +12,8 @@
 #include <qudpsocket.h>
 #include "../../../network-settings.h"
 
+#include <private/qtnetwork-config_p.h>
+
 Q_DECLARE_METATYPE(QHostAddress)
 
 class tst_QNetworkInterface : public QObject
@@ -50,14 +52,13 @@ tst_QNetworkInterface::~tst_QNetworkInterface()
 bool tst_QNetworkInterface::isIPv6Working()
 {
 #ifndef QT_NO_IPV6
- // Version without following cannot get IPV6 information
- #if !defined(QT_NO_GETIFADDRS) && !defined(QT_NO_IPV6IFNAME)
-     QUdpSocket socket;
-     socket.connectToHost(QHostAddress::LocalHostIPv6, 1234);
-     return socket.state() == QAbstractSocket::ConnectedState || socket.waitForConnected(100);
- #else
-     return false;
- #endif
+    // QNetworkInterface may be unable to detect IPv6 addresses even if they
+    // are there, due to limitations of the implementation.
+    if (QOperatingSystemVersion::currentType() == QOperatingSystemVersion::Windows ||
+            QT_CONFIG(linux_netlink) || (QT_CONFIG(getifaddrs) && QT_CONFIG(ipv6ifname))) {
+        return QtNetworkSettings::hasIPv6();
+    }
+    return false;
 #else
     return false;
 #endif

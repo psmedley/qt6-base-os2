@@ -239,10 +239,14 @@ static constexpr const auto KeyTbl = qMakeArray(
         Xkb2Qt<XKB_KEY_dead_small_schwa,        Qt::Key_Dead_Small_Schwa>,
         Xkb2Qt<XKB_KEY_dead_capital_schwa,      Qt::Key_Dead_Capital_Schwa>,
         Xkb2Qt<XKB_KEY_dead_greek,              Qt::Key_Dead_Greek>,
+/* The following four XKB_KEY_dead keys got removed in libxkbcommon 1.6.0
+   The define check is kind of version check here. */
+#ifdef XKB_KEY_dead_lowline
         Xkb2Qt<XKB_KEY_dead_lowline,            Qt::Key_Dead_Lowline>,
         Xkb2Qt<XKB_KEY_dead_aboveverticalline,  Qt::Key_Dead_Aboveverticalline>,
         Xkb2Qt<XKB_KEY_dead_belowverticalline,  Qt::Key_Dead_Belowverticalline>,
         Xkb2Qt<XKB_KEY_dead_longsolidusoverlay, Qt::Key_Dead_Longsolidusoverlay>,
+#endif
 
         // Special keys from X.org - This include multimedia keys,
         // wireless/bluetooth/uwb keys, special launcher keys, etc.
@@ -298,6 +302,7 @@ static constexpr const auto KeyTbl = qMakeArray(
         Xkb2Qt<XKB_KEY_XF86Book,                Qt::Key_Book>,
         Xkb2Qt<XKB_KEY_XF86CD,                  Qt::Key_CD>,
         Xkb2Qt<XKB_KEY_XF86Calculater,          Qt::Key_Calculator>,
+        Xkb2Qt<XKB_KEY_XF86Calculator,          Qt::Key_Calculator>,
         Xkb2Qt<XKB_KEY_XF86Clear,               Qt::Key_Clear>,
         Xkb2Qt<XKB_KEY_XF86ClearGrab,           Qt::Key_ClearGrab>,
         Xkb2Qt<XKB_KEY_XF86Close,               Qt::Key_Close>,
@@ -577,7 +582,7 @@ Qt::KeyboardModifiers QXkbCommon::modifiers(struct xkb_state *state, xkb_keysym_
     if (xkb_state_mod_name_is_active(state, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE) > 0)
         modifiers |= Qt::MetaModifier;
 
-    if (keysym >= XKB_KEY_KP_Space && keysym <= XKB_KEY_KP_9)
+    if (isKeypad(keysym))
         modifiers |= Qt::KeypadModifier;
 
     return modifiers;
@@ -733,6 +738,8 @@ xkb_keysym_t QXkbCommon::lookupLatinKeysym(xkb_state *state, xkb_keycode_t keyco
 {
     xkb_layout_index_t layout;
     xkb_keysym_t sym = XKB_KEY_NoSymbol;
+    if (!state)
+        return sym;
     xkb_keymap *keymap = xkb_state_get_keymap(state);
     const xkb_layout_index_t layoutCount = xkb_keymap_num_layouts_for_key(keymap, keycode);
     const xkb_layout_index_t currentLayout = xkb_state_key_get_layout(state, keycode);

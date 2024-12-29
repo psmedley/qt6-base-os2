@@ -61,13 +61,6 @@ function(qt_internal_target_sync_headers target module_headers module_headers_ge
     set(is_framework FALSE)
     if(NOT is_interface_lib)
         get_target_property(is_framework ${target} FRAMEWORK)
-        if(is_framework)
-            qt_internal_get_framework_info(fw ${target})
-            get_target_property(fw_output_base_dir ${target} LIBRARY_OUTPUT_DIRECTORY)
-            set(framework_args "-framework"
-                "-frameworkIncludeDir" "${fw_output_base_dir}/${fw_versioned_header_dir}"
-            )
-        endif()
     endif()
 
     qt_internal_get_qt_all_known_modules(known_modules)
@@ -79,6 +72,7 @@ function(qt_internal_target_sync_headers target module_headers module_headers_ge
     endif()
 
     get_target_property(qpa_filter_regex ${target} _qt_module_qpa_headers_filter_regex)
+    get_target_property(rhi_filter_regex ${target} _qt_module_rhi_headers_filter_regex)
     get_target_property(private_filter_regex ${target} _qt_module_private_headers_filter_regex)
 
     # We need to use the real paths since otherwise it may lead to the invalid work of the
@@ -96,6 +90,12 @@ function(qt_internal_target_sync_headers target module_headers module_headers_ge
         )
     endif()
 
+    if(rhi_filter_regex)
+        set(rhi_filter_argument
+            -rhiHeadersFilter "${rhi_filter_regex}"
+        )
+    endif()
+
     set(common_syncqt_arguments
         -module "${module}"
         -sourceDir "${source_dir_real}"
@@ -104,8 +104,10 @@ function(qt_internal_target_sync_headers target module_headers module_headers_ge
         -includeDir "${module_build_interface_include_dir}"
         -privateIncludeDir "${module_build_interface_private_include_dir}"
         -qpaIncludeDir "${module_build_interface_qpa_include_dir}"
+        -rhiIncludeDir "${module_build_interface_rhi_include_dir}"
         -generatedHeaders ${module_headers_generated}
         ${qpa_filter_argument}
+        ${rhi_filter_argument}
         ${public_namespaces_filter}
         ${non_qt_module_argument}
         ${internal_module_argument}
@@ -142,7 +144,6 @@ function(qt_internal_target_sync_headers target module_headers module_headers_ge
         -headers ${module_headers}
         -stagingDir "${syncqt_staging_dir}"
         -knownModules ${known_modules}
-        ${framework_args}
         ${version_script_args}
     )
     list(JOIN syncqt_args "\n" syncqt_args_string)
@@ -178,6 +179,7 @@ function(qt_internal_target_sync_headers target module_headers module_headers_ge
             ${syncqt_args_rsp}
             ${module_headers}
             ${QT_CMAKE_EXPORT_NAMESPACE}::syncqt
+            "$<GENEX_EVAL:$<TARGET_PROPERTY:${target},_qt_internal_sync_headers_deps>>"
         COMMENT
             "Running syncqt.cpp for module: ${module}"
         VERBATIM
@@ -194,6 +196,8 @@ function(qt_internal_target_sync_headers target module_headers module_headers_ge
             ${syncqt_outputs}
     )
     add_dependencies(sync_headers ${target}_sync_headers)
+    set_target_properties(${target}
+        PROPERTIES _qt_internal_sync_headers_target ${target}_sync_headers)
 
     if(is_3rd_party_library)
         add_dependencies(thirdparty_sync_headers ${target}_sync_headers)
@@ -224,7 +228,7 @@ function(qt_internal_target_sync_headers target module_headers module_headers_ge
     endif()
     add_dependencies(sync_all_public_headers ${target}_sync_all_public_headers)
 
-    if(NOT is_3rd_party_library AND NOT is_framework)
+    if(NOT is_3rd_party_library AND NOT is_framework AND module_headers)
         # Install all the CaMeL style aliases of header files from the staging directory in one rule
         qt_install(DIRECTORY "${syncqt_staging_dir}/"
             DESTINATION "${module_install_interface_include_dir}"
@@ -246,7 +250,7 @@ function(qt_internal_target_sync_headers target module_headers module_headers_ge
     # Run sync Qt first time at configure step to make all header files available for the code model
     # of IDEs.
     get_property(synced_modules GLOBAL PROPERTY _qt_synced_modules)
-    if(NOT "${module}" IN_LIST synced_modules)
+    if(NOT "${module}" IN_LIST synced_modules AND QT_SYNC_HEADERS_AT_CONFIGURE_TIME)
         message(STATUS "Running syncqt.cpp for module: ${module}")
         get_target_property(syncqt_location ${QT_CMAKE_EXPORT_NAMESPACE}::syncqt LOCATION)
         execute_process(

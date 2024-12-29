@@ -51,7 +51,7 @@ public:
        return mFileInfo == fileInfo.mFileInfo
        && displayType == fileInfo.displayType
        && permissions() == fileInfo.permissions()
-       && lastModified() == fileInfo.lastModified();
+       && lastModified(QTimeZone::UTC) == fileInfo.lastModified(QTimeZone::UTC);
     }
 
 #ifndef QT_NO_FSFILEENGINE
@@ -95,8 +95,8 @@ public:
         return mFileInfo;
     }
 
-    QDateTime lastModified() const {
-        return mFileInfo.lastModified();
+    QDateTime lastModified(const QTimeZone &tz) const {
+        return mFileInfo.lastModified(tz);
     }
 
     qint64 size() const {
@@ -148,6 +148,8 @@ public:
     QAbstractFileIconProvider *iconProvider() const;
     bool resolveSymlinks() const;
 
+    void requestAbort();
+
 public Q_SLOTS:
     void list(const QString &directoryPath);
     void fetchExtendedInformation(const QString &path, const QStringList &files);
@@ -158,6 +160,9 @@ public Q_SLOTS:
 private Q_SLOTS:
     void driveAdded();
     void driveRemoved();
+
+protected:
+    bool event(QEvent *event) override;
 
 private:
     void run() override;
@@ -175,7 +180,6 @@ private:
     QStack<QString> path;
     QStack<QStringList> files;
     // end protected by mutex
-    QAtomicInt abort;
 
 #if QT_CONFIG(filesystemwatcher)
     QFileSystemWatcher *m_watcher = nullptr;

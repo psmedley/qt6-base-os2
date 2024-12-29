@@ -79,11 +79,16 @@ cd "%TOPQTDIR%"
 rem Write config.opt if we're not currently -redo'ing
 set OPT_FILE_PATH=%TOPQTDIR%\config.opt
 set OPT_TMP_FILE_PATH=%TOPQTDIR%\config.opt.in
-set REDO_FILE_PATH=%TOPQTDIR%\config.redo
+set REDO_FILE_PATH=%TOPQTDIR%\config.redo.last
 set REDO_TMP_FILE_PATH=%TOPQTDIR%\config.redo.in
 set FRESH_REQUESTED_ARG=
 if not defined redoing (
-    echo.%*>"%OPT_TMP_FILE_PATH%"
+    :: The '.' in 'echo.%*' ensures we don't print "echo is off" when no arguments are passed
+    :: https://devblogs.microsoft.com/oldnewthing/20170802-00/?p=96735
+    :: The space before the '>' makes sure that when we have a digit at the end of the args, we
+    :: don't accidentally concatenate it with the '>' resulting in '0>' or '2>' which redirects
+    :: into the file from a stream different than stdout, leading to broken or empty content.
+    echo.%* >"%OPT_TMP_FILE_PATH%"
 
     cmake -DIN_FILE="%OPT_TMP_FILE_PATH%" -DOUT_FILE="%OPT_FILE_PATH%" -DIGNORE_ARGS=-top-level -P "%QTSRC%\cmake\QtWriteArgsFile.cmake"
 ) else (

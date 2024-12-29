@@ -90,7 +90,7 @@ public:
 
         inline qint64 size() const { if (info && !info->isDir()) return info->size(); return 0; }
         inline QString type() const { if (info) return info->displayType; return QLatin1StringView(""); }
-        inline QDateTime lastModified() const { if (info) return info->lastModified(); return QDateTime(); }
+        inline QDateTime lastModified(const QTimeZone &tz) const { return info ? info->lastModified(tz) : QDateTime(); }
         inline QFile::Permissions permissions() const { if (info) return info->permissions(); return { }; }
         inline bool isReadable() const { return ((permissions() & QFile::ReadUser) != 0); }
         inline bool isWritable() const { return ((permissions() & QFile::WriteUser) != 0); }
@@ -150,8 +150,12 @@ public:
             return visibleChildren.indexOf(childName);
         }
         void updateIcon(QAbstractFileIconProvider *iconProvider, const QString &path) {
+            if (!iconProvider)
+                return;
+
             if (info)
                 info->icon = iconProvider->icon(QFileInfo(path));
+
             for (QFileSystemNode *child : std::as_const(children)) {
                 //On windows the root (My computer) has no path so we don't want to add a / for nothing (e.g. /C:/)
                 if (!path.isEmpty()) {
@@ -165,6 +169,9 @@ public:
         }
 
         void retranslateStrings(QAbstractFileIconProvider *iconProvider, const QString &path) {
+            if (!iconProvider)
+                return;
+
             if (info)
                 info->displayType = iconProvider->type(QFileInfo(path));
             for (QFileSystemNode *child : std::as_const(children)) {
@@ -259,9 +266,9 @@ public:
 #if QT_CONFIG(filesystemwatcher)
 #  ifdef Q_OS_WIN
     QStringList unwatchPathsAt(const QModelIndex &);
-    void watchPaths(const QStringList &paths) { fileInfoGatherer.watchPaths(paths); }
+    void watchPaths(const QStringList &paths) { fileInfoGatherer->watchPaths(paths); }
 #  endif // Q_OS_WIN
-    QFileInfoGatherer fileInfoGatherer;
+    std::unique_ptr<QFileInfoGatherer> fileInfoGatherer;
 #endif // filesystemwatcher
     QTimer delayedSortTimer;
     QHash<const QFileSystemNode*, bool> bypassFilters;

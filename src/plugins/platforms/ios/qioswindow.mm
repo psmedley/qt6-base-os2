@@ -11,7 +11,10 @@
 #include "quiview.h"
 #include "qiosinputcontext.h"
 
+#include <QtCore/private/qcore_mac_p.h>
+
 #include <QtGui/private/qwindow_p.h>
+#include <QtGui/private/qhighdpiscaling_p.h>
 #include <qpa/qplatformintegration.h>
 
 #if QT_CONFIG(opengl)
@@ -26,34 +29,45 @@
 
 QT_BEGIN_NAMESPACE
 
-QIOSWindow::QIOSWindow(QWindow *window)
+QIOSWindow::QIOSWindow(QWindow *window, WId nativeHandle)
     : QPlatformWindow(window)
     , m_windowLevel(0)
 {
+    if (nativeHandle) {
+        m_view = reinterpret_cast<UIView *>(nativeHandle);
+        [m_view retain];
+    } else {
 #ifdef Q_OS_IOS
-    if (window->surfaceType() == QSurface::RasterSurface)
-        window->setSurfaceType(QSurface::MetalSurface);
+        if (window->surfaceType() == QSurface::RasterSurface)
+            window->setSurfaceType(QSurface::MetalSurface);
 
-    if (window->surfaceType() == QSurface::MetalSurface)
-        m_view = [[QUIMetalView alloc] initWithQIOSWindow:this];
-    else
+        if (window->surfaceType() == QSurface::MetalSurface)
+            m_view = [[QUIMetalView alloc] initWithQIOSWindow:this];
+        else
 #endif
-        m_view = [[QUIView alloc] initWithQIOSWindow:this];
+            m_view = [[QUIView alloc] initWithQIOSWindow:this];
+    }
 
     connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, &QIOSWindow::applicationStateChanged);
 
     setParent(QPlatformWindow::parent());
 
-    // Resolve default window geometry in case it was not set before creating the
-    // platform window. This picks up eg. minimum-size if set, and defaults to
-    // the "maxmized" geometry (even though we're not in that window state).
-    // FIXME: Detect if we apply a maximized geometry and send a window state
-    // change event in that case.
-    m_normalGeometry = initialGeometry(window, QPlatformWindow::geometry(),
-        screen()->availableGeometry().width(), screen()->availableGeometry().height());
+    if (!isForeignWindow()) {
+        // Resolve default window geometry in case it was not set before creating the
+        // platform window. This picks up eg. minimum-size if set, and defaults to
+        // the "maxmized" geometry (even though we're not in that window state).
+        // FIXME: Detect if we apply a maximized geometry and send a window state
+        // change event in that case.
+        m_normalGeometry = initialGeometry(window, QPlatformWindow::geometry(),
+            screen()->availableGeometry().width(), screen()->availableGeometry().height());
 
-    setWindowState(window->windowStates());
-    setOpacity(window->opacity());
+        setWindowState(window->windowStates());
+        setOpacity(window->opacity());
+        setMask(QHighDpi::toNativeLocalRegion(window->mask(), window));
+    } else {
+        // Pick up essential foreign window state
+        QPlatformWindow::setGeometry(QRectF::fromCGRect(m_view.frame).toRect());
+    }
 
     Qt::ScreenOrientation initialOrientation = window->contentOrientation();
     if (initialOrientation != Qt::PrimaryOrientation) {
@@ -76,8 +90,14 @@ QIOSWindow::~QIOSWindow()
 
     clearAccessibleCache();
 
-    m_view.platformWindow = 0;
-    [m_view removeFromSuperview];
+    quiview_cast(m_view).platformWindow = nullptr;
+
+    // Remove from superview, unless we're a foreign window without a
+    // Qt window parent, in which case the foreign window is used as
+    // a window container for a Qt UI hierarchy inside a native UI.
+    if (!(isForeignWindow() && !QPlatformWindow::parent()))
+        [m_view removeFromSuperview];
+
     [m_view release];
 }
 
@@ -116,7 +136,7 @@ void QIOSWindow::setVisible(bool visible)
     if (visible && shouldAutoActivateWindow()) {
         if (!window()->property("_q_showWithoutActivating").toBool())
             requestActivateWindow();
-    } else if (!visible && [m_view isActiveWindow]) {
+    } else if (!visible && [quiview_cast(m_view) isActiveWindow]) {
         // Our window was active/focus window but now hidden, so relinquish
         // focus to the next possible window in the stack.
         NSArray<UIView *> *subviews = m_view.viewController.view.subviews;
@@ -252,10 +272,16 @@ void QIOSWindow::setWindowState(Qt::WindowStates state)
 
 void QIOSWindow::setParent(const QPlatformWindow *parentWindow)
 {
-    UIView *parentView = parentWindow ? reinterpret_cast<UIView *>(parentWindow->winId())
-        : isQtApplication() ? static_cast<QIOSScreen *>(screen())->uiWindow().rootViewController.view : 0;
+    UIView *parentView = parentWindow ?
+        reinterpret_cast<UIView *>(parentWindow->winId())
+        : isQtApplication() && !isForeignWindow() ?
+            static_cast<QIOSScreen *>(screen())->uiWindow().rootViewController.view
+            : nullptr;
 
-    [parentView addSubview:m_view];
+    if (parentView)
+        [parentView addSubview:m_view];
+    else if (quiview_cast(m_view.superview))
+        [m_view removeFromSuperview];
 }
 
 void QIOSWindow::requestActivateWindow()
@@ -276,8 +302,6 @@ void QIOSWindow::requestActivateWindow()
 
 void QIOSWindow::raiseOrLower(bool raise)
 {
-    // Re-insert m_view at the correct index among its sibling views
-    // (QWindows) according to their current m_windowLevel:
     if (!isQtApplication())
         return;
 
@@ -285,17 +309,27 @@ void QIOSWindow::raiseOrLower(bool raise)
     if (subviews.count == 1)
         return;
 
-    for (int i = int(subviews.count) - 1; i >= 0; --i) {
-        UIView *view = static_cast<UIView *>([subviews objectAtIndex:i]);
-        if (view.hidden || view == m_view || !view.qwindow)
-            continue;
-        int level = static_cast<QIOSWindow *>(view.qwindow->handle())->m_windowLevel;
-        if (m_windowLevel > level || (raise && m_windowLevel == level)) {
-            [m_view.superview insertSubview:m_view aboveSubview:view];
-            return;
+    if (m_view.superview == m_view.qtViewController.view) {
+        // We're a top level window, so we need to take window
+        // levels into account.
+        for (int i = int(subviews.count) - 1; i >= 0; --i) {
+            UIView *view = static_cast<UIView *>([subviews objectAtIndex:i]);
+            if (view.hidden || view == m_view || !view.qwindow)
+                continue;
+            int level = static_cast<QIOSWindow *>(view.qwindow->handle())->m_windowLevel;
+            if (m_windowLevel > level || (raise && m_windowLevel == level)) {
+                [m_view.superview insertSubview:m_view aboveSubview:view];
+                return;
+            }
         }
+        [m_view.superview insertSubview:m_view atIndex:0];
+    } else {
+        // Child window, or embedded into a non-Qt view controller
+        if (raise)
+            [m_view.superview bringSubviewToFront:m_view];
+        else
+            [m_view.superview sendSubviewToBack:m_view];
     }
-    [m_view.superview insertSubview:m_view atIndex:0];
 }
 
 void QIOSWindow::updateWindowLevel()
@@ -336,8 +370,11 @@ void QIOSWindow::handleContentOrientationChange(Qt::ScreenOrientation orientatio
 
 void QIOSWindow::applicationStateChanged(Qt::ApplicationState)
 {
+    if (isForeignWindow())
+        return;
+
     if (window()->isExposed() != isExposed())
-        [m_view sendUpdatedExposeEvent];
+        [quiview_cast(m_view) sendUpdatedExposeEvent];
 }
 
 qreal QIOSWindow::devicePixelRatio() const
@@ -347,12 +384,29 @@ qreal QIOSWindow::devicePixelRatio() const
 
 void QIOSWindow::clearAccessibleCache()
 {
-    [m_view clearAccessibleCache];
+    if (isForeignWindow())
+        return;
+
+    [quiview_cast(m_view) clearAccessibleCache];
 }
 
 void QIOSWindow::requestUpdate()
 {
     static_cast<QIOSScreen *>(screen())->setUpdatesPaused(false);
+}
+
+void QIOSWindow::setMask(const QRegion &region)
+{
+    if (!region.isEmpty()) {
+        QCFType<CGMutablePathRef> maskPath = CGPathCreateMutable();
+        for (const QRect &r : region)
+            CGPathAddRect(maskPath, nullptr, r.toCGRect());
+        CAShapeLayer *maskLayer = [CAShapeLayer layer];
+        maskLayer.path = maskPath;
+        m_view.layer.mask = maskLayer;
+    } else {
+        m_view.layer.mask = nil;
+    }
 }
 
 #if QT_CONFIG(opengl)
@@ -375,6 +429,37 @@ QDebug operator<<(QDebug debug, const QIOSWindow *window)
     return debug;
 }
 #endif // !QT_NO_DEBUG_STREAM
+
+/*!
+    Returns the view cast to a QUIview if possible.
+
+    If the view is not a QUIview, nil is returned, which is safe to
+    send messages to, effectively making [quiview_cast(view) message]
+    a no-op.
+
+    For extra verbosity and clearer code, please consider checking
+    that the platform window is not a foreign window before using
+    this cast, via QPlatformWindow::isForeignWindow().
+
+    Do not use this method solely to check for foreign windows, as
+    that will make the code harder to read for people not working
+    primarily on iOS, who do not know the difference between the
+    UIView and QUIView cases.
+*/
+QUIView *quiview_cast(UIView *view)
+{
+    return qt_objc_cast<QUIView *>(view);
+}
+
+bool QIOSWindow::isForeignWindow() const
+{
+    return ![m_view isKindOfClass:QUIView.class];
+}
+
+UIView *QIOSWindow::view() const
+{
+    return m_view;
+}
 
 QT_END_NAMESPACE
 

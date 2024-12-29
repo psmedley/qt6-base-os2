@@ -45,6 +45,7 @@ static void debugBinaryString(const char *input, qint64 maxlen)
 
 #define Q_VOID
 
+Q_DECL_COLD_FUNCTION
 static void checkWarnMessage(const QIODevice *device, const char *function, const char *what)
 {
 #ifndef QT_NO_WARNING_OUTPUT
@@ -1500,7 +1501,7 @@ qint64 QIODevice::readLineData(char *data, qint64 maxSize)
     Q_D(QIODevice);
     qint64 readSoFar = 0;
     char c;
-    int lastReadReturn = 0;
+    qint64 lastReadReturn = 0;
     d->baseReadLineDataCalled = true;
 
     while (readSoFar < maxSize && (lastReadReturn = read(&c, 1)) == 1) {

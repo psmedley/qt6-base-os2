@@ -212,7 +212,7 @@ QWindowsFontEngineDirectWrite::QWindowsFontEngineDirectWrite(IDWriteFontFace *di
 
     fontDef.pixelSize = pixelSize;
     collectMetrics();
-    cache_cost = (m_ascent.toInt() + m_descent.toInt()) * m_xHeight.toInt() * 2000;
+    cache_cost = m_xHeight.toInt() * m_xHeight.toInt() * 2000;
 }
 
 QWindowsFontEngineDirectWrite::~QWindowsFontEngineDirectWrite()
@@ -466,7 +466,7 @@ QFontEngine::FaceId QWindowsFontEngineDirectWrite::faceId() const
     return m_faceId;
 }
 
-void QWindowsFontEngineDirectWrite::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::ShaperFlags) const
+void QWindowsFontEngineDirectWrite::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::ShaperFlags shaperFlags) const
 {
     QVarLengthArray<UINT16> glyphIndices(glyphs->numGlyphs);
 
@@ -478,11 +478,13 @@ void QWindowsFontEngineDirectWrite::recalcAdvances(QGlyphLayout *glyphs, QFontEn
 
     HRESULT hr;
     DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(fontDef);
-    if (renderMode == DWRITE_RENDERING_MODE_GDI_CLASSIC || renderMode == DWRITE_RENDERING_MODE_GDI_NATURAL) {
+    bool needsDesignMetrics = shaperFlags & QFontEngine::DesignMetrics;
+    if (!needsDesignMetrics && (renderMode == DWRITE_RENDERING_MODE_GDI_CLASSIC
+                             || renderMode == DWRITE_RENDERING_MODE_GDI_NATURAL)) {
         hr = m_directWriteFontFace->GetGdiCompatibleGlyphMetrics(float(fontDef.pixelSize),
                                                                  1.0f,
                                                                  NULL,
-                                                                 TRUE,
+                                                                 renderMode == DWRITE_RENDERING_MODE_GDI_NATURAL,
                                                                  glyphIndices.data(),
                                                                  glyphIndices.size(),
                                                                  glyphMetrics.data());
@@ -586,7 +588,9 @@ glyph_metrics_t QWindowsFontEngineDirectWrite::boundingBox(const QGlyphLayout &g
     for (int i = 0; i < glyphs.numGlyphs; ++i)
         w += glyphs.effectiveAdvance(i);
 
-    return glyph_metrics_t(0, -ascent(), w - lastRightBearing(glyphs), ascent() + descent(), w, 0);
+    const QFixed leftBearing = firstLeftBearing(glyphs);
+    return glyph_metrics_t(leftBearing, -ascent(), w - leftBearing - lastRightBearing(glyphs),
+            ascent() + descent(), w, 0);
 }
 
 glyph_metrics_t QWindowsFontEngineDirectWrite::boundingBox(glyph_t g)
