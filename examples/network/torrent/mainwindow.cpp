@@ -53,7 +53,7 @@ public:
         progressBarOption.textVisible = true;
 
         // Set the progress and text values of the style option.
-        int progress = client->progress();
+        int progress = qobject_cast<MainWindow *>(parent())->clientForRow(index.row())->progress();
         progressBarOption.progress = progress < 0 ? 0 : progress;
         progressBarOption.text = QString::asprintf("%d%%", progressBarOption.progress);
 
@@ -183,7 +183,7 @@ QSize MainWindow::sizeHint() const
 const TorrentClient *MainWindow::clientForRow(int row) const
 {
     // Return the client at the given row.
-    return row >= 0 && row < jobs.count() ? jobs.at(row).client : nullptr;
+    return jobs.at(row).client;
 }
 
 int MainWindow::rowOfClient(TorrentClient *client) const
@@ -479,12 +479,8 @@ void MainWindow::updateDownloadRate(int bytesPerSecond)
     // Update the download rate.
     TorrentClient *client = qobject_cast<TorrentClient *>(sender());
     int row = rowOfClient(client);
-    QTreeWidgetItem *item = row >= 0 ? torrentView->topLevelItem(row) : nullptr;
-    if (!item)
-        return;
-
     const QString num = QString::asprintf("%.1f KB/s", bytesPerSecond / 1024.0);
-    item->setText(3, num);
+    torrentView->topLevelItem(row)->setText(3, num);
 
     if (!saveChanges) {
         saveChanges = true;
@@ -497,12 +493,8 @@ void MainWindow::updateUploadRate(int bytesPerSecond)
     // Update the upload rate.
     TorrentClient *client = qobject_cast<TorrentClient *>(sender());
     int row = rowOfClient(client);
-    QTreeWidgetItem *item = row >= 0 ? torrentView->topLevelItem(row) : nullptr;
-    if (!item)
-        return;
-
     const QString num = QString::asprintf("%.1f KB/s", bytesPerSecond / 1024.0);
-    item->setText(4, num);
+    torrentView->topLevelItem(row)->setText(4, num);
 
     if (!saveChanges) {
         saveChanges = true;

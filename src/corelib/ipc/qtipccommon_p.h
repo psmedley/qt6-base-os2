@@ -21,7 +21,7 @@
 
 #if QT_CONFIG(sharedmemory) || QT_CONFIG(systemsemaphore)
 
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
 #  include <qfile.h>
 #  include <private/qcore_unix_p.h>
 #endif
@@ -78,6 +78,12 @@ static constexpr bool isIpcSupported(IpcType ipcType, QNativeIpcKey::Type type)
 
     case QNativeIpcKey::Type::Windows:
 #ifdef Q_OS_WIN
+        return true;
+#else
+        return false;
+#endif
+    case QNativeIpcKey::Type::OS2:
+#ifdef Q_OS_OS2
         return true;
 #else
         return false;
@@ -147,7 +153,7 @@ public:
 QNativeIpcKey legacyPlatformSafeKey(const QString &key, IpcType ipcType, QNativeIpcKey::Type type);
 QNativeIpcKey platformSafeKey(const QString &key, IpcType ipcType, QNativeIpcKey::Type type);
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 // Convenience function to create the file if needed
 inline int createUnixKeyFile(const QByteArray &fileName)
 {

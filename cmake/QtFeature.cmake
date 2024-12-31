@@ -1125,7 +1125,7 @@ function(qt_config_compile_test name)
             set(try_compile_output "")
             set(output_var "")
             if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.23"
-                    AND NOT QT_INTERNAL_NO_TRY_COMPILE_OUTPUT_VARIABLE)
+                    AND NOT QT_INTERNAL_NO_TRY_COMPILE_OUTPUT_VARIABLE AND NOT OS2)
                 set(output_var OUTPUT_VARIABLE try_compile_output)
             endif()
 

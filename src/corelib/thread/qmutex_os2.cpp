@@ -57,10 +57,14 @@ QMutexPrivate::~QMutexPrivate()
     DosCloseEventSem(event);
 }
 
-bool QMutexPrivate::wait(int timeout)
+bool QMutexPrivate::wait(QDeadlineTimer timeout)
 {
     APIRET arc;
-    qDosNI(arc = DosWaitEventSem(event, timeout < 0 ? SEM_INDEFINITE_WAIT : timeout));
+    if (timeout.isForever()) {
+        qDosNI(arc = DosWaitEventSem(event, SEM_INDEFINITE_WAIT));
+    } else {
+        qDosNI(arc = DosWaitEventSem(event, (unsigned long)timeout.remainingTime()));
+    }
     return !arc;
 }
 

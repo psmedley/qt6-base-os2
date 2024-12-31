@@ -29,6 +29,7 @@
 #else
 #ifdef Q_OS_OS2
 #include <unicode/ucnv.h>
+#include <QtCore/qvarlengtharray.h>
 #endif
 #endif
 
@@ -1350,7 +1351,7 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::St
     ucnv_close(conv);
 
     // return an empty string if no chars were output
-    len = tgt - ua.data();
+    len = tgt - (UChar*)ua.data();
     if (len <= 0)
         return QString();
 

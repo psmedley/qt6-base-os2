@@ -29,6 +29,11 @@
 #include <immintrin.h>
 #endif
 
+#if defined(Q_OS_OS2) && defined(NO_SSE_OS2)
+#undef QFLOAT16_IS_NATIVE
+#define QFLOAT16_IS_NATIVE 0
+#endif
+
 QT_BEGIN_NAMESPACE
 
 #if 0

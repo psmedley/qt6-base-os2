@@ -557,7 +557,6 @@ qt_internal_extend_target(Core CONDITION OS2
         kernel/qtimerinfo_unix.cpp kernel/qtimerinfo_unix_p.h
         ipc/qsharedmemory_os2.cpp
         ipc/qsystemsemaphore_os2.cpp
-        kernel/qelapsedtimer_generic.cpp
         text/qlocale_unix.cpp
         thread/qthread_os2.cpp
         thread/qmutex_os2.cpp

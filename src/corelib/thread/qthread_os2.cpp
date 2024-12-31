@@ -311,6 +311,12 @@ void QThread::yieldCurrentThread()
     DosSleep(0);
 }
 
+void QThread::sleep(std::chrono::nanoseconds nsecs)
+{
+    using namespace std::chrono;
+    DosSleep((unsigned long)(duration_cast<milliseconds>(nsecs).count()));
+}
+
 void QThread::sleep(unsigned long secs)
 {
     DosSleep(secs * 1000);

@@ -46,12 +46,13 @@
 #include "qcoreapplication.h"
 #include "qfile.h"
 #include <qdebug.h>
+#include <qt_os2.h>
 
 QT_BEGIN_NAMESPACE
 
 #if QT_CONFIG(systemsemaphore)
 
-void QSystemSemaphorePrivate::setErrorString(APIRET arc, const QString &function)
+void QSystemSemaphorePrivate::setOS2ErrorString(APIRET arc, QLatin1String function)
 {
     if (arc == NO_ERROR)
         return;
@@ -80,24 +81,24 @@ void QSystemSemaphorePrivate::setErrorString(APIRET arc, const QString &function
 #endif
 }
 
-void QSystemSemaphorePrivate::handle(QSystemSemaphore::AccessMode)
+void QSystemSemaphoreOS2::handle(QSystemSemaphorePrivate *self, QSystemSemaphore::AccessMode)
 {
     // don't allow making handles on empty keys
-    if (key.isEmpty())
+    if (self->nativeKey.isEmpty())
         return;
 
     // Create it if it doesn't already exist.
     if (semaphore == NULLHANDLE) {
-        QByteArray name = QFile::encodeName(fileName);
+        QByteArray name = QFile::encodeName(self->nativeKey.nativeKey().toLatin1());
         APIRET arc;
         // Try to open the semaphore first.
         forever {
             arc = DosOpenEventSem(name, &semaphore);
             if (arc == ERROR_SEM_NOT_FOUND) {
 #if defined QSYSTEMSEMAPHORE_DEBUG
-                qDebug("QSystemSemaphore::handle: creating a new sem [%s] (%d)...", name.data(), initialValue);
+                qDebug("QSystemSemaphore::handle: creating a new sem [%s] (%d)...", name.data(), self->initialValue);
 #endif
-                if (initialValue < 0) {
+                if (self->initialValue < 0) {
                     arc = ERROR_NOT_ENOUGH_MEMORY; // cause OutOfResources
                     break;
                 }
@@ -108,7 +109,7 @@ void QSystemSemaphorePrivate::handle(QSystemSemaphore::AccessMode)
                 }
                 if (arc == NO_ERROR) {
                     // Set the initial resource count
-                    ULONG count = initialValue;
+                    ULONG count = self->initialValue;
                     for (; count && (arc == NO_ERROR || arc == ERROR_ALREADY_POSTED); --count)
                         arc = DosPostEventSem(semaphore);
                     if (!count)
@@ -117,17 +118,17 @@ void QSystemSemaphorePrivate::handle(QSystemSemaphore::AccessMode)
             }
 #if defined QSYSTEMSEMAPHORE_DEBUG
             else
-                qDebug("QSystemSemaphore::handle: using existing sem [%s] (%d)...", name.data(), initialValue);
+                qDebug("QSystemSemaphore::handle: using existing sem [%s] (%d)...", name.data(), self->initialValue);
 #endif
             break;
         }
         if (arc != NO_ERROR) {
-            setErrorString(arc, QLatin1String("QSystemSemaphore::handle"));
+            self->setOS2ErrorString(arc, QLatin1String("QSystemSemaphore::handle"));
         }
     }
 }
 
-void QSystemSemaphorePrivate::cleanHandle()
+void QSystemSemaphoreOS2::cleanHandle(QSystemSemaphorePrivate *)
 {
     if (semaphore != NULLHANDLE) {
 #if defined QSYSTEMSEMAPHORE_DEBUG
@@ -137,13 +138,13 @@ void QSystemSemaphorePrivate::cleanHandle()
         Q_UNUSED(arc);
 #if defined QSYSTEMSEMAPHORE_DEBUG
         if (arc != NO_ERROR)
-          qDebug("QSystemSemaphorePrivate::closeHandle: DosCloseEventSem failed with %ld", arc);
+          qDebug("QSystemSemaphoreOS2::closeHandle: DosCloseEventSem failed with %ld", arc);
 #endif
     }
     semaphore = NULLHANDLE;
 }
 
-bool QSystemSemaphorePrivate::modifySemaphore(int count)
+bool QSystemSemaphoreOS2::modifySemaphore(QSystemSemaphorePrivate *self, int count)
 {
     if (semaphore == NULLHANDLE)
         return false;
@@ -158,7 +159,7 @@ bool QSystemSemaphorePrivate::modifySemaphore(int count)
         for (; count && (arc == NO_ERROR || arc == ERROR_ALREADY_POSTED); --count)
             arc = DosPostEventSem(semaphore);
         if (count) {
-            setErrorString(arc, QLatin1String("QSystemSemaphore::modifySemaphore"));
+            self->setOS2ErrorString(arc, QLatin1String("QSystemSemaphore::modifySemaphore"));
             return false;
         }
     } else {
@@ -186,13 +187,13 @@ bool QSystemSemaphorePrivate::modifySemaphore(int count)
                 }
             }
             if (arc != NO_ERROR) {
-                setErrorString(arc, QLatin1String("QSystemSemaphore::modifySemaphore"));
+                self->setOS2ErrorString(arc, QLatin1String("QSystemSemaphore::modifySemaphore"));
                 return false;
             }
         }
     }
 
-    clearError();
+    self->clearError();
     return true;
 }
 

@@ -25,13 +25,14 @@ public:
 
         PosixRealtime = 0x100,
         Windows,
+        OS2,
     };
     Q_ENUM(Type)
 
     static constexpr Type DefaultTypeForOs =
 #ifdef Q_OS_WIN
             Type::Windows
-#elif Q_OS_OS2
+#elif defined(Q_OS_OS2)
             Type::OS2
 #else
             Type::PosixRealtime

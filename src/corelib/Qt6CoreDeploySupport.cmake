@@ -56,8 +56,8 @@ function(qt6_deploy_qt_conf qt_conf_absolute_path)
 
     # This one is special, the default is platform-specific
     if(arg_LIBEXEC_DIR AND
-       ((WIN32 AND NOT arg_LIBEXEC_DIR STREQUAL "bin") OR
-        (NOT WIN32 AND NOT arg_LIBEXEC_DIR STREQUAL "libexec")))
+       (((WIN32 OR OS2) AND NOT arg_LIBEXEC_DIR STREQUAL "bin") OR
+        (NOT WIN32 AND NOT OS2 AND NOT arg_LIBEXEC_DIR STREQUAL "libexec")))
         string(APPEND contents "LibraryExecutables = ${arg_LIBEXEC_DIR}\n")
     endif()
 

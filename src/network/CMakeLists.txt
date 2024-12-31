@@ -204,7 +204,6 @@ qt_internal_extend_target(Network CONDITION WIN32
 
 qt_internal_extend_target(Network CONDITION OS2
     SOURCES
-        kernel/qdnslookup_unix.cpp
         kernel/qhostinfo_unix.cpp
         kernel/qnetworkinterface_unix.cpp
         socket/qnativesocketengine_unix.cpp
@@ -232,12 +231,17 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND QT_FEATURE_
         WrapResolv::WrapResolv
 )
 
+qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND OS2
+    SOURCES
+        kernel/qdnslookup_os2.cpp
+)
+
 qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND WIN32
     SOURCES
         kernel/qdnslookup_win.cpp
 )
 
-qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND NOT QT_FEATURE_libresolv AND NOT WIN32
+qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND NOT QT_FEATURE_libresolv AND NOT WIN32 AND NOT OS2
     SOURCES
         kernel/qdnslookup_dummy.cpp
 )

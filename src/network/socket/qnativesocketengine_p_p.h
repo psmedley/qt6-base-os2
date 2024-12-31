@@ -183,7 +183,6 @@ public:
             break;
          }
         *sockAddrSize = setSockaddr(&aa->a, address, port);
-        }
     }
 
 };

@@ -46,12 +46,13 @@
 #include "qsystemsemaphore.h"
 #include "qfile.h"
 #include <qdebug.h>
+#include "qt_os2.h"
 
 QT_BEGIN_NAMESPACE
 
 #if QT_CONFIG(sharedmemory)
 
-void QSharedMemoryPrivate::setErrorString(APIRET arc, QLatin1String function)
+void QSharedMemoryPrivate::setOS2ErrorString(APIRET arc, QLatin1String function)
 {
     if (arc == 0)
         return;
@@ -88,37 +89,37 @@ void QSharedMemoryPrivate::setErrorString(APIRET arc, QLatin1String function)
     }
 
 #if defined QSHAREDMEMORY_DEBUG
-    qDebug() << errorString << "arc" << arc << "key" << key << "fileName" << nativeKey;
+    qDebug() << errorString << "arc" << arc << "key" << key << "fileName" << self->nativeKey;
 #endif
 }
 
-bool QSharedMemoryPrivate::cleanHandle()
+bool QSharedMemoryOS2::cleanHandle(QSharedMemoryPrivate *self)
 {
     if (memory != nullptr) {
         APIRET arc = DosFreeMem(memory);
         memory = nullptr;
         size = 0;
         if (arc != NO_ERROR) {
-            setErrorString(arc, QLatin1String("QSharedMemory::cleanHandle"));
+            self->setOS2ErrorString(arc, QLatin1String("QSharedMemory::cleanHandle"));
             return false;
         }
     }
     return true;
 }
 
-bool QSharedMemoryPrivate::create(int size)
+bool QSharedMemoryOS2::create(QSharedMemoryPrivate *self, qsizetype size)
 {
 #if defined QSHAREDMEMORY_DEBUG
-    qDebug() << "size" << size << "nativeKey" << nativeKey;
+    qDebug() << "size" << size << "nativeKey" << self->nativeKey;
 #endif
 
     ULONG flags = PAG_READ | PAG_WRITE | PAG_COMMIT;
-    APIRET arc = DosAllocSharedMem(&memory, QFile::encodeName(nativeKey), size, flags | OBJ_ANY);
+    APIRET arc = DosAllocSharedMem(&memory, self->nativeKey.nativeKey().toLatin1(), (int)size, flags | OBJ_ANY);
     if (arc != NO_ERROR)
-        arc = DosAllocSharedMem(&memory, QFile::encodeName(nativeKey), size, flags);
+        arc = DosAllocSharedMem(&memory, self->nativeKey.nativeKey().toLatin1(), (int)size, flags);
 
     if (arc != NO_ERROR) {
-        setErrorString(arc, QLatin1String("QSharedMemory::create"));
+        self->setOS2ErrorString(arc, QLatin1String("QSharedMemory::create"));
         return false;
     }
 
@@ -126,14 +127,14 @@ bool QSharedMemoryPrivate::create(int size)
     qDebug() << "memory" << memory;
 #endif
 
-    this->size = size;
+    this->size = (int)size;
     return true;
 }
 
-bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
+bool QSharedMemoryOS2::attach(QSharedMemoryPrivate *self, QSharedMemory::AccessMode mode)
 {
 #if defined QSHAREDMEMORY_DEBUG
-    qDebug() << "mode" << mode << "nativeKey" << nativeKey << "memory" << memory;
+    qDebug() << "mode" << mode << "nativeKey" << self->nativeKey << "memory" << memory;
 #endif
 
     ULONG flags = PAG_READ;
@@ -147,7 +148,7 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
         arc = DosSetMem(memory, size, flags);
     } else {
         // Try to open the shared memory region
-        arc = DosGetNamedSharedMem(&memory, QFile::encodeName(nativeKey), flags);
+        arc = DosGetNamedSharedMem(&memory, self->nativeKey.nativeKey().toLatin1(), flags);
         if (arc == NO_ERROR) {
             // Detect the region size
             ULONG sz = ~0, dummy;
@@ -158,18 +159,18 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
     }
 
     if (arc != NO_ERROR) {
-        setErrorString(arc, QLatin1String("QSharedMemory::attach"));
-        cleanHandle();
+        self->setOS2ErrorString(arc, QLatin1String("QSharedMemory::attach"));
+        cleanHandle(self);
         return false;
     }
 
     return true;
 }
 
-bool QSharedMemoryPrivate::detach()
+bool QSharedMemoryOS2::detach(QSharedMemoryPrivate *self)
 {
     // Nothing to do here other than free memory
-    return cleanHandle();
+    return cleanHandle(self);
 }
 
 #endif // QT_CONFIG(sharedmemory)

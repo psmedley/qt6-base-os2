@@ -375,7 +375,7 @@ void QTimerInfoList::registerTimer(int timerId, milliseconds interval,
     }
 
 #ifdef Q_OS_OS2
-    if (t->interval == 0) {
+    if (t->interval == 0ms) {
         ++zeroTimers;
         Q_ASSERT(zeroTimers);
     }
@@ -395,9 +395,9 @@ void QTimerInfoList::registerTimer(int timerId, milliseconds interval,
 
 bool QTimerInfoList::unregisterTimer(int timerId)
 {
-+    auto it = findTimerById(timerId);
-+    if (it == cend())
-+        return false; // id not found
+    auto it = findTimerById(timerId);
+    if (it == cend())
+        return false; // id not found
 
     // set timer inactive
     QTimerInfo *t = *it;
@@ -406,7 +406,7 @@ bool QTimerInfoList::unregisterTimer(int timerId)
     if (t->activateRef)
         *(t->activateRef) = nullptr;
 #ifdef Q_OS_OS2
-     if (t->interval == 0) {
+     if (t->interval == 0ms) {
          Q_ASSERT(zeroTimers);
          --zeroTimers;
      }
@@ -430,7 +430,7 @@ bool QTimerInfoList::unregisterTimers(QObject *object)
             if (t->activateRef)
                 *(t->activateRef) = nullptr;
 #ifdef Q_OS_OS2
-            if (t->interval == 0) {
+            if (t->interval == 0ms) {
                 Q_ASSERT(zeroTimers);
                 --zeroTimers;
             }

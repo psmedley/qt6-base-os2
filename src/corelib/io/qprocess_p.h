@@ -306,12 +306,13 @@ public:
     bool createPipe(PipeType type, Channel::Pipe &pipe, const char *name = 0);
     void destroyPipe(Channel::Pipe &pipe);
     void closeHandle(HFILE &handle);
-#endif
+#else
     struct UnixExtras {
         std::function<void(void)> childProcessModifier;
         QProcess::UnixProcessParameters processParameters;
     };
     std::unique_ptr<UnixExtras> unixExtras;
+#endif
     QSocketNotifier *stateNotifier = nullptr;
     Q_PIPE childStartedPipe[2] = {INVALID_Q_PIPE, INVALID_Q_PIPE};
     pid_t pid = 0;
