@@ -305,6 +305,11 @@ if(MINGW)
     target_compile_options(PlatformCommonInternal INTERFACE -Wa,-mbig-obj)
 endif()
 
+if(OS2)
+    # Work-around for qfloat16.h not compiling without -msse2 on OS/2
+    target_compile_options(PlatformCommonInternal INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-msse2>)
+endif()
+
 if (GCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "9.2")
     target_compile_options(PlatformCommonInternal INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wsuggest-override>)
 endif()
