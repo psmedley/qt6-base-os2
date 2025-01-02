@@ -160,6 +160,10 @@ QNativeIpcKey QtIpcCommon::legacyPlatformSafeKey(const QString &key, QtIpcCommon
         if (isIpcSupported(ipcType, QNativeIpcKey::Type::PosixRealtime))
             QNativeIpcKeyPrivate::setNativeAndLegacyKeys(k, result, key);
         return k;
+    case QNativeIpcKey::Type::OS2: //FIXME
+        if (isIpcSupported(ipcType, QNativeIpcKey::Type::OS2))
+            QNativeIpcKeyPrivate::setNativeAndLegacyKeys(k, result, key);
+        return k;
     case QNativeIpcKey::Type::SystemV:
         break;
     }
@@ -225,6 +229,7 @@ QNativeIpcKey QtIpcCommon::platformSafeKey(const QString &key, QtIpcCommon::IpcT
         }
         return k;
 
+    case QNativeIpcKey::Type::OS2: //FIXME
     case QNativeIpcKey::Type::SystemV:
         break;
     }

@@ -1235,7 +1235,7 @@ void QProcessPrivate::terminateProcess()
             // WinQuerySwitchEntry will return a switch entry of the parent
             // process if the specfied one doesn't have a separate session
             // (e.g. it's a related console app); ignore this case.
-            if (rc == NO_ERROR && swcntrl.idProcess == pid)
+            if (rc == NO_ERROR && swcntrl.idProcess == (unsigned long) pid)
             {
                 // first, ensure that the Close action is enabled in the main frame
                 // window (otherwise WM_SYSCOMMAND/SC_CLOSE will be ignored)

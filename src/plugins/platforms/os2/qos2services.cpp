@@ -64,7 +64,7 @@ static bool launch(const char* str, int type)
         ulong size = sizeof(DefaultExe);
         PrfQueryProfileData(HINI_USERPROFILE, "WPURLDEFAULTSETTINGS",
                             (type == 0 ? "DefaultBrowserExe" : "DefaultMailExe"), DefaultExe, &size);
-        if (!DefaultExe) {
+        if (DefaultExe[0] == '\0') {
             if (type == 0)
                 qWarning("A default browser is not designated in WPURLDEFAULTSETTINGS->DefaultBrowserExe in OS2.INI");
             else if (type == 1)
@@ -75,7 +75,7 @@ static bool launch(const char* str, int type)
         PrfQueryProfileData(HINI_USERPROFILE, "WPURLDEFAULTSETTINGS",
                             (type == 0 ? "DefaultWorkingDir" : "DefaultMailWorkingDir"), DefaultDir, &size);
         // Set the directory
-        if (DefaultDir) { 
+        if (DefaultDir[0] != '\0') { 
             QString dirstr = QString::fromLatin1(DefaultDir);
             if (newdir.setCurrent(dirstr)) {
                 dirchanged = true;

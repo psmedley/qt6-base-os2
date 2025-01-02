@@ -89,7 +89,7 @@ void QSystemSemaphoreOS2::handle(QSystemSemaphorePrivate *self, QSystemSemaphore
 
     // Create it if it doesn't already exist.
     if (semaphore == NULLHANDLE) {
-        QByteArray name = QFile::encodeName(self->nativeKey.nativeKey().toLatin1());
+        QByteArray name = QFile::encodeName(self->nativeKey.nativeKey());
         APIRET arc;
         // Try to open the semaphore first.
         forever {
