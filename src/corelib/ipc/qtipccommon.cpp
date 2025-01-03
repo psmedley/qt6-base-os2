@@ -249,9 +249,6 @@ QNativeIpcKey QtIpcCommon::platformSafeKey(const QString &key, QtIpcCommon::IpcT
         }
         return k;
 
-<<<<<<< HEAD
-    case QNativeIpcKey::Type::OS2: //FIXME
-=======
     case QNativeIpcKey::Type::OS2:
         if (isIpcSupported(ipcType, QNativeIpcKey::Type::OS2)) {
             QString prefix;
@@ -265,7 +262,6 @@ QNativeIpcKey QtIpcCommon::platformSafeKey(const QString &key, QtIpcCommon::IpcT
         }
         return k;
 
->>>>>>> 9ecff08b410fb42a06fdf3973d31088ef3bcec7b
     case QNativeIpcKey::Type::SystemV:
         break;
     }
