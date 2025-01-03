@@ -340,7 +340,7 @@ int main(void)
     return 0;
 }
 ")
-endif(OS2)
+endif(NOT OS2)
 
 if (LINUX)
     set(ipc_posix_TEST_LIBRARIES pthread WrapRt::WrapRt)
