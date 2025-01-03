@@ -83,11 +83,10 @@ inline QT_SOCKLEN_T setSockaddr(sockaddr *sa, const QHostAddress &addr, quint16 
     case QHostAddress::IPv4Protocol:
         return setSockaddr(reinterpret_cast<sockaddr_in *>(sa), addr, port);
 
-#ifndef Q_OS_OS2
     case QHostAddress::IPv6Protocol:
     case QHostAddress::AnyIPProtocol:
+#ifndef Q_OS_OS2
         return setSockaddr(reinterpret_cast<sockaddr_in6 *>(sa), addr, port);
-
 #endif
     case QHostAddress::UnknownNetworkLayerProtocol:
         break;
