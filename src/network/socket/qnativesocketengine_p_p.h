@@ -164,9 +164,9 @@ public:
     void setPortAndAddress(quint16 port, const QHostAddress &address, qt_sockaddr *aa, QT_SOCKLEN_T *sockAddrSize)
     {
         switch (socketProtocol) {
-#ifndef Q_OS_OS2
         case QHostAddress::IPv6Protocol:
         case QHostAddress::AnyIPProtocol:
+#ifndef Q_OS_OS2
             // force to IPv6
             setSockaddr(&aa->a6, address, port);
             *sockAddrSize = sizeof(sockaddr_in6);
