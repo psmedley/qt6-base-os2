@@ -26,6 +26,10 @@
 #  include <private/qcore_unix_p.h>
 #endif
 
+#ifdef Q_OS_OS2
+#include "qt_os2.h"
+#endif
+
 QT_BEGIN_NAMESPACE
 
 class QNativeIpcKeyPrivate
