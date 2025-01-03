@@ -155,6 +155,26 @@ QNativeIpcKey QtIpcCommon::legacyPlatformSafeKey(const QString &key, QtIpcCommon
         if (isIpcSupported(ipcType, QNativeIpcKey::Type::Windows))
             QNativeIpcKeyPrivate::setNativeAndLegacyKeys(k, result, key);
         return k;
+    case QNativeIpcKey::Type::OS2:
+        {
+            QString ns;
+            if (ipcType == IpcType::SharedMemory) {
+                // use the shared mem namespace (prefix must match one in qsharedmemory_p.h!)
+                ns = QLatin1String("\\SHAREMEM\\");
+            } else {
+                // assume the semaphore namespace
+                ns = QLatin1String("\\SEM32\\");
+            }
+            // Make sure the resulting name fits the OS file name limit (note that
+            // SHA-1 is 20 bytes so its hex form length is 40 chars which means it will
+            // always fit given the limit is 260 chars if we take the right part)
+            int maxlen = CCHMAXPATH - ns.length();
+            if (result.length() > maxlen)
+                result = result.right(maxlen);
+            if (isIpcSupported(ipcType, QNativeIpcKey::Type::OS2))
+                QNativeIpcKeyPrivate::setNativeAndLegacyKeys(k, ns + result, key);
+            return k;
+        }
     case QNativeIpcKey::Type::PosixRealtime:
         result.prepend(u'/');
         if (isIpcSupported(ipcType, QNativeIpcKey::Type::PosixRealtime))
@@ -229,7 +249,23 @@ QNativeIpcKey QtIpcCommon::platformSafeKey(const QString &key, QtIpcCommon::IpcT
         }
         return k;
 
+<<<<<<< HEAD
     case QNativeIpcKey::Type::OS2: //FIXME
+=======
+    case QNativeIpcKey::Type::OS2:
+        if (isIpcSupported(ipcType, QNativeIpcKey::Type::OS2)) {
+            QString prefix;
+            switch (ipcType) {
+            case IpcType::SharedMemory:     prefix = QLatin1String("\\SHAREMEM\\"); break;
+            case IpcType::SystemSemaphore:  prefix = QLatin1String("\\SEM32\\"); break;
+            }
+            QString result = prefix + key;
+            result.truncate(CCHMAXPATH);
+            k.setNativeKey(result);
+        }
+        return k;
+
+>>>>>>> 9ecff08b410fb42a06fdf3973d31088ef3bcec7b
     case QNativeIpcKey::Type::SystemV:
         break;
     }
