@@ -1125,17 +1125,17 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_posix_shm AND UNIX
     LIBRARIES
         WrapRt::WrapRt
 )
-qt_internal_extend_target(Core CONDITION QT_FEATURE_sysv_shm
+qt_internal_extend_target(Core CONDITION QT_FEATURE_sysv_shm AND NOT OS2
     SOURCES
         ipc/qsharedmemory_systemv.cpp
 )
-qt_internal_extend_target(Core CONDITION QT_FEATURE_posix_sem
+qt_internal_extend_target(Core CONDITION QT_FEATURE_posix_sem AND NOT OS2
     SOURCES
         ipc/qsystemsemaphore_posix.cpp
     LIBRARIES
         WrapRt::WrapRt
 )
-qt_internal_extend_target(Core CONDITION QT_FEATURE_sysv_sem
+qt_internal_extend_target(Core CONDITION QT_FEATURE_sysv_sem AND NOT OS2
     SOURCES
         ipc/qsystemsemaphore_systemv.cpp
 )

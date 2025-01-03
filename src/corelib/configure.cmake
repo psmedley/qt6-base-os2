@@ -307,6 +307,7 @@ inotify_rm_watch(0, 1);
 }
 ")
 
+if (NOT OS2)
 qt_config_compile_test(sysv_shm
     LABEL "System V/XSI shared memory"
     CODE
@@ -339,6 +340,7 @@ int main(void)
     return 0;
 }
 ")
+endif(OS2)
 
 if (LINUX)
     set(ipc_posix_TEST_LIBRARIES pthread WrapRt::WrapRt)
