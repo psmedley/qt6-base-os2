@@ -144,6 +144,7 @@ public:
     static bool supports(QNativeIpcKey::Type type)
     { return type == QNativeIpcKey::Type::OS2; }
 
+    bool handle(QSharedMemoryPrivate *self);
     bool cleanHandle(QSharedMemoryPrivate *self);
     bool create(QSharedMemoryPrivate *self, qsizetype size);
     bool attach(QSharedMemoryPrivate *self, QSharedMemory::AccessMode mode);
@@ -184,7 +185,7 @@ public:
         QSharedMemoryWin32 win32;
         QSharedMemoryOS2 os2;
     };
-    QtIpcCommon::IpcStorageVariant<&Backend::posix, &Backend::sysv, &Backend::win32> backend;
+    QtIpcCommon::IpcStorageVariant<&Backend::posix, &Backend::sysv, &Backend::win32, &Backend::os2> backend;
 
     void constructBackend();
     void destructBackend();

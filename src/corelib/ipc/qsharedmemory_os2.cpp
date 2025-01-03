@@ -93,6 +93,18 @@ void QSharedMemoryPrivate::setOS2ErrorString(APIRET arc, QLatin1String function)
 #endif
 }
 
+bool QSharedMemoryOS2::handle(QSharedMemoryPrivate *self)
+{
+    // don't allow making handles on empty keys
+    if (self->nativeKey.isEmpty()) {
+        self->setError(QSharedMemory::KeyError,
+                       QSharedMemory::tr("%1: key is empty").arg("QSharedMemory::handle"));
+        return false;
+    }
+
+    return true;
+}
+
 bool QSharedMemoryOS2::cleanHandle(QSharedMemoryPrivate *self)
 {
     if (memory != nullptr) {

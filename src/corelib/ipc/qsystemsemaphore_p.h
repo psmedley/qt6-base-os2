@@ -149,8 +149,9 @@ public:
         QSystemSemaphorePosix posix;
         QSystemSemaphoreSystemV sysv;
         QSystemSemaphoreWin32 win32;
+        QSystemSemaphoreOS2 os2;
     };
-    QtIpcCommon::IpcStorageVariant<&Backend::posix, &Backend::sysv, &Backend::win32> backend;
+    QtIpcCommon::IpcStorageVariant<&Backend::posix, &Backend::sysv, &Backend::win32, &Backend::os2> backend;
 
     void constructBackend();
     void destructBackend();
