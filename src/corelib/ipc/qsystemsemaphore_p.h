@@ -60,11 +60,7 @@ struct QSystemSemaphorePosix
 
 struct QSystemSemaphoreSystemV
 {
-#ifndef Q_OS_OS2
     static constexpr bool Enabled = QT_CONFIG(sysv_sem);
-#else
-    static constexpr bool Enabled = false;
-#endif
     static bool supports(QNativeIpcKey::Type type)
     { return quint16(type) <= 0xff; }
     static bool runtimeSupportCheck();
@@ -109,7 +105,7 @@ struct QSystemSemaphoreOS2
     static constexpr bool Enabled = false;
 #endif
     static bool supports(QNativeIpcKey::Type type)
-    { return type == QNativeIpcKey::Type::Windows; }
+    { return type == QNativeIpcKey::Type::OS2; }
     static bool runtimeSupportCheck() { return Enabled; }
 
     // we can declare the members without the #if

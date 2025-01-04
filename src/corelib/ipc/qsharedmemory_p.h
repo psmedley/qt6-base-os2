@@ -151,8 +151,6 @@ public:
     bool detach(QSharedMemoryPrivate *self);
 
     HEV semaphore;
-    void *memory;
-    qsizetype size;
 };
 
 class Q_AUTOTEST_EXPORT QSharedMemoryPrivate : public QObjectPrivate

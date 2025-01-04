@@ -53,6 +53,16 @@ inline QNativeIpcKey QSharedMemoryPrivate::semaphoreNativeKey() const
         return { semkey, QNativeIpcKey::Type::Windows };
     }
 
+    if (isIpcSupported(IpcType::SharedMemory, QNativeIpcKey::Type::OS2)
+            && nativeKey.type() == QNativeIpcKey::Type::OS2) {
+        // native keys are limited to MAX_PATH
+        QString semkey = QLatin1String("\\SEM32\\");
+        QString key = nativeKey.nativeKey();
+        semkey += key;
+        semkey.truncate(MAX_PATH - 1);
+        return { semkey, QNativeIpcKey::Type::OS2 };
+    }
+
     // System V and POSIX keys appear to operate in different namespaces, so we
     // can just use the same native key
     return nativeKey;
