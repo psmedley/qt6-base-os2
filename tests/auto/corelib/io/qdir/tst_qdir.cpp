@@ -1,6 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // Copyright (C) 2017 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QTemporaryFile>
@@ -415,7 +415,7 @@ void tst_QDir::mkdirOnSymlink()
 
     // create our structure:
     dir.mkpath("two/three");
-    ::symlink("two/three", "symlink");
+    QCOMPARE(::symlink("two/three", "symlink"), 0);
 
     // try it:
     QString path = "symlink/../four/five";
@@ -715,18 +715,13 @@ void tst_QDir::compare()
     QVERIFY(QDir("../") == QDir(QDir::currentPath() + "/.."));
 }
 
-static QStringList filterLinks(const QStringList &list)
+static QStringList filterLinks(QStringList &&list)
 {
-#ifndef Q_NO_SYMLINKS
-    return list;
-#else
-    QStringList result;
-    foreach (QString str, list) {
-        if (!str.endsWith(QLatin1String(".lnk")))
-            result.append(str);
-    }
-    return result;
+#ifdef Q_NO_SYMLINKS
+    auto isDotLnk = [](const auto &s) { return s.endsWith(".lnk"_L1); };
+    list.removeIf(isDotLnk);
 #endif
+    return std::move(list);
 }
 
 void tst_QDir::entryList_data()
@@ -1874,9 +1869,9 @@ void tst_QDir::searchPaths()
     }
 
     for (int i = 0; i < searchPathPrefixList.size(); ++i) {
-        foreach (QString path, searchPathsList.at(i).split(",")) {
+        const auto parts = searchPathsList.at(i).split(",");
+        for (const QString &path : parts)
             QDir::addSearchPath(searchPathPrefixList.at(i), path);
-        }
     }
     for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         QCOMPARE(QDir::searchPaths(searchPathPrefixList.at(i)), searchPathsList.at(i).split(","));
@@ -2202,7 +2197,7 @@ void tst_QDir::match()
 
 void tst_QDir::drives()
 {
-    QFileInfoList list(QDir::drives());
+    const QFileInfoList list(QDir::drives());
 #if defined(Q_OS_WIN)
     QVERIFY(list.count() >= 1); //system
     QLatin1Char systemdrive('c');
@@ -2210,7 +2205,7 @@ void tst_QDir::drives()
 #if defined(Q_OS_WIN)
     QVERIFY(list.count() <= 26);
     bool foundsystem = false;
-    foreach (QFileInfo fi, list) {
+    for (const QFileInfo &fi : list) {
         QCOMPARE(fi.absolutePath().size(), 3); //"x:/"
         QCOMPARE(fi.absolutePath().at(1), QChar(QLatin1Char(':')));
         QCOMPARE(fi.absolutePath().at(2), QChar(QLatin1Char('/')));
@@ -2271,6 +2266,8 @@ void tst_QDir::equalityOperator_data()
     QString pathinroot("/system/..");
 #elif defined(Q_OS_HAIKU)
     QString pathinroot("/boot/..");
+#elif defined(Q_OS_VXWORKS)
+    QString pathinroot("/tmp/..");
 #else
     QString pathinroot("/usr/..");
 #endif
@@ -2336,9 +2333,9 @@ void tst_QDir::isRelative_data()
     QTest::newRow("homepath") << QDir::homePath() << false;
     QTest::newRow("temppath") << QDir::tempPath() << false;
     QTest::newRow("rootpath") << QDir::rootPath() << false;
-    foreach (QFileInfo root, QDir::drives()) {
+    const auto drives = QDir::drives();
+    for (const QFileInfo &root : drives)
         QTest::newRow(root.absolutePath().toLocal8Bit()) << root.absolutePath() << false;
-    }
 
     QTest::newRow("resource") << ":/prefix" << false;
 }

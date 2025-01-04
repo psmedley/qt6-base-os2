@@ -332,7 +332,6 @@ public:
     void startProcess();
 #if defined(Q_OS_UNIX)
     void commitChannels() const;
-    void execChild(int workingDirectory, char **argv, char **envp) const noexcept;
 #endif
     bool processStarted(QString *errorMessage = nullptr);
     void processFinished();
@@ -389,6 +388,9 @@ public:
     void cleanup();
     void setError(QProcess::ProcessError error, const QString &description = QString());
     void setErrorAndEmit(QProcess::ProcessError error, const QString &description = QString());
+
+    const QProcessEnvironmentPrivate *environmentPrivate() const
+    { return environment.d.constData(); }
 };
 
 #endif // QT_CONFIG(process)

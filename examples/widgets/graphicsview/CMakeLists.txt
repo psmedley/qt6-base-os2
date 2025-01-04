@@ -1,5 +1,6 @@
 # Copyright (C) 2022 The Qt Company Ltd.
-# SPDX-License-Identifier: BSD-3-Clause
+# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+
 if(QT_FEATURE_cursor AND QT_FEATURE_opengl)
     qt_internal_add_example(chip)
 endif()

@@ -376,6 +376,11 @@ static QString getRelocatablePrefix(QLibraryInfoPrivate::UsageMode usageMode)
     const QString prefixDir = QString(libDirCFString) + "/" QT_CONFIGURE_LIBLOCATION_TO_PREFIX_PATH;
 
     prefixPath = QDir::cleanPath(prefixDir);
+#elif defined(Q_OS_WASM)
+    // Emscripten expects to find shared libraries at the root of the in-memory
+    // file system when resolving dependencies for for dlopen() calls. So that's
+    // where libqt6core.so would be.
+    prefixPath = QStringLiteral("/");
 #elif defined(Q_OS_OS2)
     Q_UNUSED(usageMode);
     // TODO implement dladdr in LIBCn, see https://github.com/bitwiseworks/libc/issues/104

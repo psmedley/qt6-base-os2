@@ -125,7 +125,7 @@
 #  define Q_OS_INTEGRITY
 #elif defined(__rtems__)
 #  define Q_OS_RTEMS
-#elif defined(VXWORKS) /* there is no "real" VxWorks define - this has to be set in the mkspec! */
+#elif defined(__vxworks)
 #  define Q_OS_VXWORKS
 #elif defined(__OS2__)
 #  define Q_OS_OS2
