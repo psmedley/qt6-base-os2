@@ -65,9 +65,10 @@ QThreadData::~QThreadData()
     // crashing during QCoreApplicationData's global static cleanup we need to
     // safeguard the main thread here.. This fix is a bit crude, but it solves
     // the problem...
-    if (this->thread.loadAcquire() == QCoreApplicationPrivate::theMainThread.loadAcquire()) {
-       QCoreApplicationPrivate::theMainThread.storeRelease(nullptr);
-       QThreadData::clearCurrentThreadData();
+    if (threadId.loadAcquire() == QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
+        QCoreApplicationPrivate::theMainThread.storeRelease(nullptr);
+        QCoreApplicationPrivate::theMainThreadId.storeRelaxed(nullptr);
+        QThreadData::clearCurrentThreadData();
     }
 
     // ~QThread() sets thread to nullptr, so if it isn't null here, it's
@@ -146,7 +147,24 @@ void QAdoptedThread::run()
     // this function should never be called
     qFatal("QAdoptedThread::run(): Internal error, this implementation should never be called.");
 }
+#endif
 
+QScopedScopeLevelCounter::QScopedScopeLevelCounter(QThreadData *threadData)
+    : threadData(threadData)
+{
+    ++threadData->scopeLevel;
+    qCDebug(lcDeleteLater) << "Increased" << threadData->thread
+                      << "scope level to" << threadData->scopeLevel;
+}
+
+QScopedScopeLevelCounter::~QScopedScopeLevelCounter()
+{
+    --threadData->scopeLevel;
+    qCDebug(lcDeleteLater) << "Decreased" << threadData->thread
+                      << "scope level to" << threadData->scopeLevel;
+}
+
+#if QT_CONFIG(thread)
 /*
   QThreadPrivate
 */
@@ -276,7 +294,7 @@ QThreadPrivate::~QThreadPrivate()
     \note wait() and the sleep() functions should be unnecessary in
     general, since Qt is an event-driven framework. Instead of
     wait(), consider listening for the finished() signal. Instead of
-    the sleep() functions, consider using QTimer.
+    the sleep() functions, consider using QChronoTimer.
 
     The static functions currentThreadId() and currentThread() return
     identifiers for the currently executing thread. The former
@@ -359,9 +377,12 @@ QThreadPrivate::~QThreadPrivate()
     \fn void QThread::started()
 
     This signal is emitted from the associated thread when it starts executing,
-    before the run() function is called.
+    so any slots connected to it may be called via queued invocation. Whilst
+    the event may have been posted before run() is called, any
+    \l {Signals and Slots Across Threads} {cross-thread delivery} of the signal
+    may still be pending.
 
-    \sa finished()
+    \sa run(), finished()
 */
 
 /*!
@@ -415,6 +436,23 @@ QThread *QThread::currentThread()
 }
 
 /*!
+    \since 6.8
+
+    Returns whether the currently executing thread is the main thread.
+
+    The main thread is the thread in which QCoreApplication was created.
+    This is usually the thread that called the \c{main()} function, but not necessarily so.
+    It is the thread that is processing the GUI events and in which graphical objects
+    (QWindow, QWidget) can be created.
+
+    \sa currentThread(), QCoreApplication::instance()
+*/
+bool QThread::isMainThread() noexcept
+{
+    return currentThreadId() == QCoreApplicationPrivate::theMainThreadId.loadRelaxed();
+}
+
+/*!
     Constructs a new QThread to manage a new thread. The \a parent
     takes ownership of the QThread. The thread does not begin
     executing until start() is called.
@@ -463,11 +501,8 @@ QThread::~QThread()
     Q_D(QThread);
     {
         QMutexLocker locker(&d->mutex);
-        if (d->isInFinish) {
-            locker.unlock();
-            wait();
-            locker.relock();
-        }
+        if (d->isInFinish)
+            d->wait(locker, QDeadlineTimer::Forever);
         if (d->running && !d->finished && !d->data->isAdopted)
             qFatal("QThread: Destroyed while thread is still running");
 
@@ -910,6 +945,36 @@ int QThread::loopLevel() const
     return d->data->eventLoops.size();
 }
 
+/*!
+    \internal
+    Returns the thread handle of this thread.
+    It can be compared with the return value of currentThreadId().
+
+    This is used to implement isCurrentThread, and might be useful
+    for debugging (e.g. by comparing the value in gdb with info threads).
+
+    \note Thread handles of destroyed threads might be reused by the
+    operating system. Storing the return value of this function can
+    therefore give surprising results if it outlives the QThread object
+    (threads claimed to be the same even if they aren't).
+*/
+Qt::HANDLE QThreadPrivate::threadId() const noexcept
+{
+    return data->threadId.loadRelaxed();
+}
+
+/*!
+    \since 6.8
+    Returns true if this thread is QThread::currentThread.
+
+    \sa currentThreadId()
+*/
+bool QThread::isCurrentThread() const noexcept
+{
+    Q_D(const QThread);
+    return QThread::currentThreadId() == d->threadId();
+}
+
 #else // QT_CONFIG(thread)
 
 QThread::QThread(QObject *parent)
@@ -982,6 +1047,11 @@ QThread *QThread::currentThread()
     return QThreadData::current()->thread.loadAcquire();
 }
 
+bool QThread::isCurrentThread() const noexcept
+{
+    return true;
+}
+
 int QThread::idealThreadCount() noexcept
 {
     return 1;
@@ -1028,8 +1098,12 @@ QThreadData *QThreadData::current(bool createIfNecessary)
         data->threadId.storeRelaxed(Qt::HANDLE(data->thread.loadAcquire()));
         data->deref();
         data->isAdopted = true;
-        if (!QCoreApplicationPrivate::theMainThread.loadAcquire())
-            QCoreApplicationPrivate::theMainThread.storeRelease(data->thread.loadRelaxed());
+        if (!QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
+            auto *mainThread = data->thread.loadRelaxed();
+            mainThread->setObjectName("Qt mainThread");
+            QCoreApplicationPrivate::theMainThread.storeRelease(mainThread);
+            QCoreApplicationPrivate::theMainThreadId.storeRelaxed(data->threadId.loadRelaxed());
+        }
     }
     return data;
 }
@@ -1149,11 +1223,11 @@ bool QThread::event(QEvent *event)
 
 void QThread::requestInterruption()
 {
-    if (this == QCoreApplicationPrivate::theMainThread.loadAcquire()) {
+    Q_D(QThread);
+    if (d->threadId() == QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
         qWarning("QThread::requestInterruption has no effect on the main thread");
         return;
     }
-    Q_D(QThread);
     QMutexLocker locker(&d->mutex);
     if (!d->running || d->finished || d->isInFinish)
         return;

@@ -40,6 +40,7 @@
 #include <QtGui/private/qfontengine_coretext_p.h>
 
 #include <IOKit/graphics/IOGraphicsLib.h>
+#include <UniformTypeIdentifiers/UTCoreTypes.h>
 
 #include <inttypes.h>
 
@@ -124,9 +125,9 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
 #endif
         mFontDb.reset(new QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>);
 
-    QString icStr = QPlatformInputContextFactory::requested();
-    icStr.isNull() ? mInputContext.reset(new QCocoaInputContext)
-                   : mInputContext.reset(QPlatformInputContextFactory::create(icStr));
+    auto icStrs = QPlatformInputContextFactory::requested();
+    icStrs.isEmpty() ? mInputContext.reset(new QCocoaInputContext)
+                     : mInputContext.reset(QPlatformInputContextFactory::create(icStrs));
 
     initResources();
     QMacAutoReleasePool pool;
@@ -446,8 +447,8 @@ void QCocoaIntegration::focusWindowChanged(QWindow *focusWindow)
         return;
 
     static bool hasDefaultApplicationIcon = [](){
-        NSImage *genericApplicationIcon = [[NSWorkspace sharedWorkspace]
-            iconForFileType:NSFileTypeForHFSTypeCode(kGenericApplicationIcon)];
+        NSImage *genericApplicationIcon = [NSWorkspace.sharedWorkspace
+            iconForContentType:UTTypeApplicationBundle];
         NSImage *applicationIcon = [NSImage imageNamed:NSImageNameApplicationIcon];
 
         NSRect rect = NSMakeRect(0, 0, 32, 32);

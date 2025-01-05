@@ -183,6 +183,7 @@ public:
     ~QThreadPrivate();
 
     void setPriority(QThread::Priority prio);
+    Qt::HANDLE threadId() const noexcept;
 
     mutable QMutex mutex;
     QAtomicInt quitLockRef;
@@ -201,17 +202,19 @@ public:
     uint stackSize;
     std::underlying_type_t<QThread::Priority> priority;
 
+    bool wait(QMutexLocker<QMutex> &locker, QDeadlineTimer deadline);
+
 #ifdef Q_OS_UNIX
     QWaitCondition thread_done;
 
     static void *start(void *arg);
-    static void finish(void *);
-
+    void finish();          // happens early (before thread-local dtors)
+    void cleanup();         // happens late (as a thread-local dtor, if possible)
 #endif // Q_OS_UNIX
 
 #ifdef Q_OS_WIN
     static unsigned int __stdcall start(void *) noexcept;
-    static void finish(void *, bool lockAnyway = true) noexcept;
+    void finish(bool lockAnyway = true) noexcept;
 
     Qt::HANDLE handle;
     unsigned int id;
@@ -351,11 +354,8 @@ class QScopedScopeLevelCounter
 {
     QThreadData *threadData;
 public:
-    inline QScopedScopeLevelCounter(QThreadData *threadData)
-        : threadData(threadData)
-    { ++threadData->scopeLevel; }
-    inline ~QScopedScopeLevelCounter()
-    { --threadData->scopeLevel; }
+    QScopedScopeLevelCounter(QThreadData *threadData);
+    ~QScopedScopeLevelCounter();
 };
 
 // thread wrapper for the main() thread

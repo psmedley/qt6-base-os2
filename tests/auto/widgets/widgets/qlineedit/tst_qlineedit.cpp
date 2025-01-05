@@ -1937,9 +1937,6 @@ public:
 
 void tst_QLineEdit::noCursorBlinkWhenReadOnly()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     int cursorFlashTime = QApplication::cursorFlashTime();
     if (cursorFlashTime == 0)
         return;
@@ -1947,7 +1944,8 @@ void tst_QLineEdit::noCursorBlinkWhenReadOnly()
     centerOnScreen(&le);
     le.show();
     le.setFocus();
-    QVERIFY(QTest::qWaitForWindowActive(&le));
+    QVERIFY(QTest::qWaitForWindowFocused(&le));
+    QVERIFY(le.hasFocus());
     le.updates = 0;
     QTest::qWait(cursorFlashTime);
     QVERIFY(le.updates > 0);
@@ -3307,9 +3305,6 @@ void tst_QLineEdit::readOnlyStyleOption()
 
 void tst_QLineEdit::validateOnFocusOut()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QLineEdit *testWidget = ensureTestWidget();
     QSignalSpy editingFinishedSpy(testWidget, SIGNAL(editingFinished()));
     testWidget->setValidator(new QIntValidator(100, 999, testWidget));
@@ -3323,7 +3318,7 @@ void tst_QLineEdit::validateOnFocusOut()
     centerOnScreen(testWidget);
     testWidget->show();
     testWidget->activateWindow();
-    QVERIFY(QTest::qWaitForWindowActive(testWidget));
+    QVERIFY(QTest::qWaitForWindowFocused(testWidget));
     QVERIFY(testWidget->hasFocus());
 
     QTest::keyPress(testWidget, '0');
@@ -3711,9 +3706,6 @@ void tst_QLineEdit::task180999_focus()
 
 void tst_QLineEdit::task174640_editingFinished()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QWidget mw;
     QVBoxLayout *layout = new QVBoxLayout(&mw);
     QLineEdit *le1 = new QLineEdit(&mw);
@@ -3722,10 +3714,8 @@ void tst_QLineEdit::task174640_editingFinished()
     layout->addWidget(le2);
 
     mw.show();
-    QApplicationPrivate::setActiveWindow(&mw);
     mw.activateWindow();
-    QVERIFY(QTest::qWaitForWindowActive(&mw));
-    QCOMPARE(&mw, QApplication::activeWindow());
+    QVERIFY(QTest::qWaitForWindowFocused(&mw));
 
     QSignalSpy editingFinishedSpy(le1, SIGNAL(editingFinished()));
 
@@ -3818,8 +3808,6 @@ void tst_QLineEdit::task210502_caseInsensitiveInlineCompletion()
 #ifdef Q_OS_ANDROID
     QSKIP("QCompleter does not work on Android, see QTBUG-77174");
 #endif
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
 
     QString completion("ABCD");
     QStringList completions;
@@ -3830,10 +3818,9 @@ void tst_QLineEdit::task210502_caseInsensitiveInlineCompletion()
     completer.setCompletionMode(QCompleter::InlineCompletion);
     lineEdit.setCompleter(&completer);
     lineEdit.show();
-    QApplicationPrivate::setActiveWindow(&lineEdit);
-    QVERIFY(QTest::qWaitForWindowActive(&lineEdit));
     lineEdit.setFocus();
-    QTRY_VERIFY(lineEdit.hasFocus());
+    QVERIFY(QTest::qWaitForWindowFocused(&lineEdit));
+    QVERIFY(lineEdit.hasFocus());
     QTest::keyPress(&lineEdit, 'a');
     QTest::keyPress(&lineEdit, Qt::Key_Return);
     QCOMPARE(lineEdit.text(), completion);
@@ -3918,9 +3905,6 @@ void tst_QLineEdit::task233101_cursorPosAfterInputMethod()
 
 void tst_QLineEdit::task241436_passwordEchoOnEditRestoreEchoMode()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QStyleOptionFrame opt;
     QLineEdit *testWidget = ensureTestWidget();
     const int passwordCharacter = testWidget->style()->styleHint(QStyle::SH_LineEdit_PasswordCharacter, &opt, testWidget);
@@ -3931,8 +3915,7 @@ void tst_QLineEdit::task241436_passwordEchoOnEditRestoreEchoMode()
     testWidget->setFocus();
     centerOnScreen(testWidget);
     testWidget->show();
-    QApplicationPrivate::setActiveWindow(testWidget);
-    QVERIFY(QTest::qWaitForWindowActive(testWidget));
+    QVERIFY(QTest::qWaitForWindowFocused(testWidget));
     QVERIFY(testWidget->hasFocus());
 
     QTest::keyPress(testWidget, '0');
@@ -3970,9 +3953,6 @@ void tst_QLineEdit::task248948_redoRemovedSelection()
 
 void tst_QLineEdit::taskQTBUG_4401_enterKeyClearsPassword()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QString password("Wanna guess?");
 
     QLineEdit *testWidget = ensureTestWidget();
@@ -3982,8 +3962,8 @@ void tst_QLineEdit::taskQTBUG_4401_enterKeyClearsPassword()
     testWidget->selectAll();
     centerOnScreen(testWidget);
     testWidget->show();
-    QApplicationPrivate::setActiveWindow(testWidget);
-    QVERIFY(QTest::qWaitForWindowActive(testWidget));
+    QVERIFY(QTest::qWaitForWindowFocused(testWidget));
+    QVERIFY(testWidget->hasFocus());
 
     QTest::keyPress(testWidget, Qt::Key_Enter);
     QTRY_COMPARE(testWidget->text(), password);
@@ -4064,11 +4044,9 @@ void tst_QLineEdit::taskQTBUG_7395_readOnlyShortcut()
     le.addAction(&action);
 
     le.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&le));
-    QApplicationPrivate::setActiveWindow(&le);
-    QVERIFY(QTest::qWaitForWindowActive(&le));
     le.setFocus();
-    QTRY_VERIFY(le.hasFocus());
+    QVERIFY(QTest::qWaitForWindowFocused(&le));
+    QVERIFY(le.hasFocus());
 
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_P);
     QCOMPARE(spy.size(), 1);
@@ -4087,10 +4065,9 @@ void tst_QLineEdit::QTBUG697_paletteCurrentColorGroup()
     le.setPalette(p);
 
     le.show();
-    QApplicationPrivate::setActiveWindow(&le);
-    QVERIFY(QTest::qWaitForWindowActive(&le));
     le.setFocus();
-    QTRY_VERIFY(le.hasFocus());
+    QVERIFY(QTest::qWaitForWindowFocused(&le));
+    QVERIFY(le.hasFocus());
     le.selectAll();
 
     QImage img(le.size(),QImage::Format_ARGB32 );
@@ -4101,7 +4078,7 @@ void tst_QLineEdit::QTBUG697_paletteCurrentColorGroup()
     window.resize(100, 50);
     window.show();
     window.requestActivate();
-    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QVERIFY(QTest::qWaitForWindowFocused(&window));
     le.render(&img);
     QCOMPARE(img.pixel(10, le.height()/2), QColor(Qt::red).rgb());
 }
@@ -4582,7 +4559,6 @@ void tst_QLineEdit::clearButton()
     l->addWidget(listView);
     testWidget.move(300, 300);
     testWidget.show();
-    QApplicationPrivate::setActiveWindow(&testWidget);
     QVERIFY(QTest::qWaitForWindowActive(&testWidget));
     // Flip the clear button on,off, trying to detect crashes.
     filterLineEdit->setClearButtonEnabled(true);
@@ -4922,9 +4898,6 @@ void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit_data()
 
 void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     QFETCH(QKeySequence, keySequence);
     QFETCH(bool, shouldBeHandledByQLineEdit);
 
@@ -4937,10 +4910,9 @@ void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit()
     QLineEdit *lineEdit = new QLineEdit(QStringLiteral("Test"), &widget);
     lineEdit->setReadOnly(true);
     lineEdit->setFocus();
-
     widget.show();
-
-    QVERIFY(QTest::qWaitForWindowActive(&widget));
+    QVERIFY(QTest::qWaitForWindowFocused(lineEdit));
+    QVERIFY(lineEdit->hasFocus());
 
     const int keySequenceCount = keySequence.count();
     for (int i = 0; i < keySequenceCount; ++i) {
@@ -5282,8 +5254,8 @@ void tst_QLineEdit::deleteWordByKeySequence()
         lineEdit->setSelection(selectionStart, selectionEnd - selectionStart);
 
     widget.show();
-
-    QVERIFY(QTest::qWaitForWindowActive(&widget));
+    QVERIFY(QTest::qWaitForWindowFocused(&widget));
+    QVERIFY(lineEdit->hasFocus());
 
     QTestEventList keys;
     addKeySequenceStandardKey(keys, key);

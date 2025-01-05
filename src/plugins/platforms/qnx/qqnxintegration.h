@@ -10,12 +10,16 @@
 #include <QtCore/qmutex.h>
 
 #include <screen/screen.h>
+#include <QtCore/QLoggingCategory>
 
 #if QT_CONFIG(opengl)
 #include <EGL/egl.h>
 #endif
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_LOGGING_CATEGORY(lcQpaQnx);
+Q_DECLARE_LOGGING_CATEGORY(lcQpaGLContext);
 
 class QQnxScreenEventThread;
 class QQnxFileDialogHelper;
@@ -29,9 +33,9 @@ class QQnxAbstractVirtualKeyboard;
 class QQnxServices;
 
 class QSimpleDrag;
+class QQnxInputContext;
 
 #if QT_CONFIG(qqnx_pps)
-class QQnxInputContext;
 class QQnxNavigatorEventNotifier;
 class QQnxButtonEventNotifier;
 #endif
@@ -69,9 +73,7 @@ public:
     QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const override;
 #endif
 
-#if QT_CONFIG(qqnx_pps)
     QPlatformInputContext *inputContext() const override;
-#endif
 
     void moveToScreen(QWindow *window, int screen);
 
@@ -120,9 +122,9 @@ private:
     QQnxScreenEventThread *m_screenEventThread;
     QQnxNavigatorEventHandler *m_navigatorEventHandler;
     QQnxAbstractVirtualKeyboard *m_virtualKeyboard;
+    QQnxInputContext *m_inputContext;
 #if QT_CONFIG(qqnx_pps)
     QQnxNavigatorEventNotifier *m_navigatorEventNotifier;
-    QQnxInputContext *m_inputContext;
     QQnxButtonEventNotifier *m_buttonsNotifier;
 #endif
     QPlatformInputContext *m_qpaInputContext;

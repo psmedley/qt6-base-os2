@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
+#include <QtTest/private/qcomparisontesthelper_p.h>
 #include <QTemporaryFile>
 #if QT_CONFIG(process)
 #include <QProcess>
@@ -126,6 +127,7 @@ private slots:
     void normalizePathSegments();
 #endif
 
+    void compareCompiles();
     void compare();
     void QDir_default();
 
@@ -205,12 +207,18 @@ private slots:
     void stdfilesystem();
 
 private:
-#ifdef BUILTIN_TESTDATA
-    QString m_dataPath;
     QSharedPointer<QTemporaryDir> m_dataDir;
-#else
-    const QString m_dataPath;
-#endif
+    QString m_dataPath;
+
+    constexpr static const std::array m_testDirs = {
+        "entrylist"_L1,
+        "resources"_L1,
+        "searchdir"_L1,
+        "testData"_L1,
+        "testdir"_L1,
+        "types"_L1,
+        "tst_qdir.cpp"_L1,
+    };
 };
 
 Q_DECLARE_METATYPE(tst_QDir::UncHandling)
@@ -258,6 +266,20 @@ void tst_QDir::initTestCase()
     m_dataDir = QEXTRACTTESTDATA("/");
     QVERIFY2(!m_dataDir.isNull(), qPrintable("Did not find testdata. Is this builtin?"));
     m_dataPath = m_dataDir->path();
+#elif QT_CONFIG(cxx17_filesystem) // This code doesn't work in QNX on the CI
+    m_dataDir.reset(new QTemporaryDir);
+    m_dataPath = m_dataDir->path();
+
+    QString sourceDir = QFileInfo(QFINDTESTDATA(m_testDirs[0])).absolutePath();
+    namespace fs = std::filesystem;
+    for (const auto &entry : m_testDirs) {
+        auto l1 = QLatin1StringView(entry);
+        const auto src = fs::path(QString(sourceDir + u'/' + l1).toStdString());
+        const auto dest = fs::path(QString(m_dataPath + u'/' + l1).toStdString());
+        std::error_code ec;
+        fs::copy(src, dest, fs::copy_options::recursive, ec);
+        QCOMPARE(ec.value(), 0);
+    }
 #endif
 
     QVERIFY2(!m_dataPath.isEmpty(), "test data not found");
@@ -319,6 +341,7 @@ void tst_QDir::setPath()
     QFETCH(QString, dir1);
     QFETCH(QString, dir2);
 
+    QDir::setCurrent(m_dataPath + "/entrylist"_L1);
     QDir shared;
     QDir qDir1(dir1);
     QStringList entries1 = qDir1.entryList();
@@ -497,7 +520,7 @@ void tst_QDir::makedirReturnCode()
     // Remove the directory and create a file with the same path
     QDir::current().rmdir(dirName);
     QVERIFY(!f.exists());
-    f.open(QIODevice::WriteOnly);
+    QVERIFY(f.open(QIODevice::WriteOnly));
     f.write("test");
     f.close();
     QVERIFY2(f.exists(), msgDoesNotExist(f.fileName()).constData());
@@ -591,7 +614,7 @@ void tst_QDir::removeRecursivelySymlink()
     QDir().mkpath(tmpdir);
     QDir currentDir;
     currentDir.mkdir("myDir");
-    QFile("testfile").open(QIODevice::WriteOnly);
+    QVERIFY(QFile("testfile").open(QIODevice::WriteOnly));
     const QString link = tmpdir + "linkToDir.lnk";
     const QString linkToFile = tmpdir + "linkToFile.lnk";
 #ifndef Q_NO_SYMLINKS_TO_DIRS
@@ -701,18 +724,20 @@ void tst_QDir::QDir_default()
     QCOMPARE(dir.absolutePath(), QDir::currentPath());
 }
 
+void tst_QDir::compareCompiles()
+{
+    QTestPrivate::testEqualityOperatorsCompile<QDir>();
+}
+
 void tst_QDir::compare()
 {
-    // operator==
-
-    // Not using QCOMPARE to test result of QDir::operator==
-
     QDir dir;
     dir.makeAbsolute();
-    QVERIFY(dir == QDir::currentPath());
+    QT_TEST_EQUALITY_OPS(dir, QDir::currentPath(), true);
 
     QCOMPARE(QDir(), QDir(QDir::currentPath()));
-    QVERIFY(QDir("../") == QDir(QDir::currentPath() + "/.."));
+
+    QT_TEST_EQUALITY_OPS(QDir("../"), QDir(QDir::currentPath() + "/.."), true);
 }
 
 static QStringList filterLinks(QStringList &&list)
@@ -1060,7 +1085,7 @@ void tst_QDir::entryListWithSymLinks()
     QFile::remove("testfile.cpp");
     QDir dir;
     dir.mkdir("myDir");
-    QFile("testfile.cpp").open(QIODevice::WriteOnly);
+    QVERIFY(QFile("testfile.cpp").open(QIODevice::WriteOnly));
 #  ifndef Q_NO_SYMLINKS_TO_DIRS
     QVERIFY(QFile::link("myDir", "myLinkToDir.lnk"));
 #  endif
@@ -1364,17 +1389,22 @@ void tst_QDir::normalizePathSegments_data()
     QTest::newRow("data6") << "/./" << HandleUnc << "/";
     QTest::newRow("data7") << "/.." << HandleUnc << "/..";
     QTest::newRow("data8") << "/../" << HandleUnc << "/../";
+    QTest::newRow("/../.") << "/../." << HandleUnc << "/../";
+    QTest::newRow("/.././") << "/.././" << HandleUnc << "/../";
+    QTest::newRow("/../..") << "/../.." << HandleUnc << "/../..";
     QTest::newRow("data9") << "." << HandleUnc << ".";
-    QTest::newRow("data10") << "./" << HandleUnc << "./";
+    QTest::newRow("data10") << "./" << HandleUnc << ".";
     QTest::newRow("data11") << "./." << HandleUnc << ".";
-    QTest::newRow("data12") << "././" << HandleUnc << "./";
+    QTest::newRow("data12") << "././" << HandleUnc << ".";
     QTest::newRow("data13") << ".." << HandleUnc << "..";
     QTest::newRow("data14") << "../" << HandleUnc << "../";
-    QTest::newRow("data15") << "../." << HandleUnc << "..";
+    QTest::newRow("data15") << "../." << HandleUnc << "../";
     QTest::newRow("data16") << ".././" << HandleUnc << "../";
     QTest::newRow("data17") << "../.." << HandleUnc << "../..";
     QTest::newRow("data18") << "../../" << HandleUnc << "../../";
+    QTest::newRow("./file1.txt") << "./file1.txt" << HandleUnc << "file1.txt";
     QTest::newRow("data19") << ".//file1.txt" << HandleUnc << "file1.txt";
+    QTest::newRow("/foo/bar//file1.txt") << "/foo/bar//file1.txt" << HandleUnc << "/foo/bar/file1.txt";
     QTest::newRow("data20") << "/foo/bar/..//file1.txt" << HandleUnc << "/foo/file1.txt";
     QTest::newRow("data21") << "foo/.." << HandleUnc << ".";
     QTest::newRow("data22") << "./foo/.." << HandleUnc << ".";
@@ -1399,7 +1429,7 @@ void tst_QDir::normalizePathSegments_data()
 #else
     QTest::newRow("data37") << "c:/." << HandleUnc << "c:";
     QTest::newRow("data38") << "c:/.." << HandleUnc << ".";
-    QTest::newRow("data39") << "c:/../" << HandleUnc << "./";
+    QTest::newRow("data39") << "c:/../" << HandleUnc << ".";
 #endif
     QTest::newRow("data40") << "c:/./" << HandleUnc << "c:/";
     QTest::newRow("data41") << "foo/../foo/.." << HandleUnc << ".";
@@ -1426,10 +1456,9 @@ void tst_QDir::normalizePathSegments()
     QFETCH(QString, path);
     QFETCH(UncHandling, uncHandling);
     QFETCH(QString, expected);
-    QString cleaned = qt_normalizePathSegments(path, uncHandling == HandleUnc ? QDirPrivate::AllowUncPaths : QDirPrivate::DefaultNormalization);
-    QCOMPARE(cleaned, expected);
-    if (path == expected)
-        QVERIFY2(path.isSharedWith(cleaned), "Strings are same but data is not shared");
+    // for QDirPrivate::RemotePath, see tst_QUrl::resolving
+    qt_normalizePathSegments(&path, uncHandling == HandleUnc ? QDirPrivate::AllowUncPaths : QDirPrivate::DefaultNormalization);
+    QCOMPARE(path, expected);
 }
 # endif //QT_BUILD_INTERNAL
 
@@ -1602,7 +1631,7 @@ void tst_QDir::filePath()
 void tst_QDir::remove()
 {
     QFile f("remove-test");
-    f.open(QIODevice::WriteOnly);
+    QVERIFY(f.open(QIODevice::WriteOnly));
     f.close();
     QDir dir;
     QVERIFY(dir.remove("remove-test"));
@@ -1615,7 +1644,7 @@ void tst_QDir::remove()
 void tst_QDir::rename()
 {
     QFile f("rename-test");
-    f.open(QIODevice::WriteOnly);
+    QVERIFY(f.open(QIODevice::WriteOnly));
     f.close();
     QDir dir;
     QVERIFY(dir.rename("rename-test", "rename-test-renamed"));

@@ -33,6 +33,8 @@
 #include <QtCore/qresource.h>
 #include <QtCore/qscopeguard.h>
 #include <QtCore/qthread.h>
+#include <QtCore/private/qandroiditemmodelproxy_p.h>
+#include <QtCore/private/qandroidmodelindexproxy_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/private/qhighdpiscaling_p.h>
 
@@ -53,9 +55,6 @@ static jobject m_resourcesObj = nullptr;
 
 static jclass m_qtActivityClass = nullptr;
 static jclass m_qtServiceClass = nullptr;
-
-static QtJniTypes::QtActivityDelegateBase m_activityDelegate = nullptr;
-static QtJniTypes::QtInputDelegate m_inputDelegate = nullptr;
 
 static int m_pendingApplicationState = -1;
 static QBasicMutex m_platformMutex;
@@ -85,7 +84,7 @@ static double m_density = 1.0;
 static AndroidAssetsFileEngineHandler *m_androidAssetsFileEngineHandler = nullptr;
 static AndroidContentFileEngineHandler *m_androidContentFileEngineHandler = nullptr;
 
-
+static AndroidBackendRegister *m_backendRegister = nullptr;
 
 static const char m_qtTag[] = "Qt";
 static const char m_classErrorMsg[] = "Can't find class \"%s\"";
@@ -93,7 +92,8 @@ static const char m_methodErrorMsg[] = "Can't find method \"%s%s\"";
 
 Q_CONSTINIT static QBasicAtomicInt startQtAndroidPluginCalled = Q_BASIC_ATOMIC_INITIALIZER(0);
 
-Q_DECLARE_JNI_CLASS(QtEmbeddedDelegateFactory, "org/qtproject/qt/android/QtEmbeddedDelegateFactory")
+Q_DECLARE_JNI_CLASS(QtWindowInterface, "org/qtproject/qt/android/QtWindowInterface")
+Q_DECLARE_JNI_CLASS(QtAccessibilityInterface, "org/qtproject/qt/android/QtAccessibilityInterface");
 
 namespace QtAndroid
 {
@@ -184,36 +184,9 @@ namespace QtAndroid
     // TODO move calls from here to where they logically belong
     void setSystemUiVisibility(SystemUiVisibility uiVisibility)
     {
-        qtActivityDelegate().callMethod<void>("setSystemUiVisibility", jint(uiVisibility));
-    }
-
-    // FIXME: avoid direct access to QtActivityDelegate
-    QtJniTypes::QtActivityDelegateBase qtActivityDelegate()
-    {
-        using namespace QtJniTypes;
-        if (!m_activityDelegate.isValid()) {
-            if (isQtApplication()) {
-                auto context = QtAndroidPrivate::activity();
-                m_activityDelegate = context.callMethod<QtActivityDelegateBase>("getActivityDelegate");
-            } else {
-                m_activityDelegate = QJniObject::callStaticMethod<QtActivityDelegateBase>(
-                                                    Traits<QtEmbeddedDelegateFactory>::className(),
-                                                    "getActivityDelegate",
-                                                    QtAndroidPrivate::activity());
-            }
-        }
-
-        return m_activityDelegate;
-    }
-
-    QtJniTypes::QtInputDelegate qtInputDelegate()
-    {
-        if (!m_inputDelegate.isValid()) {
-            m_inputDelegate = qtActivityDelegate().callMethod<QtJniTypes::QtInputDelegate>(
-                    "getInputDelegate");
-        }
-
-        return m_inputDelegate;
+        AndroidBackendRegister *reg = QtAndroid::backendRegister();
+        reg->callInterface<QtJniTypes::QtWindowInterface, void>("setSystemUiVisibility",
+                                                                jint(uiVisibility));
     }
 
     bool isQtApplication()
@@ -234,36 +207,46 @@ namespace QtAndroid
         return true;
     }
 
+    void initializeAccessibility()
+    {
+        m_backendRegister->callInterface<QtJniTypes::QtAccessibilityInterface, void>(
+                "initializeAccessibility");
+    }
+
     void notifyAccessibilityLocationChange(uint accessibilityObjectId)
     {
-        qtActivityDelegate().callMethod<void>("notifyLocationChange", accessibilityObjectId);
+        m_backendRegister->callInterface<QtJniTypes::QtAccessibilityInterface, void>(
+                "notifyLocationChange", accessibilityObjectId);
     }
 
     void notifyObjectHide(uint accessibilityObjectId, uint parentObjectId)
     {
-        qtActivityDelegate().callMethod<void>("notifyObjectHide",
-                                              accessibilityObjectId, parentObjectId);
+        m_backendRegister->callInterface<QtJniTypes::QtAccessibilityInterface, void>(
+                "notifyObjectHide", accessibilityObjectId, parentObjectId);
     }
 
     void notifyObjectShow(uint parentObjectId)
     {
-        qtActivityDelegate().callMethod<void>("notifyObjectShow",
-                                              parentObjectId);
+        m_backendRegister->callInterface<QtJniTypes::QtAccessibilityInterface, void>(
+                "notifyObjectShow", parentObjectId);
     }
 
     void notifyObjectFocus(uint accessibilityObjectId)
     {
-        qtActivityDelegate().callMethod<void>("notifyObjectFocus", accessibilityObjectId);
+        m_backendRegister->callInterface<QtJniTypes::QtAccessibilityInterface, void>(
+                "notifyObjectFocus", accessibilityObjectId);
     }
 
     void notifyValueChanged(uint accessibilityObjectId, jstring value)
     {
-        qtActivityDelegate().callMethod<void>("notifyValueChanged", accessibilityObjectId, value);
+        m_backendRegister->callInterface<QtJniTypes::QtAccessibilityInterface, void>(
+                "notifyValueChanged", accessibilityObjectId, value);
     }
 
     void notifyScrolledEvent(uint accessibilityObjectId)
     {
-        qtActivityDelegate().callMethod<void>("notifyScrolledEvent", accessibilityObjectId);
+        m_backendRegister->callInterface<QtJniTypes::QtAccessibilityInterface, void>(
+                "notifyScrolledEvent", accessibilityObjectId);
     }
 
     void notifyNativePluginIntegrationReady(bool ready)
@@ -387,6 +370,11 @@ namespace QtAndroid
         return m_assets;
     }
 
+    AndroidBackendRegister *backendRegister()
+    {
+        return m_backendRegister;
+    }
+
 } // namespace QtAndroid
 
 static jboolean startQtAndroidPlugin(JNIEnv *env, jobject /*object*/, jstring paramsString)
@@ -397,6 +385,7 @@ static jboolean startQtAndroidPlugin(JNIEnv *env, jobject /*object*/, jstring pa
     m_androidAssetsFileEngineHandler = new AndroidAssetsFileEngineHandler();
     m_androidContentFileEngineHandler = new AndroidContentFileEngineHandler();
     m_mainLibraryHnd = nullptr;
+    m_backendRegister = new AndroidBackendRegister();
 
     const QStringList argsList = QProcess::splitCommand(QJniObject(paramsString).toString());
 
@@ -441,7 +430,7 @@ static void waitForServiceSetup(JNIEnv *env, jclass /*clazz*/)
     Q_UNUSED(env);
     // The service must wait until the QCoreApplication starts otherwise onBind will be
     // called too early
-    if (QtAndroidPrivate::service().isValid())
+    if (QtAndroidPrivate::service().isValid() && QtAndroid::isQtApplication())
         QtAndroidPrivate::waitForServiceSetup();
 }
 
@@ -544,6 +533,10 @@ static void terminateQt(JNIEnv *env, jclass /*clazz*/)
     m_androidPlatformIntegration = nullptr;
     delete m_androidAssetsFileEngineHandler;
     m_androidAssetsFileEngineHandler = nullptr;
+    delete m_androidContentFileEngineHandler;
+    m_androidContentFileEngineHandler = nullptr;
+    delete m_backendRegister;
+    m_backendRegister = nullptr;
     sem_post(&m_exitSemaphore);
 }
 
@@ -640,6 +633,12 @@ static void updateApplicationState(JNIEnv */*env*/, jobject /*thiz*/, jint state
     }
 }
 
+static void updateLocale(JNIEnv */*env*/, jobject /*thiz*/)
+{
+    QCoreApplication::postEvent(QCoreApplication::instance(), new QEvent(QEvent::LocaleChange));
+    QCoreApplication::postEvent(QCoreApplication::instance(), new QEvent(QEvent::LanguageChange));
+}
+
 static void handleOrientationChanged(JNIEnv */*env*/, jobject /*thiz*/, jint newRotation, jint nativeOrientation)
 {
     // Array of orientations rotated in 90 degree increments, counterclockwise
@@ -709,7 +708,7 @@ Q_DECLARE_JNI_NATIVE_METHOD(handleScreenRemoved)
 
 static void handleUiDarkModeChanged(JNIEnv */*env*/, jobject /*thiz*/, jint newUiMode)
 {
-    QAndroidPlatformIntegration::setColorScheme(
+    QAndroidPlatformIntegration::updateColorScheme(
         (newUiMode == 1 ) ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light);
 }
 Q_DECLARE_JNI_NATIVE_METHOD(handleUiDarkModeChanged)
@@ -743,7 +742,8 @@ static JNINativeMethod methods[] = {
     { "updateApplicationState", "(I)V", (void *)updateApplicationState },
     { "onActivityResult", "(IILandroid/content/Intent;)V", (void *)onActivityResult },
     { "onNewIntent", "(Landroid/content/Intent;)V", (void *)onNewIntent },
-    { "onBind", "(Landroid/content/Intent;)Landroid/os/IBinder;", (void *)onBind }
+    { "onBind", "(Landroid/content/Intent;)Landroid/os/IBinder;", (void *)onBind },
+    { "updateLocale", "()V", (void *)updateLocale },
 };
 
 #define FIND_AND_CHECK_CLASS(CLASS_NAME) \
@@ -891,7 +891,11 @@ Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
             || !QtAndroidDialogHelpers::registerNatives(env)
             || !QAndroidPlatformClipboard::registerNatives(env)
             || !QAndroidPlatformWindow::registerNatives(env)
-            || !QtAndroidWindowEmbedding::registerNatives(env)) {
+            || !QtAndroidWindowEmbedding::registerNatives(env)
+            || !AndroidBackendRegister::registerNatives()
+            || !QAndroidModelIndexProxy::registerNatives(env)
+            || !QAndroidItemModelProxy::registerAbstractNatives(env)
+            || !QAndroidItemModelProxy::registerProxyNatives(env)) {
         __android_log_print(ANDROID_LOG_FATAL, "Qt", "registerNatives failed");
         return -1;
     }

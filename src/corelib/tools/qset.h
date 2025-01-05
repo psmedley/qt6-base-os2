@@ -6,6 +6,7 @@
 
 #include <QtCore/qhash.h>
 #include <QtCore/qcontainertools_impl.h>
+#include <QtCore/qttypetraits.h>
 
 #include <initializer_list>
 #include <iterator>
@@ -228,10 +229,13 @@ Q_INLINE_TEMPLATE void QSet<T>::reserve(qsizetype asize) { q_hash.reserve(asize)
 template <class T>
 Q_INLINE_TEMPLATE QSet<T> &QSet<T>::unite(const QSet<T> &other)
 {
-    if (!q_hash.isSharedWith(other.q_hash)) {
-        for (const T &e : other)
-            insert(e);
-    }
+    if (q_hash.isSharedWith(other.q_hash))
+        return *this;
+    QSet<T> tmp = other;
+    if (size() < other.size())
+        swap(tmp);
+    for (const auto &e : std::as_const(tmp))
+        insert(e);
     return *this;
 }
 

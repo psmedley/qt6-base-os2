@@ -35,15 +35,6 @@ struct QtJniTypes::Traits<QtJavaWrapper>
     }
 };
 
-template<>
-struct QtJniTypes::Traits<QJniObject>
-{
-    static constexpr auto signature()
-    {
-        return QtJniTypes::CTString("Ljava/lang/Object;");
-    }
-};
-
 struct QtCustomJniObject : QJniObject {};
 
 template<>
@@ -63,7 +54,6 @@ Q_DECLARE_JNI_CLASS(JavaType, "org/qtproject/qt/JavaType");
 static_assert(QtJniTypes::Traits<QtJniTypes::JavaType>::signature() == "Lorg/qtproject/qt/JavaType;");
 static_assert(QtJniTypes::Traits<QtJniTypes::JavaType[]>::signature() == "[Lorg/qtproject/qt/JavaType;");
 
-Q_DECLARE_JNI_CLASS(String, "java/lang/String");
 static_assert(QtJniTypes::Traits<jstring>::className() == "java/lang/String");
 static_assert(QtJniTypes::Traits<QtJniTypes::String>::className() == "java/lang/String");
 static_assert(QtJniTypes::Traits<QtJniTypes::String>::signature() == "Ljava/lang/String;");
@@ -71,6 +61,16 @@ static_assert(QtJniTypes::Traits<QtJniTypes::String[]>::signature() == "[Ljava/l
 
 Q_DECLARE_JNI_CLASS(QtTextToSpeech, "org/qtproject/qt/android/speech/QtTextToSpeech")
 static_assert(QtJniTypes::Traits<QtJniTypes::QtTextToSpeech>::className() == "org/qtproject/qt/android/speech/QtTextToSpeech");
+
+// declaring two types Size in different packages
+Q_DECLARE_JNI_CLASS(android, util, Size)
+Q_DECLARE_JNI_CLASS(org, qtproject, android, Size)
+
+static_assert(QtJniTypes::Traits<QtJniTypes::android::util::Size>::className() == "android/util/Size");
+static_assert(QtJniTypes::Traits<QtJniTypes::org::qtproject::android::Size>::className() == "org/qtproject/android/Size");
+
+using namespace QtJniTypes::org::qtproject;
+static_assert(QtJniTypes::Traits<android::Size>::className() == "org/qtproject/android/Size");
 
 static_assert(QtJniTypes::fieldSignature<jint>() == "I");
 static_assert(QtJniTypes::fieldSignature<jint[]>() == "[I");

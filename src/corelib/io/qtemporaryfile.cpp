@@ -156,7 +156,7 @@ QFileSystemEntry::NativePath QTemporaryFileName::generateNext()
     return path;
 }
 
-#ifndef QT_NO_TEMPORARYFILE
+#if QT_CONFIG(temporaryfile)
 
 /*!
     \internal
@@ -396,10 +396,14 @@ bool QTemporaryFileEngine::renameOverwrite(const QString &newName)
     }
 #ifdef Q_OS_WIN
     if (flags & Win32NonShared) {
-        if (d_func()->nativeRenameOverwrite(newName)) {
-            QFSFileEngine::close();
-            return true;
+        QFileSystemEntry newEntry(newName, QFileSystemEntry::FromInternalPath());
+        bool ok = d_func()->nativeRenameOverwrite(newEntry);
+        QFSFileEngine::close();
+        if (ok) {
+            // Match what QFSFileEngine::renameOverwrite() does
+            setFileEntry(std::move(newEntry));
         }
+        return ok;
     }
 #endif
     QFSFileEngine::close();
@@ -742,7 +746,7 @@ QTemporaryFile::~QTemporaryFile()
   return true upon success and will set the fileName() to the unique
   filename used.
 
-  \sa fileName()
+  \sa fileName(), QT_USE_NODISCARD_FILE_OPEN
 */
 
 /*!
@@ -888,7 +892,6 @@ bool QTemporaryFile::rename(const QString &newName)
         if (tef->rename(newName)) {
             unsetError();
             // engine was able to handle the new name so we just reset it
-            tef->setFileName(newName);
             d->fileName = newName;
             return true;
         }
@@ -997,7 +1000,7 @@ bool QTemporaryFile::open(OpenMode flags)
     return false;
 }
 
-#endif // QT_NO_TEMPORARYFILE
+#endif // QT_CONFIG(temporaryfile)
 
 QT_END_NAMESPACE
 

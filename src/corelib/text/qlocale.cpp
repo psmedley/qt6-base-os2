@@ -11,7 +11,15 @@
 
 #include "qglobal.h"
 
-#if (defined(QT_STATIC) || defined(QT_BOOTSTRAPPED)) && defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 1000
+#if defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 1000
+/* gcc has complained about storing a pointer to a static QLocalePrivate in a
+   QSharedDataPointer, whose destructor would free the non-heap object if the
+   refcount ever got down to zero. The static instances this happens to are
+   instantiated with a refcount of 1 that never gets decremented so as long as
+   QSharedDataPointer keeps its incref()s and decref()s balanced it'll never get
+   down to zero - but the clever compiler isn't quite smart enough to figure
+   that out.
+*/
 QT_WARNING_DISABLE_GCC("-Wfree-nonheap-object") // false positive tracking
 #endif
 
@@ -22,6 +30,7 @@ QT_WARNING_DISABLE_GCC("-Wfree-nonheap-object") // false positive tracking
 
 #include "qplatformdefs.h"
 
+#include "qcalendar.h"
 #include "qdatastream.h"
 #include "qdebug.h"
 #include "qhashfunctions.h"
@@ -55,7 +64,6 @@ QT_WARNING_DISABLE_GCC("-Wfree-nonheap-object") // false positive tracking
 
 #include "private/qcalendarbackend_p.h"
 #include "private/qgregoriancalendar_p.h"
-#include "qcalendar.h"
 
 #include <q20iterator.h>
 
@@ -302,7 +310,7 @@ bool operator<(LikelyPair lhs, LikelyPair rhs)
     in the spec, but the examples clearly presume them and CLDR does provide
     such likely matches.
 */
-QLocaleId QLocaleId::withLikelySubtagsAdded() const
+QLocaleId QLocaleId::withLikelySubtagsAdded() const noexcept
 {
     /* Each pattern that appears in a comments below, language_script_region and
        similar, indicates which of this's fields (even if blank) are being
@@ -386,7 +394,7 @@ QLocaleId QLocaleId::withLikelySubtagsAdded() const
     return *this;
 }
 
-QLocaleId QLocaleId::withLikelySubtagsRemoved() const
+QLocaleId QLocaleId::withLikelySubtagsRemoved() const noexcept
 {
     QLocaleId max = withLikelySubtagsAdded();
     // language
@@ -472,7 +480,7 @@ QByteArray QLocalePrivate::bcp47Name(char separator) const
     return m_data->id().withLikelySubtagsRemoved().name(separator);
 }
 
-static qsizetype findLocaleIndexById(QLocaleId localeId)
+static qsizetype findLocaleIndexById(QLocaleId localeId) noexcept
 {
     qsizetype idx = locale_index[localeId.language_id];
     // If there are no locales for specified language (so we we've got the
@@ -491,7 +499,17 @@ static qsizetype findLocaleIndexById(QLocaleId localeId)
     return -1;
 }
 
-qsizetype QLocaleData::findLocaleIndex(QLocaleId lid)
+static constexpr qsizetype locale_data_size = q20::ssize(locale_data) - 1; // trailing guard
+bool QLocaleData::allLocaleDataRows(bool (*check)(qsizetype, const QLocaleData &))
+{
+    for (qsizetype index = 0; index < locale_data_size; ++index) {
+        if (!(*check)(index, locale_data[index]))
+            return false;
+    }
+    return true;
+}
+
+qsizetype QLocaleData::findLocaleIndex(QLocaleId lid) noexcept
 {
     QLocaleId localeId = lid;
     QLocaleId likelyId = localeId.withLikelySubtagsAdded();
@@ -693,9 +711,9 @@ qsizetype qt_repeatCount(QStringView s)
 Q_CONSTINIT static const QLocaleData *default_data = nullptr;
 Q_CONSTINIT QBasicAtomicInt QLocalePrivate::s_generation = Q_BASIC_ATOMIC_INITIALIZER(0);
 
-static QLocalePrivate *c_private()
+static QLocalePrivate *c_private() noexcept
 {
-    static QLocalePrivate c_locale(locale_data, 0, QLocale::OmitGroupSeparator, 1);
+    Q_CONSTINIT static QLocalePrivate c_locale(locale_data, 0, QLocale::OmitGroupSeparator, 1);
     return &c_locale;
 }
 
@@ -860,7 +878,7 @@ static qsizetype defaultIndex()
     return data - locale_data;
 }
 
-const QLocaleData *QLocaleData::c()
+const QLocaleData *QLocaleData::c() noexcept
 {
     Q_ASSERT(locale_index[QLocale::C] == 0);
     return locale_data;
@@ -881,8 +899,6 @@ QDataStream &operator>>(QDataStream &ds, QLocale &l)
     return ds;
 }
 #endif // QT_NO_DATASTREAM
-
-static constexpr qsizetype locale_data_size = q20::ssize(locale_data) - 1; // trailing guard
 
 Q_GLOBAL_STATIC(QSharedDataPointer<QLocalePrivate>, defaultLocalePrivate,
                 new QLocalePrivate(defaultData(), defaultIndex()))
@@ -918,6 +934,32 @@ static QLocalePrivate *findLocalePrivate(QLocale::Language language, QLocale::Sc
         index = defaultIndex();
     }
     return new QLocalePrivate(data, index, numberOptions);
+}
+
+bool comparesEqual(const QLocale &loc, QLocale::Language lang)
+{
+    // Keep in sync with findLocalePrivate()!
+    auto compareWithPrivate = [&loc](const QLocaleData *data, QLocale::NumberOptions opts)
+    {
+        return loc.d->m_data == data && loc.d->m_numberOptions == opts;
+    };
+
+    if (lang == QLocale::C)
+        return compareWithPrivate(c_private()->m_data, c_private()->m_numberOptions);
+
+    qsizetype index = QLocaleData::findLocaleIndex(QLocaleId { lang });
+    Q_ASSERT(index >= 0 && index < locale_data_size);
+    const QLocaleData *data = locale_data + index;
+
+    QLocale::NumberOptions numberOptions = QLocale::DefaultNumberOptions;
+
+    // If not found, should use default locale:
+    if (data->m_language_id == QLocale::C) {
+        if (defaultLocalePrivate.exists())
+            numberOptions = defaultLocalePrivate->data()->m_numberOptions;
+        data = defaultData();
+    }
+    return compareWithPrivate(data, numberOptions);
 }
 
 static std::optional<QString>
@@ -1148,7 +1190,7 @@ QLocale &QLocale::operator=(const QLocale &other) noexcept = default;
     Equality comparison.
 */
 
-bool QLocale::equals(const QLocale &other) const
+bool QLocale::equals(const QLocale &other) const noexcept
 {
     return d->m_data == other.d->m_data && d->m_numberOptions == other.d->m_numberOptions;
 }
@@ -3025,6 +3067,30 @@ QString QLocale::standaloneDayName(int day, FormatType type) const
 
 // Calendar look-up of month and day names:
 
+// Get locale-specific month name data:
+static const QCalendarLocale &getMonthDataFor(const QLocalePrivate *loc,
+                                              const QCalendarLocale *table)
+{
+    // Only used in assertions
+    [[maybe_unused]] const auto sameLocale = [](const QLocaleData &locale,
+                                                const QCalendarLocale &cal) {
+        return locale.m_language_id == cal.m_language_id
+            && locale.m_script_id == cal.m_script_id
+            && locale.m_territory_id == cal.m_territory_id;
+    };
+    const QCalendarLocale &monthly = table[loc->m_index];
+#ifdef QT_NO_SYSTEMLOCALE
+    [[maybe_unused]] constexpr bool isSys = false;
+#else // Can't have preprocessor directives in a macro's parameter list, so use local.
+    [[maybe_unused]] const bool isSys = loc->m_data == &systemLocaleData;
+#endif
+    Q_ASSERT(loc->m_data == &locale_data[loc->m_index] || isSys);
+    // Compare monthly to locale_data[] entry, as the m_index used with
+    // systemLocaleData is a best fit, not necessarily an exact match.
+    Q_ASSERT(sameLocale(locale_data[loc->m_index], monthly));
+    return monthly;
+}
+
 /*!
   \internal
  */
@@ -3133,7 +3199,7 @@ QString QCalendarBackend::monthName(const QLocale &locale, int month, int,
                                     QLocale::FormatType format) const
 {
     Q_ASSERT(month >= 1 && month <= maximumMonthsInYear());
-    return rawMonthName(localeMonthIndexData()[locale.d->m_index],
+    return rawMonthName(getMonthDataFor(locale.d, localeMonthIndexData()),
                         localeMonthData(), month, format);
 }
 
@@ -3168,7 +3234,7 @@ QString QCalendarBackend::standaloneMonthName(const QLocale &locale, int month, 
                                               QLocale::FormatType format) const
 {
     Q_ASSERT(month >= 1 && month <= maximumMonthsInYear());
-    return rawStandaloneMonthName(localeMonthIndexData()[locale.d->m_index],
+    return rawStandaloneMonthName(getMonthDataFor(locale.d, localeMonthIndexData()),
                                   localeMonthData(), month, format);
 }
 
@@ -3468,6 +3534,41 @@ QString QLocale::pmText() const
     return d->m_data->postMeridiem().getData(pm_data);
 }
 
+// For the benefit of QCalendar, below.
+static QString offsetFromAbbreviation(QString &&text)
+{
+    QStringView tail{text};
+    // May need to strip a prefix:
+    if (tail.startsWith("UTC"_L1) || tail.startsWith("GMT"_L1))
+        tail = tail.sliced(3);
+    // TODO: there may be a locale-specific alternative prefix.
+    // Hard to know without zone-name L10n details, though.
+    return (tail.isEmpty() // The Qt::UTC case omits the zero offset:
+            ? u"+00:00"_s
+            // Whole-hour offsets may lack the zero minutes:
+            : (tail.size() <= 3
+               ? tail + ":00"_L1
+               : std::move(text).right(tail.size())));
+}
+
+static QString zoneOffsetFormat([[maybe_unused]] const QLocale &locale,
+                                const QDateTime &when,
+                                int offsetSeconds)
+{
+    QString text =
+#if QT_CONFIG(timezone)
+        locale != QLocale::system()
+        ? when.timeRepresentation().displayName(when, QTimeZone::OffsetName, locale)
+        :
+#endif
+        when.toOffsetFromUtc(offsetSeconds).timeZoneAbbreviation();
+
+    if (!text.isEmpty())
+        text = offsetFromAbbreviation(std::move(text));
+    // else: no suitable representation of the zone.
+    return text;
+}
+
 // Another intrusion from QCalendar, using some of the tools above:
 
 QString QCalendarBackend::dateTimeToString(QStringView format, const QDateTime &datetime,
@@ -3641,19 +3742,32 @@ QString QCalendarBackend::dateTimeToString(QStringView format, const QDateTime &
             case 't': {
                 enum AbbrType { Long, Offset, Short };
                 const auto tzAbbr = [locale](const QDateTime &when, AbbrType type) {
+                    QString text;
+                    if (type == Offset) {
+                        text = zoneOffsetFormat(locale, when, when.offsetFromUtc());
+                        // When using timezone_locale data, this should always succeed:
+                        if (!text.isEmpty())
+                            return text;
+                    }
 #if QT_CONFIG(timezone)
                     if (type != Short || locale != QLocale::system()) {
                         QTimeZone::NameType mode =
                             type == Short ? QTimeZone::ShortName
                             : type == Long ? QTimeZone::LongName : QTimeZone::OffsetName;
-                        return when.timeRepresentation().displayName(when, mode, locale);
+                        text = when.timeRepresentation().displayName(when, mode, locale);
+                        if (!text.isEmpty())
+                            return text;
+                        // else fall back to an unlocalized one if we can manage it:
                     } // else: prefer QDateTime's abbreviation, for backwards-compatibility.
 #endif // else, make do with non-localized abbreviation:
-                    if (type != Offset)
-                        return when.timeZoneAbbreviation();
-                    // For Offset, we can coerce to a UTC-based zone's abbreviation:
-                    return when.toOffsetFromUtc(when.offsetFromUtc()).timeZoneAbbreviation();
+                    // Absent timezone_locale data, Offset might still reach here:
+                    if (type == Offset) // Our prior failure might not have tried this:
+                        text = when.toOffsetFromUtc(when.offsetFromUtc()).timeZoneAbbreviation();
+                    if (text.isEmpty()) // Notably including type != Offset
+                        text = when.timeZoneAbbreviation();
+                    return type == Offset ? offsetFromAbbreviation(std::move(text)) : text;
                 };
+
                 used = true;
                 repeat = qMin(repeat, 4);
                 // If we don't have a date-time, use the current system time:
@@ -3666,16 +3780,8 @@ QString QCalendarBackend::dateTimeToString(QStringView format, const QDateTime &
                 case 3: // ±hh:mm
                 case 2: // ±hhmm (we'll remove the ':' at the end)
                     text = tzAbbr(when, Offset);
-                    Q_ASSERT(text.startsWith("UTC"_L1)); // Need to strip this.
-                    // The Qt::UTC case omits the zero offset:
-                    text = (text.size() == 3
-                            ? u"+00:00"_s
-                            : (text.size() <= 6
-                               // Whole-hour offsets may lack the zero minutes:
-                               ? QStringView{text}.sliced(3) + ":00"_L1
-                               : std::move(text).sliced(3)));
                     if (repeat == 2)
-                        text = text.remove(u':');
+                        text.remove(u':');
                     break;
                 default:
                     text = tzAbbr(when, Short);
@@ -3720,7 +3826,7 @@ QString QLocaleData::doubleToString(double d, int precision, DoubleForm form,
     qsizetype bufSize = 1;
     if (precision == QLocale::FloatingPointShortest)
         bufSize += std::numeric_limits<double>::max_digits10;
-    else if (form == DFDecimal && qIsFinite(d))
+    else if (form == DFDecimal && qt_is_finite(d))
         bufSize += wholePartSpace(qAbs(d)) + precision;
     else // Add extra digit due to different interpretations of precision.
         bufSize += qMax(2, precision) + 1; // Must also be big enough for "nan" or "inf"
@@ -4739,6 +4845,15 @@ QString QLocale::formattedDataSize(qint64 bytes, int precision, DataSizeFormats 
     preferred over later ones. If your translation files use underscores, rather
     than dashes, to separate locale tags, pass QLocale::TagSeparator::Underscore
     as \a separator.
+
+    The returned list may contain entries for more than one language.
+    In particular, this happens for \l{QLocale::system()}{system locale}
+    when the user has configured the system to accept several languages
+    for user-interface translations. In such a case, the order of entries
+    for distinct languages is significant. For example, where a user has
+    configured a primarily German system to also accept English and Chinese,
+    in that order of preference, the returned list shall contain some
+    entries for German, then some for English, and finally some for Chinese.
 
     Most likely you do not need to use this function directly, but just pass the
     QLocale object to the QTranslator::load() function.

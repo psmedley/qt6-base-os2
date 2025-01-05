@@ -110,7 +110,7 @@
 #endif
 
 #include <QtCore/qdir.h>
-#include <QtCore/qdiriterator.h>
+#include <QtCore/qdirlisting.h>
 #include <QtCore/qfile.h>
 
 QT_BEGIN_NAMESPACE
@@ -133,6 +133,8 @@ QSslCertificatePrivate::QSslCertificatePrivate()
 }
 
 QSslCertificatePrivate::~QSslCertificatePrivate() = default;
+
+QT_DEFINE_QESDP_SPECIALIZATION_DTOR(QSslCertificatePrivate)
 
 /*!
     Constructs a QSslCertificate by reading \a format encoded data
@@ -197,6 +199,18 @@ QSslCertificate::QSslCertificate(const QByteArray &data, QSsl::EncodingFormat fo
 QSslCertificate::QSslCertificate(const QSslCertificate &other) : d(other.d)
 {
 }
+
+/*!
+    \fn QSslCertificate::QSslCertificate(QSslCertificate &&other)
+
+    \since 6.8
+
+    Move-constructs a new QSslCertificate from \a other.
+
+    \note The moved-from object \a other is placed in a partially-formed state,
+    in which the only valid operations are destructions and assignment of a new
+    value.
+*/
 
 /*!
     Destroys the QSslCertificate.
@@ -680,9 +694,12 @@ QList<QSslCertificate> QSslCertificate::fromPath(const QString &path,
     QRegularExpression pattern(QRegularExpression::anchoredPattern(sourcePath));
 #endif
 
-    QDirIterator it(pathPrefixString, QDir::Files, QDirIterator::FollowSymlinks | QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        QString filePath = startIndex == 0 ? it.next() : it.next().mid(startIndex);
+    using F = QDirListing::IteratorFlag;
+    constexpr auto iterFlags = F::FollowDirSymlinks | F::Recursive | F::FilesOnly;
+    for (const auto &dirEntry : QDirListing(pathPrefixString, iterFlags)) {
+        QString filePath = dirEntry.filePath();
+        if (startIndex > 0)
+            filePath.remove(0, startIndex);
 
 #if QT_CONFIG(regularexpression)
         if (!pattern.match(filePath).hasMatch())

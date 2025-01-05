@@ -76,7 +76,7 @@ QFilePrivate::openExternalFile(QIODevice::OpenMode flags, FILE *fh, QFile::FileH
 QAbstractFileEngine *QFilePrivate::engine() const
 {
     if (!fileEngine)
-        fileEngine.reset(QAbstractFileEngine::create(fileName));
+        fileEngine = QAbstractFileEngine::create(fileName);
     return fileEngine.get();
 }
 
@@ -586,7 +586,7 @@ QFile::rename(const QString &newName)
             return false;
         }
 
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) && QT_CONFIG(temporaryfile)
         // rename() on Linux simply does nothing when renaming "foo" to "Foo" on a case-insensitive
         // FS, such as FAT32. Move the file away and rename in 2 steps to work around.
         QTemporaryFileName tfn(d->fileName);
@@ -791,7 +791,7 @@ QFile::copy(const QString &newName)
                 d->setError(QFile::CopyError, tr("Cannot open %1 for input").arg(d->fileName));
             } else {
                 const auto fileTemplate = "%1/qt_temp.XXXXXX"_L1;
-#ifdef QT_NO_TEMPORARYFILE
+#if !QT_CONFIG(temporaryfile)
                 QFile out(fileTemplate.arg(QFileInfo(newName).path()));
                 if (!out.open(QIODevice::ReadWrite))
                     error = true;
@@ -843,7 +843,7 @@ QFile::copy(const QString &newName)
                                         .arg(newName, out.errorString()));
                         }
                     }
-#ifdef QT_NO_TEMPORARYFILE
+#if !QT_CONFIG(temporaryfile)
                     if (error)
                         out.remove();
 #else
@@ -899,6 +899,8 @@ QFile::copy(const QString &fileName, const QString &newName)
     of the file name, otherwise, it won't be possible to create this
     non-existing file.
 
+    \sa QT_USE_NODISCARD_FILE_OPEN
+
     \sa QIODevice::OpenMode, setFileName()
 */
 bool QFile::open(OpenMode mode)
@@ -943,7 +945,7 @@ bool QFile::open(OpenMode mode)
     such permissions will generate warnings when the Security tab of the Properties dialog
     is opened. Granting the group all permissions granted to others avoids such warnings.
 
-    \sa QIODevice::OpenMode, setFileName()
+    \sa QIODevice::OpenMode, setFileName(), QT_USE_NODISCARD_FILE_OPEN
     \since 6.3
 */
 bool QFile::open(OpenMode mode, QFile::Permissions permissions)
@@ -1000,7 +1002,7 @@ bool QFile::open(OpenMode mode, QFile::Permissions permissions)
            you cannot use this QFile with a QFileInfo.
     \endlist
 
-    \sa close()
+    \sa close(), QT_USE_NODISCARD_FILE_OPEN
 
     \b{Note for the Windows Platform}
 
@@ -1066,7 +1068,7 @@ bool QFile::open(FILE *fh, OpenMode mode, FileHandleFlags handleFlags)
     \warning Since this function opens the file without specifying the file name,
              you cannot use this QFile with a QFileInfo.
 
-    \sa close()
+    \sa close(), QT_USE_NODISCARD_FILE_OPEN
 */
 bool QFile::open(int fd, OpenMode mode, FileHandleFlags handleFlags)
 {

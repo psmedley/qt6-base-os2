@@ -2,6 +2,10 @@
 // Copyright (C) 2016 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
+#ifdef QT_NO_QSNPRINTF
+# undef QT_NO_QSNPRINTF // test of the function
+#endif
+
 #include <QTest>
 
 #include <qbytearray.h>
@@ -115,6 +119,11 @@ private slots:
     void isUpper();
     void isLower();
 
+    void indexOf_data();
+    void indexOf();
+    void lastIndexOf_data();
+    void lastIndexOf();
+
     void macTypes();
 
     void stdString();
@@ -132,6 +141,7 @@ private slots:
     void mid();
     void length();
     void length_data();
+    void slice() const;
 };
 
 static const QByteArray::DataPointer staticStandard = {
@@ -2584,6 +2594,93 @@ void tst_QByteArray::isLower()
     QVERIFY(QByteArray("`abyz{").isLower());
 }
 
+using ByteArrayOrChar = std::variant<QByteArray, char>;
+void tst_QByteArray::indexOf_data()
+{
+    qRegisterMetaType<ByteArrayOrChar>();
+    QTest::addColumn<QByteArray>("haystack");
+    QTest::addColumn<ByteArrayOrChar>("needle");
+    QTest::addColumn<int>("expectedIndex");
+    QTest::addColumn<int>("from");
+
+    const QByteArray haystack = "abc 123 cba \x80 \x08 \x00 \x01 \x81"_ba;
+
+    QTest::newRow("not_found_1_char_string") << haystack << ByteArrayOrChar("d"_ba) << -1 << 0;
+    QTest::newRow("not_found_char") << haystack << ByteArrayOrChar('d') << -1 << 0;
+
+    QTest::newRow("not_found_string") << haystack << ByteArrayOrChar("abcd"_ba) << -1 << 0;
+    QTest::newRow("found_1_char_string") << haystack << ByteArrayOrChar("a"_ba) << 0 << 0;
+
+    QTest::newRow("found_char") << haystack << ByteArrayOrChar('a') << 0 << 0;
+    QTest::newRow("found_string") << haystack << ByteArrayOrChar("cba"_ba) << 8 << 0;
+
+    QTest::newRow("found_empty_string") << haystack << ByteArrayOrChar(""_ba) << 0 << 0;
+
+    QTest::newRow("found_embedded_null") << haystack << ByteArrayOrChar("\x00"_ba) << 16 << 0;
+    QTest::newRow("not_found_terminating_null") << haystack << ByteArrayOrChar("\x00"_ba) << -1 << 17;
+    QTest::newRow("found_char_star_0x80") << haystack << ByteArrayOrChar("\x80"_ba) << 12 << 0;
+    QTest::newRow("found_char_0x80") << haystack << ByteArrayOrChar('\x80') << 12 << 0;
+    QTest::newRow("found_char_0x81") << haystack << ByteArrayOrChar('\x81') << 20 << 0;
+}
+
+void tst_QByteArray::indexOf()
+{
+    QFETCH(QByteArray, haystack);
+    QFETCH(ByteArrayOrChar, needle);
+    QFETCH(int, expectedIndex);
+    QFETCH(int, from);
+
+    if (auto *qba = std::get_if<QByteArray>(&needle)) {
+        QCOMPARE(haystack.indexOf(*qba, from), expectedIndex);
+    } else {
+        char c = std::get<char>(needle);
+        QCOMPARE(haystack.indexOf(c, from), expectedIndex);
+    }
+}
+
+void tst_QByteArray::lastIndexOf_data()
+{
+    qRegisterMetaType<ByteArrayOrChar>();
+    QTest::addColumn<QByteArray>("haystack");
+    QTest::addColumn<ByteArrayOrChar>("needle");
+    QTest::addColumn<int>("expectedIndex");
+    QTest::addColumn<int>("from");
+
+    const QByteArray haystack = "abc 123 cba \x80 \x08 \x00 \x01 \x81"_ba;
+
+    QTest::newRow("not_found_1_char_string") << haystack << ByteArrayOrChar("d"_ba) << -1 << -1;
+    QTest::newRow("not_found_char") << haystack << ByteArrayOrChar('d') << -1 << -1;
+
+    QTest::newRow("not_found_string") << haystack << ByteArrayOrChar("abcd"_ba) << -1 << -1;
+    QTest::newRow("found_1_char_string") << haystack << ByteArrayOrChar("a"_ba) << 10 << -1;
+
+    QTest::newRow("found_char") << haystack << ByteArrayOrChar('a') << 10 << -1;
+    QTest::newRow("found_string") << haystack << ByteArrayOrChar("cba"_ba) << 8 << -1;
+
+    QTest::newRow("found_empty_string") << haystack << ByteArrayOrChar(""_ba) << haystack.size() << -1;
+
+    QTest::newRow("found_embedded_null") << haystack << ByteArrayOrChar("\x00"_ba) << 16 << -1;
+    QTest::newRow("not_found_leading_null") << haystack << ByteArrayOrChar("\x00"_ba) << -1 << 15;
+    QTest::newRow("found_char_star_0x80") << haystack << ByteArrayOrChar("\x80"_ba) << 12 << -1;
+    QTest::newRow("found_char_0x80") << haystack << ByteArrayOrChar('\x80') << 12 << -1;
+    QTest::newRow("found_char_0x81") << haystack << ByteArrayOrChar('\x81') << 20 << -1;
+}
+
+void tst_QByteArray::lastIndexOf()
+{
+    QFETCH(QByteArray, haystack);
+    QFETCH(ByteArrayOrChar, needle);
+    QFETCH(int, expectedIndex);
+    QFETCH(int, from);
+
+    if (auto *qba = std::get_if<QByteArray>(&needle)) {
+        QCOMPARE(haystack.lastIndexOf(*qba, from), expectedIndex);
+    } else {
+        char c = std::get<char>(needle);
+        QCOMPARE(haystack.lastIndexOf(c, from), expectedIndex);
+    }
+}
+
 void tst_QByteArray::macTypes()
 {
 #ifndef Q_OS_DARWIN
@@ -2902,6 +2999,32 @@ void tst_QByteArray::length_data()
     QTest::newRow("with space chars") << QByteArray(" abc\r\n123\t\v") << qsizetype(11);
     QTest::newRow("with '\\0'") << QByteArray("abc\0def", 7) << qsizetype(7);
     QTest::newRow("with '\\0' no size") << QByteArray("abc\0def") << qsizetype(3);
+}
+
+void tst_QByteArray::slice() const
+{
+    QByteArray a;
+
+    a.slice(0);
+    QVERIFY(a.isEmpty());
+    QVERIFY(a.isNull());
+    a.slice(0, 0);
+    QVERIFY(a.isEmpty());
+    QVERIFY(a.isNull());
+
+    a = "Five pineapples";
+
+    a.slice(5);
+    QCOMPARE_EQ(a, "pineapples");
+
+    a.slice(4, 3);
+    QCOMPARE_EQ(a, "app");
+
+    a.slice(a.size());
+    QVERIFY(a.isEmpty());
+
+    a.slice(0, 0);
+    QVERIFY(a.isEmpty());
 }
 
 QTEST_MAIN(tst_QByteArray)

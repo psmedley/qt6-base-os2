@@ -38,8 +38,6 @@ function(qt_internal_add_benchmark target)
         endif()
     endif()
 
-    qt_internal_library_deprecation_level(deprecation_define)
-
     qt_internal_add_executable(${target}
         NO_INSTALL # we don't install benchmarks
         NO_UNITY_BUILD # excluded by default
@@ -251,12 +249,19 @@ function(qt_internal_add_test_to_batch batch_name name)
 
     # Lazy-init the test batch
     if(NOT TARGET ${target})
-        qt_internal_library_deprecation_level(deprecation_define)
+        if(${arg_MANUAL})
+            set(is_manual "QT_MANUAL_TEST")
+        else()
+            set(is_manual "")
+        endif()
+
         qt_internal_add_executable(${target}
             ${exceptions_text}
             ${gui_text}
             ${version_arg}
             NO_INSTALL
+            QT_TEST
+            ${is_manual}
             OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/build_dir"
             SOURCES "${QT_CMAKE_DIR}/qbatchedtestrunner.in.cpp"
             DEFINES QTEST_BATCH_TESTS ${deprecation_define}
@@ -275,8 +280,6 @@ function(qt_internal_add_test_to_batch batch_name name)
         set_property(TARGET ${target} PROPERTY _qt_has_gui ${arg_GUI})
         set_property(TARGET ${target} PROPERTY _qt_has_lowdpi ${arg_LOWDPI})
         set_property(TARGET ${target} PROPERTY _qt_version ${version_arg})
-        set_property(TARGET ${target} PROPERTY _qt_is_test_executable TRUE)
-        set_property(TARGET ${target} PROPERTY _qt_is_manual_test ${arg_MANUAL})
     else()
         # Check whether the args match with the batch. Some differences between
         # flags cannot be reconciled - one should not combine these tests into
@@ -513,13 +516,20 @@ function(qt_internal_add_test name)
         list(APPEND private_includes ${arg_INCLUDE_DIRECTORIES})
 
         qt_internal_prepare_test_target_flags(version_arg exceptions_text gui_text ${ARGN})
-        qt_internal_library_deprecation_level(deprecation_define)
+
+        if(${arg_MANUAL})
+            set(is_manual "QT_MANUAL_TEST")
+        else()
+            set(is_manual "")
+        endif()
 
         qt_internal_add_executable("${name}"
             ${exceptions_text}
             ${gui_text}
             ${version_arg}
             NO_INSTALL
+            QT_TEST
+            ${is_manual}
             OUTPUT_DIRECTORY "${arg_OUTPUT_DIRECTORY}"
             SOURCES "${arg_SOURCES}"
             INCLUDE_DIRECTORIES
@@ -566,12 +576,14 @@ function(qt_internal_add_test name)
             LIBRARIES ${QT_CMAKE_EXPORT_NAMESPACE}::QuickTest
         )
 
-        qt_internal_extend_target("${name}" CONDITION arg_QMLTEST AND NOT ANDROID
+        qt_internal_extend_target("${name}"
+            CONDITION arg_QMLTEST AND NOT ANDROID AND NOT QT_FORCE_BUILTIN_TESTDATA
             DEFINES
                 QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         )
 
-        qt_internal_extend_target("${name}" CONDITION arg_QMLTEST AND ANDROID
+        qt_internal_extend_target("${name}"
+            CONDITION arg_QMLTEST AND (ANDROID OR QT_FORCE_BUILTIN_TESTDATA)
             DEFINES
                 QUICK_TEST_SOURCE_DIR=":/"
         )
@@ -580,8 +592,6 @@ function(qt_internal_add_test name)
         qt_internal_extend_target("${name}" CONDITION ANDROID
             LIBRARIES ${QT_CMAKE_EXPORT_NAMESPACE}::Gui
         )
-        set_target_properties(${name} PROPERTIES _qt_is_test_executable TRUE)
-        set_target_properties(${name} PROPERTIES _qt_is_manual_test ${arg_MANUAL})
 
         set(blacklist_file "${CMAKE_CURRENT_SOURCE_DIR}/BLACKLIST")
         if(EXISTS ${blacklist_file})
@@ -647,8 +657,8 @@ function(qt_internal_add_test name)
                                "This is fine if OpenSSL was built statically.")
             endif()
         endif()
-        qt_internal_android_test_arguments(
-            "${name}" "${android_timeout}" test_executable extra_test_args)
+        qt_internal_android_test_runner_arguments("${name}" test_executable extra_test_args)
+        list(APPEND extra_test_args "--timeout" "${android_timeout}" "--verbose")
         set(test_working_dir "${CMAKE_CURRENT_BINARY_DIR}")
     elseif(QNX)
         set(test_working_dir "")
@@ -681,7 +691,11 @@ function(qt_internal_add_test name)
 
         # This tells cmake to run the tests with this script, since wasm files can't be
         # executed directly
-        set_property(TARGET "${name}" PROPERTY CROSSCOMPILING_EMULATOR "emrun")
+        if (CMAKE_HOST_WIN32)
+            set_property(TARGET "${name}" PROPERTY CROSSCOMPILING_EMULATOR "emrun.bat")
+        else()
+            set_property(TARGET "${name}" PROPERTY CROSSCOMPILING_EMULATOR "emrun")
+        endif()
     else()
         if(arg_QMLTEST AND NOT arg_SOURCES)
             set(test_working_dir "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -770,7 +784,7 @@ function(qt_internal_add_test name)
         endif()
     endif()
 
-    if(ANDROID OR IOS OR WASM OR INTEGRITY OR arg_BUILTIN_TESTDATA)
+    if(ANDROID OR IOS OR WASM OR INTEGRITY OR arg_BUILTIN_TESTDATA OR QT_FORCE_BUILTIN_TESTDATA)
         set(builtin_testdata TRUE)
     endif()
 
@@ -795,10 +809,10 @@ function(qt_internal_add_test name)
                     if(NOT blacklist_files)
                         set_target_properties(${name} PROPERTIES _qt_blacklist_files "")
                         set(blacklist_files "")
-                        cmake_language(EVAL CODE "cmake_language(DEFER DIRECTORY \"${CMAKE_SOURCE_DIR}\" CALL \"_qt_internal_finalize_batch\" \"${name}\") ")
                     endif()
                     list(PREPEND blacklist_files "${CMAKE_CURRENT_SOURCE_DIR}/${blacklist_path}")
-                    set_target_properties(${name} PROPERTIES _qt_blacklist_files "${blacklist_files}")
+                    set_target_properties(${name} PROPERTIES
+                        _qt_blacklist_files "${blacklist_files}")
                 endif()
             else()
                 set(blacklist_path "BLACKLIST")
@@ -859,6 +873,35 @@ function(qt_internal_add_test name)
     endif()
 
     qt_internal_add_test_finalizers("${name}")
+endfunction()
+
+# Generates a blacklist file for the global batched test target.
+function(qt_internal_finalize_test_batch_blacklist)
+    _qt_internal_test_batch_target_name(batch_target_name)
+    if(NOT TARGET "${batch_target_name}")
+        return()
+    endif()
+
+    set(generated_blacklist_file "${CMAKE_CURRENT_BINARY_DIR}/BLACKLIST")
+
+    set(final_contents "")
+
+    get_target_property(blacklist_files "${batch_target_name}" _qt_blacklist_files)
+    if(blacklist_files)
+        foreach(blacklist_file ${blacklist_files})
+            file(READ "${blacklist_file}" file_contents)
+            if(file_contents)
+                string(APPEND final_contents "${file_contents}\n")
+            endif()
+        endforeach()
+    endif()
+
+    qt_configure_file(OUTPUT "${generated_blacklist_file}" CONTENT "${final_contents}")
+
+    qt_internal_add_resource(${batch_target_name} "batch_blacklist"
+        PREFIX "/"
+        FILES "${generated_blacklist_file}"
+        BASE ${CMAKE_CURRENT_BINARY_DIR})
 endfunction()
 
 # Given an optional test timeout value (specified via qt_internal_add_test's TIMEOUT option)

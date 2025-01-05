@@ -3923,10 +3923,15 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                 }
                 mi.palette.setBrush(QPalette::HighlightedText, mi.palette.brush(QPalette::ButtonText));
 
+                bool drawCheckMark = mi.menuHasCheckableItems;
+#if QT_CONFIG(combobox)
+                if (qobject_cast<const QComboBox *>(w))
+                    drawCheckMark = false; // ignore the checkmarks provided by the QComboMenuDelegate
+#endif
                 int textRectOffset = m->maxIconWidth;
                 if (!mi.icon.isNull()) {
                     renderMenuItemIcon(&mi, p, w, opt->rect, subRule);
-                } else if (mi.menuHasCheckableItems) {
+                } else if (drawCheckMark) {
                     const bool checkable = mi.checkType != QStyleOptionMenuItem::NotCheckable;
                     const bool checked = checkable ? mi.checked : false;
 
@@ -3941,7 +3946,7 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                         newMi.rect = cmRect;
                         drawPrimitive(PE_IndicatorMenuCheckMark, &newMi, p, w);
                     }
-                    textRectOffset = std::max(textRectOffset, cmRect.width());
+                    textRectOffset = std::max(m->maxIconWidth, cmRect.width());
                 }
 
                 QRect textRect = subRule.contentsRect(opt->rect);
@@ -4844,11 +4849,15 @@ void QStyleSheetStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *op
         // only indirectly through the background of the item. To get the
         // same background for all parts drawn by QTreeView, we have to
         // use the background rule for the item here.
-        if (renderRule(w, opt, PseudoElement_ViewItem).hasBackground()) {
-            pseudoElement = PseudoElement_ViewItem;
-            // Skip border for the branch and draw only the brackground
-            if (const QStyleOptionViewItem *vopt = qstyleoption_cast<const QStyleOptionViewItem *>(opt)) {
-                QRenderRule rule = renderRule(w, opt, PseudoElement_ViewItem);
+        if (const QStyleOptionViewItem *vopt = qstyleoption_cast<const QStyleOptionViewItem *>(opt)) {
+            // default handling for drawing empty space
+            if (vopt->viewItemPosition == QStyleOptionViewItem::Invalid)
+                break;
+            if (QRenderRule rule = renderRule(w, opt, PseudoElement_ViewItem); rule.hasBackground()) {
+                // if the item background is not fully opaque, then we have to paint the row
+                if (rule.background()->brush.color().alpha() != 1.0)
+                    baseStyle()->drawPrimitive(pe, opt, p, w);
+                // Skip border for the branch and draw only the brackground
                 if (vopt->features & QStyleOptionViewItem::HasDecoration &&
                     (vopt->viewItemPosition == QStyleOptionViewItem::Beginning ||
                      vopt->viewItemPosition == QStyleOptionViewItem::OnlyOne) && rule.hasBorder()) {
@@ -4860,6 +4869,7 @@ void QStyleSheetStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *op
                     }
                     return;
                 }
+                pseudoElement = PseudoElement_ViewItem;
             }
         }
         break;
@@ -5292,6 +5302,8 @@ QSize QStyleSheetStyle::sizeFromContents(ContentsType ct, const QStyleOption *op
 #if QT_CONFIG(spinbox)
     case CT_SpinBox:
         if (const QStyleOptionSpinBox *spinbox = qstyleoption_cast<const QStyleOptionSpinBox *>(opt)) {
+            if (rule.baseStyleCanDraw())
+                return baseStyle()->sizeFromContents(ct, opt, sz, w);
             if (spinbox->buttonSymbols != QAbstractSpinBox::NoButtons) {
                 // Add some space for the up/down buttons
                 QRenderRule subRule = renderRule(w, opt, PseudoElement_SpinBoxUpButton);
@@ -5421,6 +5433,11 @@ QSize QStyleSheetStyle::sizeFromContents(ContentsType ct, const QStyleOption *op
                 return QSize(sz.width(), subRule.size().height());
             }
             if ((pe == PseudoElement_Item) && (subRule.hasBox() || subRule.hasBorder() || subRule.hasFont)) {
+                bool drawCheckMark = mi->menuHasCheckableItems;
+#if QT_CONFIG(combobox)
+                if (qobject_cast<const QComboBox *>(w))
+                    drawCheckMark = false; // ignore the checkmarks provided by the QComboMenuDelegate
+#endif
                 QSize sz(csz);
                 if (mi->text.contains(u'\t'))
                     sz.rwidth() += 12; //as in QCommonStyle
@@ -5428,7 +5445,7 @@ QSize QStyleSheetStyle::sizeFromContents(ContentsType ct, const QStyleOption *op
                     const int pmSmall = pixelMetric(PM_SmallIconSize);
                     const QSize pmSize = mi->icon.actualSize(QSize(pmSmall, pmSmall));
                     sz.rwidth() += std::max(mi->maxIconWidth, pmSize.width()) + 4;
-                } else if (mi->menuHasCheckableItems) {
+                } else if (drawCheckMark) {
                     QRenderRule subSubRule = renderRule(w, opt, PseudoElement_MenuCheckMark);
                     QRect checkmarkRect = positionRect(w, subRule, subSubRule, PseudoElement_MenuCheckMark, opt->rect, opt->direction);
                     sz.rwidth() += std::max(mi->maxIconWidth, checkmarkRect.width()) + 4;

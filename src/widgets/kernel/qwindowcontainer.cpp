@@ -5,6 +5,7 @@
 #include "qwidget_p.h"
 #include "qwidgetwindow_p.h"
 #include <QtGui/qwindow.h>
+#include <QtGui/private/qwindow_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <qpa/qplatformintegration.h>
 #include <QDebug>
@@ -28,7 +29,6 @@ public:
 
     QWindowContainerPrivate()
         : window(nullptr)
-        , oldFocusWindow(nullptr)
         , usesNativeWidgets(false)
     {
     }
@@ -62,6 +62,8 @@ public:
         if (window->parent() == nullptr)
             return;
         Q_Q(QWindowContainer);
+        if (q->testAttribute(Qt::WA_DontCreateNativeAncestors))
+            return;
         if (q->internalWinId()) {
             // Allow use native widgets if the window container is already a native widget
             usesNativeWidgets = true;
@@ -103,7 +105,6 @@ public:
     }
 
     QPointer<QWindow> window;
-    QWindow *oldFocusWindow;
     QWindow fakeParent;
 
     uint usesNativeWidgets : 1;
@@ -207,6 +208,7 @@ QWindowContainer::QWindowContainer(QWindow *embeddedWindow, QWidget *parent, Qt:
     }
 
     d->window = embeddedWindow;
+    d->window->installEventFilter(this);
 
     QString windowName = d->window->objectName();
     if (windowName.isEmpty())
@@ -219,8 +221,8 @@ QWindowContainer::QWindowContainer(QWindow *embeddedWindow, QWidget *parent, Qt:
 
     setAcceptDrops(true);
 
-    connect(qGuiApp, &QGuiApplication::focusWindowChanged,
-            this, &QWindowContainer::focusWindowChanged);
+    connect(containedWindow(), &QWindow::minimumHeightChanged, this, &QWindowContainer::updateGeometry);
+    connect(containedWindow(), &QWindow::minimumWidthChanged, this, &QWindowContainer::updateGeometry);
 }
 
 QWindow *QWindowContainer::containedWindow() const
@@ -241,30 +243,12 @@ QWindowContainer::~QWindowContainer()
     // QEvent::PlatformSurface delivery relies on virtuals. Getting
     // SurfaceAboutToBeDestroyed can be essential for OpenGL, Vulkan, etc.
     // QWindow subclasses in particular. Keep these working.
-    if (d->window)
+    if (d->window) {
+        d->window->removeEventFilter(this);
         d->window->destroy();
+    }
 
     delete d->window;
-
-    disconnect(qGuiApp, &QGuiApplication::focusWindowChanged,
-               this, &QWindowContainer::focusWindowChanged);
-}
-
-
-
-/*!
-    \internal
- */
-
-void QWindowContainer::focusWindowChanged(QWindow *focusWindow)
-{
-    Q_D(QWindowContainer);
-    d->oldFocusWindow = focusWindow;
-    if (focusWindow == d->window) {
-        QWidget *widget = QApplication::focusWidget();
-        if (widget)
-            widget->clearFocus();
-    }
 }
 
 /*!
@@ -281,8 +265,12 @@ bool QWindowContainer::eventFilter(QObject *o, QEvent *e)
         QChildEvent *ce = static_cast<QChildEvent *>(e);
         if (ce->child() == d->window) {
             o->removeEventFilter(this);
+            d->window->removeEventFilter(this);
             d->window = nullptr;
         }
+    } else if (e->type() == QEvent::FocusIn) {
+        if (o == d->window)
+            setFocus(Qt::ActiveWindowFocusReason);
     }
     return false;
 }
@@ -332,11 +320,16 @@ bool QWindowContainer::event(QEvent *e)
         break;
     case QEvent::FocusIn:
         if (d->window->parent()) {
-            if (d->oldFocusWindow != d->window) {
+            if (QGuiApplication::focusWindow() != d->window) {
+                QFocusEvent *event = static_cast<QFocusEvent *>(e);
+                const auto reason = event->reason();
+                QWindowPrivate::FocusTarget target = QWindowPrivate::FocusTarget::Current;
+                if (reason == Qt::TabFocusReason)
+                    target = QWindowPrivate::FocusTarget::First;
+                else if (reason == Qt::BacktabFocusReason)
+                    target = QWindowPrivate::FocusTarget::Last;
+                qt_window_private(d->window)->setFocusToTarget(target, reason);
                 d->window->requestActivate();
-            } else {
-                QWidget *next = nextInFocusChain();
-                next->setFocus();
             }
         }
         break;
@@ -371,6 +364,11 @@ bool QWindowContainer::event(QEvent *e)
     }
 
     return QWidget::event(e);
+}
+
+QSize QWindowContainer::minimumSizeHint() const
+{
+    return containedWindow() ? containedWindow()->minimumSize() : QSize(0, 0);
 }
 
 typedef void (*qwindowcontainer_traverse_callback)(QWidget *parent);

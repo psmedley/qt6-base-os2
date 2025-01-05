@@ -1028,12 +1028,12 @@ void QWindowSystemInterface::handlePlatformPanelEvent(QWindow *w)
 }
 
 #ifndef QT_NO_CONTEXTMENU
-void QWindowSystemInterface::handleContextMenuEvent(QWindow *window, bool mouseTriggered,
+QT_DEFINE_QPA_EVENT_HANDLER(bool, handleContextMenuEvent, QWindow *window, bool mouseTriggered,
                                                     const QPoint &pos, const QPoint &globalPos,
                                                     Qt::KeyboardModifiers modifiers)
 {
-    handleWindowSystemEvent<QWindowSystemInterfacePrivate::ContextMenuEvent>(window,
-        mouseTriggered, pos, globalPos, modifiers);
+    return handleWindowSystemEvent<QWindowSystemInterfacePrivate::ContextMenuEvent, Delivery>(
+        window, mouseTriggered, pos, globalPos, modifiers);
 }
 #endif
 
@@ -1208,6 +1208,13 @@ Q_GUI_EXPORT bool qt_sendShortcutOverrideEvent(QObject *o, ulong timestamp, int 
     Q_UNUSED(count);
     return false;
 #endif
+}
+
+Q_GUI_EXPORT void qt_handleWheelEvent(QWindow *window, const QPointF &local, const QPointF &global,
+                                      QPoint pixelDelta, QPoint angleDelta, Qt::KeyboardModifiers mods,
+                                      Qt::ScrollPhase phase)
+{
+    QWindowSystemInterface::handleWheelEvent(window, local, global, pixelDelta, angleDelta, mods, phase);
 }
 
 namespace QTest

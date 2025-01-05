@@ -130,7 +130,7 @@ ParsedInt readInt(QStringView text)
 struct ParsedRfcDateTime {
     QDate date;
     QTime time;
-    int utcOffset;
+    int utcOffset = 0;
 };
 
 static int shortDayFromName(QStringView name)
@@ -2152,8 +2152,10 @@ QString QTime::toString(Qt::DateFormat format) const
     \fn QString QTime::toString(const QString &format) const
     \fn QString QTime::toString(QStringView format) const
 
-    Returns the time as a string. The \a format parameter determines
-    the format of the result string.
+    Returns a string representing the time.
+
+    The \a format parameter determines the format of the result string. If the
+    time is invalid, an empty string will be returned.
 
     These expressions may be used:
 
@@ -2198,7 +2200,7 @@ QString QTime::toString(Qt::DateFormat format) const
              change of case.
     \row \li t
          \li The timezone abbreviation (for example "CEST"). Note that time zone
-             abbreviations are not unique. In particular, \l toString() cannot
+             abbreviations are not unique. In particular, \l fromString() cannot
              parse this.
     \row \li tt
          \li The timezone's offset from UTC with no colon between the hours and
@@ -2215,6 +2217,14 @@ QString QTime::toString(Qt::DateFormat format) const
              QTimeZone::LongName type. This may depend on the operating system
              in use.
     \endtable
+
+    \note To get localized forms of AM or PM (the \c{AP}, \c{ap}, \c{A}, \c{a},
+    \c{aP} or \c{Ap} formats) or of time zone representations (the \c{t}
+    formats), use QLocale::system().toString().
+
+    When the timezone cannot be determined or no suitable representation of it
+    is available, the \c{t} forms to represent it may be skipped. See \l
+    QTimeZone::displayName() for details of when it returns an empty string.
 
     Any non-empty sequence of characters enclosed in single quotes will be
     included verbatim in the output string (stripped of the quotes), even if it
@@ -2235,11 +2245,6 @@ QString QTime::toString(Qt::DateFormat format) const
     \row \li h:m:s ap     \li 2:13:9 pm
     \row \li H:m:s a      \li 14:13:9 pm
     \endtable
-
-    If the time is invalid, an empty string will be returned.
-
-    \note To get localized forms of AM or PM (the AP, ap, A, a, aP or Ap
-    formats), use QLocale::system().toString().
 
     \note If a format character is repeated more times than the longest
     expression in the table above using it, this part of the format will be read
@@ -3256,7 +3261,7 @@ static void checkValidDateTime(QDateTimeData &d, QDateTime::TransitionResolution
     }
 }
 
-static void reviseTimeZone(QDateTimeData &d, QTimeZone zone,
+static void reviseTimeZone(QDateTimeData &d, const QTimeZone &zone,
                            QDateTime::TransitionResolution resolve)
 {
     Qt::TimeSpec spec = zone.timeSpec();
@@ -5605,7 +5610,6 @@ QDateTime QDateTime::fromSecsSinceEpoch(qint64 secs, Qt::TimeSpec spec, int offs
 
 /*!
     \since 5.2
-    \overload
 
     Returns a datetime representing a moment the given number \a msecs of
     milliseconds after the start, in UTC, of the year 1970, described as
@@ -5627,7 +5631,6 @@ QDateTime QDateTime::fromMSecsSinceEpoch(qint64 msecs, const QTimeZone &timeZone
 }
 
 /*!
-    \since 6.5
     \overload
 */
 QDateTime QDateTime::fromMSecsSinceEpoch(qint64 msecs)
@@ -5637,7 +5640,6 @@ QDateTime QDateTime::fromMSecsSinceEpoch(qint64 msecs)
 
 /*!
     \since 5.8
-    \overload
 
     Returns a datetime representing a moment the given number \a secs of seconds
     after the start, in UTC, of the year 1970, described as specified by \a
@@ -5659,7 +5661,6 @@ QDateTime QDateTime::fromSecsSinceEpoch(qint64 secs, const QTimeZone &timeZone)
 }
 
 /*!
-    \since 6.5
     \overload
 */
 QDateTime QDateTime::fromSecsSinceEpoch(qint64 secs)
@@ -5882,16 +5883,11 @@ QDateTime QDateTime::fromString(QStringView string, Qt::DateFormat format)
     two digits.
 
     Incorrectly specified fields of the \a string will cause an invalid
-    QDateTime to be returned. For example, consider the following code,
-    where the two digit year 12 is read as 1912 (see the table below for all
-    field defaults); the resulting datetime is invalid because 23 April 1912
-    was a Tuesday, not a Monday:
-
-    \snippet code/src_corelib_time_qdatetime.cpp 20
-
-    The correct code is:
-
-    \snippet code/src_corelib_time_qdatetime.cpp 21
+    QDateTime to be returned. Only datetimes between the local time start of
+    year 100 and end of year 9999 are supported. Note that datetimes near the
+    ends of this range in other time-zones, notably including UTC, may fall
+    outside the range (and thus be treated as invalid) depending on local time
+    zone.
 
     \note Day and month names as well as AM/PM indicators must be given in
     English (C locale).  If localized month and day names or localized forms of

@@ -529,12 +529,150 @@ QLibraryInfoPrivate::LocationInfo QLibraryInfoPrivate::locationInfo(QLibraryInfo
 /*!
     \since 6.0
     Returns the path specified by \a p.
+
+    If there is more than one path listed in qt.conf, it will
+    only return the first one.
+    \sa paths
 */
 QString QLibraryInfo::path(LibraryPath p)
 {
     return QLibraryInfoPrivate::path(p);
 }
 
+/*!
+    \since 6.8
+    Returns all paths specificied by \a p.
+
+    \sa path
+ */
+QStringList QLibraryInfo::paths(LibraryPath p)
+{
+    return QLibraryInfoPrivate::paths(p);
+}
+
+static bool keepQtBuildDefaults()
+{
+#if QT_CONFIG(settings)
+    QSettings *config = QLibraryInfoPrivate::configuration();
+    Q_ASSERT(config != nullptr);
+    return config->value("Config/MergeQtConf", false).toBool();
+#else
+    return false;
+#endif
+}
+
+#if QT_CONFIG(settings)
+static QString normalizePath(QString ret)
+{
+    qsizetype startIndex = 0;
+    /* We support placeholders of the form $(<ENV_VAR>) in qt.conf.
+       The loop below tries to find all such placeholders, and replaces
+       them with the actual value of the ENV_VAR environment variable
+     */
+    while (true) {
+        startIndex = ret.indexOf(u'$', startIndex);
+        if (startIndex < 0)
+            break;
+        if (ret.size() < startIndex + 3)
+            break;
+        if (ret.at(startIndex + 1) != u'(') {
+            startIndex++;
+            continue;
+        }
+        qsizetype endIndex = ret.indexOf(u')', startIndex + 2);
+        if (endIndex < 0)
+            break;
+        auto envVarName = QStringView{ret}.sliced(startIndex + 2, endIndex - startIndex - 2);
+        QString value = qEnvironmentVariable(envVarName.toLocal8Bit().constData());
+        ret.replace(startIndex, endIndex - startIndex + 1, value);
+        startIndex += value.size();
+    }
+    return QDir::fromNativeSeparators(ret);
+};
+
+static QVariant libraryPathToValue(QLibraryInfo::LibraryPath loc)
+{
+    QVariant value;
+    auto li = QLibraryInfoPrivate::locationInfo(loc);
+    if (li.key.isNull())
+        return value;
+    QSettings *config = QLibraryInfoPrivate::configuration();
+    Q_ASSERT(config != nullptr);
+    // if keepQtBuildDefaults returns true,
+    // we only consider explicit values listed in qt.conf
+    QVariant defaultValue = keepQtBuildDefaults()
+            ? QVariant()
+            : QVariant(li.defaultValue);
+    config->beginGroup("Paths"_L1);
+    auto cleanup = qScopeGuard([&]() { config->endGroup(); });
+    if (li.fallbackKey.isNull()) {
+        value = config->value(li.key, defaultValue);
+    } else {
+        value = config->value(li.key);
+        if (!value.isValid())
+            value = config->value(li.fallbackKey, defaultValue);
+    }
+    return value;
+}
+#endif // settings
+
+QStringList QLibraryInfoPrivate::paths(QLibraryInfo::LibraryPath p,
+                                       UsageMode usageMode)
+{
+    const QLibraryInfo::LibraryPath loc = p;
+    QList<QString> ret;
+    bool fromConf = false;
+#if QT_CONFIG(settings)
+    if (havePaths()) {
+        fromConf = true;
+
+        QVariant value = libraryPathToValue(loc);
+        if (value.isValid()) {
+
+            if (auto *asList = get_if<QList<QString>>(&value))
+                ret = std::move(*asList);
+            else
+                ret = QList<QString>({ std::move(value).toString()});
+            for (qsizetype i = 0, end = ret.size(); i < end; ++i)
+                ret[i] = normalizePath(ret[i]);
+        }
+    }
+#endif // settings
+
+    if (!fromConf || keepQtBuildDefaults()) {
+        QString noConfResult;
+        if (loc == QLibraryInfo::PrefixPath) {
+            noConfResult = getPrefix(usageMode);
+        } else if (int(loc) <= qt_configure_strs.count()) {
+            noConfResult = QString::fromLocal8Bit(qt_configure_strs.viewAt(loc - 1));
+#ifndef Q_OS_WIN // On Windows we use the registry
+        } else if (loc == QLibraryInfo::SettingsPath) {
+            // Use of volatile is a hack to discourage compilers from calling
+            // strlen(), in the inlined fromLocal8Bit(const char *)'s body, at
+            // compile-time, as Qt installers binary-patch the path, replacing
+            // the dummy path seen at compile-time, typically changing length.
+            const char *volatile path = QT_CONFIGURE_SETTINGS_PATH;
+            noConfResult = QString::fromLocal8Bit(path);
+#endif
+        }
+        if (!noConfResult.isEmpty())
+            ret.push_back(std::move(noConfResult));
+    }
+    if (ret.isEmpty())
+        return ret;
+
+    QString baseDir;
+    if (loc == QLibraryInfo::PrefixPath) {
+        baseDir = prefixFromAppDirHelper();
+    } else {
+        // we make any other path absolute to the prefix directory
+        baseDir = QLibraryInfoPrivate::path(QLibraryInfo::PrefixPath, usageMode);
+    }
+    for (qsizetype i = 0, end = ret.size(); i < end; ++i)
+        if (QDir::isRelativePath(ret[i]))
+            ret[i] = QDir::cleanPath(baseDir + u'/' +  std::move(ret[i]));
+    return ret;
+}
 
 /*
     Returns the path specified by \a p.
@@ -544,83 +682,7 @@ QString QLibraryInfo::path(LibraryPath p)
  */
 QString QLibraryInfoPrivate::path(QLibraryInfo::LibraryPath p, UsageMode usageMode)
 {
-    const QLibraryInfo::LibraryPath loc = p;
-    QString ret;
-    bool fromConf = false;
-#if QT_CONFIG(settings)
-    if (havePaths()) {
-        fromConf = true;
-
-        auto li = QLibraryInfoPrivate::locationInfo(loc);
-        if (!li.key.isNull()) {
-            QSettings *config = QLibraryInfoPrivate::configuration();
-            Q_ASSERT(config != nullptr);
-            config->beginGroup("Paths"_L1);
-
-            if (li.fallbackKey.isNull()) {
-                ret = config->value(li.key, li.defaultValue).toString();
-            } else {
-                QVariant v = config->value(li.key);
-                if (!v.isValid())
-                    v = config->value(li.fallbackKey, li.defaultValue);
-                ret = v.toString();
-            }
-
-            qsizetype startIndex = 0;
-            while (true) {
-                startIndex = ret.indexOf(u'$', startIndex);
-                if (startIndex < 0)
-                    break;
-                if (ret.size() < startIndex + 3)
-                    break;
-                if (ret.at(startIndex + 1) != u'(') {
-                    startIndex++;
-                    continue;
-                }
-                qsizetype endIndex = ret.indexOf(u')', startIndex + 2);
-                if (endIndex < 0)
-                    break;
-                auto envVarName = QStringView{ret}.mid(startIndex + 2, endIndex - startIndex - 2);
-                QString value = QString::fromLocal8Bit(qgetenv(envVarName.toLocal8Bit().constData()));
-                ret.replace(startIndex, endIndex - startIndex + 1, value);
-                startIndex += value.size();
-            }
-
-            config->endGroup();
-
-            ret = QDir::fromNativeSeparators(ret);
-        }
-    }
-#endif // settings
-
-    if (!fromConf) {
-        if (loc == QLibraryInfo::PrefixPath) {
-            ret = getPrefix(usageMode);
-        } else if (int(loc) <= qt_configure_strs.count()) {
-            ret = QString::fromLocal8Bit(qt_configure_strs.viewAt(loc - 1));
-#ifndef Q_OS_WIN // On Windows we use the registry
-        } else if (loc == QLibraryInfo::SettingsPath) {
-            // Use of volatile is a hack to discourage compilers from calling
-            // strlen(), in the inlined fromLocal8Bit(const char *)'s body, at
-            // compile-time, as Qt installers binary-patch the path, replacing
-            // the dummy path seen at compile-time, typically changing length.
-            const char *volatile path = QT_CONFIGURE_SETTINGS_PATH;
-            ret = QString::fromLocal8Bit(path);
-#endif
-        }
-    }
-
-    if (!ret.isEmpty() && QDir::isRelativePath(ret)) {
-        QString baseDir;
-        if (loc == QLibraryInfo::PrefixPath) {
-            baseDir = prefixFromAppDirHelper();
-        } else {
-            // we make any other path absolute to the prefix directory
-            baseDir = path(QLibraryInfo::PrefixPath, usageMode);
-        }
-        ret = QDir::cleanPath(baseDir + u'/' + ret);
-    }
-    return ret;
+    return paths(p, usageMode).value(0, QString());
 }
 
 /*!
@@ -680,7 +742,7 @@ QStringList QLibraryInfo::platformPluginArguments(const QString &platformName)
 
 /*!
     \typealias QLibraryInfo::LibraryLocation
-    \deprecated Use LibraryPath with QLibraryInfo::path() instead.
+    \deprecated [6.0] Use LibraryPath with QLibraryInfo::path() instead.
 */
 
 /*!

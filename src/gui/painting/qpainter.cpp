@@ -954,8 +954,6 @@ void QPainterPrivate::updateState(QPainterState *newState)
     used inside a paintEvent() function or in a function called by
     paintEvent().
 
-    \tableofcontents
-
     \section1 Settings
 
     There are several settings that you can customize to make QPainter
@@ -1765,9 +1763,12 @@ bool QPainter::begin(QPaintDevice *pd)
                 qWarning("QPainter::begin: Cannot paint on a null image");
                 qt_cleanup_painter_state(d);
                 return false;
-            } else if (img->format() == QImage::Format_Indexed8) {
-                // Painting on indexed8 images is not supported.
-                qWarning("QPainter::begin: Cannot paint on an image with the QImage::Format_Indexed8 format");
+            } else if (img->format() == QImage::Format_Indexed8 ||
+                       img->format() == QImage::Format_CMYK8888) {
+                // Painting on these formats is not supported.
+                qWarning() << "QPainter::begin: Cannot paint on an image with the"
+                           << img->format()
+                           << "format";
                 qt_cleanup_painter_state(d);
                 return false;
             }
@@ -7098,6 +7099,13 @@ void qt_format_text(const QFont &fnt, const QRectF &_r,
 {
 
     Q_ASSERT( !((tf & ~Qt::TextDontPrint)!=0 && option!=nullptr) ); // we either have an option or flags
+
+    if (_r.isEmpty() && !(tf & Qt::TextDontClip)) {
+        if (!brect)
+            return;
+        else
+            tf |= Qt::TextDontPrint;
+    }
 
     if (option) {
         tf |= option->alignment();

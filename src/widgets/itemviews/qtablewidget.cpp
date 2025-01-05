@@ -114,6 +114,46 @@ bool QTableModel::removeColumns(int column, int count, const QModelIndex &)
     return true;
 }
 
+bool QTableModel::moveRows(const QModelIndex &sourceParent, int sourceRow, int count, const QModelIndex &destinationParent, int destinationChild)
+{
+    if (sourceRow < 0
+        || sourceRow + count - 1 >= rowCount(sourceParent)
+        || destinationChild < 0
+        || destinationChild > rowCount(destinationParent)
+        || sourceRow == destinationChild
+        || sourceRow == destinationChild - 1
+        || count <= 0
+        || sourceParent.isValid()
+        || destinationParent.isValid()) {
+        return false;
+    }
+    if (!beginMoveRows(sourceParent, sourceRow, sourceRow + count - 1, destinationParent, destinationChild))
+        return false;
+
+    // Table items
+    int numItems = count * columnCount();
+    int fromIndex = tableIndex(sourceRow, 0);
+    int destinationIndex = tableIndex(destinationChild, 0);
+    if (destinationChild < sourceRow)
+        fromIndex += numItems - 1;
+    else
+        destinationIndex--;
+    while (numItems--)
+        tableItems.move(fromIndex, destinationIndex);
+
+    // Header items
+    int fromRow = sourceRow;
+    if (destinationChild < sourceRow)
+        fromRow += count - 1;
+    else
+        destinationChild--;
+    while (count--)
+        verticalHeaderItems.move(fromRow, destinationChild);
+
+    endMoveRows();
+    return true;
+}
+
 void QTableModel::setItem(int row, int column, QTableWidgetItem *item)
 {
     int i = tableIndex(row, column);
@@ -152,27 +192,8 @@ void QTableModel::setItem(int row, int column, QTableWidgetItem *item)
             sortedRow = qMax((int)(it - colItems.begin()), 0);
         }
         if (sortedRow != row) {
-            emit layoutAboutToBeChanged({}, QAbstractItemModel::VerticalSortHint);
-            // move the items @ row to sortedRow
-            int cc = columnCount();
-            QList<QTableWidgetItem *> rowItems(cc);
-            for (int j = 0; j < cc; ++j)
-                rowItems[j] = tableItems.at(tableIndex(row, j));
-            tableItems.remove(tableIndex(row, 0), cc);
-            tableItems.insert(tableIndex(sortedRow, 0), cc, 0);
-            for (int j = 0; j < cc; ++j)
-                tableItems[tableIndex(sortedRow, j)] = rowItems.at(j);
-            QTableWidgetItem *header = verticalHeaderItems.at(row);
-            verticalHeaderItems.remove(row);
-            verticalHeaderItems.insert(sortedRow, header);
-            // update persistent indexes
-            QModelIndexList oldPersistentIndexes = persistentIndexList();
-            QModelIndexList newPersistentIndexes = oldPersistentIndexes;
-            updateRowIndexes(newPersistentIndexes, row, sortedRow);
-            changePersistentIndexList(oldPersistentIndexes,
-                                      newPersistentIndexes);
-
-            emit layoutChanged({}, QAbstractItemModel::VerticalSortHint);
+            const int destinationChild = sortedRow > row ? sortedRow + 1 : sortedRow;
+            moveRows(QModelIndex(), row, 1, QModelIndex(), destinationChild);
             return;
         }
     }
@@ -477,11 +498,12 @@ void QTableModel::sort(int column, Qt::SortOrder order)
 {
     QList<QPair<QTableWidgetItem *, int>> sortable;
     QList<int> unsortable;
+    const int numRows = rowCount();
 
-    sortable.reserve(rowCount());
-    unsortable.reserve(rowCount());
+    sortable.reserve(numRows);
+    unsortable.reserve(numRows);
 
-    for (int row = 0; row < rowCount(); ++row) {
+    for (int row = 0; row < numRows; ++row) {
         if (QTableWidgetItem *itm = item(row, column))
             sortable.append(QPair<QTableWidgetItem*,int>(itm, row));
         else
@@ -494,7 +516,6 @@ void QTableModel::sort(int column, Qt::SortOrder order)
     QList<QTableWidgetItem *> sorted_table(tableItems.size());
     QModelIndexList from;
     QModelIndexList to;
-    const int numRows = rowCount();
     const int numColumns = columnCount();
     from.reserve(numRows * numColumns);
     to.reserve(numRows * numColumns);
@@ -828,8 +849,11 @@ bool QTableModel::dropMimeData(const QMimeData *data, Qt::DropAction action,
     if (index.isValid()) {
         row = index.row();
         column = index.column();
-    }else if (row == -1 || column == -1) {  // The user dropped outside the table.
+    } else if (row == -1 || column == -1) { // The user dropped outside the table.
         row = rowCount();
+        column = 0;
+    } else { // The user dropped between two rows
+        // This means inserting a row, which only makes sense at column 0
         column = 0;
     }
 
@@ -1526,7 +1550,7 @@ QTableWidgetItem &QTableWidgetItem::operator=(const QTableWidgetItem &other)
     \ingroup model-view
     \inmodule QtWidgets
 
-    \image windows-tableview.png
+    \image fusion-tableview.png
 
     Table widgets provide standard table display facilities for applications.
     The items in a QTableWidget are provided by QTableWidgetItem.
@@ -2701,7 +2725,8 @@ void QTableWidget::dropEvent(QDropEvent *event) {
         int col = -1;
         int row = -1;
         // check whether a subclass has already accepted the event, ie. moved the data
-        if (!event->isAccepted() && d->dropOn(event, &row, &col, &topIndex)) {
+        if (!event->isAccepted() && d->dropOn(event, &row, &col, &topIndex) && row == -1 && col == -1) {
+            // Drop onto item
             const QModelIndexList indexes = selectedIndexes();
             int top = INT_MAX;
             int left = INT_MAX;
@@ -2709,7 +2734,6 @@ void QTableWidget::dropEvent(QDropEvent *event) {
                 top = qMin(index.row(), top);
                 left = qMin(index.column(), left);
             }
-
             QList<QTableWidgetItem *> taken;
             const int indexesCount = indexes.size();
             taken.reserve(indexesCount);
@@ -2724,7 +2748,7 @@ void QTableWidget::dropEvent(QDropEvent *event) {
 
             event->accept();
         }
-        // either we or a subclass accepted the move event, so assume that the data was
+        // either we or a subclass accepted the drop event, so assume that the data was
         // moved and that QAbstractItemView shouldn't remove the source when QDrag::exec returns
         if (event->isAccepted())
             d->dropEventMoved = true;

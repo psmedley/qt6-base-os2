@@ -14,6 +14,9 @@
 
 QT_BEGIN_NAMESPACE
 
+QEventLoopPrivate::~QEventLoopPrivate()
+    = default;
+
 /*!
     \class QEventLoop
     \inmodule QtCore
@@ -116,10 +119,10 @@ bool QEventLoop::processEvents(ProcessEventsFlags flags)
     can be used before calling exec(), because modal widgets
     use their own local event loop.
 
-    To make your application perform idle processing (i.e. executing a
-    special function whenever there are no pending events), use a
-    QTimer with 0 timeout. More sophisticated idle processing schemes
-    can be achieved using processEvents().
+    To make your application perform idle processing (i.e. executing a special
+    function whenever there are no pending events), use a QChronoTimer with
+    0ns timeout. More sophisticated idle processing schemes can be achieved
+    using processEvents().
 
     \sa QCoreApplication::quit(), exit(), processEvents()
 */
@@ -151,6 +154,9 @@ int QEventLoop::exec(ProcessEventsFlags flags)
             auto threadData = d->threadData.loadRelaxed();
             ++threadData->loopLevel;
             threadData->eventLoops.push(d->q_func());
+            qCDebug(lcDeleteLater) << "Increased" << threadData->thread
+                      << "loop level to" << threadData->loopLevel
+                      << "with leaf loop now" << threadData->eventLoops.last();
 
             locker.unlock();
         }
@@ -169,6 +175,12 @@ int QEventLoop::exec(ProcessEventsFlags flags)
             Q_UNUSED(eventLoop); // --release warning
             d->inExec = false;
             --threadData->loopLevel;
+
+            qCDebug(lcDeleteLater) << "Decreased" << threadData->thread
+                      << "loop level to" << threadData->loopLevel
+                      << "with leaf loop now" << (threadData->eventLoops.isEmpty()
+                        ? nullptr : threadData->eventLoops.last());
+
         }
     };
     LoopReference ref(d, locker);

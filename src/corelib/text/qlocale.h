@@ -1167,15 +1167,21 @@ public:
 
 private:
     QLocale(QLocalePrivate &dd);
-    bool equals(const QLocale &other) const;
+    bool equals(const QLocale &other) const noexcept;
     friend class QLocalePrivate;
     friend class QSystemLocale;
     friend class QCalendarBackend;
     friend class QRomanCalendar;
     friend Q_CORE_EXPORT size_t qHash(const QLocale &key, size_t seed) noexcept;
 
-    friend bool operator==(const QLocale &lhs, const QLocale &rhs) { return lhs.equals(rhs); }
-    friend bool operator!=(const QLocale &lhs, const QLocale &rhs) { return !lhs.equals(rhs); }
+    friend bool comparesEqual(const QLocale &lhs, const QLocale &rhs) noexcept
+    {
+        return lhs.equals(rhs);
+    }
+    Q_DECLARE_EQUALITY_COMPARABLE(QLocale)
+
+    friend Q_CORE_EXPORT bool comparesEqual(const QLocale &lhs, Language rhs);
+    Q_DECLARE_EQUALITY_COMPARABLE_NON_NOEXCEPT(QLocale, Language)
 
     QSharedDataPointer<QLocalePrivate> d;
 };

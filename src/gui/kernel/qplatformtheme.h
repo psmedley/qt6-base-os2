@@ -317,6 +317,7 @@ public:
 #if QT_CONFIG(shortcut)
     virtual QKeySequence standardButtonShortcut(int button) const;
 #endif
+    virtual void requestColorScheme(Qt::ColorScheme scheme);
 
     static QVariant defaultThemeHint(ThemeHint hint);
     static QString defaultStandardButtonText(int button);

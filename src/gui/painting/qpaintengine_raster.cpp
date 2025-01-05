@@ -2221,21 +2221,11 @@ void QRasterPaintEngine::drawImage(const QRectF &r, const QImage &img, const QRe
 
         // Do whatever fillRect() does, but without premultiplying the color if it's already premultiplied.
         QRgb color = img.pixel(sr_l, sr_t);
-        switch (img.format()) {
-        case QImage::Format_ARGB32_Premultiplied:
-        case QImage::Format_ARGB8565_Premultiplied:
-        case QImage::Format_ARGB6666_Premultiplied:
-        case QImage::Format_ARGB8555_Premultiplied:
-        case QImage::Format_ARGB4444_Premultiplied:
-        case QImage::Format_RGBA8888_Premultiplied:
-        case QImage::Format_A2BGR30_Premultiplied:
-        case QImage::Format_A2RGB30_Premultiplied:
+        if (img.pixelFormat().premultiplied() == QPixelFormat::Premultiplied) {
             // Combine premultiplied color with the opacity set on the painter.
             d->solid_color_filler.solidColor = multiplyAlpha256(QRgba64::fromArgb32(color), s->intOpacity);
-            break;
-        default:
+        } else {
             d->solid_color_filler.solidColor = qPremultiply(combineAlpha256(QRgba64::fromArgb32(color), s->intOpacity));
-            break;
         }
 
         if (d->solid_color_filler.solidColor.alphaF() <= 0.0f && s->composition_mode == QPainter::CompositionMode_SourceOver)
@@ -3713,15 +3703,9 @@ bool QRasterPaintEnginePrivate::canUseImageBlitting(QPainter::CompositionMode mo
 
     QImage::Format dFormat = rasterBuffer->format;
     QImage::Format sFormat = image.format();
-    // Formats must match or source format must be a subset of destination format
-    if (dFormat != sFormat && image.pixelFormat().alphaUsage() == QPixelFormat::IgnoresAlpha) {
-        if ((sFormat == QImage::Format_RGB32 && dFormat == QImage::Format_ARGB32)
-            || (sFormat == QImage::Format_RGBX8888 && dFormat == QImage::Format_RGBA8888)
-            || (sFormat == QImage::Format_RGBX64 && dFormat == QImage::Format_RGBA64))
-            sFormat = dFormat;
-        else
-            sFormat = qt_maybeAlphaVersionWithSameDepth(sFormat); // this returns premul formats
-    }
+    // Formats must match or source format must be an opaque version of destination format
+    if (dFormat != sFormat && image.pixelFormat().alphaUsage() == QPixelFormat::IgnoresAlpha)
+        dFormat = qt_maybeDataCompatibleOpaqueVersion(dFormat);
     return (dFormat == sFormat);
 }
 

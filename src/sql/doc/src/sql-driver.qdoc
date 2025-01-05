@@ -14,8 +14,6 @@
     driver source code is supplied and can be used as a model for
     \l{#development}{writing your own drivers}.
 
-    \tableofcontents
-
     \section1 Supported Databases
 
     The table below lists the drivers included with Qt:
@@ -77,14 +75,6 @@
     useful if the package provides its own set of system libraries that
     should not be recognized by the build routine.
 
-    In some cases it's more convenient to use \c CMAKE_INCLUDE_PATH
-    and \c CMAKE_LIBRARY_PATH variables to locate required libraries.
-    You should prefer this method if module needs to set properties
-    for the provided target libraries (e.g. this is required for PostgreSQL
-    and SQLite).
-    For example, you can do this as follows, to locate MySQL:
-    \snippet code/doc_src_sql-driver.qdoc 43
-
     The particulars for each driver are explained below.
 
     \note If something goes wrong and you want CMake to recheck your
@@ -110,7 +100,7 @@
 
     Due to the practicalities of dealing with external dependencies,
     only the SQLite plugin is shipped with binary builds of Qt.
-    Binary builds of Qt for Windows also include the ODBC plugin.
+    Binary builds of Qt for Windows also include the ODBC and PostgreSQL plugin.
     To be able to add additional drivers to the Qt installation
     without re-building all of Qt, it is possible to configure
     and build the \c qtbase/src/plugins/sqldrivers directory outside
@@ -924,9 +914,8 @@
 
     \snippet code/doc_src_sql-driver.qdoc 27
 
-    If you are using Firebird, the Firebird library has to be set explicitly:
-
-    \snippet code/doc_src_sql-driver.qdoc 28
+    Optionally, use the CMake variables \c{Interbase_INCLUDE_DIR} and
+    \c{Interbase_LIBRARY} to specify the include path and library directly.
 
     \section3 How to Build the QIBASE Plugin on Windows
 
@@ -937,9 +926,8 @@
 
     \snippet code/doc_src_sql-driver.qdoc 29
 
-    If you are using Firebird:
-
-    \snippet code/doc_src_sql-driver.qdoc 30
+    Optionally, use the CMake variables \c{Interbase_INCLUDE_DIR} and
+    \c{Interbase_LIBRARY} to specify the include path and library directly.
 
     Note that \c{C:\interbase\bin} must be in the \c PATH.
 

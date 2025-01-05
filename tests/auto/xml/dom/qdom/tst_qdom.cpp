@@ -1,21 +1,26 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
+#include <QtTest/qtest.h>
 
-#include <QBuffer>
-#include <QByteArray>
-#include <QCoreApplication>
-#include <QDebug>
-#include <QFile>
-#include <QList>
-#include <QRegularExpression>
-#include <QScopeGuard>
-#include <QTextStream>
-#include <QTest>
-#include <QtXml>
-#include <QVariant>
-#include <cmath>
+#include <QtXml/qdom.h>
+
+#include <QtCore/qbuffer.h>
+#include <QtCore/qbytearray.h>
+#include <QtCore/qcoreapplication.h>
+#include <QtCore/qdebug.h>
+#include <QtCore/qfile.h>
+#include <QtCore/qlist.h>
+#include <QtCore/qregularexpression.h>
+#include <QtCore/qscopeguard.h>
+#include <QtCore/qtemporaryfile.h>
+#include <QtCore/qtextstream.h>
+#include <QtCore/qvariant.h>
+#include <QtCore/qxmlstream.h>
+
 #include <QtXml/private/qdom_p.h>
+
+#include <cmath>
 
 QT_REQUIRE_CONFIG(dom);
 QT_FORWARD_DECLARE_CLASS(QDomDocument)

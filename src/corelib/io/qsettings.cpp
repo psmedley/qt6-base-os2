@@ -129,12 +129,12 @@ bool QConfFile::isWritable() const
 {
     QFileInfo fileInfo(name);
 
-#ifndef QT_NO_TEMPORARYFILE
+#if QT_CONFIG(temporaryfile)
     if (fileInfo.exists()) {
 #endif
         QFile file(name);
         return file.open(QFile::ReadWrite);
-#ifndef QT_NO_TEMPORARYFILE
+#if QT_CONFIG(temporaryfile)
     } else {
         // Create the directories to the file.
         QDir dir(fileInfo.absolutePath());
@@ -1932,8 +1932,6 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
 
     If all you need is a non-persistent memory-based structure,
     consider using QMap<QString, QVariant> instead.
-
-    \tableofcontents section1
 
     \section1 Basic Usage
 

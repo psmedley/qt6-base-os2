@@ -22,6 +22,16 @@
                 "file type" : "examples and snippets",
                 "spdx" : ["LicenseRef-Qt-Commercial OR BSD-3-Clause"]
             },
+            "cmake/QtPublicGitHelpers.cmake" : {
+                "comment" : "MIT licensed copied parts",
+                "file type" : "build system",
+                "spdx" : ["BSD-3-Clause AND MIT"]
+            },
+            "cmake/QtPublicSbomGenerationHelpers.cmake" : {
+                "comment" : "MIT licensed copied parts",
+                "file type" : "build system",
+                "spdx" : ["MIT AND BSD-3-Clause"]
+            },
             "tests/auto/cmake/test_plugin_shared_static_flavor\\.cmake" : {
                 "comment" : "Exception. This is a test file.",
                 "file type" : "test",
@@ -113,6 +123,11 @@
                 "comment" : "generated from Unicode CLDR data",
                 "file type" : "module and plugin",
                 "spdx"      : ["Unicode-3.0"]
+            },
+            "src/corelib/text/qunicodetables.*" : {
+                "comment" : "Contains data extracted from UCD, under Unicode-DFS-2016",
+                "file type" : "module and plugin",
+                "spdx"      : ["Unicode-DFS-2016"]
             },
             "src/tools/" : {
                 "comment" : "Default",

@@ -74,10 +74,81 @@ class CldrReader (object):
             # more out.
             pass # self.__wrapped(self.whitter, 'Skipping likelySubtags (for unknown codes): ', skips)
 
+    def zoneData(self):
+        """Locale-independent timezone data.
+
+        Returns a triple (alias, defaults, winIds) in which:
+          * alias is a mapping from aliases for IANA zone IDs, that
+            have the form of IANA IDs, to actual current IANA IDs; in
+            particular, this maps each CLDR zone ID to its
+            corresponding IANA ID.
+          * defaults maps each Windows name for a zone to the IANA ID
+            to use for it by default (when no territory is specified,
+            or when no entry in winIds matches the given Windows name
+            and territory).
+          * winIds is a mapping {(winId, land): ianaList} from Windows
+            name and territory code to the space-joined list of IANA
+            IDs associated with the Windows name in the given
+            territory.
+
+        and reports on any territories found in CLDR timezone data
+        that are not mentioned in enumdata.territory_map, on any
+        Windows IDs given in zonedata.windowsIdList that are no longer
+        covered by the CLDR data."""
+        alias, ignored = self.root.bcp47Aliases()
+        defaults, winIds = self.root.readWindowsTimeZones(alias)
+
+        from zonedata import windowsIdList
+        winUnused = set(n for n, o in windowsIdList).difference(
+            set(defaults).union(w for w, t, ids in winIds))
+        if winUnused:
+            joined = "\n\t".join(winUnused)
+            self.whitter.write(
+                f'No Windows ID in\n\t{joined}\nis still in use.\n'
+                'They could be removed at the next major version.\n')
+
+        # Check for duplicate entries in winIds:
+        last: tuple[str, str, str] = ('', '', '')
+        winDup = {}
+        for triple in sorted(winIds):
+            if triple[:2] == last[:2]:
+                try:
+                    seq = winDup[triple[:2]]
+                except KeyError:
+                    seq = winDup[triple[:2]] = []
+                seq.append(triple[-1])
+            last = triple
+        if winDup:
+            joined = '\n\t'.join(f'{t}, {w}: ", ".join(ids)'
+                                 for (w, t), ids in winDup.items())
+            self.whitter.write(
+                f'Duplicated (territory, Windows ID) entries:\n\t{joined}\n')
+            winIds = [trip for trip in winIds if trip[:2] not in winDup]
+            for (w, t), seq in winDup.items():
+                ianaList = []
+                for ids in seq:
+                    for iana in ids.split():
+                        if iana not in ianaList:
+                            ianaList.append(iana)
+                winIds.append((w, t, ' '.join(ianaList)))
+
+        from enumdata import territory_map
+        unLand = set(t for w, t, ids in winIds).difference(
+            v[1] for k, v in territory_map.items())
+        if unLand:
+            self.grumble.write(
+                'Unknown territory codes in timezone data: '
+                f'{", ".join(unLand)}\n'
+                'Skipping Windows zone mappings for these territories\n')
+            winIds = [(w, t, ids) for w, t, ids in winIds if t not in unLand]
+
+        # Convert list of triples to mapping:
+        winIds = {(w, t): ids for w, t, ids in winIds}
+        return alias, defaults, winIds
+
     def readLocales(self, calendars = ('gregorian',)):
-        locales = tuple(self.__allLocales(calendars))
-        return dict(((k.language_id, k.script_id, k.territory_id, k.variant_code),
-                     k) for k in locales)
+        return {(k.language_id, k.script_id, k.territory_id, k.variant_id): k
+                for k in self.__allLocales(calendars)}
 
     def __allLocales(self, calendars):
         def skip(locale, reason):
@@ -194,7 +265,7 @@ class CldrReader (object):
             language = names[0], language_code = language, language_id = ids[0],
             script = names[1], script_code = script, script_id = ids[1],
             territory = names[2], territory_code = territory, territory_id = ids[2],
-            variant_code = variant)
+            variant_code = variant, variant_id = ids[3])
 
         firstDay, weStart, weEnd = self.root.weekData(territory)
         assert all(day in ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')
@@ -210,7 +281,7 @@ class CldrReader (object):
                       currencyRounding = int(rounding))
 
         locale.update(scan.currencyData(iso))
-        locale.update(scan.numericData(self.root.numberSystem, self.whitter))
+        locale.update(scan.numericData(self.root.numberSystem))
         locale.update(scan.textPatternData())
         locale.update(scan.endonyms(language, script, territory, variant))
         locale.update(scan.unitData()) # byte, kB, MB, GB, ..., KiB, MiB, GiB, ...
@@ -283,7 +354,7 @@ class CldrAccess (object):
         for ignore, attrs in self.supplement('likelySubtags.xml').find('likelySubtags'):
             yield attrs['from'], attrs['to']
 
-    def numberSystem(self, system):
+    def numberSystem(self, system: str) -> dict[str, str]:
         """Get a description of a numbering system.
 
         Returns a mapping, with keys 'digits', 'type' and 'id'; the
@@ -352,7 +423,11 @@ class CldrAccess (object):
                 parts.append(text)
         if len(parts) > 1:
             parts[-1] = 'and ' + parts[-1]
-        assert parts
+        else:
+            assert parts
+            if parts[0].startswith('variant'):
+                raise Error(f'No support for {parts[0]}',
+                            language, script, territory, variant)
         raise Error('Unknown ' + ', '.join(parts),
                     language, script, territory, variant)
 
@@ -377,9 +452,9 @@ class CldrAccess (object):
             for f in k.split('_'):
                 scraps.add(f)
         from enumdata import language_map, territory_map, script_map
-        language = dict((v, k) for k, v in language_map.values() if not v.isspace())
-        territory = dict((v, k) for k, v in territory_map.values() if v != 'ZZ')
-        script = dict((v, k) for k, v in script_map.values() if v != 'Zzzz')
+        language = {v: k for k, v in language_map.values() if not v.isspace()}
+        territory = {v: k for k, v in territory_map.values() if v != 'ZZ'}
+        script = {v: k for k, v in script_map.values() if v != 'Zzzz'}
         lang = dict(self.__checkEnum(language, self.__codeMap('language'), scraps))
         land = dict(self.__checkEnum(territory, self.__codeMap('territory'), scraps))
         text = dict(self.__checkEnum(script, self.__codeMap('script'), scraps))
@@ -402,69 +477,115 @@ enumdata.py (keeping the old name as an alias):
                         + '\n')
             grumble('\n')
 
-    def readWindowsTimeZones(self, lookup): # For use by cldr2qtimezone.py
+    def bcp47Aliases(self):
+        """Reads the mapping from CLDR IDs to IANA IDs
+
+        CLDR identifies timezones in various ways but its standard
+        'name' for them, here described as a CLDR ID, has the form of
+        an IANA ID. CLDR IDs are stable across time, where IANA IDs
+        may be revised over time, for example Asia/Calcutta became
+        Asia/Kolkata. When a new zone is added to CLDR, it gets the
+        then-current IANA ID as its CLDR ID; if it is later
+        superseded, CLDR continues using the old ID, so we need a
+        mapping from that to current IANA IDs. Helpfully, CLDR
+        provides information about aliasing among time-zone IDs.
+
+        The file common/bcp47/timezone.xml has keyword/key/type
+        elements with attributes:
+
+          name -- zone code (ignore)
+          description -- long name for exemplar location, including
+                         territory
+
+        and some of:
+
+          deprecated -- ignore entry if present (has no alias)
+          preferred -- only present if deprecated
+          since -- version at which this entry was added (ignore)
+          alias -- space-joined sequence of IANA-form IDs; first is CLDR ID
+          iana -- if present, repeats the alias entry that's the modern IANA ID
+
+        This returns a pair (alias, naming) wherein: alias is a
+        mapping from IANA-format IDs to actual IANA IDs, that maps
+        each alias to the contemporary ID used by IANA; and naming is
+        a mapping from IANA ID to the description it and its aliases
+        shared in their keyword/key/type entry."""
+        # File has the same form as supplements:
+        root = Supplement(Node(self.__xml('common/bcp47/timezone.xml')))
+
+        # If we ever need a mapping back to CLDR ID, we can make
+        # (description, space-joined-list) the naming values.
+        alias, naming = {}, {} # { alias: iana }, { iana: description }
+        for item, attrs in root.find('keyword/key/type', exclude=('deprecated',)):
+            assert 'description' in attrs, item
+            assert 'alias' in attrs, item
+            names = attrs['alias'].split()
+            assert not any(name in alias for name in names), item
+            # CLDR ID is names[0]; if IANA now uses another name for
+            # it, this is given as the iana attribute.
+            ianaid, fullName = attrs.get('iana', names[0]), attrs['description']
+            alias.update({name: ianaid for name in names})
+            assert not ianaid in naming
+            naming[ianaid] = fullName
+
+        return alias, naming
+
+    def readWindowsTimeZones(self, alias):
         """Digest CLDR's MS-Win time-zone name mapping.
 
-        MS-Win have their own eccentric names for time-zones.  CLDR
-        helpfully provides a translation to more orthodox names.
+        Single argument, alias, should be the first part of the pair
+        returned by a call to bcp47Aliases(); it shall be used to
+        transform CLDR IDs into IANA IDs.
 
-        Single argument, lookup, is a mapping from known MS-Win names
-        for locales to a unique integer index (starting at 1).
+        MS-Win have their own eccentric names for time-zones. CLDR
+        helpfully provides a translation to more orthodox names,
+        albeit these are CLDR IDs - see bcp47Aliases() - rather than
+        (up to date) IANA IDs. The windowsZones.xml supplement has
+        supplementalData/windowsZones/mapTimezones/mapZone nodes with
+        attributes
 
-        The XML structure we read has the form:
+          territory -- ISO code
+          type -- space-joined sequence of CLDR IDs of zones
+          other -- Windows name of these zones in the given territory
 
- <supplementalData>
-     <windowsZones>
-         <mapTimezones otherVersion="..." typeVersion="...">
-             <!-- (UTC-08:00) Pacific Time (US & Canada) -->
-             <mapZone other="Pacific Standard Time" territory="001" type="America/Los_Angeles"/>
-             <mapZone other="Pacific Standard Time" territory="CA" type="America/Vancouver America/Dawson America/Whitehorse"/>
-             <mapZone other="Pacific Standard Time" territory="US" type="America/Los_Angeles America/Metlakatla"/>
-             <mapZone other="Pacific Standard Time" territory="ZZ" type="PST8PDT"/>
-         </mapTimezones>
-     </windowsZones>
- </supplementalData>
-"""
+        When 'territory' is '001', type is always just a single CLDR
+        zone ID. This is the default zone for the given Windows name.
+
+        For each mapZone node, its type is split on spacing and
+        cleaned up as follows. Those entries that are keys of alias
+        are mapped thereby to their canonical IANA IDs; all others are
+        presumed to be canonical IANA IDs and left unchanged.  Any
+        later duplicates of earlier entries are omitted. The result
+        list of IANA IDs is joined with single spaces between to give
+        a string s.
+
+        Returns a twople (defaults, windows) in which defaults is a
+        mapping, from Windows ID to IANA ID (derived from the mapZone
+        nodes with territory='001'), and windows is a list of triples
+        (Windows ID, territory code, IANA ID list) in which the first
+        two entries are the 'other' and 'territory' fields of a
+        mapZone element and the last is s, its cleaned-up list of IANA
+        IDs."""
+
+        defaults, windows = {}, []
         zones = self.supplement('windowsZones.xml')
-        enum = self.__enumMap('territory')
-        badZones, unLands, defaults, windows = set(), set(), {}, {}
-
         for name, attrs in zones.find('windowsZones/mapTimezones'):
             if name != 'mapZone':
                 continue
 
-            wid, code = attrs['other'], attrs['territory']
-            data = dict(windowsId = wid,
-                        territoryCode = code,
-                        ianaList = ' '.join(attrs['type'].split()))
-
-            try:
-                key = lookup[wid]
-            except KeyError:
-                badZones.add(wid)
-                key = 0
-            data['windowsKey'] = key
+            wid, code, ianas = attrs['other'], attrs['territory'], []
+            for cldr in attrs['type'].split():
+                iana = alias.get(cldr, cldr)
+                if iana not in ianas:
+                    ianas.append(iana)
 
             if code == '001':
-                defaults[key] = data['ianaList']
+                assert len(ianas) == 1, (wid, *ianas)
+                defaults[wid] = ianas[0]
             else:
-                try:
-                    cid, name = enum[code]
-                except KeyError:
-                    unLands.append(code)
-                    continue
-                data.update(territoryId = cid, territory = name)
-                windows[key, cid] = data
+                windows.append((wid, code, ' '.join(ianas)))
 
-        if unLands:
-            raise Error('Unknown territory codes, please add to enumdata.py: '
-                        + ', '.join(sorted(unLands)))
-
-        if badZones:
-            raise Error('Unknown Windows IDs, please add to cldr2qtimezone.py: '
-                        + ', '.join(sorted(badZones)))
-
-        return self.cldrVersion, defaults, windows
+        return defaults, windows
 
     @property
     def cldrVersion(self):
@@ -545,6 +666,8 @@ enumdata.py (keeping the old name as an alias):
             source = self.__supplementalData
             for elt in source.findNodes('currencyData/region'):
                 iso, digits, rounding = '', 2, 1
+                # TODO: fractions/info[iso4217=DEFAULT] has rounding=0 - why do we differ ?
+                # Also: some fractions/info have cashDigits and cashRounding - should we use them ?
                 try:
                     territory = elt.dom.attributes['iso3166'].nodeValue
                 except KeyError:
@@ -636,15 +759,15 @@ enumdata.py (keeping the old name as an alias):
     def __enumMap(self, key, cache = {}):
         if not cache:
             cache['variant'] = {'': (0, 'This should never be seen outside ldml.py')}
-            # They're not actually lists: mappings from numeric value
-            # to pairs of full name and short code. What we want, in
-            # each case, is a mapping from code to the other two.
+            # They're mappings from numeric value to pairs of full
+            # name and short code. What we want, in each case, is a
+            # mapping from code to the other two.
             from enumdata import language_map, script_map, territory_map
             for form, book, empty in (('language', language_map, 'AnyLanguage'),
                                       ('script', script_map, 'AnyScript'),
                                       ('territory', territory_map, 'AnyTerritory')):
-                cache[form] = dict((pair[1], (num, pair[0]))
-                                   for num, pair in book.items() if pair[0] != 'C')
+                cache[form] = {pair[1]: (num, pair[0])
+                               for num, pair in book.items() if pair[0] != 'C'}
                 # (Have to filter out the C locale, as we give it the
                 # same (all space) code as AnyLanguage, whose code
                 # should probably be 'und' instead.)

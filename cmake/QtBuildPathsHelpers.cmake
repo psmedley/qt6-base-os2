@@ -200,6 +200,8 @@ macro(qt_internal_setup_configure_install_paths)
     qt_configure_process_path(INSTALL_DESCRIPTIONSDIR
                              "${INSTALL_ARCHDATADIR}/modules"
                               "Module description files directory")
+    qt_configure_process_path(INSTALL_SBOMDIR "${INSTALL_ARCHDATADIR}/sbom"
+        "SBOM [PREFIX/sbom]")
 endmacro()
 
 macro(qt_internal_set_cmake_install_libdir)
@@ -221,6 +223,8 @@ macro(qt_internal_set_qt_apple_support_files_path)
             set(__qt_internal_cmake_apple_support_files_path "${QT_CMAKE_DIR}/macos")
         elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
             set(__qt_internal_cmake_apple_support_files_path "${QT_CMAKE_DIR}/ios")
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "visionOS")
+            set(__qt_internal_cmake_apple_support_files_path "${QT_CMAKE_DIR}/visionos")
         endif()
     endif()
 endmacro()

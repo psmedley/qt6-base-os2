@@ -140,10 +140,10 @@ public:
     QDomNodeListPrivate(QDomNodePrivate *, const QString &, const QString &);
     ~QDomNodeListPrivate();
 
-    bool operator==(const QDomNodeListPrivate &) const;
-    bool operator!=(const QDomNodeListPrivate &) const;
+    bool operator==(const QDomNodeListPrivate &) const noexcept;
 
-    void createList();
+    void createList() const;
+    bool maybeCreateList() const;
     QDomNodePrivate *item(int index);
     int length() const;
 
@@ -154,8 +154,8 @@ public:
     QDomNodePrivate *node_impl;
     QString tagname;
     QString nsURI;
-    QList<QDomNodePrivate *> list;
-    long timestamp;
+    mutable QList<QDomNodePrivate *> list;
+    mutable long timestamp;
 };
 
 class QDomNamedNodeMapPrivate

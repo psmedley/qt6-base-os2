@@ -5,11 +5,13 @@
 #include "qdebug.h"
 #include "private/qdebug_p.h"
 #include "qmetaobject.h"
+#include <private/qlogging_p.h>
 #include <private/qtextstream_p.h>
 #include <private/qtools_p.h>
 
 #include <array>
 #include <q20chrono.h>
+#include <cstdio>
 
 QT_BEGIN_NAMESPACE
 
@@ -150,15 +152,15 @@ QByteArray QtDebugUtils::toPrintable(const char *data, qint64 len, qsizetype max
 
     Flushes any pending data to be written and destroys the debug stream.
 */
-// Has been defined in the header / inlined before Qt 5.4
 QDebug::~QDebug()
 {
     if (stream && !--stream->ref) {
         if (stream->space && stream->buffer.endsWith(u' '))
             stream->buffer.chop(1);
         if (stream->message_output) {
+            QInternalMessageLogContext ctxt(stream->context);
             qt_message_output(stream->type,
-                              stream->context,
+                              ctxt,
                               stream->buffer);
         }
         delete stream;
@@ -405,9 +407,9 @@ static QByteArray timeUnit(qint64 num, qint64 den)
     };
     auto appendNumber = [&](qint64 value) {
         if (value >= 10'000 && (value % 1000) == 0)
-            len += qsnprintf(buf + len, sizeof(buf) - len, "%.6g", double(value));  // "1e+06"
+            len += std::snprintf(buf + len, sizeof(buf) - len, "%.6g", double(value));  // "1e+06"
         else
-            len += qsnprintf(buf + len, sizeof(buf) - len, "%lld", value);
+            len += std::snprintf(buf + len, sizeof(buf) - len, "%lld", value);
     };
     appendChar('[');
     appendNumber(num);
@@ -995,11 +997,22 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
-    \fn template <class T> QString QDebug::toString(T &&object)
+    \fn template <class T> QString QDebug::toString(const T &object)
     \since 6.0
 
     \include qdebug-toString.qdocinc
 */
+
+/*! \internal */
+QString QDebug::toStringImpl(StreamTypeErased s, const void *obj)
+{
+    QString result;
+    {
+        QDebug d(&result);
+        s(d.nospace(), obj);
+    }
+    return result;
+}
 
 /*!
     \fn template <class T> QDebug operator<<(QDebug debug, const QList<T> &list)
@@ -1238,13 +1251,13 @@ QDebugStateSaver::~QDebugStateSaver()
     \internal
 
     Specialization of the primary template in qdebug.h to out-of-line
-    the common case of QFlags<T>::Int being int.
+    the common case of QFlags<T>::Int being 32-bit.
 
     Just call the generic version so the two don't get out of sync.
 */
-void qt_QMetaEnum_flagDebugOperator(QDebug &debug, size_t sizeofT, int value)
+void qt_QMetaEnum_flagDebugOperator(QDebug &debug, size_t sizeofT, uint value)
 {
-    qt_QMetaEnum_flagDebugOperator<int>(debug, sizeofT, value);
+    qt_QMetaEnum_flagDebugOperator<uint>(debug, sizeofT, value);
 }
 
 #ifndef QT_NO_QOBJECT

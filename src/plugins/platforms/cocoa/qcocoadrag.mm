@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <AppKit/AppKit.h>
+#include <UniformTypeIdentifiers/UTCoreTypes.h>
 
 #include "qcocoadrag.h"
 #include "qmacclipboard.h"
 #include "qcocoahelpers.h"
 #include <QtGui/private/qcoregraphics_p.h>
 #include <QtGui/qutimimeconverter.h>
-#include <QtCore/qsysinfo.h>
 #include <QtCore/private/qcore_mac_p.h>
 
 #include <vector>
@@ -31,11 +31,22 @@ QCocoaDrag::~QCocoaDrag()
     [m_lastEvent release];
 }
 
-void QCocoaDrag::setLastMouseEvent(NSEvent *event, NSView *view)
+void QCocoaDrag::setLastInputEvent(NSEvent *event, NSView *view)
 {
     [m_lastEvent release];
     m_lastEvent = [event copy];
     m_lastView = view;
+}
+
+void QCocoaDrag::viewDestroyed(NSView *view)
+{
+    if (view == m_lastView) {
+        if (m_lastEvent.window.contentView == view) {
+            [m_lastEvent release];
+            m_lastEvent = nil;
+        }
+        m_lastView = nil;
+    }
 }
 
 QMimeData *QCocoaDrag::dragMimeData()
@@ -95,9 +106,11 @@ Qt::DropAction QCocoaDrag::defaultAction(Qt::DropActions possibleActions,
 
 Qt::DropAction QCocoaDrag::drag(QDrag *o)
 {
-    m_drag = o;
     m_executed_drop_action = Qt::IgnoreAction;
+    if (!m_lastEvent)
+        return m_executed_drop_action;
 
+    m_drag = o;
     QMacPasteboard dragBoard(CFStringRef(NSPasteboardNameDrag), QUtiMimeConverter::HandlerScopeFlag::DnD);
     m_drag->mimeData()->setData("application/x-qt-mime-type-name"_L1, QByteArray("dummy"));
     dragBoard.setMimeData(m_drag->mimeData(), QMacPasteboard::LazyRequest);
@@ -136,11 +149,6 @@ bool QCocoaDrag::maybeDragMultipleItems()
     Q_ASSERT(m_drag && m_drag->mimeData());
     Q_ASSERT(m_executed_drop_action == Qt::IgnoreAction);
 
-    if (QOperatingSystemVersion::current() < QOperatingSystemVersion::MacOSMojave) {
-        // -dragImage: stopped working in 10.14 first.
-        return false;
-    }
-
     const QMacAutoReleasePool pool;
 
     NSView *view = m_lastView ? m_lastView : m_lastEvent.window.contentView;
@@ -161,8 +169,7 @@ bool QCocoaDrag::maybeDragMultipleItems()
     for (NSPasteboardItem *item in dragBoard.pasteboardItems) {
         bool isUrl = false;
         for (NSPasteboardType type in item.types) {
-            using NSStringRef = NSString *;
-            if ([type isEqualToString:NSStringRef(kUTTypeFileURL)]) {
+            if ([type isEqualToString:UTTypeFileURL.identifier]) {
                 isUrl = true;
                 break;
             }

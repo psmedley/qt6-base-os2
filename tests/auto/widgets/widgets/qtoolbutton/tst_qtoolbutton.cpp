@@ -130,6 +130,11 @@ void tst_QToolButton::triggered()
 
     m_menu = menu.data();
 
+    // QMenu uses QGuiApplicationPrivate::lastCursorPosition to detect pointer
+    // movement. And GuiApplication needs at least one mouse move to properly
+    // initialize it. So we send a mouse move now, before we open the menu.
+    QTest::mouseMove(mainWidget.windowHandle(), mainWidget.mapFromGlobal(QPoint(0, 0)));
+
     QTimer *timer = new QTimer(this);
     timer->setInterval(50);
     connect(timer, SIGNAL(timeout()), this, SLOT(sendMouseClick()));
@@ -182,7 +187,6 @@ void tst_QToolButton::task176137_autoRepeatOfAction()
     label->move(0, 50);
 
     mainWidget.show();
-    QApplicationPrivate::setActiveWindow(&mainWidget);
     QVERIFY(QTest::qWaitForWindowActive(&mainWidget));
 
     QSignalSpy spy(&action,SIGNAL(triggered()));

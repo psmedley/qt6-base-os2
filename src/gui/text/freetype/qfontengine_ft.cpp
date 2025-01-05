@@ -415,12 +415,12 @@ static int computeFaceIndex(const QString &faceFileName, const QString &styleNam
             break;
         }
 
-        QString faceStyleName = QString::fromLatin1(face->style_name);
+        const bool found = QLatin1StringView(face->style_name) == styleName;
         numFaces = face->num_faces;
 
         FT_Done_Face(face);
 
-        if (faceStyleName == styleName)
+        if (found)
             return faceIndex;
     } while (++faceIndex < numFaces);
 
@@ -1115,6 +1115,23 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
     FT_Face face = freetype->face;
 
     FT_Matrix matrix = freetype->matrix;
+    bool transform = matrix.xx != 0x10000
+                    || matrix.yy != 0x10000
+                    || matrix.xy != 0
+                    || matrix.yx != 0;
+    if (obliquen && transform) {
+        // We have to apply the obliquen transformation before any
+        // other transforms. This means we need to duplicate Freetype's
+        // obliquen matrix here and this has to be kept in sync.
+        FT_Matrix slant;
+        slant.xx = 0x10000L;
+        slant.yx = 0;
+        slant.xy = 0x0366A;
+        slant.yy = 0x10000L;
+
+        FT_Matrix_Multiply(&matrix, &slant);
+        matrix = slant;
+    }
 
     FT_Vector v;
     v.x = format == Format_Mono ? 0 : FT_Pos(subPixelPosition.x.value());
@@ -1124,11 +1141,6 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
     bool hsubpixel = false;
     int vfactor = 1;
     int load_flags = loadFlags(set, format, 0, hsubpixel, vfactor);
-
-    bool transform = matrix.xx != 0x10000
-                     || matrix.yy != 0x10000
-                     || matrix.xy != 0
-                     || matrix.yx != 0;
 
     if (transform || obliquen || (format != Format_Mono && !isScalableBitmap()))
         load_flags |= FT_LOAD_NO_BITMAP;
@@ -1161,7 +1173,7 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
 
     if (embolden)
         FT_GlyphSlot_Embolden(slot);
-    if (obliquen) {
+    if (obliquen && !transform) {
         FT_GlyphSlot_Oblique(slot);
 
         // While Embolden alters the metrics of the slot, oblique does not, so we need
@@ -1673,15 +1685,16 @@ glyph_t QFontEngineFT::glyphIndex(uint ucs4) const
     return glyph;
 }
 
-bool QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs,
+int QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs,
                                  QFontEngine::ShaperFlags flags) const
 {
     Q_ASSERT(glyphs->numGlyphs >= *nglyphs);
     if (*nglyphs < len) {
         *nglyphs = len;
-        return false;
+        return -1;
     }
 
+    int mappedGlyphs = 0;
     int glyph_pos = 0;
     if (freetype->symbol_map) {
         FT_Face face = freetype->face;
@@ -1714,6 +1727,8 @@ bool QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs
                 if (uc < QFreetypeFace::cmapCacheSize)
                     freetype->cmapCache[uc] = glyph;
             }
+            if (glyphs->glyphs[glyph_pos] || isIgnorableChar(uc))
+                mappedGlyphs++;
             ++glyph_pos;
         }
     } else {
@@ -1735,6 +1750,8 @@ bool QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs
                         freetype->cmapCache[uc] = glyph;
                 }
             }
+            if (glyphs->glyphs[glyph_pos] || isIgnorableChar(uc))
+                mappedGlyphs++;
             ++glyph_pos;
         }
     }
@@ -1745,7 +1762,7 @@ bool QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs
     if (!(flags & GlyphIndicesOnly))
         recalcAdvances(glyphs, flags);
 
-    return true;
+    return mappedGlyphs;
 }
 
 bool QFontEngineFT::shouldUseDesignMetrics(QFontEngine::ShaperFlags flags) const

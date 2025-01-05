@@ -341,16 +341,50 @@ QT_USE_NAMESPACE
         [self doesNotRecognizeSelector:invocationSelector];
 }
 
+- (BOOL)application:(NSApplication *)application continueUserActivity:(NSUserActivity *)userActivity
+          restorationHandler:(void(^)(NSArray<id<NSUserActivityRestoring>> *restorableObjects))restorationHandler
+{
+    // Check if eg. user has installed an app delegate capable of handling this
+    if ([reflectionDelegate respondsToSelector:_cmd]
+        && [reflectionDelegate application:application continueUserActivity:userActivity
+                         restorationHandler:restorationHandler] == YES) {
+        return YES;
+    }
+
+    if (!QGuiApplication::instance())
+        return NO;
+
+    if ([userActivity.activityType isEqualToString:NSUserActivityTypeBrowsingWeb]) {
+        QCocoaIntegration *cocoaIntegration = QCocoaIntegration::instance();
+        Q_ASSERT(cocoaIntegration);
+        return cocoaIntegration->services()->handleUrl(QUrl::fromNSURL(userActivity.webpageURL));
+    }
+
+    return NO;
+}
+
 - (void)getUrl:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)replyEvent
 {
     Q_UNUSED(replyEvent);
+
     NSString *urlString = [[event paramDescriptorForKeyword:keyDirectObject] stringValue];
+    const QString qurlString = QString::fromNSString(urlString);
+
+    if (event.eventClass == kInternetEventClass && event.eventID == kAEGetURL) {
+        // 'GURL' (Get URL) event this application should handle
+        if (!QGuiApplication::instance())
+            return;
+        QCocoaIntegration *cocoaIntegration = QCocoaIntegration::instance();
+        Q_ASSERT(cocoaIntegration);
+        cocoaIntegration->services()->handleUrl(QUrl(qurlString));
+        return;
+    }
+
     // The string we get from the requesting application might not necessarily meet
     // QUrl's requirement for a IDN-compliant host. So if we can't parse into a QUrl,
     // then we pass the string on to the application as the name of a file (and
     // QFileOpenEvent::file is not guaranteed to be the path to a local, open'able
     // file anyway).
-    const QString qurlString = QString::fromNSString(urlString);
     if (const QUrl url(qurlString); url.isValid())
         QWindowSystemInterface::handleFileOpenEvent(url);
     else
@@ -415,7 +449,6 @@ QT_USE_NAMESPACE
     if (!platformItem || platformItem->menu())
         return;
 
-    QScopedScopeLevelCounter scopeLevelCounter(QGuiApplicationPrivate::instance()->threadData.loadRelaxed());
     QGuiApplicationPrivate::modifier_buttons = QAppleKeyMapper::fromCocoaModifiers([NSEvent modifierFlags]);
 
     static QMetaMethod activatedSignal = QMetaMethod::fromSignal(&QCocoaMenuItem::activated);

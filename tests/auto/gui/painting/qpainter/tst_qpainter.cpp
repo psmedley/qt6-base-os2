@@ -280,6 +280,7 @@ private slots:
 
     void fillPolygon();
 
+    void textOnArgb32();
     void drawImageAtPointF();
     void scaledDashes();
 #if QT_CONFIG(raster_fp)
@@ -2784,7 +2785,7 @@ void tst_QPainter::monoImages()
     for (int i = 1; i < QImage::NImageFormats; ++i) {
         for (int j = 0; j < numColorPairs; ++j) {
             const QImage::Format format = QImage::Format(i);
-            if (format == QImage::Format_Indexed8)
+            if (format == QImage::Format_Indexed8 || format == QImage::Format_CMYK8888)
                 continue;
 
             QImage img(2, 2, format);
@@ -3554,9 +3555,13 @@ void tst_QPainter::drawImage_data()
 
     for (int srcFormat = QImage::Format_Mono; srcFormat < QImage::NImageFormats; ++srcFormat) {
         for (int dstFormat = QImage::Format_Mono; dstFormat < QImage::NImageFormats; ++dstFormat) {
-            // Indexed8 can't be painted to, and Alpha8 can't hold a color.
-            if (dstFormat == QImage::Format_Indexed8 || dstFormat == QImage::Format_Alpha8)
+            // Indexed8 and CMYK8888 can't be painted to, and Alpha8 can't hold a color.
+            if (dstFormat == QImage::Format_Indexed8 ||
+                dstFormat == QImage::Format_CMYK8888 ||
+                dstFormat == QImage::Format_Alpha8) {
                 continue;
+            }
+
             for (int odd_x = 0; odd_x <= 1; ++odd_x) {
                 for (int odd_width = 0; odd_width <= 1; ++odd_width) {
                     QTest::addRow("srcFormat %d, dstFormat %d, odd x: %d, odd width: %d",
@@ -5452,6 +5457,31 @@ void tst_QPainter::fillPolygon()
                     }
                 }
             }
+        }
+    }
+}
+
+void tst_QPainter::textOnArgb32()
+{
+    QImage backing(100, 20, QImage::Format_RGB32);
+    backing.fill(Qt::white);
+    QImage img(100, 20, QImage::Format_ARGB32);
+    img.fill(Qt::transparent); // Filled with transparent black
+
+    QPainter imagePainter(&img);
+    imagePainter.setPen(Qt::red);
+    imagePainter.setFont(QFontDatabase::systemFont(QFontDatabase::GeneralFont));
+    imagePainter.setRenderHints(QPainter::TextAntialiasing);
+    imagePainter.drawText(img.rect(), Qt::AlignCenter,"Text example");
+    imagePainter.end();
+    imagePainter.begin(&backing);
+    imagePainter.drawImage(backing.rect(), img);
+    imagePainter.end();
+    for (int y = 0; y < backing.height(); ++y) {
+        for (int x = 0; x < backing.width(); ++x) {
+            const uint32_t px = backing.pixel(x, y);
+            // Red over white, should always be full red.
+            QCOMPARE(qRed(px), 255);
         }
     }
 }

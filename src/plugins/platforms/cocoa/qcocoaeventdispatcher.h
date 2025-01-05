@@ -74,7 +74,7 @@ typedef struct _QCocoaModalSessionInfo {
 } QCocoaModalSessionInfo;
 
 class QCocoaEventDispatcherPrivate;
-class QCocoaEventDispatcher : public QAbstractEventDispatcher
+class QCocoaEventDispatcher : public QAbstractEventDispatcherV2
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QCocoaEventDispatcher)
@@ -82,22 +82,22 @@ class QCocoaEventDispatcher : public QAbstractEventDispatcher
 public:
     QCocoaEventDispatcher(QAbstractEventDispatcherPrivate &priv, QObject *parent = nullptr);
     explicit QCocoaEventDispatcher(QObject *parent = nullptr);
-    ~QCocoaEventDispatcher();
+    ~QCocoaEventDispatcher() override;
 
-    bool processEvents(QEventLoop::ProcessEventsFlags flags);
+    bool processEvents(QEventLoop::ProcessEventsFlags flags) override;
 
-    void registerSocketNotifier(QSocketNotifier *notifier);
-    void unregisterSocketNotifier(QSocketNotifier *notifier);
+    void registerSocketNotifier(QSocketNotifier *notifier) override;
+    void unregisterSocketNotifier(QSocketNotifier *notifier) override;
 
-    void registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object);
-    bool unregisterTimer(int timerId);
-    bool unregisterTimers(QObject *object);
-    QList<TimerInfo> registeredTimers(QObject *object) const;
+    void registerTimer(Qt::TimerId timerId, Duration interval, Qt::TimerType timerType,
+                       QObject *object) final;
+    bool unregisterTimer(Qt::TimerId timerId) final;
+    bool unregisterTimers(QObject *object) final;
+    QList<TimerInfoV2> timersForObject(QObject *object) const final;
+    Duration remainingTime(Qt::TimerId timerId) const final;
 
-    int remainingTime(int timerId);
-
-    void wakeUp();
-    void interrupt();
+    void wakeUp() override;
+    void interrupt() override;
 
     static void clearCurrentThreadCocoaEventDispatcherInterruptFlag();
 
@@ -110,6 +110,7 @@ class QCocoaEventDispatcherPrivate : public QAbstractEventDispatcherPrivate
 
 public:
     QCocoaEventDispatcherPrivate();
+    ~QCocoaEventDispatcherPrivate() override;
 
     uint processEventsFlags;
 

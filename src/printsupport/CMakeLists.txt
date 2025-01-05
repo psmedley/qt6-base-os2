@@ -14,7 +14,7 @@ qt_internal_add_module(PrintSupport
         kernel/qplatformprintplugin.cpp kernel/qplatformprintplugin.h
         kernel/qprint.cpp kernel/qprint_p.h
         kernel/qprintdevice.cpp kernel/qprintdevice_p.h
-        kernel/qprintengine.h
+        kernel/qprintengine.cpp kernel/qprintengine.h
         kernel/qprintengine_pdf.cpp kernel/qprintengine_pdf_p.h
         kernel/qprinter.cpp kernel/qprinter.h kernel/qprinter_p.h
         kernel/qprinterinfo.cpp kernel/qprinterinfo.h kernel/qprinterinfo_p.h
@@ -23,6 +23,7 @@ qt_internal_add_module(PrintSupport
         QT_NO_CONTEXTLESS_CONNECT
         QT_NO_FOREACH
         QT_NO_USING_NAMESPACE
+        QT_USE_NODISCARD_FILE_OPEN
     INCLUDE_DIRECTORIES
         dialogs
         widgets
@@ -38,7 +39,6 @@ qt_internal_add_module(PrintSupport
         Qt::CorePrivate
         Qt::GuiPrivate
         Qt::WidgetsPrivate
-    GENERATE_CPP_EXPORTS
     QPA_HEADER_FILTERS
         "(^|/)qplatform.+\\.h$"
 )
@@ -102,7 +102,7 @@ if(QT_FEATURE_cups AND (UNIX OR OS2) AND NOT APPLE)
     qt_record_extra_third_party_dependency(PrintSupport Cups::Cups)
 endif()
 
-qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cupsjobwidget AND (UNIX OR OS2) AND NOT APPLE
+qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cupsjobwidget AND (UNIX OR OS2) AND NOT MACOS
     SOURCES
         widgets/qcupsjobwidget.cpp widgets/qcupsjobwidget.ui widgets/qcupsjobwidget_p.h
     ENABLE_AUTOGEN_TOOLS

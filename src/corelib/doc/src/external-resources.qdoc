@@ -171,3 +171,13 @@
     \externalpage https://cmake.org/cmake/help/latest/guide/importing-exporting/index.html#creating-packages
     \title Creating CMake packages
 */
+
+/*!
+    \externalpage https://docs.oracle.com/javase/specs/jls/se8/html/jls-10.html
+    \title Java arrays
+*/
+
+/*!
+    \externalpage https://developer.android.com/develop/connectivity/bluetooth/bt-permissions
+    \title Android Bluetooth Permissions
+*/

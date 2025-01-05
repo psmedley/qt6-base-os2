@@ -5,23 +5,10 @@
 
 #ifdef Q_OS_WIN
 
-#  include <private/qcomobject_p.h>
-
-#  include <wrl/client.h>
-
-using Microsoft::WRL::ComPtr;
+#include <private/qcomobject_p.h>
+#include <QtCore/private/qcomptr_p.h>
 
 QT_BEGIN_NAMESPACE
-
-template <typename T, typename... Args>
-ComPtr<T> makeComObject(Args &&...args)
-{
-    ComPtr<T> p;
-    // Don't use Attach because of MINGW64 bug
-    // #892 Microsoft::WRL::ComPtr::Attach leaks references
-    *p.GetAddressOf() = new T(std::forward<Args>(args)...);
-    return p;
-}
 
 MIDL_INTERFACE("878fab04-7da0-41ea-9c49-058c7fa0d80a")
 IIntermediate : public IUnknown{};
@@ -69,6 +56,7 @@ struct QComObjectTraits<IDirect>
 };
 
 } // namespace QtPrivate
+QT_END_NAMESPACE
 
 class tst_QComObject : public QObject
 {
@@ -262,7 +250,5 @@ void tst_QComObject::Release_decrementsReferenceCountByOne()
 
 QTEST_MAIN(tst_QComObject)
 #  include "tst_qcomobject.moc"
-
-QT_END_NAMESPACE
 
 #endif // Q_OS_WIN

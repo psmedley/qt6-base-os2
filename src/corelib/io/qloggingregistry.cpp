@@ -32,8 +32,7 @@ Q_GLOBAL_STATIC(QLoggingRegistry, qtLoggingRegistry)
     \internal
     Constructs a logging rule with default values.
 */
-QLoggingRule::QLoggingRule() :
-    enabled(false)
+QLoggingRule::QLoggingRule()
 {
 }
 
@@ -41,9 +40,7 @@ QLoggingRule::QLoggingRule() :
     \internal
     Constructs a logging rule.
 */
-QLoggingRule::QLoggingRule(QStringView pattern, bool enabled) :
-    messageType(-1),
-    enabled(enabled)
+QLoggingRule::QLoggingRule(QStringView pattern, bool enabled) : enabled(enabled)
 {
     parse(pattern);
 }
@@ -281,7 +278,7 @@ void QLoggingRegistry::initializeRules()
 {
     if (qtLoggingDebug()) {
         debugMsg("Initializing the rules database ...");
-        debugMsg("Checking %s environment variable", "QTLOGGING_CONF");
+        debugMsg("Checking %s environment variable", "QT_LOGGING_CONF");
     }
     QList<QLoggingRule> er, qr, cr;
     // get rules from environment
@@ -370,7 +367,7 @@ void QLoggingRegistry::unregisterCategory(QLoggingCategory *cat)
 void QLoggingRegistry::registerEnvironmentOverrideForCategory(const char *categoryName,
                                                               const char *environment)
 {
-    qtCategoryEnvironmentOverrides.insert(categoryName, environment);
+    qtCategoryEnvironmentOverrides.insert_or_assign(categoryName, environment);
 }
 
 /*!
@@ -462,7 +459,7 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
             if (it == reg->qtCategoryEnvironmentOverrides.end())
                 debug = false;
             else
-                debug = qEnvironmentVariableIntValue(it.value());
+                debug = qEnvironmentVariableIntValue(it->second);
         }
     }
 
