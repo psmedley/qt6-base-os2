@@ -80,11 +80,13 @@ public:
 
     // OS/2 specifics
 
-    QOS2KeyMapper *keyMapper() const { return mKeyMapper; }
+    QPlatformKeyMapper *keyMapper() const override;
 
     //QOS2Services  *mplatformServices() const { return mplatformServices; }
 
     static QOS2Integration *instance() { return sInstance; }
+
+    QOS2KeyMapper *mKeyMapper = nullptr;
 
 private:
     QPlatformScreen *mScreen = nullptr;
@@ -92,8 +94,6 @@ private:
 #if QT_CONFIG(clipboard)
     QOS2Clipboard *mClipboard = nullptr;
 #endif
-
-    QOS2KeyMapper *mKeyMapper = nullptr;
 
     QOS2Services  *mplatformServices = nullptr;
 

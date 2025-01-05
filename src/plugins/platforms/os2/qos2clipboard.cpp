@@ -37,6 +37,7 @@
 **
 ****************************************************************************/
 
+#undef QT_NO_FOREACH // this file contains unported legacy Q_FOREACH uses
 #include "qos2context.h"
 
 #include "qos2clipboard.h"

@@ -147,18 +147,18 @@ public:
     void stopThread();
 
     inline void maybeStartThread() {
-        if (!socketNotifiers.isEmpty() || timerList.count() > timerList.zeroTimerCount())
+        if (!socketNotifiers.isEmpty() /*|| timerList.count() > timerList.zeroTimerCount()*/) // FIXME 6.7
             startThread();
     }
 
     inline void maybeStopThread() {
-        if (tid != -1 && socketNotifiers.isEmpty() && timerList.count() == timerList.zeroTimerCount())
+        if (tid != -1 && socketNotifiers.isEmpty() /* && timerList.count() == timerList.zeroTimerCount()*/) // FIXME 6.7
             stopThread();
     }
 
     inline void maybeStopOrStartThread() {
         if (tid != -1) {
-            if (socketNotifiers.isEmpty() && timerList.count() == timerList.zeroTimerCount())
+            if (socketNotifiers.isEmpty() /*&& timerList.count() == timerList.zeroTimerCount()*/) // FIXME 6.7
                 stopThread();
             else
                 startThread();
@@ -401,11 +401,12 @@ void QEventDispatcherOS2Private::prepareForSelect(bool wakeUp)
     timeout = nullptr;
     waitTime = { 0l, 0l };
     timespec waitTimeTS = { 0l, 0l };
+#if 0  // FIXME 6.7
     if (timerList.timerWait(waitTimeTS)) {
         waitTime = timespecToTimeval(waitTimeTS);
         timeout = &waitTime;
     }
-
+#endif
     // Inform the select thread we have new data. Note that there may be no new data because all
     // exising sockets are pending and there are no timers. In this case we will leave the select
     // thread Waiting: #maybeStartThread called on any socket/timer change (and also after
@@ -444,7 +445,7 @@ int QEventDispatcherOS2Private::processTimersAndSockets()
 
 void QEventDispatcherOS2Private::startThread()
 {
-    Q_ASSERT(!socketNotifiers.isEmpty() || timerList.count() > timerList.zeroTimerCount());
+    Q_ASSERT(!socketNotifiers.isEmpty()/* || timerList.count() > timerList.zeroTimerCount()*/); // FIXME 6.7
 
     QMutexLocker locker(&mutex);
 

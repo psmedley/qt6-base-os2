@@ -41,6 +41,7 @@
 #define QOS2KEYMAPPER_H
 
 #include "qos2context.h"
+#include <qpa/qplatformkeymapper.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -66,7 +67,7 @@ struct KeyboardLayoutItem {
     enum { QtKeySize = sizeof(qtKey) / sizeof(qtKey[0]) };
 };
 
-class QOS2KeyMapper
+class QOS2KeyMapper : public QPlatformKeyMapper
 {
     Q_DISABLE_COPY(QOS2KeyMapper)
 
@@ -80,7 +81,7 @@ public:
     QWindow *keyGrabber() const { return mKeyGrabber; }
     void setKeyGrabber(QWindow *w) { mKeyGrabber = w; }
 
-    Qt::KeyboardModifiers queryKeyboardModifiers();
+    Qt::KeyboardModifiers queryKeyboardModifiers() const override;
     QList<int> possibleKeys(const QKeyEvent *e) const;
 
 private:

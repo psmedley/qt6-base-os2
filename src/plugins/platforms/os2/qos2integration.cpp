@@ -178,6 +178,11 @@ QVariant QOS2Integration::styleHint(QPlatformIntegration::StyleHint hint) const
     return QPlatformIntegration::styleHint(hint);
 }
 
+QPlatformKeyMapper *QOS2Integration::keyMapper() const
+{
+    return mKeyMapper;
+}
+
 Qt::KeyboardModifiers QOS2Integration::queryKeyboardModifiers() const
 {
     return mKeyMapper->queryKeyboardModifiers();

@@ -848,7 +848,7 @@ bool QOS2Window::setKeyboardGrabEnabled(bool grab)
 {
     qCInfo(lcQpaWindows) << this << grab;
 
-    QOS2KeyMapper *keyMapper = QOS2Integration::instance()->keyMapper();
+    QOS2KeyMapper *keyMapper = QOS2Integration::instance()->mKeyMapper;
 
     if (grab) {
         keyMapper->setKeyGrabber(window());
@@ -955,7 +955,7 @@ void QOS2Window::handleWmSetFocus(MPARAM mp1, MPARAM mp2)
 
     qCInfo(lcQpaEvents) << this << Qt::hex << DV(hwnd) << DV(gotFocus) << DV(nextActiveWindow);
 
-    QWindowSystemInterface::handleWindowActivated(nextActiveWindow);
+    QWindowSystemInterface::handleFocusWindowChanged(nextActiveWindow);
 }
 
 bool QOS2Window::handleWmPaint()
@@ -1215,7 +1215,7 @@ void QOS2Window::handleMouse(ULONG msg, MPARAM mp1, MPARAM mp2)
 
     Qt::KeyboardModifiers modifiers;
     const USHORT flags = SHORT2FROMMP(mp2);
-    const int extraKeyState = QOS2Integration::instance()->keyMapper()->extraKeyState();
+    const int extraKeyState = QOS2Integration::instance()->mKeyMapper->extraKeyState();
 
     // Get key modifiers.
     if (flags & KC_SHIFT)
@@ -1371,7 +1371,7 @@ void QOS2Window::handleWheel(ULONG msg, MPARAM mp1, MPARAM mp2)
     }
 
     Qt::KeyboardModifiers modifiers;
-    const int extraKeyState = QOS2Integration::instance()->keyMapper ()->extraKeyState ();
+    const int extraKeyState = QOS2Integration::instance()->mKeyMapper->extraKeyState ();
 
     // Get key modifiers.
     if (WinGetKeyState(HWND_DESKTOP, VK_SHIFT ) & 0x8000)
@@ -1401,7 +1401,7 @@ bool QOS2Window::handleWmChar(MPARAM mp1, MPARAM mp2)
 
     qCDebug(lcQpaEvents) << this << Qt::hex << DV(chm.fs) << DV(chm.scancode) << DV(chm.vkey) << DV(chm.chr) << Qt::dec << DV(chm.cRepeat);
 
-    return QOS2Integration::instance()->keyMapper()->translateKeyEvent(this, mHwnd, chm);
+    return QOS2Integration::instance()->mKeyMapper->translateKeyEvent(this, mHwnd, chm);
 }
 
 bool QOS2Window::handleWmTranslateAccel(MPARAM mp1, MPARAM mp2)

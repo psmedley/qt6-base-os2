@@ -681,7 +681,7 @@ bool QOS2KeyMapper::translateKeyEvent(QOS2Window *window, HWND hwnd, CHRMSG &chm
     return k0 || k1;
 }
 
-Qt::KeyboardModifiers QOS2KeyMapper::queryKeyboardModifiers()
+Qt::KeyboardModifiers QOS2KeyMapper::queryKeyboardModifiers() const
 {
     // TODO: As opposed to QGuiApplication::keyboardModifiers(), this function should return
     // real, asynchronous key modifier states. We should use WinGetPhysKeyState for that but the

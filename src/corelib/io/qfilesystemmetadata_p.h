@@ -281,7 +281,7 @@ inline uint QFileSystemMetaData::ownerId(QAbstractFileEngine::FileOwner owner) c
 #endif
 
 #if defined(Q_OS_UNIX) || defined (Q_OS_DOSLIKE)
-+inline QDateTime QFileSystemMetaData::fileTime(QFile::FileTime time) const
+inline QDateTime QFileSystemMetaData::fileTime(QFile::FileTime time) const
 {
     switch (time) {
     case QFile::FileModificationTime:
