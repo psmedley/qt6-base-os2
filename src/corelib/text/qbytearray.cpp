@@ -34,6 +34,10 @@
 #include <algorithm>
 #include <QtCore/q26numeric.h>
 
+#ifdef Q_OS_OS2
+extern "C" { void    *memrchr(const void *, int, size_t); }
+#endif
+
 #ifdef Q_OS_WIN
 #  if !defined(QT_BOOTSTRAPPED) && (defined(QT_NO_CAST_FROM_ASCII) || defined(QT_NO_CAST_FROM_BYTEARRAY))
 // MSVC requires this, but let's apply it to MinGW compilers too, just in case

@@ -27,8 +27,8 @@ QFileSystemIterator::QFileSystemIterator(const QFileSystemEntry &entry)
     if (!dir) {
         lastError = errno;
     } else {
-        if (!dirPath.endsWith(QDir::separator().toLatin1()))
-            dirPath.append(QDir::separator().toLatin1()));
+        if (!dirPath.endsWith(QDir::separator()))
+            dirPath.append(QDir::separator());
     }
 }
 

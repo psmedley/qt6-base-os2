@@ -281,7 +281,7 @@ QFileSystemModelPrivate::QFileSystemNode *QFileSystemModelPrivate::node(const QM
     return indexNode;
 }
 
-#ifdef Q_OS_DOSLIKE
+#ifdef Q_OS_WIN
 static QString qt_GetLongPathName(const QString &strShortPath)
 {
     if (strShortPath.isEmpty()
@@ -314,7 +314,9 @@ static QString qt_GetLongPathName(const QString &strShortPath)
         return QDir::fromNativeSeparators(strShortPath);
     }
 }
+#endif
 
+#ifdef Q_OS_DOSLIKE
 static inline void chopSpaceAndDot(QString &element)
 {
     if (element == "."_L1 || element == ".."_L1)

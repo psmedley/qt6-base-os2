@@ -54,13 +54,18 @@
 //
 
 #include "QtCore/qabstracteventdispatcher.h"
+#include "QtCore/qlist.h"
+#include "private/qabstracteventdispatcher_p.h"
+#include "QtCore/qvarlengtharray.h"
+#include "QtCore/qhash.h"
+#include "private/qtimerinfo_unix_p.h"
 #include "QtCore/qt_os2.h"
 
 QT_BEGIN_NAMESPACE
 
 class QEventDispatcherOS2Private;
 
-class Q_CORE_EXPORT QEventDispatcherOS2 : public QAbstractEventDispatcher
+class Q_CORE_EXPORT QEventDispatcherOS2 : public QAbstractEventDispatcherV2
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QEventDispatcherOS2)
@@ -77,12 +82,12 @@ public:
     void registerSocketNotifier(QSocketNotifier *notifier) override;
     void unregisterSocketNotifier(QSocketNotifier *notifier) override;
 
-    void registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object) override;
-    bool unregisterTimer(int timerId) override;
+    void registerTimer(Qt::TimerId timerId, Duration interval, Qt::TimerType timerType,
+                       QObject *object) override;
+    bool unregisterTimer(Qt::TimerId timerId) override;
     bool unregisterTimers(QObject *object) override;
-    QList<TimerInfo> registeredTimers(QObject *object) const override;
-
-    int remainingTime(int timerId) override;
+    QList<TimerInfoV2> timersForObject(QObject *object) const override;
+    Duration remainingTime(Qt::TimerId timerId) const override;
 
     void wakeUp() override;
     void interrupt() override;

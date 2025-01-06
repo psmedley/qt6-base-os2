@@ -231,11 +231,11 @@ void QDnsLookupRunnable::query(QDnsLookupReply *reply)
     // Perform DNS query.
     QVarLengthArray<unsigned char, PACKETSZ> buffer(PACKETSZ);
     std::memset(buffer.data(), 0, buffer.size());
-    int responseLength = local_res_nquery(&state, requestName, C_IN, requestType, buffer.data(), buffer.size());
+    int responseLength = local_res_nquery(&state, requestName.constData(), C_IN, requestType, buffer.data(), buffer.size());
     if (Q_UNLIKELY(responseLength > PACKETSZ)) {
         buffer.resize(responseLength);
         std::memset(buffer.data(), 0, buffer.size());
-        responseLength = local_res_nquery(&state, requestName, C_IN, requestType, buffer.data(), buffer.size());
+        responseLength = local_res_nquery(&state, requestName.constData(), C_IN, requestType, buffer.data(), buffer.size());
         if (Q_UNLIKELY(responseLength > buffer.size())) {
             // Ok, we give up.
             reply->error = QDnsLookup::ResolverError;

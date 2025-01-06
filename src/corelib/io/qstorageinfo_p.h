@@ -89,7 +89,7 @@ public:
     void retrieveVolumeInfo();
 #endif
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
     // Common helper functions
     template <typename String>
     static bool isParentOf(const String &parent, const QString &dirName)

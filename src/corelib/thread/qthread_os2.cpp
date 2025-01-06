@@ -492,6 +492,21 @@ bool QThread::wait(QDeadlineTimer deadline)
     return ret;
 }
 
+bool QThreadPrivate::wait(QMutexLocker<QMutex> &locker, QDeadlineTimer deadline)
+{
+#if 0 // FIXME 6.8
+    Q_ASSERT(locker.isLocked());
+    QThreadPrivate *d = this;
+
+    while (d->running) {
+        if (!d->thread_done.wait(locker.mutex(), deadline))
+            return false;
+    }
+    Q_ASSERT(d->data->threadId.loadRelaxed() == nullptr);
+#endif
+    return true;
+}
+
 void QThread::setTerminationEnabled(bool enabled)
 {
     QThread *thr = currentThread();

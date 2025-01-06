@@ -643,7 +643,7 @@ void QEventDispatcherOS2Private::threadMain(void *arg)
 }
 
 QEventDispatcherOS2::QEventDispatcherOS2(QObject *parent)
-    : QAbstractEventDispatcher(*new QEventDispatcherOS2Private, parent)
+    : QAbstractEventDispatcherV2(*new QEventDispatcherOS2Private, parent)
 {
 }
 
@@ -913,10 +913,10 @@ void QEventDispatcherOS2::unregisterSocketNotifier(QSocketNotifier *notifier)
     d->maybeStopOrStartThread();
 }
 
-void QEventDispatcherOS2::registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object)
+void QEventDispatcherOS2::registerTimer(Qt::TimerId timerId, Duration interval, Qt::TimerType timerType, QObject *object)
 {
 #ifndef QT_NO_DEBUG
-    if (timerId < 1 || interval < 0 || !object) {
+    if (qToUnderlying(timerId) < 1 || interval.count() < 0 || !object) {
         qWarning("QEventDispatcherOS2::registerTimer: invalid arguments");
         return;
     } else if (object->thread() != thread() || thread() != QThread::currentThread()) {
@@ -934,10 +934,10 @@ void QEventDispatcherOS2::registerTimer(int timerId, qint64 interval, Qt::TimerT
     d->maybeStartThread();
 }
 
-bool QEventDispatcherOS2::unregisterTimer(int timerId)
+bool QEventDispatcherOS2::unregisterTimer(Qt::TimerId timerId)
 {
 #ifndef QT_NO_DEBUG
-    if (timerId < 1) {
+    if (qToUnderlying(timerId) < 1) {
         qWarning("QEventDispatcherOS2::unregisterTimer: invalid argument");
         return false;
     } else if (thread() != QThread::currentThread()) {
@@ -984,13 +984,13 @@ bool QEventDispatcherOS2::unregisterTimers(QObject *object)
     return ok;
 }
 
-QList<QEventDispatcherOS2::TimerInfo>
-QEventDispatcherOS2::registeredTimers(QObject *object) const
+QList<QEventDispatcherOS2::TimerInfoV2>
+QEventDispatcherOS2::timersForObject(QObject *object) const
 {
 #ifndef QT_NO_DEBUG
     if (!object) {
         qWarning("QEventDispatcherOS2:registeredTimers: invalid argument");
-        return QList<TimerInfo>();
+        return QList<TimerInfov2>();
     }
 #endif
 
@@ -999,18 +999,18 @@ QEventDispatcherOS2::registeredTimers(QObject *object) const
     return d->timerList.registeredTimers(object);
 }
 
-int QEventDispatcherOS2::remainingTime(int timerId)
+auto QEventDispatcherOS2::remainingTime(Qt::TimerId timerId) const -> Duration
 {
 #ifndef QT_NO_DEBUG
-    if (timerId < 1) {
+    if (int(timerId) < 1) {
         qWarning("QEventDispatcherOS2::remainingTime: invalid argument");
-        return -1;
+        return Duration::min();
     }
 #endif
 
-    Q_D(QEventDispatcherOS2);
+    Q_D(const QEventDispatcherOS2);
 
-    return d->timerList.timerRemainingTime(timerId);
+    return d->timerList.remainingDuration(timerId);
 }
 
 void QEventDispatcherOS2::wakeUp()

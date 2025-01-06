@@ -660,8 +660,8 @@ endif()
         ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
         DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
         NO_PCH_SOURCES ${arg_NO_PCH_SOURCES}
-        ${extend_target_args}
         OS2_SHORT_NAME ${arg_OS2_SHORT_NAME}
+        ${extend_target_args}
     )
 
     # The public module define is not meant to be used when building the module itself,

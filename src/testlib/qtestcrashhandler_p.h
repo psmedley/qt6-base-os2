@@ -20,7 +20,7 @@
 
 #include <QtCore/private/qtools_p.h>
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <signal.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
@@ -39,7 +39,7 @@
 QT_BEGIN_NAMESPACE
 namespace QTest {
 namespace CrashHandler {
-#if defined(Q_OS_UNIX) && (!defined(Q_OS_WASM) || QT_CONFIG(thread))
+#if defined(Q_OS_UNIXLIKE) && (!defined(Q_OS_WASM) || QT_CONFIG(thread))
     struct iovec IoVec(struct iovec vec);
     struct iovec IoVec(const char *str);
 

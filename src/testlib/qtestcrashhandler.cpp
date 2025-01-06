@@ -66,7 +66,7 @@
 #include <fcntl.h>
 #endif
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <QtCore/private/qcore_unix_p.h>
 
 #include <errno.h>
@@ -109,7 +109,7 @@ using namespace Qt::StringLiterals;
 
 namespace QTest {
 namespace CrashHandler {
-#if defined(Q_OS_UNIX) && (!defined(Q_OS_WASM) || QT_CONFIG(thread))
+#if defined(Q_OS_UNIXLIKE) && (!defined(Q_OS_WASM) || QT_CONFIG(thread))
 struct iovec IoVec(struct iovec vec)
 {
     return vec;
