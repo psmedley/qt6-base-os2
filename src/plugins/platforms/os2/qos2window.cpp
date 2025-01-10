@@ -223,6 +223,61 @@ void RemoveSysMenuAccels(HWND hwndFrame)
     }
 }
 
+PFNWP QtOldTitlebarProc = 0;
+
+MRESULT EXPENTRY QtTitlebarProc(HWND hwnd, ULONG msg, MPARAM mp1, MPARAM mp2)
+{
+    // This forces the titlebar to render UTF-8 text using CP-1208
+    // while the rest of PM continues to use the default codepage.
+    // Each time the font is changed this process must be repeated.
+
+    switch (msg) {
+        case WM_PRESPARAMCHANGED: {
+            if (mp1 != (MPARAM)PP_FONTNAMESIZE)
+                break;
+
+            // this should only be NULL on the first invocation when
+            // QOS2Window() sends us a dummy presparam-changed msg
+            QByteArray *titleFNS = (QByteArray*)WinQueryWindowPtr(hwnd, QWL_USER);
+            if (!titleFNS) {
+                if (!(titleFNS = new QByteArray("")))
+                    break;
+                WinSetWindowPtr(hwnd, QWL_USER, (void*)titleFNS);
+            }
+
+            char        buf[64];
+            ulong       cb = WinQueryPresParam(hwnd, PP_FONTNAMESIZE, 0, 0,
+                                               sizeof(buf)-1, buf, 0);
+
+            // If the new font doesn't match the (possibly null) old font,
+            // change the codepage then force PM to recreate the font's
+            // GPI FATTRS using CP1208. This will generate a recursive
+            // presparam-changed msg that's ignored because the old & new
+            // fonts now match. Finally, restore the old CP.
+            if (cb && strcmp(titleFNS->constData(), buf)) {
+                *titleFNS = buf;
+                ulong oldCP = WinQueryCp(HMQ_CURRENT);
+                WinSetCp(HMQ_CURRENT, 1208);
+                WinSetPresParam(hwnd, PP_FONTNAMESIZE, cb, buf);
+                WinSetCp(HMQ_CURRENT, oldCP);
+            }
+
+            break;
+        }
+
+        case WM_DESTROY: {
+            // cleanup
+            QByteArray *titleFNS = (QByteArray*)WinQueryWindowPtr(hwnd, QWL_USER);
+            if (titleFNS)
+                delete titleFNS;
+            WinSetWindowPtr(hwnd, QWL_USER, 0);
+            break;
+        }
+    }
+
+    return QtOldTitlebarProc(hwnd, msg, mp1, mp2);
+}
+
 inline bool TestShowWithoutActivating(const QWindow *window)
 {
     // QWidget-attribute Qt::WA_ShowWithoutActivating .
@@ -383,6 +438,27 @@ QOS2Window::QOS2Window(QWindow *window)
         // Remember QtOldFrameProc only once: it's the same for all WC_FRAME windows.
         if (!QtOldFrameProc)
             QtOldFrameProc = oldProc;
+
+        // should the titlebar use UTF8?
+        QByteArray val = qgetenv("QT_UTF8").toLower();
+        mUtf8Titlebar = val.startsWith("1") ||
+                        val.startsWith("y") ||
+                        val.startsWith("on");
+
+        // if so subclass it to intercept font-change msgs
+        HWND hwndTitle;
+        if (mUtf8Titlebar &&
+            (frameFlags & FCF_TITLEBAR) &&
+            (hwndTitle = WinWindowFromID(mHwndFrame, FID_TITLEBAR))) {
+
+            oldProc = WinSubclassWindow(hwndTitle, QtTitlebarProc);
+            if (!QtOldTitlebarProc)
+                QtOldTitlebarProc = oldProc;
+
+            // this simulates a font-change msg to kick-start the
+            // process of getting the titlebar to use CP-1208 text
+            WinSendMsg(hwndTitle, WM_PRESPARAMCHANGED, (MPARAM)PP_FONTNAMESIZE, 0);
+        }
 
         RemoveSysMenuAccels(mHwndFrame);
 
@@ -809,9 +885,9 @@ void QOS2Window::setWindowTitle(const QString &title)
     if (mHwndFrame) {
         QByteArray titleText;
 
-        // convert the title to UTF8 for CP1208
-        // and to "plain text" otherwise
-        if (WinQueryCp(1) == 1208)
+        // convert the title to UTF8 if requested for
+        // this window, and to "plain text" otherwise
+        if (mUtf8Titlebar)
             titleText = title.toUtf8();
         else
             titleText = title.toLocal8Bit();

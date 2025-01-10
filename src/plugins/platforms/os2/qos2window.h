@@ -129,6 +129,7 @@ private:
     QMargins mFrameMargins;
     HSWITCH mSwEntry = NULLHANDLE;
     USHORT normX = 0, normY = 0, normCX = 0, normCY = 0;
+    bool mUtf8Titlebar = false;
 
     static QHash<HWND, QOS2Window *> sKnownWindows;
 
