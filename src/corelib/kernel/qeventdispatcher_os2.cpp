@@ -306,17 +306,6 @@ void QEventDispatcherOS2Private::createMsgQueue()
         if (hmq == NULLHANDLE)
             qWarning("QEventDispatcherOS2Private: WinCreateMsgQueue failed with 0x%08lX",
                      WinGetLastError(hab));
-        else {
-            // change the queue's PM codepage if the app has added
-            // "QT_PM_CP" to the environment and set it to a numeric
-            // value (e.g. 1208 for UTF8)
-            bool ok;
-            int  cp;
-            cp = qEnvironmentVariableIntValue("QT_PM_CP", &ok);
-            if (ok && cp > 0 && WinSetCp(hmq, static_cast<ulong>(cp)) == 0)
-                qWarning("QEventDispatcherOS2Private: WinSetCp failed with 0x%08lX",
-                         WinGetLastError(hab));
-        }
     }
 
     TRACE(Qt::hex << V(hab) << V(hmq));
