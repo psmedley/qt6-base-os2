@@ -501,7 +501,11 @@ bool QFSFileEngine::isRelativePath() const
 {
     Q_D(const QFSFileEngine);
     const QString fp = d->fileEntry.filePath();
+#ifndef Q_OS_OS2
     return fp.isEmpty() || fp.at(0) != u'/';
+#else
+    return fp.isEmpty() || (fp.at(0) != u'/' && fp.at(1) != u':');
+#endif
 }
 
 uint QFSFileEngine::ownerId(FileOwner own) const
