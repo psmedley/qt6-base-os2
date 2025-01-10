@@ -439,6 +439,7 @@ void QStorageInfoPrivate::initRootPath()
         return;
     }
 
+#ifndef Q_OS_OS2 // not sure about this - FIXME 6.8
     int maxLength = 0;
     const QString oldRootPath = rootPath;
     rootPath.clear();
@@ -455,6 +456,7 @@ void QStorageInfoPrivate::initRootPath()
             subvolume = it.subvolume();
         }
     }
+#endif
 }
 
 QList<QStorageInfo> QStorageInfoPrivate::mountedVolumes()
@@ -465,6 +467,7 @@ QList<QStorageInfo> QStorageInfoPrivate::mountedVolumes()
 
     QList<QStorageInfo> volumes;
 
+#ifndef Q_OS_OS2 // FIXME 6.8
     while (it.next()) {
         if (!shouldIncludeFs(it.rootPath(), it.fileSystemType()))
             continue;
@@ -478,7 +481,7 @@ QList<QStorageInfo> QStorageInfoPrivate::mountedVolumes()
             continue;
         volumes.append(info);
     }
-
+#endif
     return volumes;
 }
 
