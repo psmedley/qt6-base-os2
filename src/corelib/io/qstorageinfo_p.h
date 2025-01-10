@@ -20,6 +20,9 @@
 #include <QtCore/qtenvironmentvariables.h>
 #include <QtCore/private/qglobal_p.h>
 #include "qstorageinfo.h"
+#ifdef Q_OS_OS2
+#include "QtCore/qt_os2.h"
+#endif
 
 #ifdef Q_OS_UNIX
 #include <sys/types.h> // dev_t
@@ -40,8 +43,15 @@ public:
 
     static QStorageInfo root()
     {
-#ifdef Q_OS_DOSLIKE
+#ifdef Q_OS_WIN
         return QStorageInfo(QDir::fromNativeSeparators(QFile::decodeName(qgetenv("SystemDrive"))));
+#elif defined(Q_OS_OS2)
+        char root[] = "C:/"; // fallback to C: on any error
+        ULONG drive;
+        APIRET arc = DosQuerySysInfo(QSV_BOOT_DRIVE, QSV_BOOT_DRIVE, &drive, sizeof(drive));
+        if (arc == NO_ERROR && drive >= 1 && drive <= 26)
+        root[0] = 'A' + --drive;
+        return QStorageInfo(QLatin1String(root));
 #else
         return QStorageInfo(QStringLiteral("/"));
 #endif
@@ -89,7 +99,7 @@ public:
     void retrieveVolumeInfo();
 #endif
 
-#ifdef Q_OS_UNIXLIKE
+#ifdef Q_OS_UNIX
     // Common helper functions
     template <typename String>
     static bool isParentOf(const String &parent, const QString &dirName)
