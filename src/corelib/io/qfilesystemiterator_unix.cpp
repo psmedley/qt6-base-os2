@@ -27,8 +27,14 @@ QFileSystemIterator::QFileSystemIterator(const QFileSystemEntry &entry)
     if (!dir) {
         lastError = errno;
     } else {
+#ifndef Q_OS_OS2
         if (!dirPath.endsWith(QDir::separator()))
             dirPath.append(QDir::separator());
+#else
+        // if we use separator() we get \\ mixed with / and chaos ensues
+        if (!dirPath.endsWith(u'/'))
+            dirPath.append(u'/');
+#endif
     }
 }
 
