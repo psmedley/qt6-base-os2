@@ -665,8 +665,9 @@ bool QOS2KeyMapper::translateKeyEvent(QOS2Window *window, HWND hwnd, CHRMSG &chm
         // PM natively, or our window gets focus while a key is already press, but now gets
         // the key release event.
         KeyRecord* rec = KeyRecorder.findKey(chm.scancode, true);
-        if (!rec) {
-            // Someone ate the key down event
+        if (!rec || (chm.vkey == VK_ALTGRAF && !(chm.fs & KC_LONEKEY))) {
+            // do nothing if we didn't see the key down event; also, suppress the key-up for
+            // AltGr when used in combination with another key to avoid activating the menubar
         } else {
             qCDebug(lcQpaEvents) << "KEY RELEASE" <<  DV(receiver) << DV(rec->code) << Qt::KeyboardModifiers(state) << DV(rec->text);
             k0 = QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyRelease, rec->code,
