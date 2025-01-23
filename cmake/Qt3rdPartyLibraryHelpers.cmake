@@ -67,6 +67,7 @@ function(qt_internal_add_cmake_library target)
         OUTPUT_DIRECTORY
         ARCHIVE_INSTALL_DIRECTORY
         INSTALL_DIRECTORY
+        OS2_SHORT_NAME
     )
     set(multi_args
         ${__default_private_args}
@@ -105,6 +106,14 @@ function(qt_internal_add_cmake_library target)
         )
     endif()
 
+if (OS2)
+    if(arg_OS2_SHORT_NAME)
+       set_target_properties(${target} PROPERTIES
+            TARGET_SHORT ${arg_OS2_SHORT_NAME}
+       )
+    endif()
+endif()
+
     qt_internal_extend_target("${target}"
         SOURCES ${arg_SOURCES}
         INCLUDE_DIRECTORIES
@@ -127,6 +136,7 @@ function(qt_internal_add_cmake_library target)
         ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
         DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
         NO_UNITY_BUILD # Disabled by default
+        OS2_SHORT_NAME ${arg_OS2_SHORT_NAME}
     )
 endfunction()
 

@@ -13,6 +13,7 @@ qt_internal_add_cmake_library(tst_qfactoryloader_plugin1
         plugin1.cpp plugin1.h
     LIBRARIES
         Qt::Core
+    OS2_SHORT_NAME tst_qfa1
 )
 
 if(ANDROID)
