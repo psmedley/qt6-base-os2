@@ -141,7 +141,7 @@ bool TimeReference::sign(qint64 secs, qint64 nsecs)
     return nsecs > 0;
 }
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN)
+#if defined(Q_OS_UNIXLIKE) && !defined(Q_OS_DARWIN)
 inline bool TimeReference::addNanoseconds(qint64 arg)
 {
     return addSecsAndNSecs(arg / giga, arg % giga);

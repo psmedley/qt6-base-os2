@@ -36,7 +36,7 @@
 
 #include <private/qabstractanimation_p.h>
 
-#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID) || defined(Q_OS_OS2)
+#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
 #  define BAD_TIMER_RESOLUTION
 #endif
 
