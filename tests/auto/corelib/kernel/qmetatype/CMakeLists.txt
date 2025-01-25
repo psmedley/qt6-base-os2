@@ -20,6 +20,7 @@ qt_internal_add_cmake_library(qmetatype_lib1
         lib1.cpp
     PUBLIC_LIBRARIES
         Qt::Core
+    OS2_SHORT_NAME qmetaty1
 )
 qt_internal_add_cmake_library(qmetatype_lib2
     INSTALL_DIRECTORY "${INSTALL_TESTSDIR}/tst_qmetatype"
@@ -27,7 +28,10 @@ qt_internal_add_cmake_library(qmetatype_lib2
         lib2.cpp
     PUBLIC_LIBRARIES
         Qt::Core
+    OS2_SHORT_NAME qmetaty2
 )
+
+if (NOT OS2)
 set_target_properties(qmetatype_lib1 PROPERTIES
     VERSION 1.0.0
     SOVERSION 0
@@ -42,7 +46,7 @@ set_target_properties(qmetatype_lib2 PROPERTIES
     CXX_VISIBILITY_PRESET "hidden"
     VISIBILITY_INLINES_HIDDEN ON
 )
-
+endif(NOT OS2)
 qt_internal_add_test(tst_qmetatype
     SOURCES
         tst_qmetatype.h tst_qmetatype.cpp tst_qmetatype2.cpp

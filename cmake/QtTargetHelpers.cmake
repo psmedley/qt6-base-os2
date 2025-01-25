@@ -46,6 +46,7 @@ function(qt_internal_extend_target target)
     set(single_args
         PRECOMPILED_HEADER
         EXTRA_LINKER_SCRIPT_CONTENT
+        OS2_SHORT_NAME
         ${__qt_internal_sbom_single_args}
     )
     set(multi_args
@@ -313,6 +314,14 @@ function(qt_internal_extend_target target)
         set_target_properties(${target} PROPERTIES
             _qt_extra_linker_script_exports "${arg_EXTRA_LINKER_SCRIPT_EXPORTS}")
     endif()
+
+if (OS2)
+    if(arg_OS2_SHORT_NAME)
+       set_target_properties(${target} PROPERTIES
+            TARGET_SHORT ${arg_OS2_SHORT_NAME}
+       )
+    endif()
+endif()
 
     if(is_executable)
         # If linking against Gui, make sure to also build the default QPA plugin.

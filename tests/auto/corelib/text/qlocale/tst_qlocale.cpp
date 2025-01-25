@@ -22,7 +22,9 @@
 
 #include <float.h>
 #include <math.h>
+#ifndef Q_OS_OS2
 #include <fenv.h>
+#endif
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN)
 #    include <stdlib.h>

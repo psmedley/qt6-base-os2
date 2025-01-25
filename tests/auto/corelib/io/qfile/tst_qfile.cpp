@@ -714,7 +714,7 @@ void tst_QFile::size_data()
     QTest::addColumn<qint64>("size");
 
     QTest::newRow( "exist01" ) << m_testFile << (qint64)245;
-#if defined(Q_OS_DOSLIKE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     // Only test UNC on Windows./
     const QString uncRoot = "//" + QString(QTest::uncServerName();
     // Disable some UNC tests if the server is not accessible
@@ -2580,7 +2580,7 @@ void tst_QFile::writeLargeDataBlock_data()
     QTest::newRow("localfile-Fd")     << "./largeblockfile.txt" << (int)OpenFd;
     QTest::newRow("localfile-Stream") << "./largeblockfile.txt" << (int)OpenStream;
 
-#if defined(Q_OS_DOSLIKE) && !defined(QT_NO_NETWORK)
+#if defined(Q_OS_WIN) && !defined(QT_NO_NETWORK)
     // Some semi-randomness to avoid collisions.
     const QString uncRoot = "//" + QString(QTest::uncServerName();
     // Disable some UNC tests if the server is not accessible
@@ -3120,7 +3120,7 @@ void tst_QFile::appendAndRead()
 
 void tst_QFile::miscWithUncPathAsCurrentDir()
 {
-#if defined(Q_OS_DOSLIKE)
+#if defined(Q_OS_WIN)
     const QString uncRoot = "//" + QString(QTest::uncServerName();
     // Disable some UNC tests if the server is not accessible
     if (QFile::exists(uncRoot)) {

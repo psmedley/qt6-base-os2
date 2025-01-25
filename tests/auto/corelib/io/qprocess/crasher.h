@@ -8,7 +8,7 @@
 #if __has_include(<signal.h>)
 #  include <signal.h>
 #endif
-#if __has_include(<sys/resource.h>)
+#if __has_include(<sys/resource.h>) && !defined(__OS2__)
 #  include <sys/resource.h>
 #endif
 

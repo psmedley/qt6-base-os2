@@ -32,6 +32,13 @@ namespace QTest {
 QT_END_NAMESPACE
 #endif
 
+#ifdef Q_OS_OS2
+QT_BEGIN_NAMESPACE
+namespace QTest {
+    static QString uncServerName() { return qgetenv("HOSTNAME"); }
+}
+QT_END_NAMESPACE
+#endif
 // QTemporaryDir-based helper class for creating file-system hierarchies and cleaning up.
 class FileSystem
 {
