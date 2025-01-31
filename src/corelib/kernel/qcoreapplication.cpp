@@ -116,10 +116,6 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_QOBJECT
-Q_LOGGING_CATEGORY(lcDeleteLater, "qt.core.qobject.deletelater")
-#endif
-
 using namespace Qt::StringLiterals;
 
 Q_TRACE_PREFIX(qtcore,
@@ -140,6 +136,11 @@ extern QString qAppFileName();
 #endif
 
 Q_CONSTINIT bool QCoreApplicationPrivate::setuidAllowed = false;
+
+Q_CONSTINIT QCoreApplication *QCoreApplication::self = nullptr;
+Q_CONSTINIT static QBasicAtomicPointer<QCoreApplication> g_self = nullptr;
+#  undef qApp
+#  define qApp g_self.loadRelaxed()
 
 #if !defined(Q_OS_WIN)
 #ifdef Q_OS_DARWIN
@@ -206,7 +207,7 @@ Q_CONSTINIT QString *QCoreApplicationPrivate::cachedApplicationFilePath = nullpt
 
 bool QCoreApplicationPrivate::checkInstance(const char *function)
 {
-    bool b = (QCoreApplication::self != nullptr);
+    bool b = (qApp != nullptr);
     if (!b)
         qWarning("QApplication::%s: Please instantiate the QApplication object first", function);
     return b;
@@ -366,19 +367,20 @@ Q_CONSTINIT QAbstractEventDispatcher *QCoreApplicationPrivate::eventDispatcher =
 
 #endif // QT_NO_QOBJECT
 
-Q_CONSTINIT QCoreApplication *QCoreApplication::self = nullptr;
 Q_CONSTINIT uint QCoreApplicationPrivate::attribs =
     (1 << Qt::AA_SynthesizeMouseForUnhandledTouchEvents) |
     (1 << Qt::AA_SynthesizeMouseForUnhandledTabletEvents);
 
-struct QCoreApplicationData {
+struct QCoreApplicationData
+{
     QCoreApplicationData() noexcept {
         applicationNameSet = false;
         applicationVersionSet = false;
     }
     ~QCoreApplicationData() {
-#ifndef QT_NO_QOBJECT
+#if !defined(QT_NO_QOBJECT) && defined(Q_OS_WIN)
         // cleanup the QAdoptedThread created for the main() thread
+        // (for Unix systems, see qthread_unix.cpp:set_thread_data())
         if (auto *t = QCoreApplicationPrivate::theMainThread.loadAcquire()) {
             QThreadData *data = QThreadData::get2(t);
             data->deref(); // deletes the data and the adopted thread
@@ -510,7 +512,7 @@ void QCoreApplicationPrivate::cleanupThreadData()
         const auto locker = qt_scoped_lock(thisThreadData->postEventList.mutex);
         for (const QPostEvent &pe : std::as_const(thisThreadData->postEventList)) {
             if (pe.event) {
-                --pe.receiver->d_func()->postedEvents;
+                pe.receiver->d_func()->postedEvents.fetchAndSubAcquire(1);
                 pe.event->m_posted = false;
                 delete pe.event;
             }
@@ -868,6 +870,7 @@ void Q_TRACE_INSTRUMENT(qtcore) QCoreApplicationPrivate::init()
 
     Q_ASSERT_X(!QCoreApplication::self, "QCoreApplication", "there should be only one application object");
     QCoreApplication::self = q;
+    g_self.storeRelaxed(q);
 
 #if QT_CONFIG(thread)
 #ifdef Q_OS_WASM
@@ -969,6 +972,7 @@ QCoreApplication::~QCoreApplication()
     qt_call_post_routines();
 
     self = nullptr;
+    g_self.storeRelaxed(nullptr);
 #ifndef QT_NO_QOBJECT
     QCoreApplicationPrivate::is_app_closing = true;
     QCoreApplicationPrivate::is_app_running = false;
@@ -1147,7 +1151,7 @@ void QCoreApplication::setQuitLockEnabled(bool enabled)
 bool QCoreApplication::notifyInternal2(QObject *receiver, QEvent *event)
 {
     bool selfRequired = QCoreApplicationPrivate::threadRequiresCoreApplication();
-    if (selfRequired && !self)
+    if (selfRequired && !qApp)
         return false;
 
     // Make it possible for Qt Script to hook into events even
@@ -1169,10 +1173,10 @@ bool QCoreApplication::notifyInternal2(QObject *receiver, QEvent *event)
         return doNotify(receiver, event);
 
 #if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
-    if (threadData->thread.loadRelaxed() != QCoreApplicationPrivate::mainThread())
+    if (!QThread::isMainThread())
         return false;
 #endif
-    return self->notify(receiver, event);
+    return qApp->notify(receiver, event);
 }
 
 /*!
@@ -1279,7 +1283,7 @@ static bool doNotify(QObject *receiver, QEvent *event)
 bool QCoreApplicationPrivate::sendThroughApplicationEventFilters(QObject *receiver, QEvent *event)
 {
     // We can't access the application event filters outside of the main thread (race conditions)
-    Q_ASSERT(receiver->d_func()->threadData.loadAcquire()->thread.loadRelaxed() == mainThread());
+    Q_ASSERT(QThread::isMainThread());
 
     if (extraData) {
         // application event filters are only called for objects in the GUI thread
@@ -1300,9 +1304,7 @@ bool QCoreApplicationPrivate::sendThroughApplicationEventFilters(QObject *receiv
 
 bool QCoreApplicationPrivate::sendThroughObjectEventFilters(QObject *receiver, QEvent *event)
 {
-    if ((receiver->d_func()->threadData.loadRelaxed()->thread.loadAcquire() != mainThread()
-         || receiver != QCoreApplication::instance())
-        && receiver->d_func()->extraData) {
+    if (receiver != qApp && receiver->d_func()->extraData) {
         for (qsizetype i = 0; i < receiver->d_func()->extraData->eventFilters.size(); ++i) {
             QObject *obj = receiver->d_func()->extraData->eventFilters.at(i);
             if (!obj)
@@ -1333,7 +1335,7 @@ bool QCoreApplicationPrivate::notify_helper(QObject *receiver, QEvent * event)
     Q_TRACE_EXIT(QCoreApplication_notify_exit, consumed, filtered);
 
     // send to all application event filters (only does anything in the main thread)
-    if (receiver->d_func()->threadData.loadRelaxed()->thread.loadAcquire() == mainThread()
+    if (QThread::isMainThread()
             && QCoreApplication::self
             && QCoreApplication::self->d_func()->sendThroughApplicationEventFilters(receiver, event)) {
         filtered = true;
@@ -1536,8 +1538,6 @@ void QCoreApplicationPrivate::execCleanup()
 {
     threadData.loadRelaxed()->quitNow = false;
     in_exec = false;
-
-    qCDebug(lcDeleteLater) << "Sending deferred delete events as part of exec cleanup";
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 }
 
@@ -1715,7 +1715,7 @@ void QCoreApplication::postEvent(QObject *receiver, QEvent *event, int priority)
     QThreadData *data = locker.threadData;
 
     // if this is one of the compressible events, do compression
-    if (receiver->d_func()->postedEvents
+    if (receiver->d_func()->postedEvents.loadAcquire()
         && self && self->compressEvent(event, receiver, &data->postEventList)) {
         Q_TRACE(QCoreApplication_postEvent_event_compressed, receiver, event);
         return;
@@ -1728,7 +1728,7 @@ void QCoreApplication::postEvent(QObject *receiver, QEvent *event, int priority)
     data->postEventList.addEvent(QPostEvent(receiver, event, priority));
     Q_UNUSED(eventDeleter.release());
     event->m_posted = true;
-    ++receiver->d_func()->postedEvents;
+    receiver->d_func()->postedEvents.fetchAndAddRelease(1);
     data->canWait = false;
     locker.unlock();
 
@@ -1830,7 +1830,8 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
     // events, canWait will be set to false.
     data->canWait = (data->postEventList.size() == 0);
 
-    if (data->postEventList.size() == 0 || (receiver && !receiver->d_func()->postedEvents)) {
+    if (data->postEventList.size() == 0
+            || (receiver && !receiver->d_func()->postedEvents.loadAcquire())) {
         --data->postEventList.recursion;
         return;
     }
@@ -1901,37 +1902,16 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
             //    events posted by the current event loop; or
             // 3) if the event was posted before the outermost event loop.
 
-            const auto *event = static_cast<QDeferredDeleteEvent *>(pe.event);
-            qCDebug(lcDeleteLater) << "Processing deferred delete event for" << pe.receiver
-                << "with loop level" << event->loopLevel() << "and scope level" << event->scopeLevel();
+            const int eventLoopLevel = static_cast<QDeferredDeleteEvent *>(pe.event)->loopLevel();
+            const int eventScopeLevel = static_cast<QDeferredDeleteEvent *>(pe.event)->scopeLevel();
 
-            qCDebug(lcDeleteLater) << "Checking" << data->thread << "with loop level"
-                << data->loopLevel << "and scope level" << data->scopeLevel;
-
-            bool allowDeferredDelete = false;
-            if (event->loopLevel() == 0 && data->loopLevel > 0) {
-                qCDebug(lcDeleteLater) << "Event was posted outside outermost event loop"
-                    << "and current thread has an event loop running.";
-                allowDeferredDelete = true;
-            } else {
-                const int totalEventLevel = event->loopLevel() + event->scopeLevel();
-                const int totalThreadLevel = data->loopLevel + data->scopeLevel;
-
-                if (totalEventLevel > totalThreadLevel) {
-                    qCDebug(lcDeleteLater) << "Combined levels of event" << totalEventLevel
-                        << "is higher than thread" << totalThreadLevel;
-                    allowDeferredDelete = true;
-                } else if (event_type == QEvent::DeferredDelete && totalEventLevel == totalThreadLevel) {
-                    qCDebug(lcDeleteLater) << "Explicit send of DeferredDelete and"
-                        << "levels of event" << totalEventLevel
-                        << "is same as thread" << totalThreadLevel;
-                    allowDeferredDelete = true;
-                }
-            }
-
+            const bool postedBeforeOutermostLoop = eventLoopLevel == 0;
+            const bool allowDeferredDelete =
+                (eventLoopLevel + eventScopeLevel > data->loopLevel + data->scopeLevel
+                 || (postedBeforeOutermostLoop && data->loopLevel > 0)
+                 || (event_type == QEvent::DeferredDelete
+                     && eventLoopLevel + eventScopeLevel == data->loopLevel + data->scopeLevel));
             if (!allowDeferredDelete) {
-                qCDebug(lcDeleteLater) << "Failed conditions for deferred delete. Deferring again";
-
                 // cannot send deferred delete
                 if (!event_type && !receiver) {
                     // we must copy it first; we want to re-post the event
@@ -1948,8 +1928,6 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
                     data->postEventList.addEvent(pe_copy);
                 }
                 continue;
-            } else {
-                qCDebug(lcDeleteLater) << "Sending deferred delete to" << pe.receiver;
             }
         }
 
@@ -1959,7 +1937,7 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
         QEvent *e = pe.event;
         QObject * r = pe.receiver;
 
-        --r->d_func()->postedEvents;
+        r->d_func()->postedEvents.fetchAndSubAcquire(1);
         Q_ASSERT(r->d_func()->postedEvents >= 0);
 
         // next, update the data structure so that we're ready
@@ -2010,7 +1988,7 @@ void QCoreApplication::removePostedEvents(QObject *receiver, int eventType)
     // happen while the event loop is in the middle of posting events,
     // and when we get here, we may not have any more posted events
     // for this object.
-    if (receiver && !receiver->d_func()->postedEvents)
+    if (receiver && !receiver->d_func()->postedEvents.loadAcquire())
         return;
 
     //we will collect all the posted events for the QObject
@@ -2024,7 +2002,7 @@ void QCoreApplication::removePostedEvents(QObject *receiver, int eventType)
 
         if ((!receiver || pe.receiver == receiver)
             && (pe.event && (eventType == 0 || pe.event->type() == eventType))) {
-            --pe.receiver->d_func()->postedEvents;
+            pe.receiver->d_func()->postedEvents.fetchAndSubAcquire(1);
             pe.event->m_posted = false;
             events.append(pe.event);
             const_cast<QPostEvent &>(pe).event = nullptr;
@@ -2085,7 +2063,7 @@ void QCoreApplicationPrivate::removePostedEvent(QEvent * event)
                      pe.receiver->metaObject()->className(),
                      pe.receiver->objectName().toLocal8Bit().data());
 #endif
-            --pe.receiver->d_func()->postedEvents;
+            pe.receiver->d_func()->postedEvents.fetchAndSubAcquire(1);
             pe.event->m_posted = false;
             delete pe.event;
             const_cast<QPostEvent &>(pe).event = nullptr;
@@ -2198,7 +2176,7 @@ void QCoreApplicationPrivate::quit()
 {
     Q_Q(QCoreApplication);
 
-    if (QThread::currentThread() == mainThread()) {
+    if (QThread::isMainThread()) {
         QEvent quitEvent(QEvent::Quit);
         QCoreApplication::sendEvent(q, &quitEvent);
     } else {
@@ -2975,7 +2953,7 @@ void QCoreApplication::requestPermission(const QPermission &requestedPermission,
     QtPrivate::SlotObjUniquePtr slotObj{slotObjRaw}; // adopts
     Q_ASSERT(slotObj);
 
-    if (QThread::currentThread() != QCoreApplicationPrivate::mainThread()) {
+    if (!QThread::isMainThread()) {
         qCWarning(lcPermissions, "Permissions can only be requested from the GUI (main) thread");
         return;
     }

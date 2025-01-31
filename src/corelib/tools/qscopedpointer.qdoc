@@ -1,9 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
-
-#include "qscopedpointer.h"
-
-QT_BEGIN_NAMESPACE
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \class QScopedPointer
@@ -227,6 +223,15 @@ QT_BEGIN_NAMESPACE
     \sa isNull()
 */
 
+/*!
+    \fn template <typename T, typename Cleanup> void QScopedPointer<T, Cleanup>::swap(QScopedPointer &other)
+
+    \deprecated [6.2] Use \c std::unique_ptr instead; this function may let a pointer
+    escape its scope.
+
+    \memberswap{scoped pointer}
+*/
+
 /*! \fn template <typename T, typename Cleanup> void QScopedPointer<T, Cleanup>::swap(QScopedPointer<T, Cleanup> &lhs, QScopedPointer<T, Cleanup> &rhs)
 
     \deprecated [6.2] Use \c std::unique_ptr instead; this function may let a pointer
@@ -308,7 +313,5 @@ QT_BEGIN_NAMESPACE
     \deprecated [6.2] Use \c std::unique_ptr instead; this function may let a pointer
     escape its scope.
 
-    Swap this pointer with \a other.
+    \memberswap{pointer}.
  */
-
-QT_END_NAMESPACE

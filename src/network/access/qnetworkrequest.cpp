@@ -591,9 +591,7 @@ QNetworkRequest &QNetworkRequest::operator=(const QNetworkRequest &other)
 /*!
     \fn void QNetworkRequest::swap(QNetworkRequest &other)
     \since 5.0
-
-    Swaps this network request with \a other. This function is very
-    fast and never fails.
+    \memberswap{network request}
 */
 
 /*!
@@ -732,6 +730,9 @@ QList<QByteArray> QNetworkRequest::rawHeaderList() const
     setting. To accomplish the behaviour of multiple HTTP headers of
     the same name, you should concatenate the two values, separating
     them with a comma (",") and set one single raw header.
+
+    \note Since Qt 6.8, the header field names are normalized
+    by converting them to lowercase.
 
     \sa KnownHeaders, setHeader(), hasRawHeader(), rawHeader()
 */

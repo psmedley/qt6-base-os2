@@ -138,7 +138,7 @@ struct QMetaTypeCustomRegistry
         if (ti->legacyRegisterOp)
             ti->legacyRegisterOp();
         return ti->typeId.loadRelaxed();
-    };
+    }
 
     void unregisterDynamicType(int id)
     {
@@ -3274,11 +3274,10 @@ static const QtPrivate::QMetaTypeInterface *interfaceForType(int typeId)
 QMetaType::QMetaType(int typeId) : QMetaType(interfaceForType(typeId)) {}
 
 
-/*! \fn size_t qHash(QMetaType type, size_t seed = 0)
-    \relates QMetaType
+/*!
+    \fn size_t qHash(QMetaType key, size_t seed)
+    \qhashold{QMetaType}
     \since 6.4
-
-    Returns the hash value for the \a type, using \a seed to seed the calculation.
 */
 
 namespace QtPrivate {

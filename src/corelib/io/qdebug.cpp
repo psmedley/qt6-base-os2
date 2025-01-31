@@ -318,7 +318,7 @@ void QDebug::putString(const QChar *begin, size_t length)
         // we'll reset the QTextStream formatting mechanisms, so save the state
         QDebugStateSaver saver(*this);
         stream->ts.d_ptr->params.reset();
-        putEscapedString(stream->ts.d_ptr.data(), reinterpret_cast<const char16_t *>(begin), length);
+        putEscapedString(stream->ts.d_ptr.get(), reinterpret_cast<const char16_t *>(begin), length);
     }
 }
 
@@ -338,7 +338,7 @@ void QDebug::putByteArray(const char *begin, size_t length, Latin1Content conten
         // we'll reset the QTextStream formatting mechanisms, so save the state
         QDebugStateSaver saver(*this);
         stream->ts.d_ptr->params.reset();
-        putEscapedString(stream->ts.d_ptr.data(), reinterpret_cast<const uchar *>(begin),
+        putEscapedString(stream->ts.d_ptr.get(), reinterpret_cast<const uchar *>(begin),
                          length, content == ContainsLatin1);
     }
 }
@@ -516,9 +516,7 @@ void QDebug::putUInt128([[maybe_unused]] const void *p)
 /*!
     \fn QDebug::swap(QDebug &other)
     \since 5.0
-
-    Swaps this debug stream instance with \a other. This function is
-    very fast and never fails.
+    \memberswap{debug stream instance}
 */
 
 /*!

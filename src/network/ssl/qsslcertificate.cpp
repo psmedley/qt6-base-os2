@@ -232,9 +232,7 @@ QSslCertificate &QSslCertificate::operator=(const QSslCertificate &other)
 /*!
     \fn void QSslCertificate::swap(QSslCertificate &other)
     \since 5.0
-
-    Swaps this certificate instance with \a other. This function is
-    very fast and never fails.
+    \memberswap{certificate instance}
 */
 
 /*!
@@ -973,9 +971,8 @@ QString QSslCertificate::subjectDisplayName() const
 }
 
 /*!
-    Returns the hash value for the \a key, using \a seed to seed the calculation.
     \since 5.4
-    \relates QHash
+    \qhashold{QHash}
 */
 size_t qHash(const QSslCertificate &key, size_t seed) noexcept
 {

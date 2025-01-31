@@ -507,9 +507,7 @@ QHostAddress &QHostAddress::operator=(SpecialAddress address)
 /*!
     \fn void QHostAddress::swap(QHostAddress &other)
     \since 5.6
-
-    Swaps this host address with \a other. This operation is very fast
-    and never fails.
+    \memberswap{host address}
 */
 
 /*!
@@ -1263,8 +1261,7 @@ QDebug operator<<(QDebug d, const QHostAddress &address)
 
 /*!
     \since 5.0
-    \relates QHostAddress
-    Returns a hash of the host address \a key, using \a seed to seed the calculation.
+    \qhashold{QHostAddress}
 */
 size_t qHash(const QHostAddress &key, size_t seed) noexcept
 {

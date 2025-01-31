@@ -803,9 +803,7 @@ QFont &QFont::operator=(const QFont &font)
 /*!
     \fn void QFont::swap(QFont &other)
     \since 5.0
-
-    Swaps this font instance with \a other. This function is very fast
-    and never fails.
+    \memberswap{font instance}
 */
 
 /*!
@@ -2185,10 +2183,8 @@ QString QFont::toString() const
 }
 
 /*!
-    Returns the hash value for \a font. If specified, \a seed is used
-    to initialize the hash.
-
-    \relates QFont
+    \fn size_t qHash(const QFont &key, size_t seed)
+    \qhashold{QFont}
     \since 5.3
 */
 size_t qHash(const QFont &font, size_t seed) noexcept
@@ -2344,8 +2340,7 @@ void QFont::cacheStatistics()
 
 /*!
     \fn size_t QFont::Tag::qHash(QFont::Tag key, size_t seed) noexcept
-
-    Returns the hash value for \a key, using \a seed to seed the calculation.
+    \qhash{QFont::Tag}
 */
 
 /*!
@@ -3096,9 +3091,7 @@ QFontInfo &QFontInfo::operator=(const QFontInfo &fi)
 /*!
     \fn void QFontInfo::swap(QFontInfo &other)
     \since 5.0
-
-    Swaps this font info instance with \a other. This function is very
-    fast and never fails.
+    \memberswap{font info instance}
 */
 
 /*!

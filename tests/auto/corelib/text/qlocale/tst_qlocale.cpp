@@ -303,8 +303,8 @@ void tst_QLocale::ctor_data()
         << QLocale::lang << QLocale::text << QLocale::land \
         << QLocale::lang << QLocale::fixed << QLocale::land
 
-    FIXTEXT("zh_Latn_CN", Chinese, LatinScript, China, SimplifiedHanScript);
-    FIXTEXT("zh_Latn_TW", Chinese, LatinScript, Taiwan, TraditionalHanScript);
+    FIXTEXT("zh_Taml_CN", Chinese, TamilScript, China, SimplifiedHanScript);
+    FIXTEXT("zh_Taml_TW", Chinese, TamilScript, Taiwan, TraditionalHanScript);
 #undef FIXTEXT
 
     // No exact match, preserve language:
@@ -314,7 +314,7 @@ void tst_QLocale::ctor_data()
         << QLocale::lang << QLocale::fixtext << QLocale::fixland
 
     KEEPLANG("zh_US", Chinese, AnyScript, UnitedStates, SimplifiedHanScript, China);
-    KEEPLANG("zh_Latn_US", Chinese, LatinScript, UnitedStates, SimplifiedHanScript, China);
+    KEEPLANG("zh_Taml_US", Chinese, TamilScript, UnitedStates, SimplifiedHanScript, China);
 #undef KEEPLANG
 
     // Only territory - likely subtags imply language and script:
@@ -421,7 +421,7 @@ void tst_QLocale::defaulted_ctor()
         QCOMPARE(l.territory(), exp_country); \
     } while (false)
 
-    TEST_CTOR(AnyLanguage, AnyTerritory, default_lang, default_country);
+    TEST_CTOR(AnyLanguage, AnyTerritory, QLocale::English, QLocale::UnitedStates);
     TEST_CTOR(C, AnyTerritory, QLocale::C, QLocale::AnyTerritory);
     TEST_CTOR(Aymara, AnyTerritory, default_lang, default_country);
     TEST_CTOR(Aymara, France, default_lang, default_country);
@@ -3713,6 +3713,9 @@ void tst_QLocale::uiLanguages_data()
     QTest::newRow("zh_Hant")
         << QLocale("zh_Hant")
         << QStringList{QString("zh-Hant-TW"), QString("zh-TW")};
+    QTest::newRow("zh_TW")
+        << QLocale("zh_TW")
+        << QStringList{u"zh-Hant-TW"_s, u"zh-TW"_s};
 
     QTest::newRow("zh_Hans_CN")
         << QLocale(QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China)
@@ -4145,6 +4148,9 @@ void tst_QLocale::mySystemLocale_data()
     QTest::addRow("chinese-full")
         << QString("zh-Hans-CN") << QLocale::Chinese
         << QStringList{QStringLiteral("zh-Hans-CN"), QStringLiteral("zh-CN"), QStringLiteral("zh")};
+    QTest::addRow("chinese-taiwan")
+        << u"zh-TW"_s << QLocale::Chinese
+        << QStringList{u"zh-TW"_s, u"zh-Hant-TW"_s};
 
     // For C, it should preserve what the system gave us but only add "C", never anything more:
     QTest::addRow("C") << QString("C") << QLocale::C << QStringList{QStringLiteral("C")};

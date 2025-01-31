@@ -1401,9 +1401,12 @@ void QWidgetPrivate::create()
 
     if (data.crect.width() == 0 || data.crect.height() == 0) {
         q->setAttribute(Qt::WA_OutsideWSRange, true);
-    } else if (q->isVisible()) {
-        // If widget is already shown, set window visible, too
-        win->setNativeWindowVisibility(true);
+    } else {
+        q->setAttribute(Qt::WA_OutsideWSRange, false);
+        if (q->isVisible()) {
+            // If widget is already shown, set window visible, too
+            win->setNativeWindowVisibility(true);
+        }
     }
 }
 
@@ -4219,10 +4222,12 @@ QPointF QWidget::mapTo(const QWidget *parent, const QPointF &pos) const
     if (parent) {
         const QWidget * w = this;
         while (w != parent) {
-            Q_ASSERT_X(w, "QWidget::mapTo(const QWidget *parent, const QPointF &pos)",
-                       "parent must be in parent hierarchy");
             p = w->mapToParent(p);
             w = w->parentWidget();
+            if (!w) {
+                qWarning("QWidget::mapTo(): parent must be in parent hierarchy");
+                break;
+            }
         }
     }
     return p;
@@ -4251,11 +4256,12 @@ QPointF QWidget::mapFrom(const QWidget *parent, const QPointF &pos) const
     if (parent) {
         const QWidget * w = this;
         while (w != parent) {
-            Q_ASSERT_X(w, "QWidget::mapFrom(const QWidget *parent, const QPoint &pos)",
-                       "parent must be in parent hierarchy");
-
             p = w->mapFromParent(p);
             w = w->parentWidget();
+            if (!w) {
+                qWarning("QWidget::mapFrom(): parent must be in parent hierarchy");
+                break;
+            }
         }
     }
     return p;

@@ -38,10 +38,11 @@ from pathlib import Path
 import argparse
 
 from cldr import CldrReader
+from typing import TextIO
 from qlocalexml import QLocaleXmlWriter
 
 
-def main(argv, out, err):
+def main(argv: list[str], out: TextIO, err: TextIO) -> int:
     """Generate a QLocaleXML file from CLDR data.
 
     Takes sys.argv, sys.stdout, sys.stderr (or equivalents) as

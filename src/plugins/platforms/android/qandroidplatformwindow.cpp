@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qandroidplatformwindow.h"
+#include "androidbackendregister.h"
 #include "qandroidplatformopenglcontext.h"
 #include "qandroidplatformscreen.h"
 
@@ -16,6 +17,7 @@ QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcQpaWindow, "qt.qpa.window")
 
+Q_DECLARE_JNI_CLASS(QtWindowInterface, "org/qtproject/qt/android/QtWindowInterface")
 Q_DECLARE_JNI_CLASS(QtInputInterface, "org/qtproject/qt/android/QtInputInterface")
 Q_DECLARE_JNI_CLASS(QtInputConnectionListener,
                     "org/qtproject/qt/android/QtInputConnection$QtInputConnectionListener")
@@ -166,7 +168,7 @@ void QAndroidPlatformWindow::setVisible(bool visible)
         if (window()->isTopLevel()) {
             updateSystemUiVisibility();
             if ((m_windowState & Qt::WindowFullScreen)
-                    || ((m_windowState & Qt::WindowMaximized) && (window()->flags() & Qt::MaximizeUsingFullscreenGeometryHint))) {
+                || (window()->flags() & Qt::MaximizeUsingFullscreenGeometryHint)) {
                 setGeometry(platformScreen()->geometry());
             } else if (m_windowState & Qt::WindowMaximized) {
                 setGeometry(platformScreen()->availableGeometry());
@@ -254,15 +256,13 @@ void QAndroidPlatformWindow::requestActivateWindow()
 
 void QAndroidPlatformWindow::updateSystemUiVisibility()
 {
-    Qt::WindowFlags flags = window()->flags();
-    bool isNonRegularWindow = flags & (Qt::Popup | Qt::Dialog | Qt::Sheet) & ~Qt::Window;
+    const int flags = window()->flags();
+    const bool isNonRegularWindow = flags & (Qt::Popup | Qt::Dialog | Qt::Sheet) & ~Qt::Window;
     if (!isNonRegularWindow) {
-        if (m_windowState & Qt::WindowFullScreen)
-            QtAndroid::setSystemUiVisibility(QtAndroid::SYSTEM_UI_VISIBILITY_FULLSCREEN);
-        else if (flags & Qt::MaximizeUsingFullscreenGeometryHint)
-            QtAndroid::setSystemUiVisibility(QtAndroid::SYSTEM_UI_VISIBILITY_TRANSLUCENT);
-        else
-            QtAndroid::setSystemUiVisibility(QtAndroid::SYSTEM_UI_VISIBILITY_NORMAL);
+        const bool isFullScreen = (m_windowState & Qt::WindowFullScreen);
+        const bool expandedToCutout = (flags & Qt::MaximizeUsingFullscreenGeometryHint);
+        QtAndroid::backendRegister()->callInterface<QtJniTypes::QtWindowInterface, void>(
+            "setSystemUiVisibility", isFullScreen, expandedToCutout);
     }
 }
 

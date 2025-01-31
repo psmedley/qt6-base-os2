@@ -1065,13 +1065,6 @@ static void createQObjectOnDestruction()
     // QThread) after the last QObject has been destroyed (especially after
     // QCoreApplication has).
 
-#if !defined(QT_QGUIAPPLICATIONTEST) && !defined(Q_OS_WIN) && !defined(Q_OS_VXWORKS)
-    // QCoreApplicationData's global static destructor has run and cleaned up
-    // the QAdoptedThread.
-    if (theMainThreadIsSet())
-        qFatal("theMainThreadIsSet() returned true; some QObject must have leaked");
-#endif
-
     // Before the fixes, this would cause a dangling pointer dereference. If
     // the problem comes back, it's possible that the following causes no
     // effect.

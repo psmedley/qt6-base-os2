@@ -387,9 +387,7 @@ QUrlQuery &QUrlQuery::operator =(const QUrlQuery &other)
 
 /*!
     \fn void QUrlQuery::swap(QUrlQuery &other)
-
-    Swaps this URL query instance with \a other. This function is very
-    fast and never fails.
+    \memberswap{URL query instance}
 */
 
 /*!
@@ -425,10 +423,7 @@ bool comparesEqual(const QUrlQuery &lhs, const QUrlQuery &rhs)
 
 /*!
     \since 5.6
-    \relates QUrlQuery
-
-    Returns the hash value for \a key,
-    using \a seed to seed the calculation.
+    \qhashold{QUrlQuery}
 */
 size_t qHash(const QUrlQuery &key, size_t seed) noexcept
 {

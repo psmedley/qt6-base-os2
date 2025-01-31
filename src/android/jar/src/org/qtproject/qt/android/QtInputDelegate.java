@@ -6,6 +6,7 @@ package org.qtproject.qt.android;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.ResultReceiver;
@@ -16,7 +17,10 @@ import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.WindowInsets;
+import android.view.WindowInsets.Type;
 import android.view.WindowManager;
+import android.view.ViewTreeObserver;
 import android.view.inputmethod.InputMethodManager;
 
 import org.qtproject.qt.android.QtInputConnection.QtInputConnectionListener;
@@ -45,6 +49,11 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     private QtEditText m_currentEditText = null;
     private InputMethodManager m_imm;
 
+    // We can't rely on a hardcoded value, because screens have different resolutions.
+    // That is why we assume that the keyboard should be higher than 0.15 of the screen.
+    private static final float KEYBOARD_TO_SCREEN_RATIO = 0.15f;
+
+    private boolean m_keyboardTransitionInProgress = false;
     private boolean m_keyboardIsVisible = false;
     private boolean m_isKeyboardHidingAnimationOngoing = false;
     private long m_showHideTimeStamp = System.nanoTime();
@@ -80,6 +89,30 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     void initInputMethodManager(Activity activity)
     {
         m_imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (m_imm == null)
+            Log.w(TAG, "getSystemService() returned a null InputMethodManager instance");
+    }
+
+    private final ViewTreeObserver.OnGlobalLayoutListener keyboardListener =
+                                                new ViewTreeObserver.OnGlobalLayoutListener() {
+        @Override
+        public void onGlobalLayout() {
+            if (!isKeyboardHidden())
+                setKeyboardTransitionInProgress(false);
+        }
+    };
+
+    private void setKeyboardTransitionInProgress(boolean state)
+    {
+        if (m_keyboardTransitionInProgress == state || m_currentEditText == null)
+            return;
+
+        m_keyboardTransitionInProgress= state;
+        ViewTreeObserver observer = m_currentEditText.getViewTreeObserver();
+        if (state)
+            observer.addOnGlobalLayoutListener(keyboardListener);
+        else
+            observer.removeOnGlobalLayoutListener(keyboardListener);
     }
 
     // QtInputInterface implementation begin
@@ -87,12 +120,14 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     public void updateSelection(final int selStart, final int selEnd,
                                 final int candidatesStart, final int candidatesEnd)
     {
-        QtNative.runAction(() -> {
-            if (m_imm != null) {
-                m_imm.updateSelection(m_currentEditText, selStart, selEnd,
-                        candidatesStart, candidatesEnd);
-            }
-        });
+        if (m_imm != null) {
+            QtNative.runAction(() -> {
+                if (m_imm != null) {
+                    m_imm.updateSelection(m_currentEditText, selStart, selEnd,
+                            candidatesStart, candidatesEnd);
+                }
+            });
+        }
     }
 
     @Override
@@ -100,6 +135,9 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
                                      final int x, final int y, final int width, final int height,
                                      final int inputHints, final int enterKeyType)
     {
+        if (m_imm == null)
+            return;
+
         QtNative.runAction(() -> {
             if (m_imm == null || m_currentEditText == null)
                 return;
@@ -174,6 +212,8 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
         if (m_imm == null || m_currentEditText == null)
             return;
         m_currentEditText.postDelayed(() -> {
+            if (m_imm == null || m_currentEditText == null)
+                return;
             m_imm.restartInput(m_currentEditText);
             m_currentEditText.m_optionsChanged = false;
         }, 5);
@@ -182,6 +222,9 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     @Override
     public void hideSoftwareKeyboard()
     {
+        if (m_imm == null || m_currentEditText == null)
+            return;
+
         m_isKeyboardHidingAnimationOngoing = true;
         QtNative.runAction(() -> {
             if (m_imm == null || m_currentEditText == null)
@@ -215,6 +258,37 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     // QtInputInterface implementation end
 
     // QtInputConnectionListener methods
+    @Override
+    public boolean keyboardTransitionInProgress() {
+       return m_keyboardTransitionInProgress;
+    }
+
+    @Override
+    public boolean isKeyboardHidden() {
+        Activity activity = QtNative.activity();
+        if (activity == null) {
+            Log.w(TAG, "isKeyboardHidden: The activity reference is null");
+            return true;
+        }
+
+        boolean isKeyboardHidden = true;
+
+        if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            Rect r = new Rect();
+            activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(r);
+            DisplayMetrics metrics = new DisplayMetrics();
+            activity.getWindowManager().getDefaultDisplay().getMetrics(metrics);
+            int screenHeight = metrics.heightPixels;
+            final int kbHeight = screenHeight - r.bottom;
+            isKeyboardHidden = kbHeight < screenHeight * KEYBOARD_TO_SCREEN_RATIO;
+        } else {
+            WindowInsets w = activity.getWindow().getDecorView().getRootWindowInsets();
+            isKeyboardHidden = !w.isVisible(Type.ime());
+        }
+
+        return isKeyboardHidden;
+    }
+
     @Override
     public void onSetClosing(boolean closing) {
         if (!closing)
@@ -268,6 +342,7 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
             return;
         m_keyboardIsVisible = visibility;
         keyboardVisibilityUpdated(m_keyboardIsVisible);
+        setKeyboardTransitionInProgress(visibility);
 
         if (!visibility) {
             // Hiding the keyboard clears the immersive mode, so we need to set it again.
@@ -279,6 +354,7 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
 
     void setFocusedView(QtEditText currentEditText)
     {
+        setKeyboardTransitionInProgress(false);
         m_currentEditText = currentEditText;
     }
 

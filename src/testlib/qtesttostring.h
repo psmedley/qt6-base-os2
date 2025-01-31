@@ -32,6 +32,7 @@
 #include <QtCore/qvariant.h>
 
 #include <cstdio>
+#include <QtCore/q20memory.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -311,46 +312,53 @@ template<> inline char *toString(const QPartialOrdering &o)
 namespace Internal {
 struct QCborValueFormatter
 {
+private:
+    using UP = std::unique_ptr<char[]>;
     enum { BufferLen = 256 };
-    static char *formatSimpleType(QCborSimpleType st)
+
+    static UP createBuffer() { return q20::make_unique_for_overwrite<char[]>(BufferLen); }
+
+    static UP formatSimpleType(QCborSimpleType st)
     {
-        char *buf = new char[BufferLen];
-        std::snprintf(buf, BufferLen, "QCborValue(QCborSimpleType(%d))", int(st));
+        auto buf = createBuffer();
+        std::snprintf(buf.get(), BufferLen, "QCborValue(QCborSimpleType(%d))", int(st));
         return buf;
     }
 
-    static char *formatTag(QCborTag tag, const QCborValue &taggedValue)
+    static UP formatTag(QCborTag tag, const QCborValue &taggedValue)
     {
-        QScopedArrayPointer<char> hold(format(taggedValue));
-        char *buf = new char[BufferLen];
-        std::snprintf(buf, BufferLen, "QCborValue(QCborTag(%llu), %s)",
+        auto buf = createBuffer();
+        const std::unique_ptr<char[]> hold(format(taggedValue));
+        std::snprintf(buf.get(), BufferLen, "QCborValue(QCborTag(%llu), %s)",
                       qToUnderlying(tag), hold.get());
         return buf;
     }
 
-    static char *innerFormat(QCborValue::Type t, const char *str)
+    static UP innerFormat(QCborValue::Type t, const UP &str)
     {
         static const QMetaEnum typeEnum = []() {
             int idx = QCborValue::staticMetaObject.indexOfEnumerator("Type");
             return QCborValue::staticMetaObject.enumerator(idx);
         }();
 
-        char *buf = new char[BufferLen];
+        auto buf = createBuffer();
         const char *typeName = typeEnum.valueToKey(t);
         if (typeName)
-            std::snprintf(buf, BufferLen, "QCborValue(%s, %s)", typeName, str);
+            std::snprintf(buf.get(), BufferLen, "QCborValue(%s, %s)", typeName, str ? str.get() : "");
         else
-            std::snprintf(buf, BufferLen, "QCborValue(<unknown type 0x%02x>)", t);
+            std::snprintf(buf.get(), BufferLen, "QCborValue(<unknown type 0x%02x>)", t);
         return buf;
     }
 
-    template<typename T> static char *format(QCborValue::Type type, const T &t)
+    template<typename T> static UP format(QCborValue::Type type, const T &t)
     {
-        QScopedArrayPointer<char> hold(QTest::toString(t));
-        return innerFormat(type, hold.get());
+        const std::unique_ptr<char[]> hold(QTest::toString(t));
+        return innerFormat(type, hold);
     }
 
-    static char *format(const QCborValue &v)
+public:
+
+    static UP format(const QCborValue &v)
     {
         switch (v.type()) {
         case QCborValue::Integer:
@@ -360,21 +368,21 @@ struct QCborValueFormatter
         case QCborValue::String:
             return format(v.type(), v.toString());
         case QCborValue::Array:
-            return innerFormat(v.type(), QScopedArrayPointer<char>(format(v.toArray())).get());
+            return innerFormat(v.type(), format(v.toArray()));
         case QCborValue::Map:
-            return innerFormat(v.type(), QScopedArrayPointer<char>(format(v.toMap())).get());
+            return innerFormat(v.type(), format(v.toMap()));
         case QCborValue::Tag:
             return formatTag(v.tag(), v.taggedValue());
         case QCborValue::SimpleType:
             break;
         case QCborValue::True:
-            return qstrdup("QCborValue(true)");
+            return UP{qstrdup("QCborValue(true)")};
         case QCborValue::False:
-            return qstrdup("QCborValue(false)");
+            return UP{qstrdup("QCborValue(false)")};
         case QCborValue::Null:
-            return qstrdup("QCborValue(nullptr)");
+            return UP{qstrdup("QCborValue(nullptr)")};
         case QCborValue::Undefined:
-            return qstrdup("QCborValue()");
+            return UP{qstrdup("QCborValue()")};
         case QCborValue::Double:
             return format(v.type(), v.toDouble());
         case QCborValue::DateTime:
@@ -384,35 +392,35 @@ struct QCborValueFormatter
         case QCborValue::Uuid:
             return format(v.type(), v.toUuid());
         case QCborValue::Invalid:
-            return qstrdup("QCborValue(<invalid>)");
+            return UP{qstrdup("QCborValue(<invalid>)")};
         }
 
         if (v.isSimpleType())
             return formatSimpleType(v.toSimpleType());
-        return innerFormat(v.type(), "");
+        return innerFormat(v.type(), nullptr);
     }
 
-    static char *format(const QCborArray &a)
+    static UP format(const QCborArray &a)
     {
         QByteArray out(1, '[');
         const char *comma = "";
         for (QCborValueConstRef v : a) {
-            QScopedArrayPointer<char> s(format(v));
+            const std::unique_ptr<char[]> s(format(v));
             out += comma;
             out += s.get();
             comma = ", ";
         }
         out += ']';
-        return qstrdup(out.constData());
+        return UP{qstrdup(out.constData())};
     }
 
-    static char *format(const QCborMap &m)
+    static UP format(const QCborMap &m)
     {
         QByteArray out(1, '{');
         const char *comma = "";
         for (auto pair : m) {
-            QScopedArrayPointer<char> key(format(pair.first));
-            QScopedArrayPointer<char> value(format(pair.second));
+            const std::unique_ptr<char[]> key(format(pair.first));
+            const std::unique_ptr<char[]> value(format(pair.second));
             out += comma;
             out += key.get();
             out += ": ";
@@ -420,14 +428,14 @@ struct QCborValueFormatter
             comma = ", ";
         }
         out += '}';
-        return qstrdup(out.constData());
+        return UP{qstrdup(out.constData())};
     }
 };
 }
 
 template<> inline char *toString(const QCborValue &v)
 {
-    return Internal::QCborValueFormatter::format(v);
+    return Internal::QCborValueFormatter::format(v).release();
 }
 
 template<> inline char *toString(const QCborValueRef &v)
@@ -437,12 +445,12 @@ template<> inline char *toString(const QCborValueRef &v)
 
 template<> inline char *toString(const QCborArray &a)
 {
-    return Internal::QCborValueFormatter::format(a);
+    return Internal::QCborValueFormatter::format(a).release();
 }
 
 template<> inline char *toString(const QCborMap &m)
 {
-    return Internal::QCborValueFormatter::format(m);
+    return Internal::QCborValueFormatter::format(m).release();
 }
 
 template <typename Rep, typename Period> char *toString(std::chrono::duration<Rep, Period> dur)
@@ -461,9 +469,9 @@ template <typename Rep, typename Period> char *toString(std::chrono::duration<Re
 template <typename T1, typename T2>
 inline char *toString(const std::pair<T1, T2> &pair)
 {
-    const QScopedArrayPointer<char> first(toString(pair.first));
-    const QScopedArrayPointer<char> second(toString(pair.second));
-    return formatString("std::pair(", ")", 2, first.data(), second.data());
+    const std::unique_ptr<char[]> first(toString(pair.first));
+    const std::unique_ptr<char[]> second(toString(pair.second));
+    return formatString("std::pair(", ")", 2, first.get(), second.get());
 }
 
 template <typename Tuple, std::size_t... I>

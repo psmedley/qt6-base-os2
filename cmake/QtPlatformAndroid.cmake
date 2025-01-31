@@ -189,11 +189,6 @@ function(qt_internal_android_test_runner_arguments target out_test_runner out_te
     set(${out_test_runner} "${QT_HOST_PATH}/${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_BINDIR}/androidtestrunner" PARENT_SCOPE)
     set(deployment_tool "${QT_HOST_PATH}/${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_BINDIR}/androiddeployqt")
 
-    get_target_property(deployment_file ${target} QT_ANDROID_DEPLOYMENT_SETTINGS_FILE)
-    if (NOT deployment_file)
-        message(FATAL_ERROR "Target ${target} is not a valid android executable target\n")
-    endif()
-
     qt_internal_android_get_target_android_build_dir(${target} android_build_dir)
     set(${out_test_arguments}
         "--path" "${android_build_dir}"

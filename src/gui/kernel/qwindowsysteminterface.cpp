@@ -24,7 +24,7 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-Q_LOGGING_CATEGORY(lcQpaInputDevices, "qt.qpa.input.devices")
+Q_LOGGING_CATEGORY(lcQpaInputDevices, "qt.qpa.input.devices", QtWarningMsg)
 
 Q_CONSTINIT QElapsedTimer QWindowSystemInterfacePrivate::eventTime;
 bool QWindowSystemInterfacePrivate::synchronousWindowSystemEvents = false;
@@ -576,7 +576,6 @@ bool QWindowSystemInterface::handleWheelEvent(QWindow *window, ulong timestamp, 
 */
 void QWindowSystemInterface::registerInputDevice(const QInputDevice *device)
 {
-    qCDebug(lcQpaInputDevices) << "register" << device;
     QInputDevicePrivate::registerDevice(device);
 }
 

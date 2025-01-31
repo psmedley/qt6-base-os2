@@ -8,6 +8,7 @@
 #include <QtCore/qcompare.h>
 #include <QtCore/qcontainerfwd.h>
 #include <QtCore/qbytearray.h>
+#include <QtCore/qstringfwd.h>
 #include <QtCore/qstringliteral.h>
 #include <QtCore/qstringalgorithms.h>
 
@@ -22,13 +23,8 @@ Q_FORWARD_DECLARE_OBJC_CLASS(NSString);
 
 QT_BEGIN_NAMESPACE
 
-class QString;
-class QStringView;
 class QRegularExpression;
 class QRegularExpressionMatch;
-#ifdef Q_QDOC
-class QUtf8StringView;
-#endif
 
 namespace QtPrivate {
 template <typename Char>
@@ -68,6 +64,8 @@ struct IsContainerCompatibleWithQStringView<T, std::enable_if_t<std::conjunction
 
             // These need to be treated specially due to the empty vs null distinction
             std::negation<std::is_same<std::decay_t<T>, QString>>,
+#define QSTRINGVIEW_REFUSES_QSTRINGREF 1
+            std::negation<std::is_same<q20::remove_cvref_t<T>, QStringRef>>, // QStringRef::op QStringView()
 
             // Don't make an accidental copy constructor
             std::negation<std::is_same<std::decay_t<T>, QStringView>>
@@ -150,10 +148,13 @@ public:
     template <typename Char>
     constexpr QStringView(const Char *str) noexcept;
 #else
-
     template <typename Pointer, if_compatible_pointer<Pointer> = true>
     constexpr QStringView(const Pointer &str) noexcept
         : QStringView(str, str ? lengthHelperPointer(str) : 0) {}
+
+    template <typename Char, if_compatible_char<Char> = true>
+    constexpr QStringView(const Char (&str)[]) noexcept // array of unknown bounds
+        : QStringView{&*str} {} // decay to pointer
 #endif
 
 #ifdef Q_QDOC

@@ -1389,9 +1389,7 @@ QRegularExpression &QRegularExpression::operator=(const QRegularExpression &re) 
 
 /*!
     \fn void QRegularExpression::swap(QRegularExpression &other)
-
-    Swaps the regular expression \a other with this regular expression. This
-    operation is very fast and never fails.
+    \memberswap{regular expression}
 */
 
 /*!
@@ -2155,9 +2153,7 @@ QRegularExpressionMatch &QRegularExpressionMatch::operator=(const QRegularExpres
 
 /*!
     \fn void QRegularExpressionMatch::swap(QRegularExpressionMatch &other)
-
-    Swaps the match result \a other with this match result. This
-    operation is very fast and never fails.
+    \memberswap{match result}
 */
 
 /*!
@@ -2636,9 +2632,7 @@ QRegularExpressionMatchIterator &QRegularExpressionMatchIterator::operator=(cons
 
 /*!
     \fn void QRegularExpressionMatchIterator::swap(QRegularExpressionMatchIterator &other)
-
-    Swaps the iterator \a other with this iterator object. This operation is
-    very fast and never fails.
+    \memberswap{iterator}
 */
 
 /*!

@@ -827,9 +827,7 @@ QIcon &QIcon::operator=(const QIcon &other)
 
 /*!
     \fn void QIcon::swap(QIcon &other)
-
-    Swaps icon \a other with this icon. This operation is very
-    fast and never fails.
+    \memberswap{icon}
 */
 
 /*!
@@ -1173,6 +1171,9 @@ void QIcon::addFile(const QString &fileName, const QSize &size, Mode mode, State
     }
     if (!alreadyAdded)
         d->engine->addFile(fileName, size, mode, state);
+
+    if (d->engine->key() == "svg"_L1)   // not needed and also not supported
+        return;
 
     // Check if a "@Nx" file exists and add it.
     QString atNxFileName = qt_findAtNxFile(fileName, qApp->devicePixelRatio());

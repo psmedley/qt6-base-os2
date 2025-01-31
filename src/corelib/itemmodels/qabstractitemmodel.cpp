@@ -444,9 +444,7 @@ QPersistentModelIndex &QPersistentModelIndex::operator=(const QPersistentModelIn
 /*!
     \fn void QPersistentModelIndex::swap(QPersistentModelIndex &other)
     \since 5.0
-
-    Swaps this persistent modelindex with \a other. This function is
-    very fast and never fails.
+    \memberswap{persistent modelindex}
 */
 
 /*!
@@ -4155,12 +4153,9 @@ bool QAbstractListModel::dropMimeData(const QMimeData *data, Qt::DropAction acti
 */
 
 /*!
-    \fn size_t qHash(const QPersistentModelIndex &index, size_t seed = 0)
+    \fn size_t qHash(const QPersistentModelIndex &key, size_t seed)
     \since 5.0
-    \relates QPersistentModelIndex
-
-    Returns a hash of the QPersistentModelIndex \a index, using \a seed to
-    seed the calculation.
+    \qhashold{QPersistentModelIndex}
 */
 
 

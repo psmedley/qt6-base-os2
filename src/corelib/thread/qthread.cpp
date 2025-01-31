@@ -82,32 +82,16 @@ QThreadData::~QThreadData()
     thread.storeRelease(nullptr);
     delete t;
 
-    for (int i = 0; i < postEventList.size(); ++i) {
+    for (qsizetype i = 0; i < postEventList.size(); ++i) {
         const QPostEvent &pe = postEventList.at(i);
         if (pe.event) {
-            --pe.receiver->d_func()->postedEvents;
+            pe.receiver->d_func()->postedEvents.fetchAndSubRelaxed(1);
             pe.event->m_posted = false;
             delete pe.event;
         }
     }
 
     // fprintf(stderr, "QThreadData %p destroyed\n", this);
-}
-
-void QThreadData::ref()
-{
-#if QT_CONFIG(thread)
-    (void) _ref.ref();
-    Q_ASSERT(_ref.loadRelaxed() != 0);
-#endif
-}
-
-void QThreadData::deref()
-{
-#if QT_CONFIG(thread)
-    if (!_ref.deref())
-        delete this;
-#endif
 }
 
 QAbstractEventDispatcher *QThreadData::createEventDispatcher()
@@ -148,21 +132,6 @@ void QAdoptedThread::run()
     qFatal("QAdoptedThread::run(): Internal error, this implementation should never be called.");
 }
 #endif
-
-QScopedScopeLevelCounter::QScopedScopeLevelCounter(QThreadData *threadData)
-    : threadData(threadData)
-{
-    ++threadData->scopeLevel;
-    qCDebug(lcDeleteLater) << "Increased" << threadData->thread
-                      << "scope level to" << threadData->scopeLevel;
-}
-
-QScopedScopeLevelCounter::~QScopedScopeLevelCounter()
-{
-    --threadData->scopeLevel;
-    qCDebug(lcDeleteLater) << "Decreased" << threadData->thread
-                      << "scope level to" << threadData->scopeLevel;
-}
 
 #if QT_CONFIG(thread)
 /*
@@ -1045,6 +1014,11 @@ Qt::HANDLE QThread::currentThreadIdImpl() noexcept
 QThread *QThread::currentThread()
 {
     return QThreadData::current()->thread.loadAcquire();
+}
+
+bool QThread::isMainThread() noexcept
+{
+    return true;
 }
 
 bool QThread::isCurrentThread() const noexcept

@@ -658,9 +658,11 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextTableCellFormat &
     \omitvalue LastFontProperty
 
     \value TextUnderlineColor      Specifies the color to draw underlines, overlines and strikeouts.
-    \value TextVerticalAlignment
-    \value TextOutline
-    \value TextUnderlineStyle
+    \value TextVerticalAlignment   Specifies the type of text vertical alignment according to
+                                   the values of the QTextCharFormat::VerticalAlignment enum.
+    \value TextOutline             Specifies a \l QPen used to draw the text outline.
+    \value TextUnderlineStyle      Specifies the style of text underline according to
+                                   the values of the QTextCharFormat::UnderlineStyle enum.
     \value TextToolTip Specifies the (optional) tool tip to be displayed for a fragment of text.
     \value TextSuperScriptBaseline Specifies the baseline (in % of height) of superscript texts.
     \value TextSubScriptBaseline   Specifies the baseline (in % of height) of subscript texts.
@@ -912,9 +914,7 @@ QTextFormat &QTextFormat::operator=(const QTextFormat &rhs)
 /*!
     \fn void QTextFormat::swap(QTextFormat &other)
     \since 5.0
-
-    Swaps this text format with \a other. This function is very fast
-    and never fails.
+    \memberswap{text format}
 */
 
 /*!

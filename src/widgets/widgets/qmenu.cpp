@@ -2459,6 +2459,13 @@ void QMenuPrivate::popup(const QPoint &p, QAction *atAction, PositionFunction po
         }
     }
 
+    // do nothing if we don't have a valid size, e.g. when all actions are invisible
+    if (!size.isValid()) {
+        eventLoop = nullptr;
+        syncAction = nullptr;
+        return;
+    }
+
     const QPoint mouse = QGuiApplicationPrivate::lastCursorPosition.toPoint();
     mousePopupPos = mouse;
     const bool snapToMouse = !causedPopup.widget && (QRect(p.x() - 3, p.y() - 3, 6, 6).contains(mouse));
@@ -2505,6 +2512,7 @@ void QMenuPrivate::popup(const QPoint &p, QAction *atAction, PositionFunction po
             }
         }
     }
+
     const int subMenuOffset = q->style()->pixelMetric(QStyle::PM_SubMenuOverlap, nullptr, q);
     QMenu *caused = qobject_cast<QMenu*>(causedPopup.widget);
     if (caused && caused->geometry().width() + menuSizeHint.width() + subMenuOffset < screen.width()) {
@@ -2667,7 +2675,8 @@ QAction *QMenuPrivate::exec(const QPoint &p, QAction *action, PositionFunction p
     popup(p, action, positionFunction);
 
     QPointer<QObject> guard = q;
-    (void) evtLoop.exec();
+    if (eventLoop) // popup might have reset if there was nothing to show
+        (void)eventLoop->exec();
     if (guard.isNull())
         return nullptr;
 
@@ -3354,8 +3363,11 @@ void QMenu::keyPressEvent(QKeyEvent *e)
     }
 
     if (!key_consumed) {                                // send to menu bar
-        if ((!e->modifiers() || e->modifiers() == Qt::AltModifier || e->modifiers() == Qt::ShiftModifier) &&
-           e->text().size()==1) {
+        const Qt::KeyboardModifiers modifiers = e->modifiers();
+        if ((!modifiers || modifiers == Qt::AltModifier || modifiers == Qt::ShiftModifier
+             || modifiers == Qt::KeypadModifier
+             || modifiers == (Qt::KeypadModifier | Qt::AltModifier))
+            && e->text().size() == 1) {
             bool activateAction = false;
             QAction *nextAction = nullptr;
             if (style()->styleHint(QStyle::SH_Menu_KeyboardSearch, nullptr, this) && !e->modifiers()) {

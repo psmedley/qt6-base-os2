@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QStringList>
 #include <QDir>
+#include <QDirIterator>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -800,7 +801,14 @@ GradleBuildConfigs gradleBuildConfigs(const QString &path)
         } else if (trimmedLine.contains("compileSdkVersion androidCompileSdkVersion.toInteger()")) {
             configs.usesIntegerCompileSdkVersion = true;
         } else if (trimmedLine.contains("namespace")) {
-            configs.appNamespace = QString::fromUtf8(extractValue(trimmedLine));
+            const QString value = QString::fromUtf8(extractValue(trimmedLine));
+            const bool singleQuoted = value.startsWith(u'\'') && value.endsWith(u'\'');
+            const bool doubleQuoted = value.startsWith(u'\"') && value.endsWith(u'\"');
+
+            if (singleQuoted || doubleQuoted)
+                configs.appNamespace = value.mid(1, value.length() - 2);
+            else
+                configs.appNamespace = value;
         }
     }
 
@@ -1755,10 +1763,15 @@ bool updateLibsXml(Options *options)
 
         QStringList localLibs;
         localLibs = options->localLibs[it.key()];
+        const QString archSuffix = it.key() + ".so"_L1;
+
         const QList<QtDependency>& deps = options->qtDependencies[it.key()];
-        auto notExistsInDependencies = [&deps] (const QString &lib) {
+        auto notExistsInDependencies = [&deps, archSuffix] (const QString &libName) {
+            QString lib = QFileInfo(libName).fileName();
+            if (lib.endsWith(archSuffix))
+                lib.chop(archSuffix.length());
             return std::none_of(deps.begin(), deps.end(), [&lib] (const QtDependency &dep) {
-                return QFileInfo(dep.absolutePath).fileName() == QFileInfo(lib).fileName();
+                return QFileInfo(dep.absolutePath).fileName().contains(lib);
             });
         };
 
@@ -3446,9 +3459,31 @@ bool writeDependencyFile(const Options &options)
 
 int generateJavaQmlComponents(const Options &options)
 {
-    // TODO QTBUG-125892: Current method of path discovery are to be improved
-    // For instance, it does not discover statically linked **inner** QML modules.
-    const auto getImportPaths = [](const QString &buildPath, const QString &libName,
+    const auto firstCharToUpper = [](const QString &str) -> QString {
+        if (str.isEmpty())
+            return str;
+        return str.left(1).toUpper() + str.mid(1);
+    };
+
+    const auto upperFirstAndAfterDot = [](QString str) -> QString {
+        if (str.isEmpty())
+            return str;
+
+        str[0] = str[0].toUpper();
+
+        for (int i = 0; i < str.size(); ++i) {
+            if (str[i] == "."_L1) {
+                // Move to the next character after the dot
+                int j = i + 1;
+                if (j < str.size()) {
+                    str[j] = str[j].toUpper();
+                }
+            }
+        }
+        return str;
+    };
+
+    const auto getImportPaths = [options](const QString &buildPath, const QString &libName,
                              QStringList &appImports, QStringList &externalImports) -> bool {
         QFile confRspFile("%1/.qt/qml_imports/%2_conf.rsp"_L1.arg(buildPath, libName));
         if (!confRspFile.exists() || !confRspFile.open(QFile::ReadOnly))
@@ -3464,6 +3499,22 @@ int generateJavaQmlComponents(const Options &options)
                     externalImports << currentLine;
             }
         }
+
+        // Find inner qmldir files
+        QSet<QString> qmldirDirectories;
+        for (const QString &path : appImports) {
+            QDirIterator it(path, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                const QDir dir(it.next());
+                const QString absolutePath = dir.absolutePath();
+                if (!absolutePath.startsWith(options.outputDirectory)
+                    && dir.exists("qmldir"_L1)) {
+                    qmldirDirectories.insert(absolutePath);
+                }
+            }
+        }
+        appImports << qmldirDirectories.values();
+
         return appImports.count() + externalImports.count();
     };
 
@@ -3485,6 +3536,7 @@ int generateJavaQmlComponents(const Options &options)
         if (!qmlDirFile.exists() || !qmlDirFile.open(QFile::ReadOnly))
             return ModuleInfo();
         ModuleInfo moduleInfo;
+        QSet<QString> qmlComponentNames;
         QTextStream qmldirStream(&qmlDirFile);
         while (!qmldirStream.atEnd()) {
             const QString currentLine = qmldirStream.readLine();
@@ -3497,8 +3549,10 @@ int generateJavaQmlComponents(const Options &options)
             } else if (currentLine.size()
                        && (currentLine[0].isUpper() || currentLine.startsWith("singleton"_L1))) {
                 const QStringList parts = currentLine.split(" "_L1);
-                if (parts.size() > 2)
+                if (parts.size() > 2 && !qmlComponentNames.contains(parts.first())) {
                     moduleInfo.qmlComponents.append({ parts.first(), parts.last() });
+                    qmlComponentNames.insert(parts.first());
+                }
             }
         }
         return moduleInfo;
@@ -3510,7 +3564,7 @@ int generateJavaQmlComponents(const Options &options)
         QByteArray domInfo;
         QString importFlags;
         for (auto &importPath : otherImportPaths)
-            importFlags.append(" -i %1"_L1.arg(shellQuote(importPath)));
+            importFlags.append(" -I %1"_L1.arg(shellQuote(importPath)));
 
         const QString qmlDomCmd = "%1 -d -D required -f +:propertyInfos %2 %3"_L1.arg(
                 shellQuote(qmlDomExecPath), importFlags,
@@ -3605,24 +3659,13 @@ int generateJavaQmlComponents(const Options &options)
                << "import org.qtproject.qt.android.QtQuickViewContent;\n\n";
     };
 
-    const auto beginLibraryBlock = [](QTextStream &stream, const QString &libName) {
-        stream << QLatin1StringView("public final class %1 {\n").arg(libName);
-    };
-
-    const auto beginModuleBlock = [](QTextStream &stream, const QString &moduleName,
-                                     bool topLevel = false, int indentWidth = 4) {
-        const QString indent(indentWidth, u' ');
-        stream << indent
-               << "public final%1 class %2 {\n"_L1.arg(topLevel ? ""_L1 : " static"_L1, moduleName);
-    };
-
     const auto beginComponentBlock = [](QTextStream &stream, const QString &libName,
                                         const QString &moduleName, const QString &preferPath,
                                         const ComponentInfo &componentInfo, int indentWidth = 8) {
         const QString indent(indentWidth, u' ');
 
         stream << indent
-               << "public final static class %1 extends QtQuickViewContent {\n"_L1
+               << "public final class %1 extends QtQuickViewContent {\n"_L1
                                                         .arg(componentInfo.name)
                << indent << "    @Override public String getLibraryName() {\n"_L1
                << indent << "        return \"%1\";\n"_L1.arg(libName)
@@ -3636,14 +3679,14 @@ int generateJavaQmlComponents(const Options &options)
                << indent << "    }\n"_L1;
     };
 
-    const auto beginPropertyBlock = [](QTextStream &stream, const QJsonObject &propertyData,
-                                 int indentWidth = 8) {
+    const auto beginPropertyBlock = [firstCharToUpper](QTextStream &stream,
+                                                       const QJsonObject &propertyData,
+                                                       int indentWidth = 8) {
         const QString indent(indentWidth, u' ');
         const QString propertyName = propertyData["name"_L1].toString();
         if (propertyName.isEmpty())
             return;
-        const QString upperPropertyName =
-                propertyName[0].toUpper() + propertyName.last(propertyName.size() - 1);
+        const QString upperPropertyName = firstCharToUpper(propertyName);
         const QString typeName = propertyData["typeName"_L1].toString();
         const bool isReadyonly = propertyData["isReadonly"_L1].toBool();
 
@@ -3667,8 +3710,9 @@ int generateJavaQmlComponents(const Options &options)
                << indent << "}\n";
     };
 
-    const auto beginSignalBlock = [](QTextStream &stream, const QJsonObject &methodData,
-                                     int indentWidth = 8) {
+    const auto beginSignalBlock = [firstCharToUpper](QTextStream &stream,
+                                                     const QJsonObject &methodData,
+                                                     int indentWidth = 8) {
         const QString indent(indentWidth, u' ');
         if (methodData["methodType"_L1] != 0)
             return;
@@ -3679,8 +3723,7 @@ int generateJavaQmlComponents(const Options &options)
         const QString methodName = methodData["name"_L1].toString();
         if (methodName.isEmpty())
             return;
-        const QString upperMethodName =
-                methodName[0].toUpper() + methodName.last(methodName.size() - 1);
+        const QString upperMethodName = firstCharToUpper(methodName);
         const QString typeName = !parameters.isEmpty()
                 ? parameters[0].toObject()["typeName"_L1].toString()
                 : "void"_L1;
@@ -3695,18 +3738,20 @@ int generateJavaQmlComponents(const Options &options)
                << indent << "}\n";
     };
 
+    constexpr static auto markerFileName = "qml_java_contents"_L1;
     const QString libName(options.applicationBinary);
-    const QString libClassname = libName[0].toUpper() + libName.last(libName.size() - 1);
-    const QString javaPackage = options.packageName;
-    const QString outputDir = "%1/src/%2"_L1.arg(options.outputDirectory,
-                                                 QString(javaPackage).replace(u'.', u'/'));
+    QString javaPackageBase = options.packageName;
+    const QString expectedBaseLeaf = ".%1"_L1.arg(libName);
+    if (!javaPackageBase.endsWith(expectedBaseLeaf))
+        javaPackageBase += expectedBaseLeaf;
+    const QString baseSourceDir = "%1/src/%2"_L1.arg(options.outputDirectory,
+                                                     QString(javaPackageBase).replace(u'.', u'/'));
     const QString buildPath(QDir(options.buildDirectory).absolutePath());
     const QString domBinaryPath(options.qmlDomBinaryPath);
-    const bool leafEqualsLibname = javaPackage.endsWith(".%1"_L1.arg(libName));
 
-    fprintf(stdout, "Generating Java QML Components in %s directory.\n", qPrintable(outputDir));
-    if (!QDir().current().mkpath(outputDir)) {
-        fprintf(stderr, "Cannot create %s directory\n", qPrintable(outputDir));
+    fprintf(stdout, "Generating Java QML Components in %s directory.\n", qPrintable(baseSourceDir));
+    if (!QDir().current().mkpath(baseSourceDir)) {
+        fprintf(stderr, "Cannot create %s directory\n", qPrintable(baseSourceDir));
         return false;
     }
 
@@ -3715,21 +3760,12 @@ int generateJavaQmlComponents(const Options &options)
     if (!getImportPaths(buildPath, libName, appImports, externalImports))
         return false;
 
-    QTextStream outputStream;
-    std::unique_ptr<QFile> outputFile;
-
-    if (!leafEqualsLibname) {
-        outputFile.reset(new QFile("%1/%2.java"_L1.arg(outputDir, libClassname)));
-        if (outputFile->exists())
-            outputFile->remove();
-        if (!outputFile->open(QFile::ReadWrite)) {
-            fprintf(stderr, "Cannot open %s file to write.\n",
-                    qPrintable(outputFile->fileName()));
-            return false;
-        }
-        outputStream.setDevice(outputFile.get());
-        createHeaderBlock(outputStream, javaPackage);
-        beginLibraryBlock(outputStream, libClassname);
+    // Remove previous directories generated by this code generator
+    {
+        const QString srcDir = "%1/src"_L1.arg(options.outputDirectory);
+        QDirIterator iter(srcDir, { markerFileName }, QDir::Files, QDirIterator::Subdirectories);
+        while (iter.hasNext())
+            iter.nextFileInfo().dir().removeRecursively();
     }
 
     int generatedComponents = 0;
@@ -3738,9 +3774,7 @@ int generateJavaQmlComponents(const Options &options)
         if (!moduleInfo.isValid())
             continue;
 
-        const QString moduleClassname = moduleInfo.moduleName[0].toUpper()
-                + moduleInfo.moduleName.last(moduleInfo.moduleName.size() - 1);
-
+        const QString modulePackageSuffix = upperFirstAndAfterDot(moduleInfo.moduleName);
         if (moduleInfo.moduleName == libName) {
             fprintf(stderr,
                     "A QML module name (%s) cannot be the same as the target name when building "
@@ -3749,30 +3783,24 @@ int generateJavaQmlComponents(const Options &options)
             return false;
         }
 
-        int indentBase = 4;
-        if (leafEqualsLibname) {
-            indentBase = 0;
-            QIODevice *outputStreamDevice = outputStream.device();
-            if (outputStreamDevice) {
-                outputStream.flush();
-                outputStream.reset();
-                outputStreamDevice->close();
-            }
-
-            outputFile.reset(new QFile("%1/%2.java"_L1.arg(outputDir,moduleClassname)));
-            if (outputFile->exists() && !outputFile->remove())
-                return false;
-            if (!outputFile->open(QFile::ReadWrite)) {
-                fprintf(stderr, "Cannot open %s file to write.\n", qPrintable(outputFile->fileName()));
-                return false;
-            }
-
-            outputStream.setDevice(outputFile.get());
-            createHeaderBlock(outputStream, javaPackage);
+        const QString javaPackage = "%1.%2"_L1.arg(javaPackageBase, modulePackageSuffix);
+        const QString outputDir =
+                "%1/%2"_L1.arg(baseSourceDir, QString(modulePackageSuffix).replace(u'.', u'/'));
+        if (!QDir().current().mkpath(outputDir)) {
+            fprintf(stderr, "Cannot create %s directory\n", qPrintable(outputDir));
+            return false;
         }
 
-        beginModuleBlock(outputStream, moduleClassname, leafEqualsLibname, indentBase);
-        indentBase += 4;
+        // Add a marker file to indicate this as a module package source directory
+        {
+            QFile markerFile("%1/%2"_L1.arg(outputDir, markerFileName));
+            if (!markerFile.open(QFile::WriteOnly)) {
+                fprintf(stderr, "Cannot create %s file\n", qPrintable(markerFile.fileName()));
+                return false;
+            }
+        }
+
+        int indentBase = 0;
 
         for (const auto &qmlComponent : moduleInfo.qmlComponents) {
             const bool isSelected = options.selectedJavaQmlComponents.contains(
@@ -3785,6 +3813,11 @@ int generateJavaQmlComponents(const Options &options)
             QJsonObject component = getComponent(domInfo);
             if (component.isEmpty())
                 continue;
+
+            QByteArray componentClassBody;
+            QTextStream outputStream(&componentClassBody, QTextStream::ReadWrite);
+
+            createHeaderBlock(outputStream, javaPackage);
 
             beginComponentBlock(outputStream, libName, moduleInfo.moduleName, moduleInfo.preferPath,
                                 qmlComponent, indentBase);
@@ -3800,16 +3833,23 @@ int generateJavaQmlComponents(const Options &options)
 
             indentBase -= 4;
             endBlock(outputStream, indentBase);
+            outputStream.flush();
+
+            // Write component class body to file
+            QFile outputFile("%1/%2.java"_L1.arg(outputDir, qmlComponent.name));
+            if (outputFile.exists())
+                outputFile.remove();
+            if (!outputFile.open(QFile::WriteOnly)) {
+                fprintf(stderr, "Cannot open %s file to write.\n",
+                        qPrintable(outputFile.fileName()));
+                return false;
+            }
+            outputFile.write(componentClassBody);
+            outputFile.close();
+
             generatedComponents++;
         }
-        indentBase -= 4;
-        endBlock(outputStream, indentBase);
     }
-    if (!leafEqualsLibname)
-        endBlock(outputStream, 0);
-
-    outputStream.flush();
-    outputStream.device()->close();
     return generatedComponents;
 }
 

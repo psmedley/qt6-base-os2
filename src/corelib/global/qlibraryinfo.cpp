@@ -10,7 +10,6 @@
 #endif
 #include "qlibraryinfo.h"
 #include "qlibraryinfo_p.h"
-#include "qscopedpointer.h"
 
 #include "qcoreapplication.h"
 
@@ -34,6 +33,8 @@
 #    include <qt_windows.h>
 #endif
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
@@ -42,7 +43,7 @@ extern void qDumpCPUFeatures(); // in qsimd.cpp
 
 #if QT_CONFIG(settings)
 
-static QSettings *findConfiguration();
+static std::unique_ptr<QSettings> findConfiguration();
 
 struct QLibrarySettings
 {
@@ -51,7 +52,7 @@ struct QLibrarySettings
     bool havePaths();
     QSettings *configuration();
 
-    QScopedPointer<QSettings> settings;
+    std::unique_ptr<QSettings> settings;
     bool paths;
     bool reloadOnQAppAvailable;
 };
@@ -66,7 +67,7 @@ QSettings *QLibrarySettings::configuration()
 {
     if (reloadOnQAppAvailable && QCoreApplication::instance() != nullptr)
         load();
-    return settings.data();
+    return settings.get();
 }
 
 bool QLibrarySettings::havePaths()
@@ -79,8 +80,8 @@ bool QLibrarySettings::havePaths()
 void QLibrarySettings::load()
 {
     // If we get any settings here, those won't change when the application shows up.
-    settings.reset(findConfiguration());
-    reloadOnQAppAvailable = (settings.data() == nullptr && QCoreApplication::instance() == nullptr);
+    settings = findConfiguration();
+    reloadOnQAppAvailable = !settings && !QCoreApplication::instance();
 
     if (settings) {
         // This code needs to be in the regular library, as otherwise a qt.conf that
@@ -100,14 +101,14 @@ void QLibraryInfoPrivate::setQtconfManualPath(const QString *path)
     qtconfManualPath = path;
 }
 
-static QSettings *findConfiguration()
+static std::unique_ptr<QSettings> findConfiguration()
 {
     if (qtconfManualPath)
-        return new QSettings(*qtconfManualPath, QSettings::IniFormat);
+        return std::make_unique<QSettings>(*qtconfManualPath, QSettings::IniFormat);
 
     QString qtconfig = QStringLiteral(":/qt/etc/qt.conf");
     if (QFile::exists(qtconfig))
-        return new QSettings(qtconfig, QSettings::IniFormat);
+        return std::make_unique<QSettings>(qtconfig, QSettings::IniFormat);
 #ifdef Q_OS_DARWIN
     CFBundleRef bundleRef = CFBundleGetMainBundle();
     if (bundleRef) {
@@ -119,7 +120,7 @@ static QSettings *findConfiguration()
             QCFString path = CFURLCopyFileSystemPath(urlRef, kCFURLPOSIXPathStyle);
             qtconfig = QDir::cleanPath(path);
             if (QFile::exists(qtconfig))
-                return new QSettings(qtconfig, QSettings::IniFormat);
+                return std::make_unique<QSettings>(qtconfig, QSettings::IniFormat);
         }
     }
 #endif
@@ -127,10 +128,10 @@ static QSettings *findConfiguration()
         QDir pwd(QCoreApplication::applicationDirPath());
         qtconfig = pwd.filePath(u"qt" QT_STRINGIFY(QT_VERSION_MAJOR) ".conf"_s);
         if (QFile::exists(qtconfig))
-            return new QSettings(qtconfig, QSettings::IniFormat);
+            return std::make_unique<QSettings>(qtconfig, QSettings::IniFormat);
         qtconfig = pwd.filePath("qt.conf"_L1);
         if (QFile::exists(qtconfig))
-            return new QSettings(qtconfig, QSettings::IniFormat);
+            return std::make_unique<QSettings>(qtconfig, QSettings::IniFormat);
     }
     return nullptr;     //no luck
 }
@@ -272,8 +273,6 @@ QVersionNumber QLibraryInfo::version() noexcept
 
 static QString prefixFromAppDirHelper()
 {
-    QString appDir;
-
     if (QCoreApplication::instance()) {
 #ifdef Q_OS_DARWIN
         CFBundleRef bundleRef = CFBundleGetMainBundle();
@@ -292,12 +291,10 @@ static QString prefixFromAppDirHelper()
         }
 #endif // Q_OS_DARWIN
         // We make the prefix path absolute to the executable's directory.
-        appDir = QCoreApplication::applicationDirPath();
+        return QCoreApplication::applicationDirPath();
     } else {
-        appDir = QDir::currentPath();
+        return QDir::currentPath();
     }
-
-    return appDir;
 }
 
 #if QT_CONFIG(relocatable)
@@ -701,8 +698,7 @@ QString QLibraryInfoPrivate::path(QLibraryInfo::LibraryPath p, UsageMode usageMo
 QStringList QLibraryInfo::platformPluginArguments(const QString &platformName)
 {
 #if QT_CONFIG(settings)
-    QScopedPointer<const QSettings> settings(findConfiguration());
-    if (!settings.isNull()) {
+    if (const auto settings = findConfiguration()) {
         const QString key = "Platforms/"_L1
                 + platformName
                 + "Arguments"_L1;

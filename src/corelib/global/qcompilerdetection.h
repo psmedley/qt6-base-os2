@@ -464,12 +464,6 @@
 #  define QT_ASAN_ENABLED
 #endif
 
-#ifdef __cplusplus
-# if __has_include(<version>) /* remove this check once Integrity, QNX have caught up */
-#  include <version>
-# endif
-#endif
-
 /*
  * C++11 support
  *
@@ -1232,6 +1226,12 @@
 #  else
 #    define Q_FALLTHROUGH() (void)0
 #  endif
+#endif
+
+#if defined(__has_attribute) && __has_attribute(uninitialized)
+#  define Q_DECL_UNINITIALIZED __attribute__((uninitialized))
+#else
+#  define Q_DECL_UNINITIALIZED
 #endif
 
 

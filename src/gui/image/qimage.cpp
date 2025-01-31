@@ -1091,9 +1091,7 @@ QImage &QImage::operator=(const QImage &image)
 
 /*!
     \fn void QImage::swap(QImage &other)
-
-    Swaps image \a other with this image. This operation is very
-    fast and never fails.
+    \memberswap{image}
 */
 
 /*!
@@ -2915,7 +2913,7 @@ bool QImage::allGray() const
         break;
     }
 
-    uint buffer[BufferSize];
+    Q_DECL_UNINITIALIZED uint buffer[BufferSize];
     const QPixelLayout *layout = &qPixelLayouts[d->format];
     const auto fetch = layout->fetchToARGB32PM;
     for (int j = 0; j < d->height; ++j) {

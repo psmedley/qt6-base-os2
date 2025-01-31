@@ -283,7 +283,11 @@ function(qt_internal_add_tool target_name)
         _qt_internal_add_try_run_post_build("${target_name}" "${arg_TRY_RUN_FLAGS}")
     endif()
 
-    qt_enable_separate_debug_info(${target_name} "${install_dir}" QT_EXECUTABLE)
+    qt_internal_defer_separate_debug_info("${target_name}"
+        SEPARATE_DEBUG_INFO_ARGS
+            "${install_dir}"
+            QT_EXECUTABLE
+    )
     qt_internal_install_pdb_files(${target_name} "${install_dir}")
 
     if(QT_GENERATE_SBOM)
@@ -381,6 +385,7 @@ function(qt_export_tools module_name)
 
     # List of package dependencies that need be find_package'd when using the Tools package.
     set(package_deps "")
+    set(third_party_deps "")
 
     # Additional cmake files to install
     set(extra_cmake_files "")
@@ -393,7 +398,15 @@ function(qt_export_tools module_name)
         # e.g. qtwaylandscanner depends on WaylandScanner (non-qt package).
         get_target_property(extra_packages "${tool_name}" QT_EXTRA_PACKAGE_DEPENDENCIES)
         if(extra_packages)
-            list(APPEND package_deps "${extra_packages}")
+            foreach(third_party_dep IN LISTS extra_packages)
+                list(GET third_party_dep 0 third_party_dep_name)
+                list(GET third_party_dep 1 third_party_dep_version)
+
+                # Assume that all tool thirdparty deps are mandatory.
+                # TODO: Components are not supported
+                list(APPEND third_party_deps
+                    "${third_party_dep_name}\\\;FALSE\\\;${third_party_dep_version}\\\;\\\;")
+            endforeach()
         endif()
 
         get_target_property(_extra_cmake_files "${tool_name}" EXTRA_CMAKE_FILES)

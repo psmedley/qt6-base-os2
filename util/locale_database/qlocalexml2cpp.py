@@ -84,7 +84,7 @@ class ByteArrayData:
         return index
 
     def write(self, out: Callable[[str], int], name: str) -> None:
-        out(f'\nstatic constexpr char {name}[] = {{\n')
+        out(f'\nstatic inline constexpr char {name}[] = {{\n')
         out(wrap_list(self.data, 16)) # 16 == 100 // len('0xhh, ')
         # All data is ASCII, so only two-digit hex is ever needed.
         out('\n};\n')
@@ -151,7 +151,7 @@ class StringData:
             raise ValueError(f'Data is too big ({len(self.data)}) '
                              f'for {indbits}-bit index to its end!',
                              self.name)
-        out(f"\nstatic constexpr char16_t {self.name}[] = {{\n")
+        out(f"\nstatic inline constexpr char16_t {self.name}[] = {{\n")
         out(wrap_list(self.data, 12)) # 12 == 100 // len('0xhhhh, ')
         out("\n};\n")
 
@@ -201,7 +201,7 @@ class TimeZoneDataWriter (LocaleSourceEditor):
 
         # Write UTC ID key table
         out('// IANA ID Index, UTC Offset\n')
-        out('static constexpr UtcData utcDataTable[] = {\n')
+        out('static inline constexpr UtcData utcDataTable[] = {\n')
         for offset in sorted(offsetMap.keys()): # Sort so C++ can binary-chop.
             names: tuple[str, ...] = offsetMap[offset]
             joined: int = self.__ianaListTable.append(' '.join(names))
@@ -213,7 +213,7 @@ class TimeZoneDataWriter (LocaleSourceEditor):
         store: Callable[[str], int] = self.__ianaTable.append
 
         out('// Alias ID Index, Alias ID Index\n')
-        out('static constexpr AliasData aliasMappingTable[] = {\n')
+        out('static inline constexpr AliasData aliasMappingTable[] = {\n')
         for name, iana in pairs: # They're ready-sorted
             if name != iana:
                 out(f'    {{ {store(name):6d},{store(iana):6d} }},'
@@ -227,7 +227,7 @@ class TimeZoneDataWriter (LocaleSourceEditor):
         alias: dict[str, str] = dict(pairs) # {MS name: IANA ID}
 
         out('// Windows ID Key, Windows ID Index, IANA ID Index, UTC Offset\n')
-        out('static constexpr WindowsData windowsDataTable[] = {\n')
+        out('static inline constexpr WindowsData windowsDataTable[] = {\n')
         # Sorted by Windows ID key:
 
         for index, (name, offset) in enumerate(self.__windowsList, 1):
@@ -247,7 +247,7 @@ class TimeZoneDataWriter (LocaleSourceEditor):
                 for name, land, ianas in triples)
 
         out('// Windows ID Key, Territory Enum, IANA ID Index\n')
-        out('static constexpr ZoneData zoneDataTable[] = {\n')
+        out('static inline constexpr ZoneData zoneDataTable[] = {\n')
         # Sorted by (Windows ID Key, territory enum)
         for winId, landId, name, land, ianas in seq:
             out(f'    {{ {winId:6d},{landId:6d},{store(ianas):6d} }},'
@@ -289,7 +289,7 @@ class LocaleDataWriter (LocaleSourceEditor):
         likely = sorted(likely, key=keyLikely)
 
         i = 0
-        self.writer.write('static constexpr QLocaleId likely_subtags[] = {\n')
+        self.writer.write('static inline constexpr QLocaleId likely_subtags[] = {\n')
         # have and give are both triplets of ints
         for had, have, got, give in likely:
             i += 1
@@ -300,7 +300,7 @@ class LocaleDataWriter (LocaleSourceEditor):
         self.writer.write('};\n\n')
 
     def localeIndex(self, indices: Iterator[tuple[int, str]]) -> None:
-        self.writer.write('static constexpr quint16 locale_index[] = {\n')
+        self.writer.write('static inline constexpr quint16 locale_index[] = {\n')
         for index, name in indices:
             self.writer.write(f'{index:6d}, // {name}\n')
         self.writer.write('     0 // trailing 0\n')
@@ -322,7 +322,7 @@ class LocaleDataWriter (LocaleSourceEditor):
         endonyms_data = StringData('endonyms_data')
 
         # Locale data
-        self.writer.write('static constexpr QLocaleData locale_data[] = {\n')
+        self.writer.write('static inline constexpr QLocaleData locale_data[] = {\n')
         # Table headings: keep each label centred in its field, matching line_format:
         self.writer.write('   // '
                           # Width 6 + comma
@@ -473,7 +473,7 @@ class LocaleDataWriter (LocaleSourceEditor):
 
     @staticmethod
     def __writeNameData(out, book: dict[int, tuple[str, str, str]], form: str) -> None:
-        out(f'static constexpr char {form}_name_list[] =\n')
+        out(f'static inline constexpr char {form}_name_list[] =\n')
         out('"Default\\0"\n')
         for key, value in book.items():
             if key == 0:
@@ -485,7 +485,7 @@ class LocaleDataWriter (LocaleSourceEditor):
                 out(f'"{name}\\0"\n') # Automagically utf-8 encoded
         out(';\n\n')
 
-        out(f'static constexpr quint16 {form}_name_index[] = {{\n')
+        out(f'static inline constexpr quint16 {form}_name_index[] = {{\n')
         out(f'     0, // Any{form.capitalize()}\n')
         index = 8
         for key, value in book.items():
@@ -497,7 +497,7 @@ class LocaleDataWriter (LocaleSourceEditor):
 
     @staticmethod
     def __writeCodeList(out, book: dict[int, tuple[str, str, str]], form: str, width: int) -> None:
-        out(f'static constexpr unsigned char {form}_code_list[] =\n')
+        out(f'static inline constexpr unsigned char {form}_code_list[] =\n')
         for key, value in book.items():
             code = value[1]
             code += r'\0' * max(width - len(code), 0)
@@ -560,7 +560,7 @@ class CalendarDataWriter (LocaleSourceEditor):
               names: list[tuple[int, int, int]]) -> None:
         months_data = StringData('months_data', 16)
 
-        self.writer.write('static constexpr QCalendarLocale locale_data[] = {\n')
+        self.writer.write('static inline constexpr QCalendarLocale locale_data[] = {\n')
         self.writer.write(
             '     //'
             # IDs, width 7 (6 + comma)

@@ -93,9 +93,7 @@ QMimeType::QMimeType(const QMimeTypePrivate &dd) :
 
 /*!
     \fn void QMimeType::swap(QMimeType &other);
-    Swaps QMimeType \a other with this QMimeType object.
-
-    This operation is very fast and never fails.
+    \memberswap{mime type}
 
     The swap() method helps with the implementation of assignment
     operators in an exception-safe way. For more information consult
@@ -125,10 +123,7 @@ bool comparesEqual(const QMimeType &lhs, const QMimeType &rhs) noexcept
 
 /*!
     \since 5.6
-    \relates QMimeType
-
-    Returns the hash value for \a key, using
-    \a seed to seed the calculation.
+    \qhashold{QMimeType}
  */
 size_t qHash(const QMimeType &key, size_t seed) noexcept
 {

@@ -170,7 +170,7 @@ QObjectPrivate::QObjectPrivate(int version)
     isDeletingChildren = false;                 // set by deleteChildren()
     sendChildEvents = true;                     // if we should send ChildAdded and ChildRemoved events to parent
     receiveChildEvents = true;
-    postedEvents = 0;
+    postedEvents.storeRelaxed(0);
     extraData = nullptr;
     metaObject = nullptr;
     isWindow = false;
@@ -198,7 +198,7 @@ QObjectPrivate::~QObjectPrivate()
         }
     }
 
-    if (postedEvents)
+    if (postedEvents.loadRelaxed())
         QCoreApplication::removePostedEvents(q_ptr, 0);
 
     thisThreadData->deref();
@@ -1400,7 +1400,6 @@ bool QObject::event(QEvent *e)
         break;
 
     case QEvent::DeferredDelete:
-        qCDebug(lcDeleteLater) << "Deferred deleting" << this;
         delete this;
         break;
 
@@ -1738,8 +1737,8 @@ void QObjectPrivate::setThreadData_helper(QThreadData *currentData, QThreadData 
     }
 
     // move posted events
-    int eventsMoved = 0;
-    for (int i = 0; i < currentData->postEventList.size(); ++i) {
+    qsizetype eventsMoved = 0;
+    for (qsizetype i = 0; i < currentData->postEventList.size(); ++i) {
         const QPostEvent &pe = currentData->postEventList.at(i);
         if (!pe.event)
             continue;
@@ -2451,10 +2450,8 @@ void QObject::deleteLater()
     // as long as we're not guarding every access to the bit field.
 
     Q_D(QObject);
-    if (d->deleteLaterCalled) {
-        qCDebug(lcDeleteLater) << "Skipping deleteLater for already deferred object" << this;
+    if (d->deleteLaterCalled)
         return;
-    }
 
     d->deleteLaterCalled = true;
 
@@ -2480,15 +2477,9 @@ void QObject::deleteLater()
         // non-conformant code path, and our best guess is that the scope level
         // should be 1. (Loop level 0 is special: it means that no event loops
         // are running.)
-        if (scopeLevel == 0 && loopLevel != 0) {
-            qCDebug(lcDeleteLater) << "Delete later called with scope level 0"
-                << "but loop level is > 0. Assuming scope is 1";
+        if (scopeLevel == 0 && loopLevel != 0)
             scopeLevel = 1;
-        }
     }
-
-    qCDebug(lcDeleteLater) << "Posting deferred delete for" << this
-        << "with loop level" << loopLevel << "and scope level" << scopeLevel;
 
     eventListLocker.unlock();
     QCoreApplication::postEvent(this,

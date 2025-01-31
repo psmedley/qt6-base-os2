@@ -258,10 +258,16 @@ void prepareStackTrace()
         return;
 
 #if defined(Q_OS_MACOS)
+    // Try to handle https://github.com/llvm/llvm-project/issues/53254,
+    // where LLDB will hang and fail to provide a valid stack trace.
+# if defined(Q_PROCESSOR_ARM)
+    return;
+ #else
     #define CSR_ALLOW_UNRESTRICTED_FS (1 << 1)
     std::optional<uint32_t> sipConfiguration = qt_mac_sipConfiguration();
     if (!sipConfiguration || !(*sipConfiguration & CSR_ALLOW_UNRESTRICTED_FS))
-        return; // LLDB will fail to provide a valid stack trace
+        return;
+# endif
 #endif
 
 #ifdef Q_OS_UNIX
@@ -478,7 +484,7 @@ LONG WINAPI WindowsFaultHandler::windowsFaultHandler(struct _EXCEPTION_POINTERS 
             fprintf(stderr, "Nearby symbol    : %s\n", exceptionSymbol.name);
             delete [] exceptionSymbol.name;
         }
-        void *stack[maxStackFrames];
+        Q_DECL_UNINITIALIZED void *stack[maxStackFrames];
         fputs("\nStack:\n", stderr);
         const unsigned frameCount = CaptureStackBackTrace(0, DWORD(maxStackFrames), stack, NULL);
         for (unsigned f = 0; f < frameCount; ++f)     {

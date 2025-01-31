@@ -59,7 +59,7 @@ class QtActivityDelegate extends QtActivityDelegateBase
 
     void registerBackends()
     {
-        if (!m_backendsRegistered) {
+        if (!m_backendsRegistered && !BackendRegister.isNull()) {
             m_backendsRegistered = true;
             BackendRegister.registerBackend(QtWindowInterface.class,
                                             (QtWindowInterface)QtActivityDelegate.this);
@@ -76,6 +76,10 @@ class QtActivityDelegate extends QtActivityDelegateBase
     {
         if (m_backendsRegistered) {
             m_backendsRegistered = false;
+
+            if (BackendRegister.isNull())
+                return;
+
             BackendRegister.unregisterBackend(QtWindowInterface.class);
             BackendRegister.unregisterBackend(QtAccessibilityInterface.class);
             BackendRegister.unregisterBackend(QtMenuInterface.class);
@@ -84,14 +88,14 @@ class QtActivityDelegate extends QtActivityDelegateBase
     }
 
     @Override
-    public void setSystemUiVisibility(int systemUiVisibility)
+    public void setSystemUiVisibility(boolean isFullScreen, boolean expandedToCutout)
     {
         if (m_layout == null)
             return;
 
         QtNative.runAction(() -> {
             if (m_layout != null) {
-                m_displayManager.setSystemUiVisibility(systemUiVisibility);
+                m_displayManager.setSystemUiVisibility(isFullScreen, expandedToCutout);
                 m_layout.requestLayout();
                 QtNative.updateWindow();
             }

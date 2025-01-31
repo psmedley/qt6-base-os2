@@ -2536,6 +2536,7 @@ void QDateTimeEdit::initStyleOption(QStyleOptionSpinBox *option) const
 void QDateTimeEditPrivate::init(const QVariant &var)
 {
     Q_Q(QDateTimeEdit);
+    defaultCenturyStart = QDATETIMEEDIT_DATE_INITIAL.year();
     switch (var.userType()) {
     case QMetaType::QDate:
         value = var.toDate().startOfDay(timeZone);

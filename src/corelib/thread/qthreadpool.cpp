@@ -9,6 +9,7 @@
 #include <QtCore/qpointer.h>
 
 #include <algorithm>
+#include <climits> // For INT_MAX
 #include <memory>
 
 using namespace std::chrono_literals;
@@ -481,7 +482,9 @@ QThreadPool *QThreadPoolPrivate::qtGuiInstance()
 {
     Q_CONSTINIT static QPointer<QThreadPool> guiInstance;
     Q_CONSTINIT static QBasicMutex theMutex;
-
+    const static bool runtime_disable = qEnvironmentVariableIsSet("QT_NO_GUI_THREADPOOL");
+    if (runtime_disable)
+        return nullptr;
     const QMutexLocker locker(&theMutex);
     if (guiInstance.isNull() && !QCoreApplication::closingDown()) {
         guiInstance = new QThreadPool();

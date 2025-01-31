@@ -558,7 +558,11 @@ struct Data
         seed = QHashSeed::globalSeed();
     }
 
-    void reallocationHelper(const Data &other, size_t nSpans, bool resized)
+    // The Resized parameter is a template param to make sure the compiler will get rid of the
+    // branch, for performance.
+    template <bool Resized>
+    Q_ALWAYS_INLINE
+    void reallocationHelper(const Data &other, size_t nSpans)
     {
         for (size_t s = 0; s < nSpans; ++s) {
             const Span &span = other.spans[s];
@@ -566,7 +570,7 @@ struct Data
                 if (!span.hasNode(index))
                     continue;
                 const Node &n = span.at(index);
-                auto it = resized ? findBucket(n.key) : Bucket { spans + s, index };
+                auto it = Resized ? findBucket(n.key) : Bucket { spans + s, index };
                 Q_ASSERT(it.isUnused());
                 Node *newNode = it.insert();
                 new (newNode) Node(n);
@@ -578,14 +582,14 @@ struct Data
     {
         auto r = allocateSpans(numBuckets);
         spans = r.spans;
-        reallocationHelper(other, r.nSpans, false);
+        reallocationHelper<false>(other, r.nSpans);
     }
     Data(const Data &other, size_t reserved) : size(other.size), seed(other.seed)
     {
         numBuckets = GrowthPolicy::bucketsForCapacity(qMax(size, reserved));
         spans = allocateSpans(numBuckets).spans;
         size_t otherNSpans = other.numBuckets >> SpanConstants::SpanShift;
-        reallocationHelper(other, otherNSpans, numBuckets != other.numBuckets);
+        reallocationHelper<true>(other, otherNSpans);
     }
 
     static Data *detached(Data *d)
@@ -929,6 +933,8 @@ public:
 #endif // Q_QDOC
 
     inline qsizetype size() const noexcept { return d ? qsizetype(d->size) : 0; }
+
+    [[nodiscard]]
     inline bool isEmpty() const noexcept { return !d || d->size == 0; }
 
     inline qsizetype capacity() const noexcept { return d ? qsizetype(d->numBuckets >> 1) : 0; }
@@ -1363,6 +1369,7 @@ public:
     size_t bucket_count() const noexcept { return d ? d->numBuckets : 0; }
     static size_t max_bucket_count() noexcept { return Data::maxNumBuckets(); }
 
+    [[nodiscard]]
     inline bool empty() const noexcept { return isEmpty(); }
 
 private:
@@ -1609,6 +1616,7 @@ public:
 
     inline qsizetype size() const noexcept { return m_size; }
 
+    [[nodiscard]]
     inline bool isEmpty() const noexcept { return !m_size; }
 
     inline qsizetype capacity() const noexcept { return d ? qsizetype(d->numBuckets >> 1) : 0; }
@@ -2118,6 +2126,7 @@ public:
     size_t bucket_count() const noexcept { return d ? d->numBuckets : 0; }
     static size_t max_bucket_count() noexcept { return Data::maxNumBuckets(); }
 
+    [[nodiscard]]
     inline bool empty() const noexcept { return isEmpty(); }
 
     inline iterator replace(const Key &key, const T &value)

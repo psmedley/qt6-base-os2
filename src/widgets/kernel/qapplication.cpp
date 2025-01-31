@@ -2762,7 +2762,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                                mouse->pointingDevice());
                 me.m_spont = mouse->spontaneous();
                 me.setTimestamp(mouse->timestamp());
-                QMutableSinglePointEvent::from(me).setDoubleClick(QMutableSinglePointEvent::from(mouse)->isDoubleClick());
+                QMutableSinglePointEvent::setDoubleClick(&me, QMutableSinglePointEvent::isDoubleClick(mouse));
                 // throw away any mouse-tracking-only mouse events
                 if (!w->hasMouseTracking()
                     && mouse->type() == QEvent::MouseMove && mouse->buttons() == 0) {
@@ -3067,7 +3067,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
 #endif // QT_CONFIG(draganddrop)
         case QEvent::TouchBegin: {
             // Note: TouchUpdate and TouchEnd events are never propagated
-            QMutableTouchEvent *touchEvent = QMutableTouchEvent::from(static_cast<QTouchEvent *>(e));
+            QTouchEvent *touchEvent = static_cast<QTouchEvent *>(e);
             bool eventAccepted = touchEvent->isAccepted();
             bool acceptTouchEvents = w->testAttribute(Qt::WA_AcceptTouchEvents);
 
@@ -3084,7 +3084,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
             while (w) {
                 // first, try to deliver the touch event
                 acceptTouchEvents = w->testAttribute(Qt::WA_AcceptTouchEvents);
-                touchEvent->setTarget(w);
+                QMutableTouchEvent::setTarget(touchEvent, w);
                 touchEvent->setAccepted(acceptTouchEvents);
                 QPointer<QWidget> p = w;
                 res = acceptTouchEvents && d->notify_helper(w, touchEvent);
@@ -3110,7 +3110,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
 
                 const QPoint offset = w->pos();
                 w = w->parentWidget();
-                touchEvent->setTarget(w);
+                QMutableTouchEvent::setTarget(touchEvent, w);
                 for (int i = 0; i < touchEvent->pointCount(); ++i) {
                     auto &pt = touchEvent->point(i);
                     QMutableEventPoint::setPosition(pt, pt.position() + offset);
@@ -3802,8 +3802,8 @@ void QApplicationPrivate::activateImplicitTouchGrab(QWidget *widget, QTouchEvent
 bool QApplicationPrivate::translateRawTouchEvent(QWidget *window, const QTouchEvent *te)
 {
     QApplicationPrivate *d = self;
-    // TODO get rid of this QPair
-    typedef QPair<QEventPoint::State, QList<QEventPoint> > StatesAndTouchPoints;
+    // TODO get rid of this std::pair
+    typedef std::pair<QEventPoint::State, QList<QEventPoint> > StatesAndTouchPoints;
     QHash<QWidget *, StatesAndTouchPoints> widgetsNeedingEvents;
 
     const auto *device = te->pointingDevice();
