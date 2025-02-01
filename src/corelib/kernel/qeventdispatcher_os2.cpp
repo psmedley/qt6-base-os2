@@ -979,7 +979,7 @@ QEventDispatcherOS2::timersForObject(QObject *object) const
 #ifndef QT_NO_DEBUG
     if (!object) {
         qWarning("QEventDispatcherOS2:registeredTimers: invalid argument");
-        return QList<TimerInfov2>();
+        return QList<TimerInfoV2>();
     }
 #endif
 
