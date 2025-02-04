@@ -1261,10 +1261,11 @@ QChar *QUtf32::convertToUnicode(QChar *out, QByteArrayView in, QStringConverter:
 
 #if defined(Q_OS_OS2) && !defined(QT_BOOTSTRAPPED)
 
-QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::State *state)
+QString QLocal8Bit::convertToUnicode(QByteArrayView in, QStringConverter::State *state)
 {
     const char *src    = in.data();
     qsizetype   srcLen = in.size();
+    const char *srcLim = &src[srcLen];
 
     if (!src || !srcLen)
         return QString();
@@ -1287,8 +1288,8 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::St
         return QString();
     }
 
-    // create a big output buffer
-    QVarLengthArray<UChar, 4096> ua(4096);
+    // create a target buffer with some slop
+    QVarLengthArray<UChar, 4096> ua(srcLen + 16);
     UChar     *tgt    = (UChar*)ua.data();
     qsizetype  tgtLen = ua.size();
     int        len;
@@ -1322,19 +1323,19 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::St
     }
 
     // try the conversion
-    ucnv_toUnicode(conv, &tgt, &tgt[tgtLen], &src, &src[srcLen], 0, true, &err);
+    ucnv_toUnicode(conv, &tgt, &tgt[tgtLen], &src, srcLim, 0, true, &err);
 
     // if conversion failed due to buffer overflow, double the size of the buffer
     // and continue where we left off; if that fails, don't even try to recover
     if (U_FAILURE(err)) {
         if (err == U_BUFFER_OVERFLOW_ERROR) {
+            tgtLen = tgt - ua.data();
             ua.resize(2 * tgtLen);
             tgt = (UChar*)ua.data();
             tgt += tgtLen;
-            tgtLen = ua.size();
             err = U_ZERO_ERROR;
             ucnv_toUnicode(conv, &tgt, &tgt[tgtLen],
-                           &src, &src[srcLen], NULL, true, &err);
+                           &src, srcLim, NULL, true, &err);
         }
         else
         if (err == U_TRUNCATED_CHAR_FOUND) {
@@ -1346,6 +1347,7 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::St
             }
         }
         else {
+            tgt = ua.data();
             qWarning("convertToUnicode_sys: ucnv_ToUnicode() failed - err= %d\n", err);
         }
     }
@@ -1369,10 +1371,11 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::St
 // ignore the possibility that a surrogate pair could be split across
 // two chunks - as such, the conversion is always stateless (we hope)
 
-QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, QStringConverter::State *state)
+QByteArray QLocal8Bit::convertFromUnicode(QStringView in, QStringConverter::State *state)
 {
     const UChar *src    = (const UChar*)in.data();
     qsizetype    srcLen = in.size();
+    const UChar *srcLim = &src[srcLen];
 
     Q_UNUSED(state);
     Q_ASSERT(srcLen < INT_MAX);
@@ -1403,23 +1406,23 @@ QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, QStringConverter::
     ucnv_setSubstChars(conv, cpSub, 1, &err);
 
     // create a target buffer with some slop
-    QByteArray   ba(srcLen + 1 + srcLen/10, 0);
+    QByteArray   ba(srcLen + 16, 0);
     char        *tgt    = ba.data();
     qsizetype    tgtLen = ba.size();
 
     // try the conversion; if it fails, double the size of the buffer and
     // continue where we left off; if that fails, don't even try to recover
     ucnv_fromUnicode(conv, &tgt, &tgt[tgtLen],
-                     &src, &src[srcLen], NULL, true, &err);
+                     &src, srcLim, NULL, true, &err);
 
     if (err == U_BUFFER_OVERFLOW_ERROR) {
+        tgtLen = tgt - ba.data();
         ba.resize(2 * tgtLen);
         tgt = ba.data();
         tgt += tgtLen;
-        tgtLen = ba.size();
         err = U_ZERO_ERROR;
         ucnv_fromUnicode(conv, &tgt, &tgt[tgtLen],
-                         &src, &src[srcLen], NULL, true, &err);
+                         &src, srcLim, NULL, true, &err);
     }
 
     // on failure, return an empty buffer; otherwise, resize to actual length
