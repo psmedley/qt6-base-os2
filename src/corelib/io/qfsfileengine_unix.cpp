@@ -680,7 +680,7 @@ bool QFSFileEnginePrivate::unmap(uchar *ptr)
         return false;
     }
 
-#ifdef Q_OS_OS2x
+#ifdef Q_OS_OS2
     uchar *start = ptr - maps.value(ptr).first;
     size_t len = maps.value(ptr).second;
 #else

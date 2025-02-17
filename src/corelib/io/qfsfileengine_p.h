@@ -179,11 +179,7 @@ public:
     mutable int cachedFd;
     mutable DWORD fileAttrib;
 #elif defined(Q_OS_OS2)
-    struct StartAndLength {
-        int start;     // offset % PageSize
-        size_t length; // length + offset % PageSize
-    };
-    QMultiHash<uchar *, StartAndLength> maps;
+    QMultiHash<uchar *, std::pair<int /*offset % PageSize*/, size_t /*length + offset % PageSize*/> > maps;
 #else
     struct StartAndLength {
         int start;     // offset % PageSize
