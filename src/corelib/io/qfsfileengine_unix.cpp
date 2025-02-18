@@ -646,7 +646,7 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
         // On OS/2, LIBCx mmap returns the same address for the same region,
         // account for it (to make two map calls with two subsequent unmap calls
         // succeed, see tst_QFile for an example).
-        maps.insert(address, {extra, realSize});
+        maps.insert(address, std::pair<int,size_t>{extra, realSize});
 #else
         maps[address] = {extra, realSize};
 #endif
