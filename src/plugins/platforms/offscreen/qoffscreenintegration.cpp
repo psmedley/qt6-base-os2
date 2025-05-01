@@ -78,7 +78,6 @@ QOffscreenIntegration::QOffscreenIntegration(const QStringList& paramList)
 #if QT_CONFIG(draganddrop)
     m_drag.reset(new QOffscreenDrag);
 #endif
-    m_services.reset(new QPlatformServices);
 
     QJsonObject config = resolveConfigFileConfiguration(paramList).value_or(defaultConfiguration());
     setConfiguration(config);
@@ -425,6 +424,9 @@ QPlatformDrag *QOffscreenIntegration::drag() const
 
 QPlatformServices *QOffscreenIntegration::services() const
 {
+    if (m_services.isNull())
+        m_services.reset(new QPlatformServices);
+
     return m_services.data();
 }
 

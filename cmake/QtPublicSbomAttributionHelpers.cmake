@@ -25,12 +25,8 @@ function(_qt_internal_sbom_handle_qt_attribution_files out_prefix_outer)
         return()
     endif()
 
-    set(opt_args
-        CREATE_SBOM_FOR_EACH_ATTRIBUTION
-    )
-    set(single_args
-        PARENT_TARGET
-    )
+    set(opt_args "")
+    set(single_args "")
     set(multi_args "")
 
     _qt_internal_get_sbom_specific_options(sbom_opt_args sbom_single_args sbom_multi_args)
@@ -57,15 +53,22 @@ function(_qt_internal_sbom_handle_qt_attribution_files out_prefix_outer)
         math(EXPR attribution_file_count "${attribution_file_count} + 1")
     endforeach()
 
-    # If CREATE_SBOM_FOR_EACH_ATTRIBUTION is set, that means the parent target was a qt entity,
-    # and not a 3rd party library.
+    # If CREATE_SBOM_FOR_EACH_ATTRIBUTION is set, that means the parent target is likely not a
+    # 3rd party library, so each attribution entry should create a separate attribution target.
     # In which case we don't want to proagate options like CPE to the child attribution targets,
     # because the CPE is meant for the parent target.
     set(propagate_sbom_options_to_new_attribution_targets TRUE)
+    if(arg___QT_INTERNAL_HANDLE_QT_ENTITY_ATTRIBUTION_FILES)
+        _qt_internal_sbom_is_qt_entity_type("${arg_TYPE}" is_qt_entity_type)
+        if(is_qt_entity_type)
+            set(arg_CREATE_SBOM_FOR_EACH_ATTRIBUTION TRUE)
+        endif()
+    endif()
+
     if(arg_CREATE_SBOM_FOR_EACH_ATTRIBUTION)
         set(propagate_sbom_options_to_new_attribution_targets FALSE)
-        if(NOT arg_PARENT_TARGET)
-            message(FATAL_ERROR "PARENT_TARGET must be set")
+        if(NOT arg_ATTRIBUTION_PARENT_TARGET)
+            message(FATAL_ERROR "ATTRIBUTION_PARENT_TARGET must be set")
         endif()
     endif()
 
@@ -74,6 +77,12 @@ function(_qt_internal_sbom_handle_qt_attribution_files out_prefix_outer)
             "ATTRIBUTION_ENTRY_INDEX should only be set if a single attribution "
             "file is specified."
         )
+    endif()
+
+    set(ids_to_add "")
+    set(ids_found "")
+    if(arg_ATTRIBUTION_IDS)
+        set(ids_to_add ${arg_ATTRIBUTION_IDS})
     endif()
 
     set(file_index 0)
@@ -118,6 +127,17 @@ function(_qt_internal_sbom_handle_qt_attribution_files out_prefix_outer)
                     FILE_PATH "${attribution_file_path}"
                 )
 
+                # Check if we need to filter for specific ids.
+                if(ids_to_add AND ${out_prefix}_attribution_id)
+                    if("${${out_prefix}_attribution_id}" IN_LIST ids_to_add)
+                        list(APPEND ids_found "${${out_prefix}_attribution_id}")
+                    else()
+                        # Skip to next entry.
+                        math(EXPR entry_index "${entry_index} + 1")
+                        continue()
+                    endif()
+                endif()
+
                 # Propagate the values to the outer scope.
                 foreach(variable_name IN LISTS variable_names)
                     set(${out_prefix}_${variable_name} "${${out_prefix}_${variable_name}}"
@@ -155,25 +175,63 @@ function(_qt_internal_sbom_handle_qt_attribution_files out_prefix_outer)
                     FILE_PATH "${attribution_file_path}"
                 )
 
+                # Check if we need to filter for specific ids
+                if(ids_to_add AND ${out_prefix}_attribution_id)
+                    if("${${out_prefix}_attribution_id}" IN_LIST ids_to_add)
+                        list(APPEND ids_found "${${out_prefix}_attribution_id}")
+                    else()
+                        # Skip to next entry.
+                        math(EXPR entry_index "${entry_index} + 1")
+                        continue()
+                    endif()
+                endif()
+
                 # If no Id was retrieved, just add a numeric one, to make the sbom target
                 # unique.
-                set(attribution_target "${arg_PARENT_TARGET}_Attribution_")
+                set(attribution_target "${arg_ATTRIBUTION_PARENT_TARGET}_Attribution_")
                 if(NOT ${out_prefix}_attribution_id)
                     string(APPEND attribution_target "${file_index}_${entry_index}")
                 else()
                     string(APPEND attribution_target "${${out_prefix}_attribution_id}")
                 endif()
 
+                # Sanitize the target name, to avoid issues with slashes and other unsupported chars
+                # in target names.
+                string(REGEX REPLACE "[^a-zA-Z0-9_-]" "_"
+                    attribution_target "${attribution_target}")
+
                 set(sbom_args "")
+
+                # Always propagate the package supplier, because we assume the supplier for 3rd
+                # party libs is the same as the current project supplier.
+                # Also propagate the internal qt entity type values like CPE, supplier, PURL
+                # handling options, attribution file values, if set.
+                _qt_internal_forward_function_args(
+                    FORWARD_APPEND
+                    FORWARD_PREFIX arg
+                    FORWARD_OUT_VAR sbom_args
+                    FORWARD_OPTIONS
+                        USE_ATTRIBUTION_FILES
+                        __QT_INTERNAL_HANDLE_QT_ENTITY_TYPE_CPE
+                        __QT_INTERNAL_HANDLE_QT_ENTITY_TYPE_SUPPLIER
+                        __QT_INTERNAL_HANDLE_QT_ENTITY_TYPE_PURL
+                        __QT_INTERNAL_HANDLE_QT_ENTITY_ATTRIBUTION_FILES
+                    FORWARD_SINGLE
+                        SUPPLIER
+                )
 
                 if(propagate_sbom_options_to_new_attribution_targets)
                     # Filter out the attributtion options, they will be passed mnaually
                     # depending on which file and index is currently being processed.
                     _qt_internal_get_sbom_specific_options(
                         sbom_opt_args sbom_single_args sbom_multi_args)
-                    list(REMOVE_ITEM sbom_opt_args NO_CURRENT_DIR_ATTRIBUTION)
+                    list(REMOVE_ITEM sbom_opt_args
+                        NO_CURRENT_DIR_ATTRIBUTION
+                        CREATE_SBOM_FOR_EACH_ATTRIBUTION
+                    )
                     list(REMOVE_ITEM sbom_single_args ATTRIBUTION_ENTRY_INDEX)
                     list(REMOVE_ITEM sbom_multi_args
+                        ATTRIBUTION_IDS
                         ATTRIBUTION_FILE_PATHS
                         ATTRIBUTION_FILE_DIR_PATHS
                     )
@@ -198,16 +256,22 @@ function(_qt_internal_sbom_handle_qt_attribution_files out_prefix_outer)
                 # Create another sbom target with the id as a hint for the target name,
                 # the attribution file passed, and make the new target a dependency of the
                 # parent one.
+                if(arg___QT_INTERNAL_HANDLE_QT_ENTITY_ATTRIBUTION_FILES)
+                    set(attribution_entity_type QT_THIRD_PARTY_SOURCES)
+                else()
+                    set(attribution_entity_type THIRD_PARTY_SOURCES)
+                endif()
+
                 _qt_internal_add_sbom("${attribution_target}"
                     IMMEDIATE_FINALIZATION
-                    TYPE QT_THIRD_PARTY_SOURCES
+                    TYPE "${attribution_entity_type}"
                     ATTRIBUTION_FILE_PATHS "${attribution_file_path}"
                     ATTRIBUTION_ENTRY_INDEX "${entry_index}"
                     NO_CURRENT_DIR_ATTRIBUTION
                     ${sbom_args}
                 )
 
-                _qt_internal_extend_sbom_dependencies(${arg_PARENT_TARGET}
+                _qt_internal_extend_sbom_dependencies(${arg_ATTRIBUTION_PARENT_TARGET}
                     SBOM_DEPENDENCIES ${attribution_target}
                 )
             endif()
@@ -217,6 +281,22 @@ function(_qt_internal_sbom_handle_qt_attribution_files out_prefix_outer)
 
         math(EXPR file_index "${file_index} + 1")
     endforeach()
+
+    # Show an error if an id is unaccounted for, it might be it has moved to a different file, that
+    # is not referenced.
+    if(ids_to_add)
+        set(attribution_ids_diff ${ids_to_add})
+        list(REMOVE_ITEM attribution_ids_diff ${ids_found})
+        if(attribution_ids_diff)
+            set(error_message
+                "The following required attribution ids were not found in the attribution files")
+            if(arg_ATTRIBUTION_PARENT_TARGET)
+                string(APPEND error_message " for target: ${arg_ATTRIBUTION_PARENT_TARGET}")
+            endif()
+            string(APPEND error_message " ids: ${attribution_ids_diff}")
+            message(FATAL_ERROR "${error_message}")
+        endif()
+    endif()
 endfunction()
 
 # Helper to parse a qt_attribution.json file and do various operations:
@@ -335,10 +415,10 @@ function(_qt_internal_sbom_read_qt_attribution out_prefix)
     endif()
 
     if(arg_GET_DEFAULT_KEYS)
-        # Some calls are currently commented out, to save on json parsing time because we don't have
-        # a usage for them yet.
-        # _qt_internal_sbom_get_attribution_key(License license)
+        _qt_internal_sbom_get_attribution_key(Id attribution_id "${out_prefix}")
         _qt_internal_sbom_get_attribution_key(LicenseId license_id "${out_prefix}")
+        _qt_internal_sbom_get_attribution_key(License license "${out_prefix}")
+        _qt_internal_sbom_get_attribution_key(LicenseFile license_file "${out_prefix}")
         _qt_internal_sbom_get_attribution_key(Version version "${out_prefix}")
         _qt_internal_sbom_get_attribution_key(Homepage homepage "${out_prefix}")
         _qt_internal_sbom_get_attribution_key(Name attribution_name "${out_prefix}")

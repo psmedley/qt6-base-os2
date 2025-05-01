@@ -234,8 +234,6 @@ endif()
             set_property(TARGET "${qt_module_target}" APPEND PROPERTY _qt_plugins "${target}")
         endif()
 
-        set(plugin_target_versioned "${QT_CMAKE_EXPORT_NAMESPACE}::${target}")
-        get_target_property(type "${plugin_target_versioned}" TYPE)
         qt_internal_add_autogen_sync_header_dependencies(${target} ${qt_module_target})
     endif()
 
@@ -452,7 +450,7 @@ endif()
                 ${__qt_internal_sbom_multi_args}
         )
 
-        _qt_internal_extend_sbom(${target} ${sbom_args})
+        qt_internal_extend_qt_entity_sbom(${target} ${sbom_args})
     endif()
 
     qt_add_list_file_finalizer(qt_finalize_plugin ${target} ${finalizer_extra_args})

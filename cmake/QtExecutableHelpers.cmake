@@ -71,7 +71,12 @@ function(qt_internal_add_executable name)
         endif()
     endif()
 
-    if(arg_QT_APP AND QT_FEATURE_debug_and_release AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19.0")
+    get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
+    if(arg_QT_APP
+            AND QT_FEATURE_debug_and_release
+            AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19.0"
+            AND is_multi_config
+        )
         set_property(TARGET "${name}"
             PROPERTY EXCLUDE_FROM_ALL "$<NOT:$<CONFIG:${QT_MULTI_CONFIG_FIRST_CONFIG}>>")
     endif()
@@ -245,23 +250,6 @@ function(qt_internal_add_executable name)
                 ADDITIONAL_INSTALL_ARGS ${additional_install_args}
         )
         qt_internal_install_pdb_files(${name} "${arg_INSTALL_DIRECTORY}")
-    endif()
-
-    if(QT_GENERATE_SBOM)
-        set(sbom_args "")
-        _qt_internal_forward_function_args(
-            FORWARD_APPEND
-            FORWARD_PREFIX arg
-            FORWARD_OUT_VAR sbom_args
-            FORWARD_OPTIONS
-                ${__qt_internal_sbom_optional_args}
-            FORWARD_SINGLE
-                ${__qt_internal_sbom_single_args}
-            FORWARD_MULTI
-                ${__qt_internal_sbom_multi_args}
-        )
-
-        _qt_internal_extend_sbom(${name} ${sbom_args})
     endif()
 
     qt_add_list_file_finalizer(qt_internal_finalize_executable "${name}")

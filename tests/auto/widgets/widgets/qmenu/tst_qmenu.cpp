@@ -117,6 +117,9 @@ private slots:
 
     void nestedTearOffDetached();
     void closeMenuOnClickIfMouseHasntMoved();
+#if QT_CONFIG(shortcut) && !defined(Q_OS_DARWIN)
+    void dontSelectDisabledActionByShortcut();
+#endif
 
     void invisibleActions();
 
@@ -2172,12 +2175,32 @@ void tst_QMenu::invisibleActions()
         action->setVisible(false);
 
     contextMenu.popup(globalPos);
-    QCOMPARE(contextMenu.isVisible(), contextMenu.sizeHint().isValid());
-
-    // if it wasn't shown previously, then exec() shouldn't do anything either
-    if (!contextMenu.isVisible())
-        QVERIFY(!contextMenu.exec());
+    QVERIFY(!contextMenu.isVisible());
+    QVERIFY(!contextMenu.exec());
 }
+
+#if QT_CONFIG(shortcut) && !defined(Q_OS_DARWIN)
+void tst_QMenu::dontSelectDisabledActionByShortcut()
+{
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("Window activation is not supported");
+
+    QMainWindow w;
+    auto mb = w.menuBar();
+    auto m = mb->addMenu("me&nu");
+    auto zero = m->addAction("placeholder");
+    auto first = m->addAction("disabled &o");
+    auto second = m->addAction(QStringLiteral("enabled &o"));
+
+    QSignalSpy spy(second, &QAction::triggered);
+    first->setDisabled(true);
+    w.show();
+    QVERIFY(QTest::qWaitForWindowActive(&w));
+    QTest::keyClick(&w, Qt::Key_N, Qt::AltModifier);
+    QTest::keyClick(m, Qt::Key_O, Qt::NoModifier);
+    QCOMPARE(spy.count(), 1);
+}
+#endif
 
 QTEST_MAIN(tst_QMenu)
 #include "tst_qmenu.moc"

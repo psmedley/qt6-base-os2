@@ -19,10 +19,7 @@
 
     Unlike the window managers for top-level windows, all window flags
     (Qt::WindowFlags) are supported by QMdiArea as long as the flags
-    are supported by the current widget style. If a specific flag is
-    not supported by the style (e.g., the
-    \l{Qt::}{WindowShadeButtonHint}), you can still shade the window
-    with showShaded().
+    are supported by the current widget style.
 
     Subwindows in QMdiArea are instances of QMdiSubWindow. They
     are added to an MDI area with addSubWindow(). It is common to pass
@@ -774,6 +771,17 @@ void QMdiAreaPrivate::_q_moveTab(int from, int to)
     Q_UNUSED(to);
 #else
     childWindows.move(from, to);
+
+    // Put the active window in front to update activation order.
+    const int indexToActiveWindow = childWindows.indexOf(active);
+    if (indexToActiveWindow != -1) {
+        const int index = indicesToActivatedChildren.indexOf(indexToActiveWindow);
+        Q_ASSERT(index != -1);
+        if (index != 0) { // if it's not in front
+            indicesToActivatedChildren.move(index, 0);
+            internalRaise(active);
+        }
+    }
 #endif // QT_CONFIG(tabbar)
 }
 

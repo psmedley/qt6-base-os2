@@ -61,6 +61,9 @@ private slots:
     void fromLocalFile();
     void fromLocalFileNormalize_data();
     void fromLocalFileNormalize();
+    void fromLocalFileNormalizeNonRoundtrip_data();
+    void fromLocalFileNormalizeNonRoundtrip();
+    void macTypes_data();
     void macTypes();
     void relative();
     void compat_legacy();
@@ -1366,6 +1369,8 @@ void tst_QUrl::toLocalFile_data()
     QTest::newRow("FILE:/") << QString::fromLatin1("FILE:/a.txt") << QString::fromLatin1("/a.txt");
 
     QTest::newRow("path-delimiter") << QString::fromLatin1("file:///Mambo <%235>.mp3") << QString::fromLatin1("/Mambo <#5>.mp3");
+    QTest::newRow("path-brackets-encoded") << u"file:///tmp/%5Btest%5D.txt"_s << u"/tmp/[test].txt"_s;
+    QTest::newRow("path-brackets-decoded") << u"file:///tmp/[test].txt"_s << u"/tmp/[test].txt"_s;
     QTest::newRow("path-percent") << QString::fromLatin1("file:///a%25.txt") << QString::fromLatin1("/a%.txt");
     QTest::newRow("path-percent-percent") << QString::fromLatin1("file:///a%25%25.txt") << QString::fromLatin1("/a%%.txt");
     QTest::newRow("path-percent-a-percent") << QString::fromLatin1("file:///a%25a%25.txt") << QString::fromLatin1("/a%a%.txt");
@@ -1407,6 +1412,16 @@ void tst_QUrl::toLocalFile()
     QUrl url(theUrl);
     QCOMPARE(url.toLocalFile(), theFile);
     QCOMPARE(url.isLocalFile(), !theFile.isEmpty());
+
+    // set the path to the same (encoded) thing - nothing should change
+    url.setPath(url.path(QUrl::FullyEncoded), QUrl::TolerantMode);
+    QCOMPARE(url.toLocalFile(), theFile);
+    QCOMPARE(url.isLocalFile(), !theFile.isEmpty());
+
+    // QUrl::PrettyDecoded is still URL-encoded and lossless
+    url.setPath(url.path(QUrl::PrettyDecoded), QUrl::TolerantMode);
+    QCOMPARE(url.toLocalFile(), theFile);
+    QCOMPARE(url.isLocalFile(), !theFile.isEmpty());
 }
 
 void tst_QUrl::fromLocalFile_data()
@@ -1420,9 +1435,14 @@ void tst_QUrl::fromLocalFile_data()
     QTest::newRow("absolute-two-path") << QString::fromLatin1("/a/b.txt") << QString::fromLatin1("file:///a/b.txt") << QString::fromLatin1("/a/b.txt");
     QTest::newRow("path-delimiters") << QString::fromLatin1("/Mambo <#5>.mp3") << QString::fromLatin1("file:///Mambo <%235>.mp3")
                                      << QString::fromLatin1("/Mambo <#5>.mp3");
+    QTest::newRow("path-brackets") << u"/tmp/[test].txt"_s << u"file:///tmp/%5Btest%5D.txt"_s << u"/tmp/[test].txt"_s;
 
     // Windows absolute details
     QTest::newRow("windows-drive") << QString::fromLatin1("c:/a.txt") << QString::fromLatin1("file:///c:/a.txt") << QString::fromLatin1("/c:/a.txt");
+
+    // Handling of Windows roots with relative - note, no normalization!
+    QTest::newRow("windows-drive-above-root")
+            << QString::fromLatin1("c:/../a.txt") << QString::fromLatin1("file:///c:/../a.txt") << QString::fromLatin1("/c:/../a.txt");
 
     // Windows UNC paths
     for (const char *suffix : { "", "/", "/somedir/somefile" }) {
@@ -1478,6 +1498,16 @@ void tst_QUrl::fromLocalFile()
 
     QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
     QCOMPARE(url.path(), thePath);
+
+    // set the path to the same (encoded) thing - nothing should change
+    url.setPath(url.path(QUrl::FullyEncoded), QUrl::TolerantMode);
+    QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
+    QCOMPARE(url.path(), thePath);
+
+    // QUrl::PrettyDecoded is still URL-encoded and lossless
+    url.setPath(url.path(QUrl::PrettyDecoded), QUrl::TolerantMode);
+    QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
+    QCOMPARE(url.path(), thePath);
 }
 
 void tst_QUrl::fromLocalFileNormalize_data()
@@ -1488,6 +1518,11 @@ void tst_QUrl::fromLocalFileNormalize_data()
 
     QTest::newRow("absolute-path") << QString::fromLatin1("/a.txt") << QString::fromLatin1("file:///a.txt") << QString::fromLatin1("file:///a.txt");
     QTest::newRow("relative-path") << QString::fromLatin1("a.txt") << QString::fromLatin1("file:a.txt") << QString::fromLatin1("file:a.txt");
+
+    QTest::newRow("absolute-path-trailing-slash") << u"/b/"_s << u"file:///b/"_s << u"file:///b/"_s;
+    QTest::newRow("absolute-path-no-trailing-slash") << u"/b"_s << u"file:///b"_s << u"file:///b"_s;
+    QTest::newRow("absolute-path-2-trailing-slashes") << u"/b//"_s << u"file:///b//"_s << u"file:///b/"_s;
+
     QTest::newRow("percent") << QString::fromLatin1("/a%.txt") << QString::fromLatin1("file:///a%25.txt")
                              << QString::fromLatin1("file:///a%25.txt");
     QTest::newRow("percent25") << QString::fromLatin1("/a%25.txt") << QString::fromLatin1("file:///a%2525.txt")
@@ -1497,10 +1532,13 @@ void tst_QUrl::fromLocalFileNormalize_data()
     QTest::newRow("relative-dot") << QString::fromLatin1("./a.txt") << QString::fromLatin1("file:./a.txt") << QString::fromLatin1("file:a.txt");
     QTest::newRow("relative-dot-dot") << QString::fromLatin1("././a.txt") << QString::fromLatin1("file:././a.txt") << QString::fromLatin1("file:a.txt");
     QTest::newRow("relative-path-dotdot") << QString::fromLatin1("b/../a.txt") << QString::fromLatin1("file:b/../a.txt") << QString::fromLatin1("file:a.txt");
+    QTest::newRow("relative-path-dotdot-dotdot") << QString::fromLatin1("b/../../a.txt") << QString::fromLatin1("file:b/../../a.txt") << QString::fromLatin1("file:../a.txt");
     QTest::newRow("absolute-path-dotdot") << QString::fromLatin1("/b/../a.txt") << QString::fromLatin1("file:///b/../a.txt") << QString::fromLatin1("file:///a.txt");
+    QTest::newRow("absolute-path-dotdot-dotdot") << QString::fromLatin1("/b/../../a.txt") << QString::fromLatin1("file:///b/../../a.txt") << QString::fromLatin1("file:///../a.txt");
     QTest::newRow("absolute-path-slash") << QString::fromLatin1("/b/") << QString::fromLatin1("file:///b/") << QString::fromLatin1("file:///b/");
     QTest::newRow("absolute-path-slahs-dot") << QString::fromLatin1("/b/.") << QString::fromLatin1("file:///b/.") << QString::fromLatin1("file:///b/");
     QTest::newRow("absolute-path-slahs-dot-slash") << QString::fromLatin1("/b/./") << QString::fromLatin1("file:///b/./") << QString::fromLatin1("file:///b/");
+    QTest::newRow("absolute-path-dotdot-slashslash") << QString::fromLatin1("/b/..//") << QString::fromLatin1("file:///b/..//") << QString::fromLatin1("file:////");
 }
 
 void tst_QUrl::fromLocalFileNormalize()
@@ -1517,13 +1555,84 @@ void tst_QUrl::fromLocalFileNormalize()
     QCOMPARE(url.toString(QUrl::NormalizePathSegments), urlWithNormalizedPath);
 }
 
-void tst_QUrl::macTypes()
+void tst_QUrl::fromLocalFileNormalizeNonRoundtrip_data()
+{
+#ifdef Q_OS_WIN32
+    static constexpr bool IsWindows = true;
+#else
+    static constexpr bool IsWindows = false;
+#endif
+
+    QTest::addColumn<QString>("input");
+    QTest::addColumn<QString>("theUrl");
+    QTest::addColumn<QString>("thePath");
+    QTest::addColumn<QString>("urlWithNormalizedPath");
+
+    QTest::newRow("server") << u"//server"_s << u"file://server"_s << QString() << u"file://server"_s;
+    QTest::newRow("server/..") << u"//server/.."_s << u"file://server/.."_s << u"/.."_s << u"file://server/.."_s;
+    QTest::newRow("server/share") << u"//server/share"_s << u"file://server/share"_s << u"/share"_s << u"file://server/share"_s;
+    QTest::newRow("server/share/..") << u"//server/share/.."_s << u"file://server/share/.."_s << u"/share/.."_s << u"file://server/"_s;
+
+    auto addAbsoluteWindowsPathRow = [](const char *name, const QString &input,
+            const QString &unixNormalized, const QString &windowsNormalized) {
+        QString thePath = '/' + input;        // fromPercentEncoding, but works for now
+        QString theUrl = "file://" + thePath;
+        const QString &normalized = IsWindows ? windowsNormalized : unixNormalized;
+        QTest::newRow(name) << input << theUrl << thePath << normalized;
+    };
+    addAbsoluteWindowsPathRow("relative-drive", "c:", "file:///c:", "file:///c:");
+    addAbsoluteWindowsPathRow("absolute-drive", "c:/", "file:///c:/", "file:///c:/");
+    addAbsoluteWindowsPathRow("relative-drive/path", "c:autoexec.bat",
+                              "file:///c:autoexec.bat", "file:///c:autoexec.bat");
+    addAbsoluteWindowsPathRow("absolute-drive/path", "c:/config.sys",
+                              "file:///c:/config.sys", "file:///c:/config.sys");
+    addAbsoluteWindowsPathRow("absolute-drive/path/..", "c:/dos/..",
+                              "file:///c:/", "file:///c:/");
+    addAbsoluteWindowsPathRow("absolute-drive/path/../", "c:/dos/../",
+                              "file:///c:/", "file:///c:/");
+
+    // The drive root should remain for the normalized URLs on Windows
+    addAbsoluteWindowsPathRow("absolute-drive/..", "c:/..",
+                              "file:///", "file:///c:/..");
+    addAbsoluteWindowsPathRow("relative-drive/path/..", "c:dos/..",
+                              "file:///", "file:///c:");
+    addAbsoluteWindowsPathRow("relative-drive/path/../", "c:dos/../",
+                              "file:///", "file:///c:");   // Note: trailing / would change meaning!
+    addAbsoluteWindowsPathRow("relative-drive/path/../..", "c:dos/../..",
+                              "file:///..", "file:///c:..");
+    addAbsoluteWindowsPathRow("relative-drive/path/../../", "c:dos/../../",
+                              "file:///../", "file:///c:../");
+}
+
+void tst_QUrl::fromLocalFileNormalizeNonRoundtrip()
+{
+    QFETCH(QString, input);
+    QFETCH(QString, theUrl);
+    QFETCH(QString, thePath);
+    QFETCH(QString, urlWithNormalizedPath);
+
+    QUrl url = QUrl::fromLocalFile(input);
+
+    QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
+    QCOMPARE(url.path(), thePath);
+    QCOMPARE(url.toString(QUrl::NormalizePathSegments), urlWithNormalizedPath);
+}
+
+void tst_QUrl::macTypes_data()
 {
 #ifndef Q_OS_DARWIN
     QSKIP("This is a Mac-only test");
 #else
-    extern void tst_QUrl_mactypes(); // in tst_qurl_mac.mm
-    void tst_QUrl_mactypes();
+    extern void tst_QUrl_mactypes_data();
+    tst_QUrl_mactypes_data();
+#endif
+}
+
+void tst_QUrl::macTypes()
+{
+#ifdef Q_OS_DARWIN
+    extern void tst_QUrl_mactypes();
+    tst_QUrl_mactypes();
 #endif
 }
 

@@ -84,7 +84,8 @@ Q_DECLARE_METATYPE(QSharedPointer<char>)
 #include <time.h>
 
 #include "../../../network-settings.h"
-#include "../../../network-helpers.h"
+
+#include <QtTest/private/qtesthelpers_p.h>
 
 #ifdef Q_OS_INTEGRITY
 #include "qplatformdefs.h"
@@ -2309,7 +2310,7 @@ void tst_QNetworkReply::getWithBodyRedirected()
     QVERIFY(validateRedirectedResponseHeaders(reply));
 
     // Verify that the message body has arrived to the server
-    if (status > 302) {
+    if (status > 307) {
         QVERIFY(server2.contentLength != 0);
         QCOMPARE(server2.contentLength, dataFromClientToServer.size());
         QCOMPARE(server2.receivedData.right(dataFromClientToServer.size()), dataFromClientToServer);
@@ -2940,7 +2941,7 @@ void tst_QNetworkReply::postToHttpMultipart_data()
     imagePart11.setRawHeader("Content-Location", "http://my.test.location.tld");
     imagePart11.setRawHeader("Content-ID", "my@id.tld");
     QFile *file11 = new QFile(testDataDir + "/image1.jpg");
-    file11->open(QIODevice::ReadOnly);
+    QVERIFY2(file11->open(QIODevice::ReadOnly), qPrintable(file11->fileName()));
     imagePart11.setBodyDevice(file11);
     QHttpMultiPart *imageMultiPart1 = new QHttpMultiPart(QHttpMultiPart::FormDataType);
     imageMultiPart1->append(imagePart11);
@@ -2954,7 +2955,7 @@ void tst_QNetworkReply::postToHttpMultipart_data()
     imagePart21.setRawHeader("Content-Location", "http://my.test.location.tld");
     imagePart21.setRawHeader("Content-ID", "my@id.tld");
     QFile *file21 = new QFile(testDataDir + "/image1.jpg");
-    file21->open(QIODevice::ReadOnly);
+    QVERIFY2(file21->open(QIODevice::ReadOnly), qPrintable(file21->fileName()));
     imagePart21.setBodyDevice(file21);
     QHttpMultiPart *imageMultiPart2 = new QHttpMultiPart();
     imageMultiPart2->setContentType(QHttpMultiPart::FormDataType);
@@ -2965,7 +2966,7 @@ void tst_QNetworkReply::postToHttpMultipart_data()
     imagePart22.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("image/jpeg"));
     imagePart22.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"testImage2\""));
     QFile *file22 = new QFile(testDataDir + "/image2.jpg");
-    file22->open(QIODevice::ReadOnly);
+    QVERIFY2(file22->open(QIODevice::ReadOnly), qPrintable(file22->fileName()));
     imagePart22.setBodyDevice(file22);
     imageMultiPart2->append(imagePart22);
     file22->setParent(imageMultiPart2);
@@ -2987,7 +2988,7 @@ void tst_QNetworkReply::postToHttpMultipart_data()
     imagePart31.setRawHeader("Content-Location", "http://my.test.location.tld");
     imagePart31.setRawHeader("Content-ID", "my@id.tld");
     QFile *file31 = new QFile(testDataDir + "/image1.jpg");
-    file31->open(QIODevice::ReadOnly);
+    QVERIFY2(file31->open(QIODevice::ReadOnly), qPrintable(file31->fileName()));
     imagePart31.setBodyDevice(file31);
     QHttpMultiPart *imageMultiPart3 = new QHttpMultiPart(QHttpMultiPart::FormDataType);
     imageMultiPart3->append(imagePart31);
@@ -2996,7 +2997,7 @@ void tst_QNetworkReply::postToHttpMultipart_data()
     imagePart32.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("image/jpeg"));
     imagePart32.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"testImage2\""));
     QFile *file32 = new QFile(testDataDir + "/image2.jpg");
-    file32->open(QIODevice::ReadOnly);
+    QVERIFY2(file32->open(QIODevice::ReadOnly), qPrintable(file32->fileName()));
     imagePart32.setBodyDevice(file31); // check that resetting works
     imagePart32.setBodyDevice(file32);
     imageMultiPart3->append(imagePart32);
@@ -3005,7 +3006,7 @@ void tst_QNetworkReply::postToHttpMultipart_data()
     imagePart33.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("image/jpeg"));
     imagePart33.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"testImage3\""));
     QFile *file33 = new QFile(testDataDir + "/image3.jpg");
-    file33->open(QIODevice::ReadOnly);
+    QVERIFY2(file33->open(QIODevice::ReadOnly), qPrintable(file33->fileName()));
     imagePart33.setBodyDevice(file33);
     imageMultiPart3->append(imagePart33);
     file33->setParent(imageMultiPart3);
@@ -3054,7 +3055,7 @@ void tst_QNetworkReply::postToHttpMultipart_data()
     imagePart51.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("image/jpeg"));
     imagePart51.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"testImage\""));
     QFile *file51 = new QFile(testDataDir + "/image1.jpg");
-    file51->open(QIODevice::ReadOnly);
+    QVERIFY2(file51->open(QIODevice::ReadOnly), qPrintable(file51->fileName()));
     QByteArray imageData = file51->readAll();
     file51->close();
     delete file51;
@@ -5617,7 +5618,7 @@ void tst_QNetworkReply::ioPostToHttpsUploadProgress()
 {
     //QFile sourceFile(testDataDir + "/bigfile");
     //QVERIFY(sourceFile.open(QIODevice::ReadOnly));
-    if (QtNetworkTestHelpers::isSecureTransportBlockingTest())
+    if (QTestPrivate::isSecureTransportBlockingTest())
         QSKIP("SecureTransport: temporary keychain is not working on this version of macOS");
 
     qint64 wantedSize = 2*1024*1024; // 2 MB
@@ -5697,7 +5698,7 @@ void tst_QNetworkReply::ioGetFromBuiltinHttp()
     QFETCH(bool, https);
     QFETCH(int, bufferSize);
 
-    if (https && QtNetworkTestHelpers::isSecureTransportBlockingTest())
+    if (https && QTestPrivate::isSecureTransportBlockingTest())
         QSKIP("SecureTransport: temporary keychain is not working on this version of macOS");
 
     QByteArray testData;
@@ -6461,7 +6462,7 @@ void tst_QNetworkReply::httpProxyCommands_data()
         << QByteArray("HTTP/1.0 200 OK\r\nProxy-Connection: close\r\nContent-Length: 1\r\n\r\n1")
         << "GET http://0.0.0.0:4443/http-request HTTP/1.";
 #if QT_CONFIG(ssl)
-    if (QtNetworkTestHelpers::isSecureTransportBlockingTest())
+    if (QTestPrivate::isSecureTransportBlockingTest())
         QSKIP("SecureTransport: temporary keychain is not working on this version of macOS");
 
     QTest::newRow("https")
@@ -6690,7 +6691,7 @@ void tst_QNetworkReply::httpConnectionCount_data()
     QTest::addRow("http/1.1") << false << false;
     QTest::addRow("http/2") << true << false;
 #if QT_CONFIG(ssl)
-    if (!QtNetworkTestHelpers::isSecureTransportBlockingTest()) {
+    if (!QTestPrivate::isSecureTransportBlockingTest()) {
         QTest::addRow("https/1.1") << false << true;
         QTest::addRow("https/2") << true << true;
     }
@@ -7052,7 +7053,7 @@ void tst_QNetworkReply::encrypted()
 
 void tst_QNetworkReply::abortOnEncrypted()
 {
-    if (QtNetworkTestHelpers::isSecureTransportBlockingTest())
+    if (QTestPrivate::isSecureTransportBlockingTest())
         QSKIP("SecureTransport: temporary keychain is not working on this version of macOS");
 
     SslServer server;
@@ -9150,7 +9151,7 @@ void tst_QNetworkReply::ioHttpRedirectErrors()
     QFETCH(QNetworkReply::NetworkError, error);
 
     QUrl localhost(url);
-    if (localhost.scheme() == QLatin1String("https") && QtNetworkTestHelpers::isSecureTransportBlockingTest())
+    if (localhost.scheme() == QLatin1String("https") && QTestPrivate::isSecureTransportBlockingTest())
         QSKIP("SecureTransport: temporary keychain is not working on this version of macOS");
 
     MiniHttpServer server("", localhost.scheme() == QLatin1String("https"));
@@ -9229,7 +9230,7 @@ void tst_QNetworkReply::ioHttpRedirectPolicy()
     QFETCH(const QNetworkRequest::RedirectPolicy, policy);
 
     QFETCH(const bool, ssl);
-    if (ssl && QtNetworkTestHelpers::isSecureTransportBlockingTest())
+    if (ssl && QTestPrivate::isSecureTransportBlockingTest())
         QSKIP("SecureTransport: temporary keychain is not working on this version of macOS");
 
     QFETCH(const int, redirectCount);
@@ -9313,7 +9314,7 @@ void tst_QNetworkReply::ioHttpRedirectPolicyErrors()
     QVERIFY(policy != QNetworkRequest::ManualRedirectPolicy);
 
     QFETCH(const bool, ssl);
-    if (ssl && QtNetworkTestHelpers::isSecureTransportBlockingTest())
+    if (ssl && QTestPrivate::isSecureTransportBlockingTest())
         QSKIP("SecureTransport: temporary keychain is not working on this version of macOS");
     QFETCH(const QString, location);
     QFETCH(const int, maxRedirects);
@@ -9900,7 +9901,7 @@ public slots:
 
 void tst_QNetworkReply::putWithServerClosingConnectionImmediately()
 {
-    if (QtNetworkTestHelpers::isSecureTransportBlockingTest())
+    if (QTestPrivate::isSecureTransportBlockingTest())
         QSKIP("SecureTransport: temporary keychain is not working on this version of macOS");
 
     const int numUploads = 40;

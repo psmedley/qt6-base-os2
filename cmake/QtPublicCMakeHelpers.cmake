@@ -597,6 +597,45 @@ function(_qt_internal_remove_args out_var)
     set(${out_var} "${result}" PARENT_SCOPE)
 endfunction()
 
+function(__qt_internal_handle_find_all_qt_module_packages out_var)
+    set(opt_args "")
+    set(single_args "")
+    set(multi_args
+        COMPONENTS
+    )
+    cmake_parse_arguments(PARSE_ARGV 1 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    if(NOT arg_COMPONENTS)
+        return()
+    endif()
+
+    set(components ${arg_COMPONENTS})
+
+    if("ALL_QT_MODULES" IN_LIST components)
+        list(FIND components "ALL_QT_MODULES" all_qt_modules_index)
+        list(REMOVE_AT components ${all_qt_modules_index})
+
+        # Find the path to dir with module.json files. # We consider each file name to be a
+        # Qt package (component) name that contains a target with the same name.
+        set(json_modules_path "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_DESCRIPTIONSDIR}")
+        file(GLOB json_modules "${json_modules_path}/*.json")
+
+        set(all_qt_modules "")
+
+        foreach(json_module IN LISTS json_modules)
+            get_filename_component(module_name "${json_module}" NAME_WE)
+            list(APPEND all_qt_modules ${module_name})
+        endforeach()
+
+        if(all_qt_modules)
+            list(INSERT components "${all_qt_modules_index}" ${all_qt_modules})
+        endif()
+    endif()
+
+    set(${out_var} "${components}" PARENT_SCOPE)
+endfunction()
+
 # Append ${ARGN} to ${target}'s ${property_name} property, removing duplicates.
 function(_qt_internal_append_to_target_property_without_duplicates target property_name)
     get_target_property(property "${target}" "${property_name}")
@@ -674,4 +713,58 @@ function(_qt_internal_forward_function_args)
     endif()
 
     set(${arg_FORWARD_OUT_VAR} "${forward_args}" PARENT_SCOPE)
+endfunction()
+
+# Compatibility of `cmake_path(RELATIVE_PATH)`
+#
+# In order to be compatible with `file(RELATIVE_PATH)`, path normalization of the result is
+# always performed, with the trailing slash stripped.
+#
+# Synopsis
+#
+#   _qt_internal_relative_path(<path-var>
+#       [BASE_DIRECTORY <input>]
+#       [OUTPUT_VARIABLE <out-var>]
+#   )
+#
+# Arguments
+#
+# `path-var`
+#   Equivalent to `cmake_path(RELATIVE_PATH <path-var>)`.
+#
+# `BASE_DIRECTORY`
+#   Equivalent to `cmake_path(RELATIVE_PATH BASE_DIRECTORY)`.
+#
+# `OUTPUT_VARIABLE`
+#   Equivalent to `cmake_path(RELATIVE_PATH OUTPUT_VARIABLE)`.
+function(_qt_internal_relative_path path_var)
+    set(option_args "")
+    set(single_args
+        BASE_DIRECTORY
+        OUTPUT_VARIABLE
+    )
+    set(multi_args "")
+    cmake_parse_arguments(PARSE_ARGV 1 arg "${option_args}" "${single_args}" "${multi_args}")
+
+    if(NOT arg_BASE_DIRECTORY)
+        set(arg_BASE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    endif()
+    if(NOT arg_OUTPUT_VARIABLE)
+        set(arg_OUTPUT_VARIABLE ${path_var})
+    endif()
+
+    if(CMAKE_VERSION VERSION_LESS 3.20)
+        file(RELATIVE_PATH ${arg_OUTPUT_VARIABLE}
+            "${arg_BASE_DIRECTORY}"
+            "${${path_var}}")
+    else()
+        cmake_path(RELATIVE_PATH ${path_var}
+            BASE_DIRECTORY "${arg_BASE_DIRECTORY}"
+            OUTPUT_VARIABLE ${arg_OUTPUT_VARIABLE}
+        )
+        cmake_path(NORMAL_PATH ${arg_OUTPUT_VARIABLE})
+        string(REGEX REPLACE "/$" "" ${arg_OUTPUT_VARIABLE}
+                "${${arg_OUTPUT_VARIABLE}}")
+    endif()
+    set(${arg_OUTPUT_VARIABLE} "${${arg_OUTPUT_VARIABLE}}" PARENT_SCOPE)
 endfunction()

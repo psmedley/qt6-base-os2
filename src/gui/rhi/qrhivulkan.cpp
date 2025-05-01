@@ -14,6 +14,8 @@
 #endif
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_GCC("-Wsuggest-override")
+QT_WARNING_DISABLE_GCC("-Wundef")
+QT_WARNING_DISABLE_CLANG("-Wundef")
 #if defined(Q_CC_CLANG) && Q_CC_CLANG >= 1100
 QT_WARNING_DISABLE_CLANG("-Wdeprecated-copy")
 #endif
@@ -860,9 +862,37 @@ bool QRhiVulkan::create(QRhi::Flags flags)
         allocatorInfo.device = dev;
         allocatorInfo.pVulkanFunctions = &funcs;
         allocatorInfo.instance = inst->vkInstance();
-        allocatorInfo.vulkanApiVersion = VK_MAKE_VERSION(caps.apiVersion.majorVersion(),
-                                                         caps.apiVersion.minorVersion(),
-                                                         caps.apiVersion.microVersion());
+
+        // Logic would dictate setting allocatorInfo.vulkanApiVersion to caps.apiVersion.
+        // However, VMA has asserts to test if the header version Qt was built with is
+        // older than the runtime version. This is nice, but a bit unnecessary (in Qt we'd
+        // rather prefer losing the affected features automatically, and perhaps printing
+        // a warning, instead of aborting the application). Restrict the runtime version
+        // passed in based on the preprocessor macro to keep VMA happy.
+#ifdef VK_VERSION_1_4
+        if (caps.apiVersion >= QVersionNumber(1, 4))
+            allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_4;
+        else
+#endif
+#ifdef VK_VERSION_1_3
+        if (caps.apiVersion >= QVersionNumber(1, 3))
+            allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+        else
+#endif
+#ifdef VK_VERSION_1_2
+        if (caps.apiVersion >= QVersionNumber(1, 2))
+            allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2;
+        else
+#endif
+#ifdef VK_VERSION_1_1
+        if (caps.apiVersion >= QVersionNumber(1, 1))
+            allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_1;
+        else
+#endif
+#ifdef VK_VERSION_1_0
+        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_0;
+#endif
+
         VmaAllocator vmaallocator;
         VkResult err = vmaCreateAllocator(&allocatorInfo, &vmaallocator);
         if (err != VK_SUCCESS) {
@@ -2027,9 +2057,6 @@ bool QRhiVulkan::recreateSwapChain(QRhiSwapChain *swapChain)
         frame.imageAcquired = false;
         frame.imageSemWaitable = false;
 
-        df->vkCreateFence(dev, &fenceInfo, nullptr, &frame.imageFence);
-        frame.imageFenceWaitable = true; // fence was created in signaled state
-
         df->vkCreateSemaphore(dev, &semInfo, nullptr, &frame.imageSem);
         df->vkCreateSemaphore(dev, &semInfo, nullptr, &frame.drawSem);
 
@@ -2064,13 +2091,6 @@ void QRhiVulkan::releaseSwapChainResources(QRhiSwapChain *swapChain)
             df->vkDestroyFence(dev, frame.cmdFence, nullptr);
             frame.cmdFence = VK_NULL_HANDLE;
             frame.cmdFenceWaitable = false;
-        }
-        if (frame.imageFence) {
-            if (frame.imageFenceWaitable)
-                df->vkWaitForFences(dev, 1, &frame.imageFence, VK_TRUE, UINT64_MAX);
-            df->vkDestroyFence(dev, frame.imageFence, nullptr);
-            frame.imageFence = VK_NULL_HANDLE;
-            frame.imageFenceWaitable = false;
         }
         if (frame.imageSem) {
             df->vkDestroySemaphore(dev, frame.imageSem, nullptr);
@@ -2153,24 +2173,26 @@ QRhi::FrameOpResult QRhiVulkan::beginFrame(QRhiSwapChain *swapChain, QRhi::Begin
 
     inst->handle()->beginFrame(swapChainD->window);
 
-    if (!frame.imageAcquired) {
-        // Wait if we are too far ahead, i.e. the thread gets throttled based on the presentation rate
-        // (note that we are using FIFO mode -> vsync)
-        if (frame.imageFenceWaitable) {
-            df->vkWaitForFences(dev, 1, &frame.imageFence, VK_TRUE, UINT64_MAX);
-            df->vkResetFences(dev, 1, &frame.imageFence);
-            frame.imageFenceWaitable = false;
-        }
+    // Make sure the previous commands for the same frame slot have finished.
+    //
+    // Do this also for any other swapchain's commands with the same frame slot
+    // While this reduces concurrency, it keeps resource usage safe: swapchain
+    // A starting its frame 0, followed by swapchain B starting its own frame 0
+    // will make B wait for A's frame 0 commands, so if a resource is written
+    // in B's frame or when B checks for pending resource releases, that won't
+    // mess up A's in-flight commands (as they are not in flight anymore).
+    waitCommandCompletion(frameResIndex);
 
+    if (!frame.imageAcquired) {
         // move on to next swapchain image
         uint32_t imageIndex = 0;
         VkResult err = vkAcquireNextImageKHR(dev, swapChainD->sc, UINT64_MAX,
-                                             frame.imageSem, frame.imageFence, &imageIndex);
+                                             frame.imageSem, VK_NULL_HANDLE, &imageIndex);
+
         if (err == VK_SUCCESS || err == VK_SUBOPTIMAL_KHR) {
             swapChainD->currentImageIndex = imageIndex;
             frame.imageSemWaitable = true;
             frame.imageAcquired = true;
-            frame.imageFenceWaitable = true;
         } else if (err == VK_ERROR_OUT_OF_DATE_KHR) {
             return QRhi::FrameOpSwapChainOutOfDate;
         } else {
@@ -2183,18 +2205,6 @@ QRhi::FrameOpResult QRhiVulkan::beginFrame(QRhiSwapChain *swapChain, QRhi::Begin
             return QRhi::FrameOpError;
         }
     }
-
-    // Make sure the previous commands for the same image have finished. (note
-    // that this is based on the fence from the command buffer submit, nothing
-    // to do with the Present)
-    //
-    // Do this also for any other swapchain's commands with the same frame slot
-    // While this reduces concurrency, it keeps resource usage safe: swapchain
-    // A starting its frame 0, followed by swapchain B starting its own frame 0
-    // will make B wait for A's frame 0 commands, so if a resource is written
-    // in B's frame or when B checks for pending resource releases, that won't
-    // mess up A's in-flight commands (as they are not in flight anymore).
-    waitCommandCompletion(frameResIndex);
 
     currentFrameSlot = int(swapChainD->currentFrameSlot);
     currentSwapChain = swapChainD;

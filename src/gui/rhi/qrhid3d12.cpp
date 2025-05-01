@@ -990,6 +990,7 @@ void QD3D12CommandBuffer::visitStorageImage(QD3D12Stage s,
     } else if (is3D) {
         uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
         uavDesc.Texture3D.MipSlice = UINT(d.level);
+        uavDesc.Texture3D.WSize = UINT(-1);
     } else {
         uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
         uavDesc.Texture2D.MipSlice = UINT(d.level);
@@ -3633,7 +3634,7 @@ void QRhiD3D12::finishActiveReadbacks(bool forced)
             if (readback.result->completed)
                 completedCallbacks.append(readback.result->completed);
 
-            activeReadbacks.removeLast();
+            activeReadbacks.remove(i);
         }
     }
 

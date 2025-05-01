@@ -97,9 +97,9 @@ function(_qt_internal_handle_ios_launch_screen target)
     endif()
 endfunction()
 
-function(_qt_internal_find_ios_development_team_id out_var)
+function(_qt_internal_find_apple_development_team_id out_var)
     get_property(team_id GLOBAL PROPERTY _qt_internal_ios_development_team_id)
-    get_property(team_id_computed GLOBAL PROPERTY _qt_internal_ios_development_team_id_computed)
+    get_property(team_id_computed GLOBAL PROPERTY _qt_internal_apple_development_team_id_computed)
     if(team_id_computed)
         # Just in case if the value is non-empty but still booly FALSE.
         if(NOT team_id)
@@ -109,17 +109,31 @@ function(_qt_internal_find_ios_development_team_id out_var)
         return()
     endif()
 
-    set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id_computed "TRUE")
+    set_property(GLOBAL PROPERTY _qt_internal_apple_development_team_id_computed "TRUE")
 
     set(home_dir "$ENV{HOME}")
     set(xcode_preferences_path "${home_dir}/Library/Preferences/com.apple.dt.Xcode.plist")
 
     # Extract the first account name (email) from the user's Xcode preferences
     message(DEBUG "Trying to extract an Xcode development team id from '${xcode_preferences_path}'")
-    execute_process(COMMAND "/usr/libexec/PlistBuddy"
-                            -x -c "print IDEProvisioningTeams" "${xcode_preferences_path}"
-                    OUTPUT_VARIABLE teams_xml
-                    ERROR_VARIABLE plist_error)
+
+    # Try Xcode 16.2 format first
+    _qt_internal_plist_buddy("${xcode_preferences_path}"
+        COMMANDS "print IDEProvisioningTeamByIdentifier"
+        EXTRA_ARGS -x
+        OUTPUT_VARIABLE teams_xml
+        ERROR_VARIABLE plist_error
+    )
+
+    # Then fall back to older format
+    if(plist_error OR NOT teams_xml)
+        _qt_internal_plist_buddy("${xcode_preferences_path}"
+            COMMANDS "print IDEProvisioningTeams"
+            EXTRA_ARGS -x
+            OUTPUT_VARIABLE teams_xml
+            ERROR_VARIABLE plist_error
+        )
+    endif()
 
     # Parsing state.
     set(is_free "")
@@ -149,6 +163,16 @@ function(_qt_internal_find_ios_development_team_id out_var)
     #            <true/>
     #            <key>teamID</key>
     #            <string>BBB</string>
+    #            ...
+    #        </dict>
+    #    </array>
+    #    <key>AAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE</key>
+    #    <array>
+    #        <dict>
+    #            <key>isFreeProvisioningTeam</key>
+    #            <false/>
+    #            <key>teamID</key>
+    #            <string>CCC</string>
     #            ...
     #        </dict>
     #    </array>
@@ -270,7 +294,7 @@ function(_qt_internal_get_default_apple_bundle_identifier target out_var)
 
         # For a better out-of-the-box experience, try to create a unique prefix by appending
         # the sha1 of the team id, if one is found.
-        _qt_internal_find_ios_development_team_id(team_id)
+        _qt_internal_find_apple_development_team_id(team_id)
         if(team_id)
             string(SHA1 hash "${team_id}")
             string(SUBSTRING "${hash}" 0 8 infix)
@@ -378,7 +402,7 @@ function(_qt_internal_set_xcode_development_team_id target)
     if(NOT CMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM AND NOT QT_NO_SET_XCODE_DEVELOPMENT_TEAM_ID)
         get_target_property(existing_team_id "${target}" XCODE_ATTRIBUTE_DEVELOPMENT_TEAM)
         if(NOT existing_team_id)
-            _qt_internal_find_ios_development_team_id(team_id)
+            _qt_internal_find_apple_development_team_id(team_id)
             set_target_properties("${target}"
                                   PROPERTIES XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${team_id}")
         endif()
@@ -635,10 +659,10 @@ endfunction()
 
 function(_qt_internal_plist_buddy plist_file)
     cmake_parse_arguments(PARSE_ARGV 1 arg
-        "" "OUTPUT_VARIABLE;ERROR_VARIABLE" "COMMANDS")
+        "" "OUTPUT_VARIABLE;ERROR_VARIABLE;EXTRA_ARGS" "COMMANDS")
     foreach(command ${arg_COMMANDS})
         execute_process(COMMAND "/usr/libexec/PlistBuddy"
-                                -c "${command}" "${plist_file}"
+                                ${arg_EXTRA_ARGS} -c "${command}" "${plist_file}"
                     OUTPUT_VARIABLE plist_buddy_output
                     ERROR_VARIABLE plist_buddy_error)
         string(STRIP "${plist_buddy_output}" plist_buddy_output)
@@ -729,6 +753,25 @@ function(_qt_internal_set_ios_simulator_arch target)
         "XCODE_ATTRIBUTE_ARCHS[sdk=iphonesimulator*]"
         "x86_64")
 endfunction()
+
+function(_qt_internal_set_xcode_entrypoint_attribute target entrypoint)
+    if(CMAKE_XCODE_ATTRIBUTE_LD_ENTRY_POINT
+        OR QT_NO_SET_XCODE_LD_ENTRY_POINT)
+        return()
+    endif()
+
+    get_target_property(existing_entrypoint
+        "${target}" XCODE_ATTRIBUTE_LD_ENTRY_POINT)
+    if(NOT existing_entrypoint MATCHES "-NOTFOUND")
+        return()
+    endif()
+
+    set_target_properties("${target}"
+        PROPERTIES
+        "XCODE_ATTRIBUTE_LD_ENTRY_POINT"
+        "${entrypoint}")
+endfunction()
+
 
 # Export Apple platform sdk and xcode version requirements to Qt6ConfigExtras.cmake.
 # Always exported, even on non-Apple platforms, so that we can use them when building
@@ -998,6 +1041,8 @@ function(_qt_internal_finalize_ios_app target)
     _qt_internal_set_xcode_targeted_device_family("${target}")
     _qt_internal_set_xcode_bitcode_enablement("${target}")
     _qt_internal_set_ios_simulator_arch("${target}")
+
+    _qt_internal_set_xcode_entrypoint_attribute("${target}" "_qt_main_wrapper")
 endfunction()
 
 function(_qt_internal_finalize_macos_app target)

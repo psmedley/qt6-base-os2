@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT AND BSD-3-Clause
 
 # Helper to set a single arg option to a default value if not set.
-function(qt_internal_sbom_set_default_option_value option_name default)
+function(_qt_internal_sbom_set_default_option_value option_name default)
     if(NOT arg_${option_name})
         set(arg_${option_name} "${default}" PARENT_SCOPE)
     endif()
@@ -11,8 +11,8 @@ endfunction()
 
 # Helper to set a single arg option to a default value if not set.
 # Errors out if the end value is empty. Including if the default value was empty.
-function(qt_internal_sbom_set_default_option_value_and_error_if_empty option_name default)
-    qt_internal_sbom_set_default_option_value("${option_name}" "${default}")
+function(_qt_internal_sbom_set_default_option_value_and_error_if_empty option_name default)
+    _qt_internal_sbom_set_default_option_value("${option_name}" "${default}")
     if(NOT arg_${option_name})
         message(FATAL_ERROR "Specifying a non-empty ${option_name} is required")
     endif()
@@ -73,10 +73,15 @@ function(_qt_internal_sbom_begin_project_generate)
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    string(TIMESTAMP current_utc UTC)
-    string(TIMESTAMP current_year "%Y" UTC)
+    if(QT_SBOM_FAKE_TIMESTAMP)
+        set(current_utc "2590-01-01T11:33:55Z")
+        set(current_year "2590")
+    else()
+        string(TIMESTAMP current_utc UTC)
+        string(TIMESTAMP current_year "%Y" UTC)
+    endif()
 
-    qt_internal_sbom_set_default_option_value(PROJECT "${PROJECT_NAME}")
+    _qt_internal_sbom_set_default_option_value(PROJECT "${PROJECT_NAME}")
 
     _qt_internal_sbom_get_git_version_vars()
 
@@ -85,17 +90,17 @@ function(_qt_internal_sbom_begin_project_generate)
     set(default_install_sbom_path
         "\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/${default_sbom_file_name}")
 
-    qt_internal_sbom_set_default_option_value(OUTPUT "${default_install_sbom_path}")
-    qt_internal_sbom_set_default_option_value(OUTPUT_RELATIVE_PATH
+    _qt_internal_sbom_set_default_option_value(OUTPUT "${default_install_sbom_path}")
+    _qt_internal_sbom_set_default_option_value(OUTPUT_RELATIVE_PATH
         "${default_sbom_file_name}")
 
-    qt_internal_sbom_set_default_option_value(LICENSE "NOASSERTION")
-    qt_internal_sbom_set_default_option_value(PROJECT_FOR_SPDX_ID "Package-${arg_PROJECT}")
-    qt_internal_sbom_set_default_option_value_and_error_if_empty(SUPPLIER "")
-    qt_internal_sbom_set_default_option_value(COPYRIGHT "${current_year} ${arg_SUPPLIER}")
-    qt_internal_sbom_set_default_option_value_and_error_if_empty(SUPPLIER_URL
+    _qt_internal_sbom_set_default_option_value(LICENSE "NOASSERTION")
+    _qt_internal_sbom_set_default_option_value(PROJECT_FOR_SPDX_ID "Package-${arg_PROJECT}")
+    _qt_internal_sbom_set_default_option_value_and_error_if_empty(SUPPLIER "")
+    _qt_internal_sbom_set_default_option_value(COPYRIGHT "${current_year} ${arg_SUPPLIER}")
+    _qt_internal_sbom_set_default_option_value_and_error_if_empty(SUPPLIER_URL
         "${PROJECT_HOMEPAGE_URL}")
-    qt_internal_sbom_set_default_option_value(NAMESPACE
+    _qt_internal_sbom_set_default_option_value(NAMESPACE
         "${arg_SUPPLIER}/spdxdocs/${arg_PROJECT}-${QT_SBOM_GIT_VERSION}")
 
     if(arg_CPE)
@@ -123,7 +128,7 @@ function(_qt_internal_sbom_begin_project_generate)
         set(cmake_configs "${CMAKE_BUILD_TYPE}")
     endif()
 
-    qt_internal_sbom_set_default_option_value(DOWNLOAD_LOCATION "NOASSERTION")
+    _qt_internal_sbom_set_default_option_value(DOWNLOAD_LOCATION "NOASSERTION")
 
     set(cmake_version "Built by CMake ${CMAKE_VERSION}")
     set(system_name_and_processor "${CMAKE_SYSTEM_NAME} (${CMAKE_SYSTEM_PROCESSOR})")
@@ -208,9 +213,10 @@ Relationship: SPDXRef-DOCUMENT DESCRIBES ${project_spdx_id}
     set(computed_sbom_file_name_without_ext "${output_file_name_without_ext}${multi_config_suffix}")
     set(computed_sbom_file_name "${output_file_name_without_ext}${output_file_ext}")
 
-    # In a super build, put all the build time sboms into the same dir in qtbase.
-    if(QT_SUPERBUILD)
-        set(build_sbom_root_dir "${QtBase_BINARY_DIR}/qt_sbom")
+    # In a super build and in a no-prefix build, put all the build time sboms into the same dir in,
+    # in the qtbase build dir.
+    if(QT_BUILDING_QT AND (QT_SUPERBUILD OR (NOT QT_WILL_INSTALL)))
+        set(build_sbom_root_dir "${QT_BUILD_DIR}")
     else()
         set(build_sbom_root_dir "${sbom_dir}")
     endif()
@@ -238,6 +244,11 @@ Relationship: SPDXRef-DOCUMENT DESCRIBES ${project_spdx_id}
         file(WRITE \"${staging_area_spdx_file}\" \"\${content}\")
 ")
     file(GENERATE OUTPUT "${create_staging_file}" CONTENT "${content}")
+
+
+    set_property(GLOBAL PROPERTY _qt_sbom_project_supplier "${arg_SUPPLIER}")
+    set_property(GLOBAL PROPERTY _qt_sbom_project_supplier_url "${arg_SUPPLIER_URL}")
+    set_property(GLOBAL PROPERTY _qt_sbom_project_namespace "${arg_NAMESPACE}")
 
     set_property(GLOBAL PROPERTY _qt_sbom_project_name "${arg_PROJECT}")
     set_property(GLOBAL PROPERTY _qt_sbom_project_spdx_id "${project_spdx_id}")
@@ -438,7 +449,7 @@ function(_qt_internal_sbom_end_project_generate)
 
     # Allow skipping checksum computation for testing purposes, while installing just the sbom
     # documents, without requiring to build and install all the actual files.
-    if(QT_INTERNAL_SBOM_FAKE_CHECKSUM)
+    if(QT_SBOM_FAKE_CHECKSUM)
         string(APPEND extra_code_begin "
             set(QT_SBOM_FAKE_CHECKSUM TRUE)")
     endif()
@@ -544,8 +555,8 @@ function(_qt_internal_sbom_generate_add_file)
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    qt_internal_sbom_set_default_option_value_and_error_if_empty(FILENAME "")
-    qt_internal_sbom_set_default_option_value_and_error_if_empty(FILETYPE "")
+    _qt_internal_sbom_set_default_option_value_and_error_if_empty(FILENAME "")
+    _qt_internal_sbom_set_default_option_value_and_error_if_empty(FILETYPE "")
 
     set(check_option "")
     if(arg_SPDXID)
@@ -558,8 +569,8 @@ function(_qt_internal_sbom_generate_add_file)
         HINTS "SPDXRef-${arg_FILENAME}"
     )
 
-    qt_internal_sbom_set_default_option_value(LICENSE "NOASSERTION")
-    qt_internal_sbom_set_default_option_value(COPYRIGHT "NOASSERTION")
+    _qt_internal_sbom_set_default_option_value(LICENSE "NOASSERTION")
+    _qt_internal_sbom_set_default_option_value(COPYRIGHT "NOASSERTION")
 
     get_property(sbom_project_spdx_id GLOBAL PROPERTY _qt_sbom_project_spdx_id)
     if(NOT sbom_project_spdx_id)
@@ -702,7 +713,7 @@ function(_qt_internal_sbom_generate_add_external_reference)
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    qt_internal_sbom_set_default_option_value_and_error_if_empty(EXTERNAL_DOCUMENT_FILE_PATH "")
+    _qt_internal_sbom_set_default_option_value_and_error_if_empty(EXTERNAL_DOCUMENT_FILE_PATH "")
 
     if(NOT arg_EXTERNAL_DOCUMENT_SPDX_ID)
         get_property(spdx_id_count GLOBAL PROPERTY _qt_sbom_spdx_id_count)
@@ -803,7 +814,7 @@ function(_qt_internal_sbom_generate_add_external_reference)
         string(REGEX REPLACE \"^.*[\\r\\n]DocumentNamespace:[ \\t]*([^#\\r\\n]*).*$\"
                 \"\\\\1\" ext_ns \"\${ext_content}\")
 
-        list(APPEND QT_SBOM_EXTERNAL_DOC_REFS \"
+        string(APPEND QT_SBOM_EXTERNAL_DOC_REFS \"
 ExternalDocumentRef: ${arg_EXTERNAL_DOCUMENT_SPDX_ID} \${ext_ns} SHA1: \${ext_sha1}\")
 
         ${relationship_content}
@@ -841,7 +852,7 @@ function(_qt_internal_sbom_generate_add_package)
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    qt_internal_sbom_set_default_option_value_and_error_if_empty(PACKAGE "")
+    _qt_internal_sbom_set_default_option_value_and_error_if_empty(PACKAGE "")
 
     set(check_option "")
     if(arg_SPDXID)
@@ -854,13 +865,13 @@ function(_qt_internal_sbom_generate_add_package)
         HINTS "SPDXRef-${arg_PACKAGE}"
     )
 
-    qt_internal_sbom_set_default_option_value(DOWNLOAD_LOCATION "NOASSERTION")
-    qt_internal_sbom_set_default_option_value(VERSION "unknown")
-    qt_internal_sbom_set_default_option_value(SUPPLIER "Person: Anonymous")
-    qt_internal_sbom_set_default_option_value(LICENSE_DECLARED "NOASSERTION")
-    qt_internal_sbom_set_default_option_value(LICENSE_CONCLUDED "NOASSERTION")
-    qt_internal_sbom_set_default_option_value(COPYRIGHT "NOASSERTION")
-    qt_internal_sbom_set_default_option_value(PURPOSE "OTHER")
+    _qt_internal_sbom_set_default_option_value(DOWNLOAD_LOCATION "NOASSERTION")
+    _qt_internal_sbom_set_default_option_value(VERSION "unknown")
+    _qt_internal_sbom_set_default_option_value(SUPPLIER "Person: Anonymous")
+    _qt_internal_sbom_set_default_option_value(LICENSE_DECLARED "NOASSERTION")
+    _qt_internal_sbom_set_default_option_value(LICENSE_CONCLUDED "NOASSERTION")
+    _qt_internal_sbom_set_default_option_value(COPYRIGHT "NOASSERTION")
+    _qt_internal_sbom_set_default_option_value(PURPOSE "OTHER")
 
     set(fields "")
 
@@ -984,7 +995,7 @@ function(_qt_internal_sbom_generate_add_project_relationship)
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    qt_internal_sbom_set_default_option_value_and_error_if_empty(RELATIONSHIPS "")
+    _qt_internal_sbom_set_default_option_value_and_error_if_empty(RELATIONSHIPS "")
 
     _qt_internal_get_staging_area_spdx_file_path(staging_area_spdx_file)
 
@@ -1085,7 +1096,7 @@ function(_qt_internal_sbom_generate_add_license)
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    qt_internal_sbom_set_default_option_value_and_error_if_empty(LICENSE_ID "")
+    _qt_internal_sbom_set_default_option_value_and_error_if_empty(LICENSE_ID "")
 
     set(check_option "")
     if(arg_SPDXID)
@@ -1138,7 +1149,7 @@ function(_qt_internal_sbom_get_and_check_spdx_id)
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    qt_internal_sbom_set_default_option_value_and_error_if_empty(VARIABLE "")
+    _qt_internal_sbom_set_default_option_value_and_error_if_empty(VARIABLE "")
 
     if(NOT arg_CHECK)
         get_property(spdx_id_count GLOBAL PROPERTY _qt_sbom_spdx_id_count)

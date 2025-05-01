@@ -16,6 +16,43 @@ function(qt_internal_add_doc_tool_dependency doc_target tool_name)
     endif()
 endfunction()
 
+# Adds custom build and install targets to generate documentation for a documentation project
+# identified by a cmake target and a path to a .qdocconf file.
+#
+# Creates custom targets of the form:
+# - generate_docs_${target}
+# - prepare_docs_${target}
+# - html_docs_${target}
+# - install_html_docs_${target}
+# - etc.
+#
+# The first two arguments to the function should be <target> <path-to-qdocconf>.
+#
+# Additional options are:
+# INDEX_DIRECTORIES - a list of index directories to pass to qdoc.
+#
+# DEFINES - extra environment variable assignments of the form ENV_VAR=VALUE, which should be set
+# during qdoc execution.
+#
+# QDOC_EXTRA_ARGS - extra command-line arguments to pass to qdoc in both prepare and generate
+# phases.
+#
+# QDOC_PREPARE_EXTRA_ARGS - extra command-line arguments to pass to qdoc in the prepare phase.
+#
+# QDOC_GENERATE_EXTRA_ARGS - extra command-line arguments to pass to qdoc in the generate phase.
+#
+# SHOW_INTERNAL - if set, the --showinternal option is passed to qdoc.
+#
+# Additional environment variables considered:
+# QT_INSTALL_DOCS - directory path where the qt docs were expected to be installed, used for
+# linking to other built docs. If not set, defaults to the qtbase or qt5 build directory, or the
+# install directory extracted from the BuildInternals package.
+#
+# QT_QDOC_EXTRA_ARGS, QT_QDOC_PREPARE_EXTRA_ARGS, QT_QDOC_GENERATE_EXTRA_ARGS - same as the options
+# but can be set as either environment or cmake variables.
+#
+# QT_QDOC_SHOW_INTERNAL - same as the option but can be set as either an environment or
+# cmake variable.
 function(qt_internal_add_docs)
     if(NOT QT_BUILD_DOCS)
         return()
@@ -23,39 +60,67 @@ function(qt_internal_add_docs)
 
     if(${ARGC} EQUAL 1)
         # Function called from old generated CMakeLists.txt that was missing the target parameter
+        if(QT_FEATURE_developer_build)
+            message(AUTHOR_WARNING
+                "qt_internal_add_docs called with old signature. Skipping doc generation.")
+        endif()
         return()
     endif()
-    set(error_msg "qt_add_docs called with wrong number of arguments. ")
-    list(APPEND error_msg
-        "Should be qt_add_docs\(target_name qdocconf "
-        "\[INDEX_DIRECTORIES EXTRA_INDEX_DIRS_LIST_TO_ENABLE_QDOC_RESOLVE_LINKS\]\)")
+
     if(NOT ${ARGC} GREATER_EQUAL 2)
-        message(FATAL_ERROR ${error_msg})
-        return()
+        message(FATAL_ERROR
+            "qt_internal_add_docs called with a wrong number of arguments. "
+            "The call should be qt_internal_add_docs\(<target> <path-to-qdocconf> [other-options])"
+        )
     endif()
 
     set(target ${ARGV0})
-    set(doc_project ${ARGV1})
+    set(qdoc_conf_path ${ARGV1})
+
+    set(opt_args
+        SHOW_INTERNAL
+    )
+    set(single_args "")
+    set(multi_args
+        INDEX_DIRECTORIES
+        DEFINES
+        QDOC_EXTRA_ARGS
+        QDOC_PREPARE_EXTRA_ARGS
+        QDOC_GENERATE_EXTRA_ARGS
+    )
+    cmake_parse_arguments(PARSE_ARGV 2 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
     set(qdoc_extra_args "")
-    # Check if there are more than 2 arguments and pass them
-    # as extra --indexdir arguments to qdoc in prepare and
+
+    # The INDEX_DIRECTORIES key should enable passing a list of index
+    # directories as extra command-line arguments to qdoc, in prepare and
     # generate phases.
-    if (${ARGC} GREATER 2)
-        # The INDEX_DIRECTORIES key should enable passing a list of index
-        # directories as extra command-line arguments to qdoc.
-        set(qdocExtraArgs "INDEX_DIRECTORIES;DEFINES")
-        cmake_parse_arguments(PARSE_ARGV 2 arg "" "" "${qdocExtraArgs}")
-        if(arg_UNPARSED_ARGUMENTS)
-            message(FATAL_ERROR ${error_msg})
-            return()
-        endif()
-        if(arg_INDEX_DIRECTORIES)
-            foreach(index_directory ${arg_INDEX_DIRECTORIES})
-                list(APPEND qdoc_extra_args "--indexdir" ${index_directory})
-            endforeach()
-        endif()
+    if(arg_INDEX_DIRECTORIES)
+        foreach(index_directory ${arg_INDEX_DIRECTORIES})
+            list(APPEND qdoc_extra_args "--indexdir" ${index_directory})
+        endforeach()
     endif()
 
+    set(show_internal_env FALSE)
+    if(DEFINED ENV{QT_QDOC_SHOW_INTERNAL})
+        set(show_internal_env $ENV{QT_QDOC_SHOW_INTERNAL})
+    endif()
+    if(arg_SHOW_INTERNAL OR QT_QDOC_SHOW_INTERNAL OR show_internal_env)
+        list(APPEND qdoc_extra_args "--showinternal")
+    endif()
+
+    if(arg_QDOC_EXTRA_ARGS)
+        list(APPEND qdoc_extra_args ${arg_QDOC_EXTRA_ARGS})
+    endif()
+
+    if(QT_QDOC_EXTRA_ARGS)
+        list(APPEND qdoc_extra_args ${QT_QDOC_EXTRA_ARGS})
+    endif()
+
+    if(DEFINED ENV{QT_QDOC_EXTRA_ARGS})
+        list(APPEND qdoc_extra_args $ENV{QT_QDOC_EXTRA_ARGS})
+    endif()
 
     # If a target is not built (which can happen for tools when crosscompiling), we shouldn't try
     # to generate docs.
@@ -77,7 +142,8 @@ function(qt_internal_add_docs)
         set(doc_tools_libexec "${QtBase_BINARY_DIR}/${INSTALL_LIBEXECDIR}")
     else()
         set(doc_tools_bin "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_BINDIR}")
-        set(doc_tools_libexec "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_LIBEXECDIR}")
+        set(doc_tools_libexec
+            "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_LIBEXECDIR}")
     endif()
 
     if(CMAKE_HOST_WIN32)
@@ -121,15 +187,18 @@ function(qt_internal_add_docs)
         set(include_path_args "")
     endif()
 
-    get_filename_component(doc_target "${doc_project}" NAME_WLE)
+    get_filename_component(doc_target "${qdoc_conf_path}" NAME_WLE)
     if (QT_WILL_INSTALL)
         set(qdoc_output_dir "${CMAKE_BINARY_DIR}/${INSTALL_DOCDIR}/${doc_target}")
         set(qdoc_qch_output_dir "${CMAKE_BINARY_DIR}/${INSTALL_DOCDIR}")
         set(index_dir "${CMAKE_BINARY_DIR}/${INSTALL_DOCDIR}")
     else()
-        set(qdoc_output_dir "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_DOCDIR}/${doc_target}")
-        set(qdoc_qch_output_dir "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_DOCDIR}")
-        set(index_dir "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_DOCDIR}")
+        set(qdoc_output_dir
+            "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_DOCDIR}/${doc_target}")
+        set(qdoc_qch_output_dir
+            "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_DOCDIR}")
+        set(index_dir
+            "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_DOCDIR}")
     endif()
 
     # qtattributionsscanner
@@ -144,7 +213,7 @@ function(qt_internal_add_docs)
     # prepare docs target
     set(prepare_qdoc_args
         -outputdir "${qdoc_output_dir}"
-        "${target_source_dir}/${doc_project}"
+        "${target_source_dir}/${qdoc_conf_path}"
         -prepare
         -indexdir "${index_dir}"
         -no-link-errors
@@ -157,12 +226,25 @@ function(qt_internal_add_docs)
         )
     endif()
 
+    if(arg_QDOC_PREPARE_EXTRA_ARGS)
+        list(APPEND prepare_qdoc_args ${arg_QDOC_PREPARE_EXTRA_ARGS})
+    endif()
+
+    if(QT_QDOC_PREPARE_EXTRA_ARGS)
+        list(APPEND prepare_qdoc_args ${QT_QDOC_PREPARE_EXTRA_ARGS})
+    endif()
+
+    if(DEFINED ENV{QT_QDOC_PREPARE_EXTRA_ARGS})
+        list(APPEND prepare_qdoc_args $ENV{QT_QDOC_PREPARE_EXTRA_ARGS})
+    endif()
+
     if(DEFINED ENV{QT_INSTALL_DOCS})
         set(qt_install_docs_env "$ENV{QT_INSTALL_DOCS}")
     elseif(QT_SUPERBUILD OR "${PROJECT_NAME}" STREQUAL "QtBase")
         set(qt_install_docs_env "${QtBase_BINARY_DIR}/${INSTALL_DOCDIR}")
     else()
-        set(qt_install_docs_env "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_DOCDIR}")
+        set(qt_install_docs_env
+            "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_DOCDIR}")
     endif()
 
     set(qdoc_env_args
@@ -193,7 +275,7 @@ function(qt_internal_add_docs)
     # generate docs target
     set(generate_qdoc_args
         -outputdir "${qdoc_output_dir}"
-        "${target_source_dir}/${doc_project}"
+        "${target_source_dir}/${qdoc_conf_path}"
         -generate
         -indexdir "${index_dir}"
         "${include_path_args}"
@@ -203,6 +285,18 @@ function(qt_internal_add_docs)
             -installdir "${QT_INSTALL_DIR}/${INSTALL_DOCDIR}"
             ${qdoc_extra_args}
         )
+    endif()
+
+    if(arg_QDOC_GENERATE_EXTRA_ARGS)
+        list(APPEND generate_qdoc_args ${arg_QDOC_GENERATE_EXTRA_ARGS})
+    endif()
+
+    if(QT_QDOC_GENERATE_EXTRA_ARGS)
+        list(APPEND generate_qdoc_args ${QT_QDOC_GENERATE_EXTRA_ARGS})
+    endif()
+
+    if(DEFINED ENV{QT_QDOC_GENERATE_EXTRA_ARGS})
+        list(APPEND generate_qdoc_args $ENV{QT_QDOC_GENERATE_EXTRA_ARGS})
     endif()
 
     foreach(target_prefix generate_top_level_docs generate_repo_docs generate_docs)

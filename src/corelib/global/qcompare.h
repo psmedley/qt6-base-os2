@@ -23,6 +23,7 @@ QT_BEGIN_NAMESPACE
 
 namespace QtPrivate {
 using CompareUnderlyingType = qint8;
+constexpr CompareUnderlyingType LegacyUncomparableValue = -127; // historic Qt value
 
 // [cmp.categories.pre] / 1
 enum class Ordering : CompareUnderlyingType
@@ -641,14 +642,15 @@ auto qCompareThreeWay(const LeftType &lhs, const RightType &rhs);
 
 template <typename LT, typename RT,
           std::enable_if_t<
-                  QtOrderingPrivate::CompareThreeWayTester::hasCompareThreeWay<LT, RT>
-                    || QtOrderingPrivate::CompareThreeWayTester::hasCompareThreeWay<RT, LT>,
+                  std::disjunction_v<
+                          QtOrderingPrivate::CompareThreeWayTester::HasCompareThreeWay<LT, RT>,
+                          QtOrderingPrivate::CompareThreeWayTester::HasCompareThreeWay<RT, LT>>,
                   bool> = true>
 auto qCompareThreeWay(const LT &lhs, const RT &rhs)
         noexcept(QtOrderingPrivate::CompareThreeWayTester::compareThreeWayNoexcept<LT, RT>())
 {
     using Qt::compareThreeWay;
-    if constexpr (QtOrderingPrivate::CompareThreeWayTester::hasCompareThreeWay<LT, RT>) {
+    if constexpr (QtOrderingPrivate::CompareThreeWayTester::hasCompareThreeWay_v<LT, RT>) {
         return compareThreeWay(lhs, rhs);
     } else {
         const auto retval = compareThreeWay(rhs, lhs);
@@ -665,7 +667,7 @@ auto qCompareThreeWay(const LT &lhs, const RT &rhs)
 namespace QtPrivate {
 enum class LegacyUncomparable : CompareUnderlyingType
 {
-    Unordered = -127
+    Unordered = QtPrivate::LegacyUncomparableValue
 };
 }
 

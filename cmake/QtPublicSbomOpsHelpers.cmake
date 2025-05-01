@@ -153,6 +153,13 @@ function(_qt_internal_sbom_find_and_handle_sbom_op_dependencies)
         _qt_internal_sbom_find_python_and_dependency_helper_lambda()
     endif()
 
+    # Always save the python interpreter path if it is found, even if the dependencies are not
+    # found. This improves the error message workflow.
+    if(python_found AND NOT QT_INTERNAL_SBOM_PYTHON_EXECUTABLE)
+        set(QT_INTERNAL_SBOM_PYTHON_EXECUTABLE "${python_path}" CACHE INTERNAL
+            "Python interpeter used for SBOM generation.")
+    endif()
+
     if(NOT everything_found)
         if(arg_REQUIRED)
             set(message_type "FATAL_ERROR")
@@ -177,11 +184,6 @@ function(_qt_internal_sbom_find_and_handle_sbom_op_dependencies)
     else()
         message(DEBUG "Using Python ${python_path} for running SBOM ops.")
 
-        if(NOT QT_INTERNAL_SBOM_PYTHON_EXECUTABLE)
-            set(QT_INTERNAL_SBOM_PYTHON_EXECUTABLE "${python_path}" CACHE INTERNAL
-                "Python interpeter used for SBOM generation.")
-        endif()
-
         set(QT_INTERNAL_SBOM_DEPS_FOUND_FOR_${arg_OP_KEY} "TRUE" CACHE INTERNAL
             "All dependencies found to run SBOM OP ${arg_OP_KEY}")
     endif()
@@ -192,15 +194,184 @@ function(_qt_internal_sbom_find_and_handle_sbom_op_dependencies)
     endif()
 endfunction()
 
+# Helper that checks a variable for truthiness, and sets the OUT_VAR_DEPS_FOUND and
+# OUT_VAR_REASON_FAILURE_MESSAGE variables based on what was passed in.
+function(_qt_internal_sbom_handle_sbom_op_missing_dependency)
+    set(opt_args "")
+    set(single_args
+        VAR_TO_CHECK
+        OUT_VAR_DEPS_FOUND
+        OUT_VAR_REASON_FAILURE_MESSAGE
+    )
+    set(multi_args
+        FAILURE_MESSAGE
+    )
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    if(NOT arg_VAR_TO_CHECK)
+        message(FATAL_ERROR "VAR_TO_CHECK is required")
+    endif()
+
+    set(reason "")
+    set(value "${${arg_VAR_TO_CHECK}}")
+    if(NOT value)
+        if(arg_FAILURE_MESSAGE)
+            list(JOIN arg_FAILURE_MESSAGE " " reason)
+        endif()
+        set(deps_found FALSE)
+    else()
+        set(deps_found TRUE)
+    endif()
+
+    if(arg_OUT_VAR_DEPS_FOUND)
+        set(${arg_OUT_VAR_DEPS_FOUND} "${deps_found}" PARENT_SCOPE)
+    endif()
+    if(arg_OUT_VAR_REASON_FAILURE_MESSAGE)
+        set(${arg_OUT_VAR_REASON_FAILURE_MESSAGE} "${reason}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+# Helper to query whether the sbom python interpreter is available, and also the error message if it
+# is not available.
+function(_qt_internal_sbom_check_python_interpreter_available)
+    set(opt_args "")
+    set(single_args
+        OUT_VAR_DEPS_FOUND
+        OUT_VAR_REASON_FAILURE_MESSAGE
+    )
+    set(multi_args
+        FAILURE_MESSAGE_PREFIX
+    )
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    set(failure_message
+        "QT_INTERNAL_SBOM_PYTHON_EXECUTABLE is missing a valid path to a python interpreter")
+
+    if(arg_FAILURE_MESSAGE_PREFIX)
+        list(PREPEND failure_message ${arg_FAILURE_MESSAGE_PREFIX})
+    endif()
+
+    _qt_internal_sbom_handle_sbom_op_missing_dependency(
+        VAR_TO_CHECK QT_INTERNAL_SBOM_PYTHON_EXECUTABLE
+        FAILURE_MESSAGE ${failure_message}
+        OUT_VAR_DEPS_FOUND deps_found
+        OUT_VAR_REASON_FAILURE_MESSAGE reason
+    )
+
+    if(arg_OUT_VAR_DEPS_FOUND)
+        set(${arg_OUT_VAR_DEPS_FOUND} "${deps_found}" PARENT_SCOPE)
+    endif()
+    if(arg_OUT_VAR_REASON_FAILURE_MESSAGE)
+        set(${arg_OUT_VAR_REASON_FAILURE_MESSAGE} "${reason}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+# Helper to assert that the python interpreter is available.
+function(_qt_internal_sbom_assert_python_interpreter_available error_message_prefix)
+    _qt_internal_sbom_check_python_interpreter_available(
+        FAILURE_MESSAGE_PREFIX ${error_message_prefix}
+        OUT_VAR_DEPS_FOUND deps_found
+        OUT_VAR_REASON_FAILURE_MESSAGE reason
+    )
+
+    if(NOT deps_found)
+        message(FATAL_ERROR ${reason})
+    endif()
+endfunction()
+
+# Helper to query whether an sbom python dependency is available, and also the error message if it
+# is not available.
+function(_qt_internal_sbom_check_python_dependency_available)
+    set(opt_args "")
+    set(single_args
+        OUT_VAR_DEPS_FOUND
+        OUT_VAR_REASON_FAILURE_MESSAGE
+        VAR_TO_CHECK
+    )
+    set(multi_args
+        FAILURE_MESSAGE_PREFIX
+        FAILURE_MESSAGE_SUFFIX
+    )
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    set(failure_message
+        "Required Python dependencies not found: ")
+
+    if(arg_FAILURE_MESSAGE_PREFIX)
+        list(PREPEND failure_message ${arg_FAILURE_MESSAGE_PREFIX})
+    endif()
+
+    if(arg_FAILURE_MESSAGE_SUFFIX)
+        list(APPEND failure_message ${arg_FAILURE_MESSAGE_SUFFIX})
+    endif()
+
+    _qt_internal_sbom_handle_sbom_op_missing_dependency(
+        VAR_TO_CHECK ${arg_VAR_TO_CHECK}
+        FAILURE_MESSAGE ${failure_message}
+        OUT_VAR_DEPS_FOUND deps_found
+        OUT_VAR_REASON_FAILURE_MESSAGE reason
+    )
+
+    if(arg_OUT_VAR_DEPS_FOUND)
+        set(${arg_OUT_VAR_DEPS_FOUND} "${deps_found}" PARENT_SCOPE)
+    endif()
+    if(arg_OUT_VAR_REASON_FAILURE_MESSAGE)
+        set(${arg_OUT_VAR_REASON_FAILURE_MESSAGE} "${reason}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+# Helper to assert that an sbom python dependency is available.
+function(_qt_internal_sbom_assert_python_dependency_available key dep error_message_prefix)
+    _qt_internal_sbom_check_python_dependency_available(
+        VAR_TO_CHECK QT_INTERNAL_SBOM_DEPS_FOUND_FOR_${key}
+        FAILURE_MESSAGE_PREFIX ${error_message_prefix}
+        FAILURE_MESSAGE_SUFFIX ${dep}
+        OUT_VAR_DEPS_FOUND deps_found
+        OUT_VAR_REASON_FAILURE_MESSAGE reason
+    )
+
+    if(NOT deps_found)
+        message(FATAL_ERROR ${reason})
+    endif()
+endfunction()
+
+# Helper to query whether the json sbom generation dependency is available, and also the error
+# message if it is not available.
+function(_qt_internal_sbom_check_generate_json_dependency_available)
+    set(opt_args "")
+    set(single_args
+        OUT_VAR_DEPS_FOUND
+        OUT_VAR_REASON_FAILURE_MESSAGE
+    )
+    set(multi_args "")
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    _qt_internal_sbom_check_python_dependency_available(
+        VAR_TO_CHECK QT_INTERNAL_SBOM_DEPS_FOUND_FOR_GENERATE_JSON
+        FAILURE_MESSAGE_SUFFIX "spdx_tools.spdx.clitools.pyspdxtools"
+        OUT_VAR_DEPS_FOUND deps_found
+        OUT_VAR_REASON_FAILURE_MESSAGE reason
+    )
+
+    if(arg_OUT_VAR_DEPS_FOUND)
+        set(${arg_OUT_VAR_DEPS_FOUND} "${deps_found}" PARENT_SCOPE)
+    endif()
+    if(arg_OUT_VAR_REASON_FAILURE_MESSAGE)
+        set(${arg_OUT_VAR_REASON_FAILURE_MESSAGE} "${reason}" PARENT_SCOPE)
+    endif()
+endfunction()
+
 # Helper to generate a SPDX JSON file from a tag/value format file.
 # This also implies some additional validity checks, useful to ensure a proper sbom file.
 function(_qt_internal_sbom_generate_json)
-    if(NOT QT_INTERNAL_SBOM_PYTHON_EXECUTABLE)
-        message(FATAL_ERROR "Python interpreter not found for generating SBOM json file.")
-    endif()
-    if(NOT QT_INTERNAL_SBOM_DEPS_FOUND_FOR_GENERATE_JSON)
-        message(FATAL_ERROR "Python dependencies not found for generating SBOM json file.")
-    endif()
+    set(error_message_prefix "Failed to generate an SBOM json file.")
+    _qt_internal_sbom_assert_python_interpreter_available("${error_message_prefix}")
+    _qt_internal_sbom_assert_python_dependency_available(GENERATE_JSON
+        "spdx_tools.spdx.clitools.pyspdxtools" ${error_message_prefix})
 
     set(content "
         message(STATUS \"Generating JSON: \${QT_SBOM_OUTPUT_PATH}.json\")
@@ -219,6 +390,50 @@ function(_qt_internal_sbom_generate_json)
     file(GENERATE OUTPUT "${verify_sbom}" CONTENT "${content}")
 
     set_property(GLOBAL APPEND PROPERTY _qt_sbom_cmake_verify_include_files "${verify_sbom}")
+endfunction()
+
+# Helper to query whether the all required dependencies are available to generate a tag / value
+# document from a json one.
+function(_qt_internal_sbom_verify_deps_for_generate_tag_value_spdx_document)
+    set(opt_args "")
+    set(single_args
+        OUT_VAR_DEPS_FOUND
+        OUT_VAR_REASON_FAILURE_MESSAGE
+    )
+    set(multi_args "")
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    # First try to find dependencies, because they might not have been found yet.
+    _qt_internal_sbom_find_and_handle_sbom_op_dependencies(
+        OP_KEY "GENERATE_JSON"
+    )
+
+    _qt_internal_sbom_check_python_interpreter_available(
+        OUT_VAR_DEPS_FOUND python_found
+        OUT_VAR_REASON_FAILURE_MESSAGE python_error
+    )
+    _qt_internal_sbom_check_generate_json_dependency_available(
+        OUT_VAR_DEPS_FOUND dep_found
+        OUT_VAR_REASON_FAILURE_MESSAGE dep_error
+    )
+
+    set(reasons "")
+    if(python_error)
+        string(APPEND reasons "${python_error}\n")
+    endif()
+    if(dep_error)
+        string(APPEND reasons "${dep_error}\n")
+    endif()
+
+    if(python_found AND dep_found)
+        set(deps_found "TRUE")
+    else()
+        set(deps_found "FALSE")
+    endif()
+
+    set(${arg_OUT_VAR_DEPS_FOUND} "${deps_found}" PARENT_SCOPE)
+    set(${arg_OUT_VAR_REASON_FAILURE_MESSAGE} "${reasons}" PARENT_SCOPE)
 endfunction()
 
 # Helper to generate a tag/value SPDX file from a SPDX JSON format file.
@@ -250,12 +465,20 @@ endfunction()
 # OUT_VAR_OUTPUT_ABSOLUTE_FILE_PATH - output variable where to store the output file path.
 # Note that the path will contain an unresolved '${QT_SBOM_OUTPUT_DIR}' which only has a value at
 # install time. So the path can't be used sensibly during configure time.
+#
+# OPTIONAL - whether the operation should return early, if the required python dependencies are
+# not found. OUT_VAR_DEPS_FOUND is still set in that case.
+#
+# OUT_VAR_DEPS_FOUND - output variable where to store whether the python dependencies for the
+# operation were found, and thus the conversion will be attempted.
 function(_qt_internal_sbom_generate_tag_value_spdx_document)
     if(NOT QT_GENERATE_SBOM)
         return()
     endif()
 
-    set(opt_args "")
+    set(opt_args
+        OPTIONAL
+    )
     set(single_args
         OPERATION_ID
         INPUT_JSON_FILE_PATH
@@ -263,18 +486,39 @@ function(_qt_internal_sbom_generate_tag_value_spdx_document)
         OUTPUT_FILE_NAME
         OUT_VAR_OUTPUT_FILE_NAME
         OUT_VAR_OUTPUT_ABSOLUTE_FILE_PATH
+        OUT_VAR_DEPS_FOUND
     )
     set(multi_args "")
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    if(NOT QT_INTERNAL_SBOM_PYTHON_EXECUTABLE)
-        message(FATAL_ERROR "Python interpreter not found for generating tag/value file from JSON.")
+    # First try to find dependencies, because they might not have been found yet.
+    _qt_internal_sbom_find_and_handle_sbom_op_dependencies(
+        OP_KEY "GENERATE_JSON"
+        OUT_VAR_DEPS_FOUND deps_found
+    )
+
+    if(arg_OPTIONAL)
+        set(deps_are_required FALSE)
+    else()
+        set(deps_are_required TRUE)
     endif()
-    if(NOT QT_INTERNAL_SBOM_DEPS_FOUND_FOR_GENERATE_JSON)
-        message(FATAL_ERROR
-            "Python dependencies not found for generating tag/value file from JSON.")
+
+    # If the operation has to succeed, then the deps are required. Assert they are available.
+    if(deps_are_required)
+        set(error_message_prefix "Failed to generate a tag/value SBOM file from a json SBOM file.")
+        _qt_internal_sbom_assert_python_interpreter_available("${error_message_prefix}")
+        _qt_internal_sbom_assert_python_dependency_available(GENERATE_JSON
+            "spdx_tools.spdx.clitools.pyspdxtools" ${error_message_prefix})
+
+    # If the operation is optional, don't error out if the deps are not found, but silently return
+    # and mention that the deps are not found.
+    elseif(NOT deps_found)
+        set(${arg_OUT_VAR_DEPS_FOUND} "${deps_found}" PARENT_SCOPE)
+        return()
     endif()
+
+    set(${arg_OUT_VAR_DEPS_FOUND} "${deps_found}" PARENT_SCOPE)
 
     if(NOT arg_OPERATION_ID)
         message(FATAL_ERROR "OPERATION_ID is required")
@@ -329,13 +573,10 @@ endfunction()
 
 # Helper to verify the generated sbom is valid.
 function(_qt_internal_sbom_verify_valid)
-    if(NOT QT_INTERNAL_SBOM_PYTHON_EXECUTABLE)
-        message(FATAL_ERROR "Python interpreter not found for verifying SBOM file.")
-    endif()
-
-    if(NOT QT_INTERNAL_SBOM_DEPS_FOUND_FOR_VERIFY_SBOM)
-        message(FATAL_ERROR "Python dependencies not found for verifying SBOM file")
-    endif()
+    set(error_message_prefix "Failed to verify SBOM file syntax.")
+    _qt_internal_sbom_assert_python_interpreter_available("${error_message_prefix}")
+    _qt_internal_sbom_assert_python_dependency_available(VERIFY_SBOM
+        "spdx_tools.spdx.clitools.pyspdxtools" ${error_message_prefix})
 
     set(content "
         message(STATUS \"Verifying: \${QT_SBOM_OUTPUT_PATH}\")
@@ -358,13 +599,10 @@ endfunction()
 
 # Helper to verify the generated sbom is NTIA compliant.
 function(_qt_internal_sbom_verify_ntia_compliant)
-    if(NOT QT_INTERNAL_SBOM_PYTHON_EXECUTABLE)
-        message(FATAL_ERROR "Python interpreter not found for verifying SBOM file.")
-    endif()
-
-    if(NOT QT_INTERNAL_SBOM_DEPS_FOUND_FOR_RUN_NTIA)
-        message(FATAL_ERROR "Python dependencies not found for running the SBOM NTIA checker.")
-    endif()
+    set(error_message_prefix "Failed to run NTIA checker on SBOM file.")
+    _qt_internal_sbom_assert_python_interpreter_available("${error_message_prefix}")
+    _qt_internal_sbom_assert_python_dependency_available(RUN_NTIA
+        "ntia_conformance_checker.main" ${error_message_prefix})
 
     set(content "
         message(STATUS \"Checking for NTIA compliance: \${QT_SBOM_OUTPUT_PATH}\")
@@ -499,15 +737,57 @@ function(_qt_internal_sbom_generate_reuse_source_sbom)
     endif()
 
     set(source_sbom_path "\${QT_SBOM_OUTPUT_PATH_WITHOUT_EXT}.source.spdx")
+    file(TO_CMAKE_PATH "$ENV{QT_QA_LICENSE_TEST_DIR}/$ENV{QT_SOURCE_SBOM_TEST_SCRIPT}"
+        full_path_to_license_test)
+    set(verify_source_sbom "
+            message(STATUS \"Verifying source SBOM ${source_sbom_path} using qtqa tst_licenses.pl ${full_path_to_license_test}\")
+            if(NOT EXISTS \"${full_path_to_license_test}\")
+                message(FATAL_ERROR \"Source SBOM check has failed: The tst_licenses.pl script could not be found at ${full_path_to_license_test}\")
+            endif()
+            execute_process(
+                COMMAND perl \"\$ENV{QT_SOURCE_SBOM_TEST_SCRIPT}\" -sbomonly -sbom \"${source_sbom_path}\"
+                WORKING_DIRECTORY \"\$ENV{QT_QA_LICENSE_TEST_DIR}\"
+                RESULT_VARIABLE res
+                COMMAND_ECHO STDOUT
+            )
+            if(NOT res EQUAL 0)
+                message(FATAL_ERROR \"Source SBOM check has failed: \${res}\")
+            endif()
+")
+
+    set(extra_reuse_args "")
+
+    get_property(project_supplier GLOBAL PROPERTY _qt_sbom_project_supplier)
+    if(project_supplier)
+        get_property(project_supplier_url GLOBAL PROPERTY _qt_sbom_project_supplier_url)
+
+        # Add the supplier url if available. Add it in parenthesis to stop reuse from adding its
+        # own empty parenthesis.
+        if(project_supplier_url)
+            set(project_supplier "${project_supplier} (${project_supplier_url})")
+        endif()
+
+        # Unfortunately there's no way to silence the addition of the 'Creator: Person' field,
+        # even though 'Creator: Organization' is supplied.
+        list(APPEND extra_reuse_args --creator-organization "${project_supplier}")
+    endif()
 
     set(content "
         message(STATUS \"Generating source SBOM using reuse tool: ${source_sbom_path}\")
+        set(extra_reuse_args \"${extra_reuse_args}\")
         execute_process(
-            COMMAND ${QT_SBOM_PROGRAM_REUSE} --root \"${PROJECT_SOURCE_DIR}\" spdx
-                    -o ${source_sbom_path}
+            COMMAND
+                ${QT_SBOM_PROGRAM_REUSE}
+                --root \"${PROJECT_SOURCE_DIR}\"
+                spdx
+                -o ${source_sbom_path}
+                \${extra_reuse_args}
             RESULT_VARIABLE res
         )
         ${handle_error}
+        if(\"\$ENV{VERIFY_SOURCE_SBOM}\"  STREQUAL \"ON\")
+            ${verify_source_sbom}
+        endif()
 ")
 
     file(GENERATE OUTPUT "${file_op}" CONTENT "${content}")

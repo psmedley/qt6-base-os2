@@ -1638,7 +1638,7 @@ void tst_QFileInfo::isHiddenFromFinder()
     const char *filename = "test_foobar.txt";
 
     QFile testFile(filename);
-    testFile.open(QIODevice::WriteOnly | QIODevice::Append);
+    QVERIFY(testFile.open(QIODevice::WriteOnly | QIODevice::Append));
     testFile.write(QByteArray("world"));
     testFile.close();
 

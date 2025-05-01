@@ -82,7 +82,6 @@ endfunction()
 # Options:
 #   NO_ADDITIONAL_TARGET_INFO
 #     Don't generate a Qt6*AdditionalTargetInfo.cmake file.
-#     The caller is responsible for creating one.
 #
 #   MODULE_INTERFACE_NAME
 #     The custom name of the module interface. This name is used as a part of the include paths
@@ -749,9 +748,17 @@ set(QT_ALLOW_MISSING_TOOLS_PACKAGES TRUE)")
     endif()
 
     foreach(cmake_file IN LISTS arg_EXTRA_CMAKE_FILES)
-        get_filename_component(basename ${cmake_file} NAME)
-        file(COPY ${cmake_file} DESTINATION ${config_build_dir})
-        list(APPEND extra_cmake_files "${config_build_dir}/${basename}")
+        get_source_file_property(install_path ${cmake_file} QT_INSTALL_PATH)
+        if(NOT install_path)
+            # Sanitize the install_path from `NOTFOUND` to ""
+            set(install_path "")
+        endif()
+        file(COPY ${cmake_file} DESTINATION "${config_build_dir}/${install_path}")
+        qt_install(FILES
+            ${cmake_file}
+            DESTINATION "${config_install_dir}/${install_path}"
+            COMPONENT Devel
+        )
 
         # Make sure touched extra cmake files cause a reconfigure, so they get re-copied.
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${cmake_file}")
@@ -990,7 +997,7 @@ set(QT_ALLOW_MISSING_TOOLS_PACKAGES TRUE)")
                 ${__qt_internal_sbom_multi_args}
         )
 
-        _qt_internal_extend_sbom(${target} ${sbom_args})
+        qt_internal_extend_qt_entity_sbom(${target} ${sbom_args})
     endif()
 
     qt_add_list_file_finalizer(qt_finalize_module ${target} ${arg_INTERNAL_MODULE} ${arg_NO_PRIVATE_MODULE})
@@ -1241,7 +1248,12 @@ function(qt_describe_module target)
     qt_path_join(install_dir ${QT_INSTALL_DIR} ${path_suffix})
 
     set(descfile_in "${QT_CMAKE_DIR}/ModuleDescription.json.in")
+
+    # IMPORTANT: If you adjust the file name not to be the exact target name and thus the CMake
+    # package name, it needs to consider also the code in QtConfig.cmake.in that globs the json
+    # files.
     set(descfile_out "${build_dir}/${target}.json")
+
     string(TOLOWER "${PROJECT_NAME}" lower_case_project_name)
     set(cross_compilation "false")
     if(CMAKE_CROSSCOMPILING)

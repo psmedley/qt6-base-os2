@@ -2322,6 +2322,12 @@ void tst_QRhi::renderToTextureSampleWithSeparateTextureAndSampler()
     QFETCH(QRhi::Implementation, impl);
     QFETCH(QRhiInitParams *, initParams);
 
+#ifdef Q_OS_ANDROID
+    if (impl == QRhi::Vulkan) {
+        QSKIP("This function fails with Vulkan on Android, see QTQAINFRA-6926 for more info.");
+    }
+#endif
+
     QScopedPointer<QRhi> rhi(QRhi::create(impl, initParams, QRhi::Flags(), nullptr));
     if (!rhi)
         QSKIP("QRhi could not be created, skipping testing rendering");
@@ -5962,6 +5968,13 @@ void tst_QRhi::renderToRgb10Texture()
 
     if (!rhi->isTextureFormatSupported(QRhiTexture::RGB10A2))
         QSKIP("RGB10A2 is not supported, skipping test");
+
+#ifdef Q_OS_ANDROID
+    if (impl == QRhi::OpenGLES2) {
+        if (rhi->driverInfo().deviceName.contains("SwiftShader"))
+            QSKIP("SwiftShader software acceleration is used which does not support this OpenGLES feature. See QTBUG-132934");
+    }
+#endif
 
     const QSize outputSize(1920, 1080);
     QScopedPointer<QRhiTexture> texture(rhi->newTexture(QRhiTexture::RGB10A2, outputSize, 1,

@@ -34,7 +34,6 @@ QT_BEGIN_NAMESPACE
 
 static constexpr int topLevelRoundingRadius    = 8; //Radius for toplevel items like popups for round corners
 static constexpr int secondLevelRoundingRadius = 4; //Radius for second level items like hovered menu item round corners
-static constexpr QLatin1StringView originalWidthProperty("_q_windows11_style_original_width");
 
 enum WINUI3Color {
     subtleHighlightColor,             //Subtle highlight based on alpha used for hovered elements
@@ -314,11 +313,11 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
 
                 if (slider->orientation == Qt::Horizontal) {
                     rect = QRect(slrect.left(), rect.center().y() - 2, slrect.width() - 5, 4);
-                    leftRect = QRect(rect.left(), rect.top(), (handlePos.x() - rect.left()), rect.height());
+                    leftRect = QRect(rect.left() + 1, rect.top(), (handlePos.x() - rect.left()), rect.height());
                     rightRect = QRect(handlePos.x(), rect.top(), (rect.width() - handlePos.x()), rect.height());
                 } else {
                     rect = QRect(rect.center().x() - 2, slrect.top(), 4, slrect.height() - 5);
-                    rightRect = QRect(rect.left(), rect.top(), rect.width(), (handlePos.y() - rect.top()));
+                    rightRect = QRect(rect.left(), rect.top() + 1, rect.width(), (handlePos.y() - rect.top()));
                     leftRect = QRect(rect.left(), handlePos.y(), rect.width(), (rect.height() - handlePos.y()));
                 }
 
@@ -795,10 +794,11 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
         break;
     case PE_IndicatorCheckBox:
         {
+            const bool isRtl = option->direction == Qt::RightToLeft;
             QNumberStyleAnimation* animation = qobject_cast<QNumberStyleAnimation*>(d->animation(option->styleObject));
             QFontMetrics fm(assetFont);
 
-            QRectF rect = option->rect;
+            QRectF rect = isRtl ? option->rect.adjusted(0, 0, -2, 0) : option->rect.adjusted(2, 0, 0, 0);
             QPointF center = QPointF(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2);
             rect.setWidth(15);
             rect.setHeight(15);
@@ -844,17 +844,18 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
         break;
     case PE_IndicatorRadioButton:
         {
-            if (option->styleObject->property("_q_end_radius").isNull())
-                option->styleObject->setProperty("_q_end_radius", option->state & State_On ? 4.0f :7.0f);
-            QNumberStyleAnimation* animation = qobject_cast<QNumberStyleAnimation*>(d->animation(option->styleObject));
-            if (animation != nullptr)
-                option->styleObject->setProperty("_q_inner_radius", animation->currentValue());
-            else
-                option->styleObject->setProperty("_q_inner_radius", option->styleObject->property("_q_end_radius"));
-            int innerRadius = option->styleObject->property("_q_inner_radius").toFloat();
+            const bool isRtl = option->direction == Qt::RightToLeft;
+            qreal innerRadius = option->state & State_On ? 4.0f :7.0f;
+            if (option->styleObject) {
+                if (option->styleObject->property("_q_end_radius").isNull())
+                    option->styleObject->setProperty("_q_end_radius", innerRadius);
+                QNumberStyleAnimation *animation = qobject_cast<QNumberStyleAnimation *>(d->animation(option->styleObject));
+                innerRadius = animation ? animation->currentValue() : option->styleObject->property("_q_end_radius").toFloat();
+                option->styleObject->setProperty("_q_inner_radius", innerRadius);
+            }
 
             QPainterPath path;
-            QRectF rect = option->rect;
+            QRectF rect = isRtl ? option->rect.adjusted(0, 0, -2, 0) : option->rect.adjusted(2, 0, 0, 0);
             QPointF center = QPoint(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2);
             rect.setWidth(15);
             rect.setHeight(15);
@@ -1342,7 +1343,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
         if (const QStyleOptionProgressBar* progbaropt = qstyleoption_cast<const QStyleOptionProgressBar*>(option)) {
             QRect rect = subElementRect(SE_ProgressBarLabel, progbaropt, widget);
             painter->setPen(progbaropt->palette.text().color());
-            painter->drawText(rect, progbaropt->text,Qt::AlignVCenter|Qt::AlignLeft);
+            painter->drawText(rect, progbaropt->text,progbaropt->textAlignment);
         }
         break;
     case CE_PushButtonLabel:
@@ -1814,6 +1815,15 @@ QRect QWindows11Style::subElementRect(QStyle::SubElement element, const QStyleOp
             ret = QWindowsVistaStyle::subElementRect(element, option, widget);
         }
         break;
+    case QStyle::SE_ProgressBarLabel:
+        if (const QStyleOptionProgressBar *pb = qstyleoption_cast<const QStyleOptionProgressBar *>(option)) {
+            if (pb->textAlignment.testFlags(Qt::AlignVCenter)) {
+                ret = option->rect.adjusted(0, 6, 0, 0);
+            } else {
+                ret = QWindowsVistaStyle::subElementRect(element, option, widget);
+            }
+        }
+        break;
     case QStyle::SE_HeaderLabel:
     case QStyle::SE_HeaderArrow:
         ret = QCommonStyle::subElementRect(element, option, widget);
@@ -2162,30 +2172,6 @@ void QWindows11Style::polish(QWidget* widget)
         pal.setColor(QPalette::ButtonText, pal.text().color());
         pal.setColor(QPalette::BrightText, pal.text().color());
         widget->setPalette(pal);
-    } else if (widget->inherits("QAbstractSpinBox")) {
-        const int minWidth = 2 * 24 + 40;
-        const int originalWidth = widget->size().width();
-        if (originalWidth < minWidth) {
-            widget->resize(minWidth, widget->size().height());
-            widget->setProperty(originalWidthProperty.constData(), originalWidth);
-        }
-    } else if (widget->inherits("QAbstractButton") || widget->inherits("QToolButton")) {
-        widget->setAutoFillBackground(false);
-        auto pal = widget->palette();
-        if (QPushButton *btn = qobject_cast<QPushButton*>(widget)) {
-            if (btn->isFlat() && !pal.isBrushSet(QPalette::Active, QPalette::Button))
-                pal.setColor(QPalette::Active, QPalette::Button, pal.window().color());
-        }
-        if (colorSchemeIndex == 0) {
-            pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(0x00,0x00,0x00,0x5C));
-            pal.setColor(QPalette::Disabled, QPalette::Button, QColor(0xF9,0xF9,0xF9,0x4D));
-        }
-        else {
-            pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(0xFF,0xFF,0xFF,0x87));
-            pal.setColor(QPalette::Disabled, QPalette::Button, QColor(0xFF,0xFF,0xFF,0x6B));
-        }
-        widget->setPalette(pal);
-
     } else if (qobject_cast<QGraphicsView *>(widget) && !qobject_cast<QTextEdit *>(widget)) {
         QPalette pal = widget->palette();
         pal.setColor(QPalette::Base, pal.window().color());
@@ -2218,13 +2204,6 @@ void QWindows11Style::unpolish(QWidget *widget)
         const QPalette pal = scrollarea->viewport()->property("_q_original_background_palette").value<QPalette>();
         scrollarea->viewport()->setPalette(pal);
         scrollarea->viewport()->setProperty("_q_original_background_palette", QVariant());
-    }
-    if (widget->inherits("QAbstractSpinBox")) {
-        const QVariant originalWidth = widget->property(originalWidthProperty.constData());
-        if (originalWidth.isValid()) {
-            widget->resize(originalWidth.toInt(), widget->size().height());
-            widget->setProperty(originalWidthProperty.constData(), QVariant());
-        }
     }
 }
 

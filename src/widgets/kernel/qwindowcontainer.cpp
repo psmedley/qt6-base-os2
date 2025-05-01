@@ -156,11 +156,13 @@ public:
     instance have any focus policy and it will delegate focus to the
     window via a call to QWindow::requestActivate(). However,
     returning to the normal focus chain from the QWindow instance will
-    be up to the QWindow instance implementation itself. For instance,
-    when entering a Qt Quick based window with tab focus, it is quite
-    likely that further tab presses will only cycle inside the QML
-    application. Also, whether QWindow::requestActivate() actually
-    gives the window focus, is platform dependent.
+    be up to the QWindow instance implementation itself. Also, whether
+    QWindow::requestActivate() actually gives the window focus, is
+    platform dependent.
+
+    Since 6.8, if embedding a Qt Quick based window, tab presses will
+    transition in and out of the embedded QML window, allowing focus to move
+    to the next or previous focusable object in the window container chain.
 
     \li Using many window container instances in a QWidget-based
     application can greatly hurt the overall performance of the
@@ -422,7 +424,9 @@ void QWindowContainer::parentWasChanged(QWidget *parent)
 void QWindowContainer::parentWasMoved(QWidget *parent)
 {
     if (QWindowContainerPrivate *d = QWindowContainerPrivate::get(parent)) {
-        if (d->window->parent())
+        if (!d->window)
+            return;
+        else if (d->window->parent())
             d->updateGeometry();
     }
     qwindowcontainer_traverse(parent, parentWasMoved);
@@ -431,7 +435,9 @@ void QWindowContainer::parentWasMoved(QWidget *parent)
 void QWindowContainer::parentWasRaised(QWidget *parent)
 {
     if (QWindowContainerPrivate *d = QWindowContainerPrivate::get(parent)) {
-        if (d->window->parent())
+        if (!d->window)
+            return;
+        else if (d->window->parent())
             d->window->raise();
     }
     qwindowcontainer_traverse(parent, parentWasRaised);
@@ -440,7 +446,9 @@ void QWindowContainer::parentWasRaised(QWidget *parent)
 void QWindowContainer::parentWasLowered(QWidget *parent)
 {
     if (QWindowContainerPrivate *d = QWindowContainerPrivate::get(parent)) {
-        if (d->window->parent())
+        if (!d->window)
+            return;
+        else if (d->window->parent())
             d->window->lower();
     }
     qwindowcontainer_traverse(parent, parentWasLowered);

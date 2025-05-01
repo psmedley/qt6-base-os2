@@ -104,18 +104,6 @@ clock_gettime(CLOCK_MONOTONIC, &ts);
 }
 ")
 
-# close_range
-qt_config_compile_test(close_range
-    LABEL "close_range()"
-    CODE
-"#include <unistd.h>
-
-int main()
-{
-    return close_range(3, 1024, 0) != 0;
-}
-")
-
 # cloexec
 qt_config_compile_test(cloexec
     LABEL "O_CLOEXEC"
@@ -255,6 +243,26 @@ int main(void)
 inotify_init();
 inotify_add_watch(0, \"foobar\", IN_ACCESS);
 inotify_rm_watch(0, 1);
+    /* END TEST: */
+    return 0;
+}
+")
+
+# fsnotify
+qt_config_compile_test(fsnotify
+    LABEL "libfsnotify"
+    LIBRARIES fsnotify
+    CODE
+"#include <sys/inotify.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+    int fd = inotify_init();
+    if (fd >= 0) {
+        inotify_add_watch(fd, \"foobar\", IN_ACCESS);
+        inotify_rm_watch(fd, 1);
+    }
     /* END TEST: */
     return 0;
 }
@@ -525,11 +533,6 @@ qt_feature("clock-monotonic" PUBLIC
     CONDITION QT_FEATURE_clock_gettime AND TEST_clock_monotonic
 )
 qt_feature_definition("clock-monotonic" "QT_NO_CLOCK_MONOTONIC" NEGATE VALUE "1")
-qt_feature("close_range" PRIVATE
-    LABEL "close_range()"
-    CONDITION QT_FEATURE_process AND TEST_close_range
-    AUTODETECT UNIX
-)
 qt_feature("doubleconversion" PRIVATE
     LABEL "DoubleConversion"
 )
@@ -582,7 +585,11 @@ qt_feature("icu" PRIVATE
 )
 qt_feature("inotify" PUBLIC PRIVATE
     LABEL "inotify"
-    CONDITION TEST_inotify
+    CONDITION TEST_inotify OR TEST_fsnotify
+)
+qt_feature("fsnotify"
+    LABEL "fsnotify"
+    CONDITION TEST_fsnotify
 )
 qt_feature_definition("inotify" "QT_NO_INOTIFY" NEGATE VALUE "1")
 qt_feature("ipc_posix"

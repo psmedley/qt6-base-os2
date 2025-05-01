@@ -68,6 +68,7 @@ qt_internal_add_module(Core
         global/qoverload.h
         global/qprocessordetection.h
         global/qrandom.cpp global/qrandom.h global/qrandom_p.h
+        global/qstdlibdetection.h
         global/qswap.h
         global/qsysinfo.cpp global/qsysinfo.h
         global/qsystemdetection.h
@@ -96,6 +97,7 @@ qt_internal_add_module(Core
         global/q20map.h
         global/q20memory.h
         global/q20type_traits.h
+        global/q20utility.h
         global/q20vector.h
         global/q23functional.h
         global/q23utility.cpp # remove once we have a user that tests this
@@ -697,6 +699,11 @@ qt_internal_extend_target(Core CONDITION INTEGRITY
 # Remove if QCC (gcc version 8.3.0) for QNX 7.1.0 is no longer supported
 qt_internal_extend_target(Core CONDITION QCC AND (CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "8.3.0")
     PUBLIC_COMPILE_OPTIONS $<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof>
+)
+
+qt_internal_extend_target(Core CONDITION QNX AND QT_FEATURE_fsnotify
+    LIBRARIES
+        fsnotify
 )
 
 qt_internal_extend_target(Core CONDITION LINUX AND QT_BUILD_SHARED_LIBS

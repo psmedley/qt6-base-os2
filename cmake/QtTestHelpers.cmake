@@ -231,6 +231,7 @@ function(qt_internal_get_test_arg_definitions optional_args single_value_args mu
         QML_IMPORTPATH
         TESTDATA
         QT_TEST_SERVER_LIST
+        ANDROID_TESTRUNNER_PRE_TEST_ADB_COMMANDS
         ${__default_private_args}
         ${__default_public_args}
         PARENT_SCOPE
@@ -448,6 +449,8 @@ endfunction()
 #       The option forces adding the provided TESTDATA to resources.
 #    MANUAL
 #       The option indicates that the test is a manual test.
+#    ANDROID_TESTRUNNER_PRE_TEST_ADB_COMMANDS
+#       Passes --pre-test-adb-command <command> to androidTestRunner. Android specific argument.
 function(qt_internal_add_test name)
     qt_internal_get_test_arg_definitions(optional_args single_value_args multi_value_args)
 
@@ -660,6 +663,13 @@ function(qt_internal_add_test name)
         endif()
         qt_internal_android_test_runner_arguments("${name}" test_executable extra_test_args)
         list(APPEND extra_test_args "--timeout" "${android_timeout}" "--verbose")
+
+        if(arg_ANDROID_TESTRUNNER_PRE_TEST_ADB_COMMANDS)
+            foreach(command IN LISTS arg_ANDROID_TESTRUNNER_PRE_TEST_ADB_COMMANDS)
+                list(APPEND extra_test_args "--pre-test-adb-command" "${command}")
+            endforeach()
+        endif()
+
         set(test_working_dir "${CMAKE_CURRENT_BINARY_DIR}")
     elseif(QNX)
         set(test_working_dir "")
@@ -765,18 +775,10 @@ function(qt_internal_add_test name)
             )
         endif()
 
-        # Add a ${target}/check makefile target, to more easily test one test.
-
-        set(test_config_options "")
-        get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
-        if(is_multi_config)
-            set(test_config_options -C $<CONFIG>)
-        endif()
-        add_custom_target("${testname}_check"
-            VERBATIM
-            COMMENT "Running ${CMAKE_CTEST_COMMAND} -V -R \"^${name}$\" ${test_config_options}"
-            COMMAND "${CMAKE_CTEST_COMMAND}" -V -R "^${name}$" ${test_config_options}
-        )
+        # Add a ${target}_check makefile target, to more easily test one test.
+        # TODO: Note in batch mode testname tests would execute all batched tests defined in name
+        _qt_internal_make_check_target(${testname} CTEST_TEST_NAME ${name})
+        # Add appropriate dependencies to the targets as needed
         if(TARGET "${name}")
             add_dependencies("${testname}_check" "${name}")
             if(ANDROID)

@@ -955,7 +955,7 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
 
 #if QT_CONFIG(thread)
     if (!parent) {
-        Q_ASSERT_X(q->thread() == qApp->thread(), "QWidget",
+        Q_ASSERT_X(QThread::isMainThread(), "QWidget",
                    "Widgets must be created in the GUI thread.");
     }
 #endif
@@ -2129,7 +2129,7 @@ void QWidgetPrivate::clipToEffectiveMask(QRegion &region) const
     QPoint offset;
 
 #if QT_CONFIG(graphicseffect)
-    if (graphicsEffect) {
+    if (graphicsEffect && !w->isWindow()) {
         w = q->parentWidget();
         offset -= data.crect.topLeft();
     }

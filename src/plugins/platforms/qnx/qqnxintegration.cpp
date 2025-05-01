@@ -93,6 +93,10 @@ static inline QQnxIntegration::Options parseOptions(const QStringList &paramList
         options |= QQnxIntegration::SurfacelessEGLContext;
     }
 
+    if (paramList.contains("desktop"_L1)) {
+        options |= QQnxIntegration::Desktop;
+    }
+
     return options;
 }
 
@@ -124,7 +128,6 @@ QQnxIntegration::QQnxIntegration(const QStringList &paramList)
     , m_buttonsNotifier(new QQnxButtonEventNotifier())
 #endif
     , m_qpaInputContext(0)
-    , m_services(0)
     , m_fontDatabase(new QGenericUnixFontDatabase())
     , m_eventDispatcher(createUnixEventDispatcher())
     , m_nativeInterface(new QQnxNativeInterface(this))
@@ -189,10 +192,6 @@ QQnxIntegration::QQnxIntegration(const QStringList &paramList)
 #if QT_CONFIG(qqnx_pps)
     m_navigator = new QQnxNavigatorPps();
 #endif
-
-    // Create services handling class
-    if (m_navigator)
-        m_services = new QQnxServices(m_navigator);
 
     createDisplays();
 
@@ -473,6 +472,10 @@ QVariant QQnxIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
 
 QPlatformServices * QQnxIntegration::services() const
 {
+    // Create services handling class
+    if (m_navigator && !m_services)
+        m_services = new QQnxServices(m_navigator);
+
     return m_services;
 }
 

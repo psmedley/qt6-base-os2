@@ -54,7 +54,8 @@ public:
         FullScreenApplication = 0x1,
         RootWindow = 0x2,
         AlwaysFlushScreenContext = 0x4,
-        SurfacelessEGLContext = 0x8
+        SurfacelessEGLContext = 0x8,
+        Desktop = 0x10
     };
     Q_DECLARE_FLAGS(Options, Option)
     explicit QQnxIntegration(const QStringList &paramList);
@@ -128,7 +129,7 @@ private:
     QQnxButtonEventNotifier *m_buttonsNotifier;
 #endif
     QPlatformInputContext *m_qpaInputContext;
-    QQnxServices *m_services;
+    mutable QQnxServices *m_services = nullptr;
     QPlatformFontDatabase *m_fontDatabase;
     mutable QAbstractEventDispatcher *m_eventDispatcher;
     QQnxNativeInterface *m_nativeInterface;
