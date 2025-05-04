@@ -37,7 +37,7 @@
 **
 ****************************************************************************/
 
-#ifndef QOS2STHEME_H
+#ifndef QOS2THEME_H
 #define QOS2THEME_H
 
 #include <qpa/qplatformtheme.h>
