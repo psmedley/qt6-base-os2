@@ -58,6 +58,7 @@ public:
         BlockedByModal = 0x4,
         InInit = 0x8,
         InSetWindowState = 0x10,
+        IsDesktop = 0x20, // mHwnd is HWND_DESKTOP's handle which we don't own
     };
 
     explicit QOS2Window(QWindow *window);

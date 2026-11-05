@@ -303,6 +303,7 @@ QOS2Window::QOS2Window(QWindow *window)
 
     if (type == Qt::Desktop) {
         mHwnd = WinQueryDesktopWindow(NULLHANDLE, NULLHANDLE);
+        setFlag(IsDesktop);
         return;
     }
 
@@ -551,6 +552,10 @@ QOS2Window::~QOS2Window()
 {
     qCInfo(lcQpaWindows) << this;
 
+    // The desktop window is not ours, don't touch it.
+    if (testFlag(IsDesktop))
+        return;
+
     if (hasMouseCapture())
         setMouseGrabEnabled(false);
 
@@ -570,9 +575,16 @@ QOS2Window::~QOS2Window()
         mSwEntry = NULLHANDLE;
     }
 
-    // Only destroy top-level windows; children will be implicitly destroyed by their parents.
+    // Destroy the native window. For top-level windows, destroying the frame also destroys the
+    // client (and all its children). Child windows must be destroyed explicitly as well: Qt may
+    // destroy a child platform window while its parent stays alive (QWindow::destroy, reparenting,
+    // deleting a native child widget) and the PM window would otherwise stay on screen. Note that
+    // when a parent is destroyed, Qt destroys the platform windows of its children first, so we
+    // never destroy an HWND that PM has already destroyed implicitly.
     if (mHwndFrame != NULLHANDLE)
         WinDestroyWindow(mHwndFrame);
+    else if (mHwnd != NULLHANDLE)
+        WinDestroyWindow(mHwnd);
 }
 
 void QOS2Window::initialize()
