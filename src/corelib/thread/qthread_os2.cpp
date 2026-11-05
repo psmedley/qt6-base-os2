@@ -63,6 +63,9 @@ static void qt_create_tls()
         return;
     static QBasicMutex mutex;
     QMutexLocker locker(&mutex);
+    // Re-check under the lock: another thread may have allocated it meanwhile.
+    if (qt_tls != NULL)
+        return;
     APIRET arc = DosAllocThreadLocalMemory((sizeof(QThreadData *) + 3)/4,
                                            (PULONG *)&qt_tls);
     if (arc != NO_ERROR)
@@ -323,7 +326,8 @@ void QThread::msleep(unsigned long msecs)
 
 void QThread::usleep(unsigned long usecs)
 {
-    DosSleep((usecs / 1000) + 1);
+    // Round up to the next millisecond (DosSleep has ms granularity).
+    DosSleep((usecs + 999) / 1000);
 }
 
 // NOTE: Caller must hold the mutex.
@@ -368,11 +372,10 @@ void QThreadPrivate::setPriority(QThread::Priority priority)
 
         case QThread::InheritPriority:
         default:
-            PTIB ptib;
-            DosGetInfoBlocks(&ptib, NULL);
-            prioClass = (ptib->tib_ptib2->tib2_ulpri >> 8) & 0xFF;
-            prioDelta = (ptib->tib_ptib2->tib2_ulpri) & 0xFF;
-            break;
+            // Threads created with _beginthread already inherit the priority of the creator.
+            // Note that we must not pass the creator's absolute priority level to
+            // DosSetPriority here as its delta argument is relative to the current level.
+            return;
     }
 
     APIRET rc = DosSetPriority(PRTYS_THREAD, prioClass, prioDelta, tid);

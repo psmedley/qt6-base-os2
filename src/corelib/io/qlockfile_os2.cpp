@@ -103,8 +103,11 @@ bool QLockFilePrivate::isProcessRunning(qint64 pid, const QString &appname)
 
 QString QLockFilePrivate::processNameByPid(qint64 pid)
 {
-    enum { SysStateSize = 4096 };
-    char *sys_state = new char[SysStateSize];
+    // Note: QS_PROCESS also returns thread records, so leave enough room for processes with
+    // many threads (ERROR_BUFFER_OVERFLOW would make us treat a dead lock owner as alive).
+    enum { SysStateSize = 64 * 1024 };
+    QByteArray buf(SysStateSize, Qt::Uninitialized);
+    char *sys_state = buf.data();
 
     APIRET arc = DosQuerySysState(QS_PROCESS, 0, pid, 0, sys_state, SysStateSize);
     if (arc == ERROR_INVALID_PROCID) // PID doesn't exist anymore
