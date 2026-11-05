@@ -330,57 +330,131 @@ void QThread::usleep(unsigned long usecs)
     DosSleep((usecs + 999) / 1000);
 }
 
+// Returns the current priority of the given thread of this process in the
+// tib2_ulpri format (class in bits 8-15, level 0-31 in bits 0-7) or false if
+// the thread doesn't exist (anymore) or the query fails.
+static bool qt_query_thread_priority(TID tid, ULONG *priority)
+{
+    PTIB ptib;
+    PPIB ppib;
+    DosGetInfoBlocks(&ptib, &ppib);
+
+    // Fast path for the current thread.
+    if (ptib->tib_ptib2->tib2_ultid == tid) {
+        *priority = ptib->tib_ptib2->tib2_ulpri;
+        return true;
+    }
+
+    // QS_PROCESS returns the process record followed by its thread records.
+    enum { SysStateSize = 64 * 1024 };
+    QByteArray buf(SysStateSize, Qt::Uninitialized);
+    APIRET arc = DosQuerySysState(QS_PROCESS, 0, ppib->pib_ulpid, 0, buf.data(), SysStateSize);
+    if (arc != NO_ERROR) {
+        qWarning("qt_query_thread_priority: DosQuerySysState returned %lu", arc);
+        return false;
+    }
+
+    const QSPTRREC *pPtrRec = reinterpret_cast<const QSPTRREC *>(buf.constData());
+    const QSPREC *pProcRec = pPtrRec->pProcRec;
+    if (!pProcRec || pProcRec->RecType != QS_PROCESS || !pProcRec->pThrdRec)
+        return false;
+
+    for (USHORT i = 0; i < pProcRec->cTCB; ++i) {
+        const QSTREC &rec = pProcRec->pThrdRec[i];
+        if (rec.tid == tid) {
+            *priority = rec.priority;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // NOTE: Caller must hold the mutex.
 void QThreadPrivate::setPriority(QThread::Priority priority)
 {
     this->priority = priority;
 
+    // Target priority class and absolute level (0-31) within this class. Note that the
+    // IdleTime class has three Qt priorities so they use distinct levels to stay ordered.
     ULONG prioClass = 0;
-    LONG prioDelta = 0;
+    LONG prioLevel = 0;
     switch (priority) {
         case QThread::IdlePriority:
             prioClass = PRTYC_IDLETIME;
-            prioDelta = PRTYD_MINIMUM;
+            prioLevel = 0;
             break;
 
         case QThread::LowestPriority:
             prioClass = PRTYC_IDLETIME;
+            prioLevel = PRTYD_MAXIMUM / 2;
             break;
 
         case QThread::LowPriority:
             prioClass = PRTYC_IDLETIME;
-            prioDelta = PRTYD_MAXIMUM;
+            prioLevel = PRTYD_MAXIMUM;
             break;
 
         case QThread::NormalPriority:
-        	prioClass = PRTYC_REGULAR;
-        	break;
+            prioClass = PRTYC_REGULAR;
+            prioLevel = 0;
+            break;
 
         case QThread::HighPriority:
             prioClass = PRTYC_REGULAR;
-            prioDelta = PRTYD_MAXIMUM;
+            prioLevel = PRTYD_MAXIMUM;
             break;
 
         case QThread::HighestPriority:
-        	prioClass = PRTYC_TIMECRITICAL;
-        	break;
+            prioClass = PRTYC_TIMECRITICAL;
+            prioLevel = 0;
+            break;
 
         case QThread::TimeCriticalPriority:
             prioClass = PRTYC_TIMECRITICAL;
-            prioDelta = PRTYD_MAXIMUM;
+            prioLevel = PRTYD_MAXIMUM;
             break;
 
         case QThread::InheritPriority:
         default:
             // Threads created with _beginthread already inherit the priority of the creator.
-            // Note that we must not pass the creator's absolute priority level to
-            // DosSetPriority here as its delta argument is relative to the current level.
             return;
     }
 
-    APIRET rc = DosSetPriority(PRTYS_THREAD, prioClass, prioDelta, tid);
-    if (rc != NO_ERROR)
-        qWarning("QThreadPrivate::setPriority: DosSetPriority returned %lu", rc);
+    // NOTE: The delta argument of DosSetPriority is relative to the current level of the
+    // thread, so passing the target level directly only works if the thread is at level 0
+    // (e.g. switching from Low to Lowest would otherwise be a no-op). Query the current
+    // level and compute the delta. Since it's not obvious whether changing the class resets
+    // the level, do the class change first and query the level again afterwards.
+
+    APIRET rc;
+    ULONG cur = 0;
+    if (!qt_query_thread_priority(tid, &cur)) {
+        // Can't query (e.g. the thread has already ended), use the old approach which is
+        // correct at least for threads that are at level 0.
+        rc = DosSetPriority(PRTYS_THREAD, prioClass, prioLevel, tid);
+        if (rc != NO_ERROR && rc != ERROR_INVALID_THREADID)
+            qWarning("QThreadPrivate::setPriority: DosSetPriority returned %lu", rc);
+        return;
+    }
+
+    if (((cur >> 8) & 0xFF) != prioClass) {
+        rc = DosSetPriority(PRTYS_THREAD, prioClass, 0, tid);
+        if (rc != NO_ERROR) {
+            if (rc != ERROR_INVALID_THREADID)
+                qWarning("QThreadPrivate::setPriority: DosSetPriority returned %lu", rc);
+            return;
+        }
+        if (!qt_query_thread_priority(tid, &cur))
+            return; // the thread is gone
+    }
+
+    const LONG delta = prioLevel - LONG(cur & 0xFF);
+    if (delta != 0) {
+        rc = DosSetPriority(PRTYS_THREAD, PRTYC_NOCHANGE, delta, tid);
+        if (rc != NO_ERROR && rc != ERROR_INVALID_THREADID)
+            qWarning("QThreadPrivate::setPriority: DosSetPriority returned %lu", rc);
+    }
 }
 
 void QThread::start(Priority priority)
