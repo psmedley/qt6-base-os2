@@ -43,143 +43,151 @@
 #include <QtCore/qurl.h>
 #include <QtCore/qdebug.h>
 #include <QtCore/qdir.h>
-#include <QtCore/qscopedpointer.h>
+#include <QtCore/qfile.h>
+#include <QtCore/qfileinfo.h>
 #include <QtCore/qstring.h>
-#include <QtCore/qthread.h>
+
+#ifndef ERROR_SMG_START_IN_BACKGROUND
+#define ERROR_SMG_START_IN_BACKGROUND 457
+#endif
 
 QT_BEGIN_NAMESPACE
 
-static bool launch(const char* str, int type)
-{
-    CHAR DefaultExe[CCHMAXPATH] = {0};
-    CHAR DefaultDir[CCHMAXPATH] = {0};
-    CHAR DefaultParam[CCHMAXPATH] = {0};
-    CHAR*     p;
-    const QDir curdir = QDir::current();
-    bool dirchanged = false;
-    QDir newdir = QDir::root();
+namespace {
 
-    // Browser or Mailto: link
-    if (type == 0 || type ==1) {
-        ulong size = sizeof(DefaultExe);
-        PrfQueryProfileData(HINI_USERPROFILE, "WPURLDEFAULTSETTINGS",
-                            (type == 0 ? "DefaultBrowserExe" : "DefaultMailExe"), DefaultExe, &size);
-        if (!DefaultExe) {
-            if (type == 0)
-                qWarning("A default browser is not designated in WPURLDEFAULTSETTINGS->DefaultBrowserExe in OS2.INI");
-            else if (type == 1)
-                qWarning("A default mail app is not designated in WPURLDEFAULTSETTINGS->DefaultMailExe in OS2.INI");
+enum LaunchType {
+    LaunchBrowser,  // target is an URL to pass to the default browser
+    LaunchMail,     // target is a mailto: URL to pass to the default mail app
+    LaunchDocument, // target is a native path to open via its WPS object
+    LaunchProgram,  // target is a native path of an executable to start
+};
+
+// Reads a string from the WPURLDEFAULTSETTINGS application of OS2.INI into buf (always
+// NUL-terminated). Returns false if there is no such key or it's empty.
+bool queryUrlSetting(const char *key, char *buf, ULONG size)
+{
+    buf[0] = '\0';
+    ULONG sz = size;
+    if (!PrfQueryProfileData(HINI_USERPROFILE, "WPURLDEFAULTSETTINGS", key, buf, &sz) || !sz) {
+        buf[0] = '\0';
+        return false;
+    }
+    buf[qMin(sz, size - 1)] = '\0';
+    return buf[0] != '\0';
+}
+
+bool launch(const QByteArray &target, LaunchType type)
+{
+    if (target.isEmpty())
+        return false;
+
+    if (type == LaunchDocument) {
+        HOBJECT hObject = WinQueryObject(target.constData());
+        if (hObject != NULLHANDLE && WinOpenObject(hObject, 0 /*OPEN_DEFAULT*/, TRUE))
+            return true;
+        qWarning("WinOpenObject failed for \"%s\"", target.constData());
+        return false;
+    }
+
+    CHAR defaultExe[CCHMAXPATH];
+    QByteArray params;
+    QString origDir;
+    bool dirChanged = false;
+
+    if (type == LaunchBrowser || type == LaunchMail) {
+        const bool browser = type == LaunchBrowser;
+        if (!queryUrlSetting(browser ? "DefaultBrowserExe" : "DefaultMailExe",
+                             defaultExe, sizeof(defaultExe))) {
+            qWarning("%s", browser
+                     ? "A default browser is not designated in WPURLDEFAULTSETTINGS->DefaultBrowserExe in OS2.INI"
+                     : "A default mail app is not designated in WPURLDEFAULTSETTINGS->DefaultMailExe in OS2.INI");
             return false;
         }
-        size = sizeof(DefaultDir);
-        PrfQueryProfileData(HINI_USERPROFILE, "WPURLDEFAULTSETTINGS",
-                            (type == 0 ? "DefaultWorkingDir" : "DefaultMailWorkingDir"), DefaultDir, &size);
-        // Set the directory
-        if (DefaultDir) { 
-            QString dirstr = QString::fromLatin1(DefaultDir);
-            if (newdir.setCurrent(dirstr)) {
-                dirchanged = true;
-            }
+
+        // Start the program in its working directory (DosStartSession has no parameter for that).
+        CHAR defaultDir[CCHMAXPATH];
+        if (queryUrlSetting(browser ? "DefaultWorkingDir" : "DefaultMailWorkingDir",
+                            defaultDir, sizeof(defaultDir))) {
+            origDir = QDir::currentPath();
+            if (QDir::setCurrent(QFile::decodeName(defaultDir)))
+                dirChanged = true;
             else
-                qWarning("Cannot find the default working directory");
+                qWarning("Cannot find the default working directory \"%s\"", defaultDir);
         }
-        // Mailto:
-        if (type == 1) {
-            size = sizeof(DefaultParam);
-            PrfQueryProfileData(HINI_USERPROFILE, "WPURLDEFAULTSETTINGS",
-                                "DefaultMailParameters", DefaultParam, &size);
-            strcat(DefaultParam, " ");
-            strcat(DefaultParam, str);
-        }
-    }
-    //WinQueryObject doesn't work with forward slashes
-    if (strstr(str, "file:///")) {
-        strcpy((char*) str, str + 8);
-        p = (char*) str;
-        while (*p) {
-          if (*p == '/')
-            *p = '\\';
-          p++;
-        }
-    }
-    //Executable file passed Not sure this happens
-    if (type == 3) { 
-        p = strchr(str, ' ');
-        p++;
-        strcpy(DefaultParam, p);
-        p--;
-        *p = 0;
-        qWarning("exe %s param %s\n", str, DefaultParam);
-    }
-    //Filename passed
-    if (type == 2) {
-        HOBJECT hObject = WinQueryObject(str);
-        if (hObject != 0)
-            if (WinOpenObject(hObject, 0 /*OPEN_DEFAULT*/, TRUE))
-                return true;
-        qWarning("WinOpenObject failed");
-    }
-    else {
-        PID       pid            = 0;
-        ULONG     ulSessID       = 0;
-        CHAR      achObjBuf[256] = {0};
-        APIRET    rc             = NO_ERROR;
-        STARTDATA startData;
 
-        memset(&startData, 0, sizeof(STARTDATA));
-        startData.Length     = sizeof(STARTDATA);
-        startData.Related    = SSF_RELATED_INDEPENDENT;
-        startData.InheritOpt = SSF_INHERTOPT_PARENT;
-        startData.FgBg       = SSF_FGBG_FORE; 
-        startData.PgmControl = SSF_CONTROL_VISIBLE;
-        startData.TraceOpt   = SSF_TRACEOPT_NONE;
-        startData.PgmTitle   = NULL;
-        startData.PgmName    = (type == 3 ? (PSZ) str : DefaultExe);
-        startData.TermQ      = 0;
-        startData.Environment = NULL;
-        startData.PgmInputs = (type == 0 ? (PBYTE) str : DefaultParam);
-        startData.SessionType = SSF_TYPE_PM;
-        startData.ObjectBuffer  = achObjBuf;
-        startData.ObjectBuffLen = (ULONG) sizeof(achObjBuf);
-
-        rc = DosStartSession(&startData, &ulSessID, &pid);
-
-        if (dirchanged) {
-            //Set the directory to root since we might have changed drives for the working directory
-            QString temp = newdir.current().absolutePath();
-
-            temp.truncate(3);
-            newdir.setCurrent(temp);
-            //Reset the current directory to the original
-            if (!newdir.setCurrent(curdir.absolutePath()))
-                qWarning("Reseting the current directory failed");
+        if (!browser) {
+            CHAR mailParams[CCHMAXPATH];
+            if (queryUrlSetting("DefaultMailParameters", mailParams, sizeof(mailParams))) {
+                params = mailParams;
+                params += ' ';
+            }
         }
-        if (!rc) {
-            return true;
-        }
-        else {
-            qWarning("DosStartSession err %i \n", (int) rc);
-        }
+        params += target;
     }
-    return false;
+
+    PID pid = 0;
+    ULONG ulSessID = 0;
+    CHAR achObjBuf[256] = {0};
+    STARTDATA startData;
+
+    memset(&startData, 0, sizeof(STARTDATA));
+    startData.Length = sizeof(STARTDATA);
+    startData.Related = SSF_RELATED_INDEPENDENT;
+    startData.InheritOpt = SSF_INHERTOPT_PARENT;
+    startData.FgBg = SSF_FGBG_FORE;
+    startData.PgmControl = SSF_CONTROL_VISIBLE;
+    startData.TraceOpt = SSF_TRACEOPT_NONE;
+    startData.PgmTitle = NULL;
+    startData.PgmName = type == LaunchProgram ? (PSZ)target.constData() : defaultExe;
+    startData.TermQ = 0;
+    startData.Environment = NULL;
+    startData.PgmInputs = params.isEmpty() ? NULL : (PBYTE)params.constData();
+    startData.SessionType = type == LaunchProgram ? SSF_TYPE_DEFAULT : SSF_TYPE_PM;
+    startData.ObjectBuffer = achObjBuf;
+    startData.ObjectBuffLen = (ULONG)sizeof(achObjBuf);
+
+    APIRET rc = DosStartSession(&startData, &ulSessID, &pid);
+
+    if (dirChanged) {
+        // OS/2 keeps a current directory per drive: reset the one we changed to the drive's
+        // root before going back to the original directory (which may be on another drive).
+        QString root = QDir::currentPath();
+        root.truncate(3);
+        QDir::setCurrent(root);
+        if (!QDir::setCurrent(origDir))
+            qWarning("Resetting the current directory failed");
+    }
+
+    // ERROR_SMG_START_IN_BACKGROUND just means we couldn't bring the new session to front.
+    if (rc != NO_ERROR && rc != ERROR_SMG_START_IN_BACKGROUND) {
+        qWarning("DosStartSession failed with %lu", rc);
+        return false;
+    }
+
+    return true;
 }
+
+} // unnamed namespace
 
 bool QOS2Services::openUrl(const QUrl &url)
 {
-    int type = 0;
-    const QString scheme = url.scheme();
-    if (scheme == u"mailto")
-        type = 1;
-    return launch((const char *) url.toString().toLatin1(), type);
+    if (!url.isValid())
+        return false;
+    const LaunchType type = url.scheme() == u"mailto" ? LaunchMail : LaunchBrowser;
+    return launch(url.toEncoded(), type);
 }
+
 bool QOS2Services::openDocument(const QUrl &url)
 {
-    int type = 2;
+    // Note: use toLocalFile() to get rid of the scheme and of the percent encoding (otherwise
+    // e.g. paths with spaces won't be found by WinQueryObject); WinQueryObject also requires
+    // backslashes.
+    const QString path = QDir::toNativeSeparators(url.toLocalFile());
+    if (path.isEmpty())
+        return false;
 
-    QString suffix = url.toLocalFile();
-    if (suffix.compare(u"exe", Qt::CaseInsensitive))
-        type = 3;
-    return launch((const char *) url.toString().toLatin1(), type);
+    const bool isExe = QFileInfo(path).suffix().compare(QLatin1String("exe"), Qt::CaseInsensitive) == 0;
+    return launch(QFile::encodeName(path), isExe ? LaunchProgram : LaunchDocument);
 }
 
 QT_END_NAMESPACE

@@ -455,7 +455,7 @@ bool QOS2MimeText::convertFromMimeData(const QMimeData *mimeData, ULONG format,
         }
         if (j < r.size())
             o[j] = '\0';
-    } else if (format == CF_TextUnicode || CF_TextHtml) {
+    } else if (format == CF_TextUnicode || format == CF_TextHtml) {
         QString str = format == CF_TextUnicode ?
                       mimeData->text() : mimeData->html();
         const QChar *u = str.unicode();
@@ -540,9 +540,12 @@ QVariant QOS2MimeText::convertFromFormat(ULONG format, ULONG flags, ULONG data,
                 if (c != '\r')
                     o[j++] = c;
             }
+            // Drop the unused tail left after stripping CRs (it would otherwise
+            // end up as trailing NUL characters in the resulting QString).
+            r.truncate(j);
         }
         str = QString::fromLocal8Bit(r);
-    } else if (format == CF_TextUnicode || CF_TextHtml) {
+    } else if (format == CF_TextUnicode || format == CF_TextHtml) {
         str = QString::fromUtf16((const char16_t *)data);
         str.replace(QLatin1String("\r\n"), QLatin1String("\n"));
     }

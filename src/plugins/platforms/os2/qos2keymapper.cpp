@@ -707,11 +707,21 @@ QList<int> QOS2KeyMapper::possibleKeys(const QKeyEvent *e) const
 {
     QList<int> result;
 
+    // Synthesized events may carry arbitrary scan codes, don't index out of bounds.
+    if (e->nativeScanCode() >= NumKeyboardLayoutItems) {
+        qCDebug(lcQpaEvents) << "bad scan code" << e->nativeScanCode();
+        return result;
+    }
+
     const KeyboardLayoutItem &kbItem = mKeyLayout[e->nativeScanCode()];
     if (!kbItem.layoutIds[0]) {
         qCDebug(lcQpaEvents) << "none";
         return result;
     }
+
+    // We need either a valid key code or some text to derive the base key from.
+    if (!kbItem.qtKey[0][0] && (!e->key() || e->key() == Qt::Key_unknown) && e->text().isEmpty())
+        return result;
 
     int baseKey0 = kbItem.qtKey[0][0] ? kbItem.qtKey[0][0] :
                    e->key() && e->key() != Qt::Key_unknown ? e->key() :
@@ -721,7 +731,7 @@ QList<int> QOS2KeyMapper::possibleKeys(const QKeyEvent *e) const
     if (kbItem.layoutIds[1])
         baseKey1 = kbItem.qtKey[0][1] ? kbItem.qtKey[0][1] :
                    e->key() && e->key() != Qt::Key_unknown ? e->key() :
-                   e->text().at(0).unicode();
+                   !e->text().isEmpty() ? e->text().at(0).unicode() : baseKey0;
 
     Qt::KeyboardModifiers keyMods = e->modifiers();
 

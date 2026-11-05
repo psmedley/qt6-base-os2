@@ -76,7 +76,7 @@ QOS2Screen::QOS2Screen()
 
     switch (mDepth) {
     case 32: mFormat = QImage::Format_RGB32; break;
-    case 24: mFormat = QImage::Format_RGB888; break;
+    case 24: mFormat = QImage::Format_BGR888; break; // OS/2 bitmaps use B, G, R byte order
     case 16: mFormat = QImage::Format_RGB16; break;
     case 15: mFormat = QImage::Format_RGB555; break;
     case 8: mFormat = QImage::Format_Indexed8; break;
