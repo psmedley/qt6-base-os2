@@ -502,8 +502,11 @@ void QProcessManager::run()
             int procKey = toProcKey(pipeStates[i].usKey);
             QProcessPrivate::PipeType type = toPipeType(pipeStates[i].usKey);
 
-            QProcess *proc = processes[procKey];
+            // Note: don't use operator[] as it would insert a null entry for an unknown key.
+            QProcess *proc = processes.value(procKey);
             Q_ASSERT(proc);
+            if (!proc)
+                continue;
             DEBUG(("  process %p pid %d type %d", proc, proc->d_func()->pid, type));
 
             int flags = 0;
@@ -811,8 +814,9 @@ static int qt_startProcess(const QString &program, const QStringList &arguments,
     // In Qt6, having the QByteArray full of null zeros causes "Broken filename 
     // passed to function" errors from fullProgramInfo.absolutePath() - strip 
     // them out and truncate the size of fullProgramName
-    quint16 index = fullProgramName.indexOf('\0');
-    if (index >1) fullProgramName.truncate(index);
+    const qsizetype index = fullProgramName.indexOf('\0');
+    if (index >= 0)
+        fullProgramName.truncate(index);
     DEBUG(("found \"%s\" for \"%s\"",
            qPrintable(QFile::decodeName(fullProgramName)),
            qPrintable(QFile::decodeName(programName))));
@@ -845,7 +849,7 @@ static int qt_startProcess(const QString &program, const QStringList &arguments,
             QString item = environment->at(envc);
             envv[envc] = qstrdup(item.toLocal8Bit().constData());
             if (!seenPATH)
-                seenPATH = !qstrncmp(envv[envc], "PATH=", 4);
+                seenPATH = !qstrncmp(envv[envc], "PATH=", 5);
             if (!seenCOMSPEC)
                 seenCOMSPEC = !qstrncmp(envv[envc], "COMSPEC=", 8);
         }

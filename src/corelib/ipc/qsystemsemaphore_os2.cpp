@@ -110,8 +110,11 @@ void QSystemSemaphoreOS2::handle(QSystemSemaphorePrivate *self, QSystemSemaphore
                 if (arc == NO_ERROR) {
                     // Set the initial resource count
                     ULONG count = self->initialValue;
-                    for (; count && (arc == NO_ERROR || arc == ERROR_ALREADY_POSTED); --count)
+                    for (; count; --count) {
                         arc = DosPostEventSem(semaphore);
+                        if (arc != NO_ERROR && arc != ERROR_ALREADY_POSTED)
+                            break;
+                    }
                     if (!count)
                         arc = NO_ERROR;
                 }
@@ -156,8 +159,11 @@ bool QSystemSemaphoreOS2::modifySemaphore(QSystemSemaphorePrivate *self, int cou
     if (count > 0) {
         // Set the requested resource count
         APIRET arc = NO_ERROR;
-        for (; count && (arc == NO_ERROR || arc == ERROR_ALREADY_POSTED); --count)
+        for (; count; --count) {
             arc = DosPostEventSem(semaphore);
+            if (arc != NO_ERROR && arc != ERROR_ALREADY_POSTED)
+                break;
+        }
         if (count) {
             self->setOS2ErrorString(arc, QLatin1String("QSystemSemaphore::modifySemaphore"));
             return false;

@@ -714,12 +714,15 @@ bool QEventDispatcherOS2::processEvents(QEventLoop::ProcessEventsFlags flags)
                 // Process queued user input events.
                 haveMessage = true;
                 msg = d->queuedUserInputEvents.takeFirst();
-            } else if(!(flags & QEventLoop::ExcludeSocketNotifiers) && d->queuedSockets) {
-                // Process queued socket events.
-                haveMessage = true;
-                memset(&msg, 0, sizeof(msg));
-                msg.msg = WM_QT_TIMER_OR_SOCKET;
+            } else if (!(flags & QEventLoop::ExcludeSocketNotifiers) && d->queuedSockets) {
+                // Deliver socket events left pending by an event loop that excluded socket
+                // notifiers (see WM_QT_TIMER_OR_SOCKET handling below) and let the select thread
+                // pick up these sockets again (pending ones are excluded from select).
                 d->queuedSockets = false;
+                d->processTimersAndSockets();
+                d->maybeStartThread();
+                retVal = true;
+                break;
             } else {
                 if (haveWaitMsg) {
                     haveMessage = true;
@@ -741,12 +744,13 @@ bool QEventDispatcherOS2::processEvents(QEventLoop::ProcessEventsFlags flags)
                         // Queue user input events for later processing.
                         d->queuedUserInputEvents.append(msg);
                         continue;
-                    } else if ((flags & QEventLoop::ExcludeSocketNotifiers) &&
-                        (msg.msg == WM_QT_TIMER_OR_SOCKET)) {
-                        // Queue socket events for later processing.
-                        d->queuedSockets = true;
-                        continue;
                     }
+                    // Note: WM_QT_TIMER_OR_SOCKET is never held back here, even with
+                    // ExcludeSocketNotifiers. It also drives timers and must be dispatched to the
+                    // aux window to fetch select results and let the select thread go on (otherwise
+                    // timers would stop firing and the stashed results would be lost when the
+                    // thread is restarted). processTimersAndSockets honors ExcludeSocketNotifiers by
+                    // leaving socket events pending; they are delivered later via queuedSockets.
                 }
             }
             if (haveMessage) {
@@ -771,6 +775,8 @@ bool QEventDispatcherOS2::processEvents(QEventLoop::ProcessEventsFlags flags)
                     // Qt (and tst_QTimer::timerFiresOnlyOncePerProcessEvents) requires that timers
                     // are run only once per processEvents invocation.
                     if (msg.msg == WM_QT_TIMER_OR_SOCKET) {
+                        if ((flags & QEventLoop::ExcludeSocketNotifiers) && !d->pendingNotifiers.isEmpty())
+                            d->queuedSockets = true;
                         retVal = true;
                         break;
                     }

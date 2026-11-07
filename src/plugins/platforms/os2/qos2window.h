@@ -60,6 +60,7 @@ public:
         BlockedByModal = 0x4,
         InInit = 0x8,
         InSetWindowState = 0x10,
+        IsDesktop = 0x20, // mHwnd is HWND_DESKTOP's handle which we don't own
     };
 
     explicit QOS2Window(QWindow *window);
@@ -128,7 +129,9 @@ private:
     HWND mHwndFrame = NULLHANDLE;
     QMargins mFrameMargins;
     HSWITCH mSwEntry = NULLHANDLE;
-    USHORT normX = 0, normY = 0, normCX = 0, normCY = 0;
+    // Note: signed since PM stores the restore position as signed 16-bit coordinates (the window
+    // may be positioned partially off-screen, e.g. below the bottom edge).
+    SHORT normX = 0, normY = 0, normCX = 0, normCY = 0;
     bool mUtf8Titlebar = false;
 
     static QHash<HWND, QOS2Window *> sKnownWindows;
