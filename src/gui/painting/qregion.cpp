@@ -495,7 +495,7 @@ QRegion& QRegion::operator&=(const QRegion &r)
    \overload
    \since 4.4
  */
-#if defined (Q_OS_UNIX) || defined (Q_OS_WIN)
+#if defined (Q_OS_UNIXLIKE) || defined (Q_OS_DOSLIKE)
 QRegion& QRegion::operator&=(const QRect &r)
 {
     return *this = *this & r;
@@ -629,7 +629,7 @@ bool QRegion::intersects(const QRegion &region) const
 */
 
 
-#if !defined (Q_OS_UNIX) && !defined (Q_OS_WIN) || defined(Q_QDOC)
+#if !defined (Q_OS_UNIXLIKE) && !defined (Q_OS_DOSLIKE) || defined(Q_QDOC)
 /*
     \overload
     \since 4.4

@@ -4,7 +4,7 @@
 
 #include "qoperatingsystemversion.h"
 
-#if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN)
+#if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN) && !defined(Q_OS_OS2)
 #include "qoperatingsystemversion_p.h"
 #endif
 
@@ -354,6 +354,8 @@ QString QOperatingSystemVersionBase::name(QOperatingSystemVersionBase osversion)
         return QStringLiteral("Android");
     case QOperatingSystemVersionBase::HarmonyOS:
         return QStringLiteral("HarmonyOS");
+    case QOperatingSystemVersionBase::OS2:
+        return QStringLiteral("OS/2");
     case QOperatingSystemVersionBase::Unknown:
     default:
         return QString();
@@ -733,6 +735,30 @@ const QOperatingSystemVersion QOperatingSystemVersion::Android10 =
  */
 const QOperatingSystemVersion QOperatingSystemVersion::Android11 =
     QOperatingSystemVersion(QOperatingSystemVersion::Android, 11, 0);
+
+/*!
+    \variable QOperatingSystemVersion::OS2Warp3
+    \brief a version corresponding to OS/2 Warp 3.
+    \since 5.11.0
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::OS2Warp3 =
+    QOperatingSystemVersion(QOperatingSystemVersion::OS2, 20, 30);
+
+/*!
+    \variable QOperatingSystemVersion::OS2Warp4
+    \brief a version corresponding to OS/2 Warp 4.
+    \since 5.11.0
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::OS2Warp4 =
+    QOperatingSystemVersion(QOperatingSystemVersion::OS2, 20, 40);
+
+/*!
+    \variable QOperatingSystemVersion::OS2Warp4_5
+    \brief a version corresponding to OS/2 Warp 4.5.
+    \since 5.11.0
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::OS2Warp4_5 =
+    QOperatingSystemVersion(QOperatingSystemVersion::OS2, 20, 45);
 
 /*!
     \variable QOperatingSystemVersion::Android12

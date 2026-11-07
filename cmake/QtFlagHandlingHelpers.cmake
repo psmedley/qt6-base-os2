@@ -161,7 +161,7 @@ function(qt_internal_add_link_flags_no_undefined target)
         # passing this option is deprecated, causing a warning.
         return()
     endif()
-    if ((GCC OR CLANG) AND NOT (MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC"))
+    if ((GCC OR CLANG) AND NOT (MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC") AND NOT OS2)
         if((GCC OR CLANG) AND QT_FEATURE_sanitizer)
             return()
         endif()
@@ -240,7 +240,7 @@ function(qt_internal_apply_gc_binaries target visibility)
         target_link_options("${target}" ${visibility} "${gc_sections_flag}")
     endif()
 
-    if((GCC OR CLANG) AND NOT WASM AND NOT UIKIT
+    if((GCC OR CLANG) AND NOT WASM AND NOT UIKIT AND NOT OS2
         AND NOT (MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC"))
         set(split_sections_flags
             "${clang_or_gcc_begin}-ffunction-sections;-fdata-sections${clang_or_gcc_end}")

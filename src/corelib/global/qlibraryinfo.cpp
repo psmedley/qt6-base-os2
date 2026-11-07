@@ -28,6 +28,10 @@
 #    include <dlfcn.h>
 #endif
 
+#if !defined(QT_BUILD_QMAKE) && QT_CONFIG(relocatable) && defined(Q_OS_OS2)
+#  include <qt_os2.h>
+#endif
+
 #if QT_CONFIG(relocatable) && defined(Q_OS_WIN)
 #    include <qt_windows.h>
 #endif
@@ -533,6 +537,15 @@ static QString relocatablePrefixFromQt()
     // file system when resolving dependencies for for dlopen() calls. So that's
     // where libqt6core.so would be.
     prefixPath = QStringLiteral("/");
+#elif defined(Q_OS_OS2)
+    Q_UNUSED(usageMode);
+    // TODO implement dladdr in LIBCn, see https://github.com/bitwiseworks/libc/issues/104
+    HMODULE hmod;
+    if (!DosQueryModFromEIP(&hmod, NULL, 0, NULL, NULL, (ULONG)&QLibraryInfo::isDebugBuild)) {
+        char path[CCHMAXPATH];
+        if (!DosQueryModuleName(hmod, CCHMAXPATH, path))
+            prefixPath = prefixFromQtCoreLibraryHelper(QString::fromLocal8Bit(path));
+    }
 #elif QT_CONFIG(dlopen)
     Dl_info info;
     int result = dladdr(reinterpret_cast<void *>(&QLibraryInfo::isDebugBuild), &info);

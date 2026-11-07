@@ -27,7 +27,7 @@
 
 QT_REQUIRE_CONFIG(processenvironment);
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <QtCore/private/qorderedmutexlocker_p.h>
 #endif
 
@@ -35,6 +35,11 @@ QT_REQUIRE_CONFIG(processenvironment);
 #include "QtCore/qt_windows.h"
 typedef HANDLE Q_PIPE;
 #define INVALID_Q_PIPE INVALID_HANDLE_VALUE
+#elif defined(Q_OS_OS2)
+#include "QtCore/qt_os2.h"
+#define INVALID_HFILE HFILE(~0)
+typedef int Q_PIPE;
+#define INVALID_Q_PIPE -1
 #else
 typedef int Q_PIPE;
 #define INVALID_Q_PIPE -1
@@ -170,7 +175,7 @@ public:
     using Map = QMap<Key, Value>;
     Map vars;
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
     typedef QHash<QString, Key> NameHash;
     mutable NameHash nameMap;
 
@@ -236,16 +241,29 @@ public:
 
         QString file;
         QProcessPrivate *process = nullptr;
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
         QSocketNotifier *notifier = nullptr;
-#else
+#endif
+#ifdef Q_OS_WIN
         union {
             QWindowsPipeReader *reader = nullptr;
             QWindowsPipeWriter *writer;
         };
 #endif
+#ifdef Q_OS_OS2
+        struct Pipe {
+            Pipe() : server(INVALID_HFILE), client(INVALID_HFILE), closePending(false),
+                signaled(false), bytes(0) {}
+            HFILE server;
+            HFILE client;
+            bool closePending : 1;
+            bool signaled: 1;
+            qint64 bytes;
+        };
+        Pipe pipe;
+#else
         Q_PIPE pipe[2] = {INVALID_Q_PIPE, INVALID_Q_PIPE};
-
+#endif
         ProcessChannelType type = Normal;
         bool closed = false;
         bool append = false;
@@ -267,6 +285,9 @@ public:
 #endif
     bool _q_startupNotification();
     void _q_processDied();
+#if defined(Q_OS_OS2)
+    int _q_notified(int flags);
+#endif
 
     Channel stdinChannel;
     Channel stdoutChannel;
@@ -289,11 +310,18 @@ public:
     QWinEventNotifier *processFinishedNotifier = nullptr;
     Q_PROCESS_INFORMATION *pid = nullptr;
 #else
+#ifdef Q_OS_OS2
+    enum PipeType { InPipe = 0, OutPipe = 1, ErrPipe = 2 };
+    bool createPipe(PipeType type, Channel::Pipe &pipe, const char *name = 0);
+    void destroyPipe(Channel::Pipe &pipe);
+    void closeHandle(HFILE &handle);
+#else
     struct UnixExtras {
         std::function<void(void)> childProcessModifier;
         QProcess::UnixProcessParameters processParameters;
     };
     std::unique_ptr<UnixExtras> unixExtras;
+#endif
     QSocketNotifier *stateNotifier = nullptr;
     Q_PIPE childStartedPipe[2] = {INVALID_Q_PIPE, INVALID_Q_PIPE};
     pid_t pid = 0;
@@ -323,13 +351,37 @@ public:
 #else
     void findExitCode();
 #endif
+#ifdef Q_OS_OS2
+    void waitForDeadChild();
+
+#endif
 #ifdef Q_OS_WIN
     STARTUPINFOW createStartupInfo();
     bool callCreateProcess(QProcess::CreateProcessArguments *cpargs);
     bool drainOutputPipes();
 #endif
+#ifdef Q_OS_OS2
+    void init();
+    void uninit();
+    void ensureWaitSem();
+    void tryCloseStdinPipe();
+    enum WaitCond { WaitReadyRead, WaitBytesWritten, WaitFinished };
+    bool waitFor(WaitCond cond, const QDeadlineTimer &deadline);
+    static qint64 bytesAvailableFromPipe(HPIPE hpipe, bool *closed = 0);
+#endif
 
     bool startDetached(qint64 *pPid);
+
+#ifdef Q_OS_OS2
+    enum { CanReadStdOut = 1, CanReadStdErr = 2, CanWrite = 4, CanDie = 8, CanAll = 0x0F, WaitMode = 0x80 };
+    int waitMode;
+    HEV waitSem;
+    // NOTE: order of pointers in pipes[] must match order of values in PipeType
+    Channel::Pipe *pipes[3] = { &stdinChannel.pipe, &stdoutChannel.pipe, &stderrChannel.pipe };
+    USHORT procKey;
+    bool threadSafe;
+    bool crashed = false;
+#endif
 
     bool waitForStarted(const QDeadlineTimer &deadline);
     bool waitForReadyRead(const QDeadlineTimer &deadline);
@@ -339,7 +391,9 @@ public:
     qint64 bytesAvailableInChannel(const Channel *channel) const;
     qint64 readFromChannel(const Channel *channel, char *data, qint64 maxlen);
 
+#ifndef Q_OS_OS2
     void destroyPipe(Q_PIPE pipe[2]);
+#endif
     void cleanup();
     void setError(QProcess::ProcessError error, const QString &description = QString());
     void setErrorAndEmit(QProcess::ProcessError error, const QString &description = QString());

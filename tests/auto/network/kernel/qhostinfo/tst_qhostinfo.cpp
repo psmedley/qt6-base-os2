@@ -15,7 +15,6 @@
 #include <qhostinfo.h>
 #include "private/qhostinfo_p.h"
 #include "private/qnativesocketengine_p.h"
-
 #include <QCoreApplication>
 #include <QDebug>
 #include <QScopeGuard>
@@ -44,12 +43,13 @@
 #ifndef NI_MAXHOST
 #  define NI_MAXHOST        1025
 #endif
+#if defined(Q_OS_OS2)
+#  include <libcx/net.h>
+#endif
 
 #include "../../../network-settings.h"
 
 #define TEST_DOMAIN ".test.qt-project.org"
-
-using namespace std::chrono_literals;
 
 class tst_QHostInfo : public QObject
 {

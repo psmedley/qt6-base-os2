@@ -208,7 +208,7 @@ public:
 
     constexpr static inline QChar listSeparator() noexcept
     {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
         return u';';
 #else
         return u':';
@@ -217,7 +217,7 @@ public:
 
     static QChar separator()
     {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
         return u'\\';
 #else
         return u'/';

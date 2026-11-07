@@ -2972,6 +2972,10 @@ QList<QByteArray> QSslSocketPrivate::unixRootCertDirectories()
         return QByteArray::fromRawData(std::begin(cstr), std::size(cstr) - 1);
     };
     static const QByteArray dirs[] = {
+#ifdef Q_OS_OS2
+        ba("/@unixroot/etc/ssl/certs/"),
+        ba("/@unixroot/usr/local/ssl/"),
+#else
         ba("/etc/ssl/certs/"), // (K)ubuntu, OpenSUSE, Mandriva ...
         ba("/usr/lib/ssl/certs/"), // Gentoo, Mandrake
         ba("/usr/share/ssl/"), // Red Hat pre-2004, SuSE
@@ -2983,6 +2987,7 @@ QList<QByteArray> QSslSocketPrivate::unixRootCertDirectories()
         ba("/opt/openssl/certs/"), // HP-UX
         ba("/etc/ssl/"), // OpenBSD
         ba("/etc/security/certificates/"), // HarmonyOS
+#endif
     };
     QList<QByteArray> result = QList<QByteArray>::fromReadOnlyData(dirs);
     if constexpr (isVxworks) {

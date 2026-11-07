@@ -20,7 +20,7 @@ const char *ThePlugin::architectureName() const
 }
 
 static int pluginVariable = 0xc0ffee;
-extern "C" Q_DECL_EXPORT int *pointerAddress()
+extern "C" Q_DECL_EXPORT int * Q_STANDARD_CALL pointerAddress()
 {
     return &pluginVariable;
 }

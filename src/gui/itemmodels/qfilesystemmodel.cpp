@@ -23,6 +23,10 @@
 #  include <shlobj.h>
 #endif
 
+#ifdef Q_OS_OS2
+extern "C" char *_getvol (char);
+#endif
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
@@ -279,7 +283,7 @@ QFileSystemModelPrivate::QFileSystemNode *QFileSystemModelPrivate::node(const QM
     return indexNode;
 }
 
-#ifdef Q_OS_WIN32
+#ifdef Q_OS_WIN
 static QString qt_GetLongPathName(const QString &strShortPath)
 {
     if (strShortPath.isEmpty()
@@ -312,7 +316,9 @@ static QString qt_GetLongPathName(const QString &strShortPath)
         return QDir::fromNativeSeparators(strShortPath);
     }
 }
+#endif
 
+#ifdef Q_OS_DOSLIKE
 static inline void chopSpaceAndDot(QString &element)
 {
     if (element == "."_L1 || element == ".."_L1)
@@ -359,7 +365,7 @@ QFileSystemModelPrivate::QFileSystemNode *QFileSystemModelPrivate::node(const QS
     // ### TODO can we use bool QAbstractFileEngine::caseSensitive() const?
     QStringList pathElements = absolutePath.split(u'/', Qt::SkipEmptyParts);
     if ((pathElements.isEmpty())
-#if !defined(Q_OS_WIN)
+#if !defined(Q_OS_DOSLIKE)
         && QDir::fromNativeSeparators(longPath) != "/"_L1
 #endif
         )
@@ -368,7 +374,7 @@ QFileSystemModelPrivate::QFileSystemNode *QFileSystemModelPrivate::node(const QS
     QString elementPath;
     QChar separator = u'/';
     QString trailingSeparator;
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     if (absolutePath.startsWith("//"_L1)) { // UNC path
         QString host = "\\\\"_L1 + pathElements.constFirst();
         if (absolutePath == QDir::fromNativeSeparators(host))
@@ -420,7 +426,7 @@ QFileSystemModelPrivate::QFileSystemNode *QFileSystemModelPrivate::node(const QS
         elementPath.append(element);
         if (i == pathElements.size() - 1)
             elementPath.append(trailingSeparator);
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         // If after stripping the characters there is nothing left then we
         // just return the parent directory as it is assumed that the path
         // is referring to the parent.
@@ -854,10 +860,15 @@ QString QFileSystemModelPrivate::name(const QModelIndex &index) const
 */
 QString QFileSystemModelPrivate::displayName(const QModelIndex &index) const
 {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QFileSystemNode *dirNode = node(index);
+#if defined(Q_OS_OS2)
+    if (!dirNode->volumeName.isEmpty())
+        return name(index) + QLatin1String(" [") + dirNode->volumeName + QLatin1Char(']');
+#else
     if (!dirNode->volumeName.isEmpty())
         return dirNode->volumeName;
+#endif
 #endif
     return name(index);
 }
@@ -886,7 +897,7 @@ bool QFileSystemModel::setData(const QModelIndex &idx, const QVariant &value, in
     }
 
     QString newName = value.toString();
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     chopSpaceAndDot(newName);
     if (newName.isEmpty())
         return false;
@@ -1437,7 +1448,7 @@ QString QFileSystemModelPrivate::filePath(const QModelIndex &index) const
         idx = idx.parent();
     }
     QString fullPath = QDir::fromNativeSeparators(path.join(QDir::separator()));
-#if !defined(Q_OS_WIN)
+#if !defined(Q_OS_DOSLIKE)
     if ((fullPath.size() > 2) && fullPath[0] == u'/' && fullPath[1] == u'/')
         fullPath = fullPath.mid(1);
 #else
@@ -1457,7 +1468,7 @@ QModelIndex QFileSystemModel::mkdir(const QModelIndex &parent, const QString &na
         return parent;
 
     QString fileName = name;
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     chopSpaceAndDot(fileName);
     if (fileName.isEmpty())
         return QModelIndex();
@@ -1504,7 +1515,7 @@ QFile::Permissions QFileSystemModel::permissions(const QModelIndex &index) const
 QModelIndex QFileSystemModel::setRootPath(const QString &newPath)
 {
     Q_D(QFileSystemModel);
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
 #ifdef Q_OS_WIN32
     QString longNewPath = qt_GetLongPathName(newPath);
 #else
@@ -1867,6 +1878,20 @@ QFileSystemModelPrivate::QFileSystemNode* QFileSystemModelPrivate::addNode(QFile
     //The parentNode is "" so we are listing the drives
     if (parentNode->fileName.isEmpty())
         node->volumeName = volumeName(fileName);
+#elif defined(Q_OS_OS2)
+    //The parentNode is "" so we are listing the drives
+    if (parentNode->fileName.isEmpty()) {
+        // Drives with no media are reported as not existing by QFileSystemEngine.
+        if (node->fileInfo().exists()) {
+            char *volname = _getvol(fileName.at(0).toLatin1());
+            if (volname)
+                node->volumeName = QFile::decodeName(volname);
+            else
+                node->volumeName = QString();
+        } else {
+            node->volumeName = QFileSystemModel::tr("<no media>", "No removable media in drive");
+        }
+    }
 #endif
     Q_ASSERT(!parentNode->children.contains(fileName));
     parentNode->children.insert(fileName, node);
@@ -1977,7 +2002,7 @@ void QFileSystemModelPrivate::fileSystemChanged(const QString &path,
         QExtendedInformation info = fileInfoGatherer->getInfo(update.second);
         bool previouslyHere = parentNode->children.contains(fileName);
         if (!previouslyHere) {
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
             chopSpaceAndDot(fileName);
             if (fileName.isEmpty())
                 continue;

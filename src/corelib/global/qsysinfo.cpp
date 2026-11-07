@@ -47,6 +47,10 @@
 #  include "qt_windows.h"
 #endif // Q_OS_WIN
 
+#ifdef Q_OS_OS2
+#include <unistd.h>
+#endif
+
 #include "archdetect.cpp"
 
 QT_BEGIN_NAMESPACE
@@ -714,7 +718,7 @@ QString QSysInfo::kernelType()
 */
 QString QSysInfo::kernelVersion()
 {
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     const auto osver = QOperatingSystemVersion::current();
     return QString::asprintf("%d.%d.%d",
                              osver.majorVersion(), osver.minorVersion(), osver.microVersion());
@@ -929,6 +933,9 @@ QString QSysInfo::prettyProductName()
     QString result = QString::asprintf("%s %s", OH_GetOSFullName(),
                                 OH_GetDistributionOSReleaseType());
     return result;
+#elif defined(Q_OS_OS2)
+    // todo detect if we're running ArcaOS and which version
+    return QLatin1String("OS/2");
 #elif defined(Q_OS_HAIKU)
     return "Haiku "_L1 + productVersion();
 #elif defined(Q_OS_UNIX)

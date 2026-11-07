@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:significant reason:default
 
+#include "qplatformdefs.h"
 #include "qcoreapplication.h"
 #include "qcoreapplication_p.h"
 
@@ -88,7 +89,7 @@
 
 #include <stdlib.h>
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #  include <locale.h>
 #  ifndef Q_OS_INTEGRITY
 #    include <langinfo.h>
@@ -194,6 +195,10 @@ QString QCoreApplicationPrivate::appName() const
     QString applicationName;
 #ifdef Q_OS_DARWIN
     applicationName = infoDictionaryStringProperty(QStringLiteral("CFBundleName"));
+#elif defined(Q_OS_OS2)
+    applicationName = QCoreApplication::applicationFilePath();
+    if (!applicationName.isEmpty())
+        applicationName = QFileInfo(applicationName).completeBaseName();
 #endif
     if (applicationName.isEmpty() && argv[0]) {
         char *p = strrchr(argv[0], '/');
@@ -207,6 +212,8 @@ QString QCoreApplicationPrivate::appVersion() const
     QString applicationVersion;
 #if defined(Q_OS_DARWIN)
     applicationVersion = infoDictionaryStringProperty(QStringLiteral("CFBundleVersion"));
+#elif defined(Q_OS_OS2)
+    // ### TODO use module DESCRIPTION string etc.
 #elif defined(Q_OS_ANDROID) && !defined(QT_BOOTSTRAPPED)
     QJniObject context(QNativeInterface::QAndroidApplication::context());
     if (context.isValid()) {
@@ -2452,7 +2459,23 @@ QString QCoreApplication::applicationDirPath()
     return appFilePath.isEmpty() ? QString() : appFilePath.path();
 }
 
-#if !defined(Q_OS_WIN) && !defined(Q_OS_DARWIN)
+#if defined(Q_OS_OS2)
+// Not static: also used by qprocess_os2.cpp
+Q_CORE_EXPORT QString qAppFileName()
+{
+    char appPath[PATH_MAX + 1];
+    if (_execname(appPath, sizeof(appPath)) == 0) {
+        // _execname returns the uppercased path, try to get the real case
+        char *path = appPath;
+        char realAppPath[PATH_MAX + 1];
+        if (_realrealpath(appPath, realAppPath, sizeof(realAppPath)))
+            path = realAppPath;
+        return QFile::decodeName(path);
+    }
+
+    return QString();
+}
+#elif !defined(Q_OS_WIN) && !defined(Q_OS_DARWIN)
 // qcoreapplication_win.cpp or qcoreapplication_mac.cpp for those
 static QString qAppFileName()
 {

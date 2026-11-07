@@ -59,7 +59,7 @@ static QSemaphore threadsTurn;
     it's actually very coarse, about 16msec by default.
 */
 enum {
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     systemTimersResolution = 16,
 #elif defined(Q_OS_QNX)
     systemTimersResolution = 10,

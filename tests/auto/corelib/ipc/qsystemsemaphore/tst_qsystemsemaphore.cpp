@@ -60,7 +60,9 @@ private slots:
     void processes_data();
     void processes();
 
+#if !defined(Q_OS_OS2)
     void undo();
+#endif
     void initialValue();
 
 private:
@@ -300,6 +302,7 @@ void tst_QSystemSemaphore::processes()
 #endif
 }
 
+#if !defined(Q_OS_OS2)
 void tst_QSystemSemaphore::undo()
 {
 #if defined(Q_OS_HARMONY)
@@ -336,6 +339,7 @@ void tst_QSystemSemaphore::undo()
     QVERIFY(acquire.state()== QProcess::NotRunning);
 #endif
 }
+#endif
 
 void tst_QSystemSemaphore::initialValue()
 {

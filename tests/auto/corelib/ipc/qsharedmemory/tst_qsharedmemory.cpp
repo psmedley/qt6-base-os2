@@ -687,8 +687,12 @@ void tst_QSharedMemory::simpleProducerConsumer()
     char *put = (char*)producer.data();
     char *get = (char*)consumer.data();
     // On Windows CE you always have ReadWrite access. Thus
-    // ViewMapOfFile returns the same pointer
+    // ViewMapOfFile returns the same pointer. On OS/2 there is no concept
+    // of local mappings at all, so the pointer is the same even across
+    // processes.
+#ifndef Q_OS_OS2
     QVERIFY(put != get);
+#endif
     for (int i = 0; i < size; ++i) {
         put[i] = 'Q';
         QCOMPARE(get[i], 'Q');

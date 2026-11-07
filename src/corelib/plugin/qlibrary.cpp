@@ -81,7 +81,7 @@ Q_STATIC_LOGGING_CATEGORY_WITH_ENV_OVERRIDE(lcDebugLibrary, "QT_DEBUG_PLUGINS", 
     load this path first. If the file cannot be found, QLibrary tries
     the name with different platform-specific file prefixes, like
     "lib" on Unix and Mac, and suffixes, like ".so" on Unix, ".dylib"
-    on the Mac, or ".dll" on Windows.
+    on the Mac, or ".dll" on Windows and OS/2.
 
     If the file path is not absolute then QLibrary modifies the search
     order to try the system-specific prefixes and suffixes first,
@@ -120,7 +120,7 @@ Q_STATIC_LOGGING_CATEGORY_WITH_ENV_OVERRIDE(lcDebugLibrary, "QT_DEBUG_PLUGINS", 
     The symbol must be exported as a C function from the library for
     resolve() to work. This means that the function must be wrapped in
     an \c{extern "C"} block if the library is compiled with a C++
-    compiler. On Windows, this also requires the use of a \c dllexport
+    compiler. On Windows and OS/2, this also requires the use of a \c dllexport
     macro; see resolve() for the details of how this is done. For
     convenience, there is a static resolve() function which you can
     use if you just want to call a function in a library without
@@ -606,7 +606,7 @@ QtPluginInstanceFunction QLibraryPrivate::loadPlugin()
 
     \table
     \header \li Platform \li Valid suffixes
-    \row \li Windows     \li \c .dll, \c .DLL
+    \row \li Windows, OS/2 \li \c .dll, \c .DLL
     \row \li Unix/Linux  \li \c .so
     \row \li AIX  \li \c .a
     \row \li HP-UX       \li \c .sl, \c .so (HP-UXi)
@@ -617,7 +617,7 @@ QtPluginInstanceFunction QLibraryPrivate::loadPlugin()
  */
 bool QLibrary::isLibrary(const QString &fileName)
 {
-#if defined(Q_OS_WIN) || defined(Q_OS_CYGWIN)
+#if defined(Q_OS_DOSLIKE) || defined(Q_OS_CYGWIN)
     return fileName.endsWith(".dll"_L1, Qt::CaseInsensitive);
 #else // Generic Unix
 # if defined(Q_OS_DARWIN)
@@ -883,7 +883,8 @@ QLibrary::QLibrary(QObject *parent) : QObject(parent)
     We recommend omitting the file's suffix in \a fileName, since
     QLibrary will automatically look for the file with the appropriate
     suffix in accordance with the platform, e.g. ".so" on Unix,
-    ".dylib" on \macos and iOS, and ".dll" on Windows. (See \l{fileName}.)
+    ".dylib" on \macos and iOS, and ".dll" on Windows and OS/2.
+    (See \l{fileName}.)
  */
 QLibrary::QLibrary(const QString &fileName, QObject *parent) : QObject(parent)
 {
@@ -893,12 +894,13 @@ QLibrary::QLibrary(const QString &fileName, QObject *parent) : QObject(parent)
 /*!
     Constructs a library object with the given \a parent that will
     load the library specified by \a fileName and major version number \a verNum.
-    Currently, the version number is ignored on Windows.
+    Currently, the version number is ignored on Windows and OS/2.
 
     We recommend omitting the file's suffix in \a fileName, since
     QLibrary will automatically look for the file with the appropriate
     suffix in accordance with the platform, e.g. ".so" on Unix,
-    ".dylib" on \macos and iOS, and ".dll" on Windows. (See \l{fileName}.)
+    ".dylib" on \macos and iOS, and ".dll" on Windows and OS/2.
+    (See \l{fileName}.)
 */
 QLibrary::QLibrary(const QString &fileName, int verNum, QObject *parent) : QObject(parent)
 {
@@ -908,12 +910,13 @@ QLibrary::QLibrary(const QString &fileName, int verNum, QObject *parent) : QObje
 /*!
     Constructs a library object with the given \a parent that will
     load the library specified by \a fileName and full version number \a version.
-    Currently, the version number is ignored on Windows.
+    Currently, the version number is ignored on Windows and OS/2.
 
     We recommend omitting the file's suffix in \a fileName, since
     QLibrary will automatically look for the file with the appropriate
     suffix in accordance with the platform, e.g. ".so" on Unix,
-    ".dylib" on \macos and iOS, and ".dll" on Windows. (See \l{fileName}.)
+    ".dylib" on \macos and iOS, and ".dll" on Windows and OS/2.
+    (See \l{fileName}.)
  */
 QLibrary::QLibrary(const QString &fileName, const QString &version, QObject *parent)
     : QObject(parent)
@@ -975,7 +978,7 @@ QString QLibrary::fileName() const
 
     Sets the fileName property and major version number to \a fileName
     and \a versionNumber respectively.
-    The \a versionNumber is ignored on Windows.
+    The \a versionNumber is ignored on Windows and OS/2.
 
     \sa setFileName()
 */
@@ -989,7 +992,7 @@ void QLibrary::setFileNameAndVersion(const QString &fileName, int verNum)
 
     Sets the fileName property and full version number to \a fileName
     and \a version respectively.
-    The \a version parameter is ignored on Windows.
+    The \a version parameter is ignored on Windows and OS/2.
 
     \sa setFileName()
 */
@@ -1014,7 +1017,7 @@ void QLibrary::setFileNameAndVersion(const QString &fileName, const QString &ver
 
     The symbol must be exported as a C function from the library. This
     means that the function must be wrapped in an \c{extern "C"} if
-    the library is compiled with a C++ compiler. On Windows you must
+    the library is compiled with a C++ compiler. On Windows and OS/2 you must
     also explicitly export the function from the DLL using the
     \c{__declspec(dllexport)} compiler directive, for example:
 
@@ -1057,7 +1060,7 @@ QFunctionPointer QLibrary::resolve(const QString &fileName, const char *symbol)
     returns the address of the exported symbol \a symbol.
     Note that \a fileName should not include the platform-specific file suffix;
     (see \l{fileName}). The library remains loaded until the application exits.
-    \a verNum is ignored on Windows.
+    \a verNum is ignored on Windows and OS/2.
 
     The function returns \nullptr if the symbol could not be resolved or if
     the library could not be loaded.
@@ -1078,7 +1081,7 @@ QFunctionPointer QLibrary::resolve(const QString &fileName, int verNum, const ch
     returns the address of the exported symbol \a symbol.
     Note that \a fileName should not include the platform-specific file suffix;
     (see \l{fileName}). The library remains loaded until the application exits.
-    \a version is ignored on Windows.
+    \a version is ignored on Windows and OS/2.
 
     The function returns \nullptr if the symbol could not be resolved or if
     the library could not be loaded.

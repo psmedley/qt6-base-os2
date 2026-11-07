@@ -1029,7 +1029,7 @@ void tst_QSettings::testIniParsing()
     f.write(inicontent);
     f.close();
 
-    QConfFile::clearCache();
+//    QConfFile::clearCache();
     QSettings settings(settingsPath("someDir/someSettings.ini"), QSettings::IniFormat);
 
     if ( settings.status() == QSettings::NoError ) { // else no point proceeding
@@ -1276,7 +1276,7 @@ static void testMetaTypesHelper(QSettings::Format format)
         settings.setValue(key, inputVariant);
     }
 
-    QConfFile::clearCache();
+//    QConfFile::clearCache();
 
     {
         QSettings settings(format, scope, organization, applicationName);
@@ -3315,7 +3315,7 @@ void tst_QSettings::childGroups()
     }
 
     for (int pass = 0; pass < 3; ++pass) {
-        QConfFile::clearCache();
+//        QConfFile::clearCache();
         QSettings settings(format, scope, "software.org");
         settings.setFallbacksEnabled(false);
         if (pass == 1) {
@@ -3384,7 +3384,7 @@ void tst_QSettings::childKeys()
     }
 
     for (int pass = 0; pass < 3; ++pass) {
-        QConfFile::clearCache();
+//        QConfFile::clearCache();
         QSettings settings(format, scope, "software.org");
         settings.setFallbacksEnabled(false);
         if (pass == 1) {
@@ -3445,7 +3445,7 @@ void tst_QSettings::allKeys()
     }
 
     for (int pass = 0; pass < 3; ++pass) {
-        QConfFile::clearCache();
+//        QConfFile::clearCache();
         QSettings settings(format, scope, "software.org");
         settings.setFallbacksEnabled(false);
 

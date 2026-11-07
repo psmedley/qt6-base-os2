@@ -35,6 +35,11 @@ else()
     endif()
 endif()
 
+if (OS2)
+# hack to ensure -msse2 is applied on examples too
+    list(APPEND _qt_compiler_warning_flags_on -msse2)
+endif()
+
 set(_qt_compiler_warning_flags_condition
     "$<BOOL:$<TARGET_PROPERTY:QT_COMPILE_OPTIONS_DISABLE_WARNINGS>>")
 set(_qt_compiler_warning_flags_genex

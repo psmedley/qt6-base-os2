@@ -86,7 +86,7 @@
 # endif
 #include <qt_windows.h> // for Sleep
 #endif
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <QtCore/private/qcore_unix_p.h>
 
 #include <errno.h>
@@ -2352,7 +2352,7 @@ void QTest::failOnWarning(const QRegularExpression &messagePattern)
 /*! \internal
 */
 
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
 static inline bool isWindowsBuildDirectory(const QString &dirName)
 {
     return dirName.compare("Debug"_L1, Qt::CaseInsensitive) == 0
@@ -2436,14 +2436,14 @@ QString QTest::qFindTestData(const QString& base, const char *file, int line, co
         if (binDirectory.exists(base)) {
             found = binDirectory.absoluteFilePath(base);
         }
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         // Windows: The executable is typically located in one of the
         // 'Release' or 'Debug' directories.
         else if (isWindowsBuildDirectory(binDirectory.dirName())
                  && binDirectory.cdUp() && binDirectory.exists(base)) {
             found = binDirectory.absoluteFilePath(base);
         }
-#endif // Q_OS_WIN
+#endif // Q_OS_DOSLIKE
         else if (QTestLog::verboseLevel() >= 2) {
             const QString candidate = QDir::toNativeSeparators(QCoreApplication::applicationDirPath() + u'/' + base);
             QTestLog::info(qPrintable("testdata %1 not found relative to test binary [%2]; "

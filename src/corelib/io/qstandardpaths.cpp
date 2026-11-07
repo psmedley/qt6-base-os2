@@ -498,13 +498,18 @@ static Q_DECL_COLD_FUNCTION QString fallbackPathVariable()
     return {};
 }
 
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
 static QStringList executableExtensions()
 {
+#ifdef Q_OS_WIN
     // If %PATHEXT% does not contain .exe, it is either empty, malformed, or distorted in ways that we cannot support, anyway.
     const QStringList pathExt = QString::fromLocal8Bit(qgetenv("PATHEXT")).toLower().split(u';');
     return pathExt.contains(".exe"_L1, Qt::CaseInsensitive) ?
            pathExt : QStringList{".exe"_L1, ".com"_L1, ".bat"_L1, ".cmd"_L1};
+#elif defined(Q_OS_OS2)
+    // Limit to .exe and .cmd for now (.com and .bat require MS-DOS support which we don't support anyway)
+    return QStringList() << QLatin1String(".exe") << QLatin1String(".cmd");
+#endif
 }
 #endif
 
@@ -531,7 +536,7 @@ static inline QString searchExecutable(const QStringList &searchPaths,
     return QString();
 }
 
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
 
 // Find executable appending candidate suffixes, used for suffix-less executables
 // on Windows.
@@ -552,7 +557,7 @@ static inline QString
     return QString();
 }
 
-#endif // Q_OS_WIN
+#endif // Q_OS_DOSLIKE
 
 /*!
     \include standardpath/functiondocs.qdocinc findExecutable
@@ -583,7 +588,7 @@ QString QStandardPaths::findExecutable(const QString &executableName, const QStr
         }
     }
 
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     // On Windows, if the name does not have a suffix or a suffix not
     // in PATHEXT ("xx.foo"), append suffixes from PATHEXT.
     static const QStringList executable_extensions = executableExtensions();

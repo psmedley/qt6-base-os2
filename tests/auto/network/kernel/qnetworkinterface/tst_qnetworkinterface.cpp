@@ -52,6 +52,7 @@ tst_QNetworkInterface::~tst_QNetworkInterface()
 
 bool tst_QNetworkInterface::isIPv6Working()
 {
+#ifndef QT_NO_IPV6
     // QNetworkInterface may be unable to detect IPv6 addresses even if they
     // are there, due to limitations of the implementation.
     if (QOperatingSystemVersion::currentType() == QOperatingSystemVersion::Windows ||
@@ -59,6 +60,9 @@ bool tst_QNetworkInterface::isIPv6Working()
         return QtNetworkSettings::hasIPv6();
     }
     return false;
+#else
+    return false;
+#endif
 }
 
 void tst_QNetworkInterface::initTestCase()

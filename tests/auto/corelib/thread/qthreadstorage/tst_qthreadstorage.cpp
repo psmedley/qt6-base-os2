@@ -27,6 +27,9 @@
 #  include <process.h>
 #  include <qt_windows.h>
 #endif
+#ifdef Q_OS_OS2
+#include <qt_os2.h>
+#endif
 
 #ifdef QTEST_THROW_ON_FAIL
 # error QVERIFY/QCOMPARE in QThread::run()
@@ -234,6 +237,12 @@ void tst_QThreadStorage::adoptedWinThreads()
         thread = (HANDLE)_beginthread(testAdoptedThreadStorage, 0, &pointers);
         QVERIFY(thread);
         WaitForSingleObject(thread, INFINITE);
+    });
+#elif defined(Q_OS_OS2)
+    adoptedThreads_impl([] (QThreadStorage<Pointer *> &pointers) {
+        TID thread = TID(_beginthread(testAdoptedThreadStorage, NULL, 0, &pointers));
+        QVERIFY(thread != TID(-1));
+        DosWaitThread(&thread, DCWW_WAIT);
     });
 #else
     QSKIP("This is a Windows test.");

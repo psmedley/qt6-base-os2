@@ -566,7 +566,7 @@ namespace QTest {
         qmake.setWorkingDirectory(temporaryDirPath);
 
         QString cmd = QLibraryInfo::path(QLibraryInfo::BinariesPath) + "/qmake";
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         cmd.append(".exe");
 #endif
         if (!QFile::exists(cmd)) {

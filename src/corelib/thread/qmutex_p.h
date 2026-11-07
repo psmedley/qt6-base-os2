@@ -28,6 +28,8 @@
 
 #if defined(Q_OS_UNIX)
 #  include <semaphore.h>
+#elif defined(Q_OS_OS2)
+# include "qt_os2.h"
 #endif
 
 struct timespec;
@@ -84,6 +86,8 @@ public:
     //platform specific stuff
 #if defined(Q_OS_UNIX)
     sem_t semaphore;
+#elif defined(Q_OS_OS2)
+    HEV event;
 #endif
 };
 

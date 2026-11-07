@@ -120,11 +120,20 @@ qt_internal_extend_target(Bootstrap CONDITION WIN32
         user32
 )
 
+qt_internal_extend_target(Bootstrap CONDITION OS2
+    SOURCES
+        ../../corelib/global/qoperatingsystemversion_os2.cpp
+        ../../corelib/kernel/qcore_unix.cpp
+        ../../corelib/io/qfilesystemengine_unix.cpp
+        ../../corelib/io/qfilesystemiterator_unix.cpp
+        ../../corelib/io/qfsfileengine_unix.cpp
+        ../../corelib/io/qstandardpaths_unix.cpp
+)
+
 qt_internal_extend_target(Bootstrap CONDITION MSVC AND CLANG
     LIBRARIES
         clang_rt.builtins-$<IF:$<STREQUAL:${TEST_architecture_arch},arm64>,aarch64,x86_64>
 )
-
 qt_internal_extend_target(Bootstrap CONDITION APPLE
     SOURCES
         ../../corelib/kernel/qcore_foundation.mm

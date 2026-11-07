@@ -67,6 +67,7 @@ function(qt_internal_add_cmake_library target)
         OUTPUT_DIRECTORY
         ARCHIVE_INSTALL_DIRECTORY
         INSTALL_DIRECTORY
+        OS2_SHORT_NAME
     )
     set(multi_args
         ${__default_private_args}
@@ -105,6 +106,14 @@ function(qt_internal_add_cmake_library target)
         )
     endif()
 
+    if(OS2)
+        if(arg_OS2_SHORT_NAME)
+            set_target_properties(${target} PROPERTIES
+                TARGET_SHORT ${arg_OS2_SHORT_NAME}
+            )
+        endif()
+    endif()
+
     _qt_internal_forward_function_args(
         FORWARD_PREFIX arg
         FORWARD_OUT_VAR extend_target_args
@@ -125,11 +134,11 @@ function(qt_internal_add_cmake_library target)
             ENABLE_AUTOGEN_TOOLS
             DISABLE_AUTOGEN_TOOLS
     )
-
     qt_internal_extend_target("${target}"
         ${extend_target_args}
         LIBRARIES ${arg_LIBRARIES} Qt::PlatformCommonInternal
         NO_UNITY_BUILD # Disabled by default
+        OS2_SHORT_NAME ${arg_OS2_SHORT_NAME}
     )
 endfunction()
 
@@ -208,7 +217,9 @@ function(qt_internal_add_3rdparty_library target)
         RUNTIME_OUTPUT_DIRECTORY "${QT_BUILD_DIR}/${INSTALL_BINDIR}"
         ARCHIVE_OUTPUT_DIRECTORY "${QT_BUILD_DIR}/${INSTALL_LIBDIR}"
         VERSION ${PROJECT_VERSION}
+if (NOT OS2)
         SOVERSION ${PROJECT_VERSION_MAJOR}
+endif()
         _qt_module_skip_depends_include TRUE
     )
     set_property(TARGET "${target}"

@@ -198,7 +198,7 @@ function(_qt_internal_get_check_cxx_source_compiles_out_var out_output_var out_f
     # since 3.23. Allow an opt out in case this breaks in the future.
     set(extra_func_args "")
     if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.23"
-            AND NOT QT_INTERNAL_NO_TRY_COMPILE_OUTPUT_VARIABLE)
+            AND NOT QT_INTERNAL_NO_TRY_COMPILE_OUTPUT_VARIABLE AND NOT OS2)
         set(extra_func_args OUTPUT_VARIABLE ${out_output_var})
     endif()
 

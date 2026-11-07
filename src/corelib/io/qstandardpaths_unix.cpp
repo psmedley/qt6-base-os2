@@ -269,7 +269,8 @@ QString QStandardPaths::writableLocation(StandardLocation type)
             xdgRuntimeDir = QDir::tempPath() + "/runtime-"_L1 + userName;
 
             if (!fromEnv) {
-#ifndef Q_OS_WASM
+#if !defined(Q_OS_OS2) && !defined(Q_OS_WASM)
+                // Makes no sense to warn on OS/2 as it is almost always not set and it's normal
                 qWarning("QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '%ls'", qUtf16Printable(xdgRuntimeDir));
 #endif
             }
@@ -395,7 +396,11 @@ static QStringList xdgDataDirs()
 
     QStringList dirs = dirsList(xdgDataDirsEnv);
     if (dirs.isEmpty())
+#ifdef Q_OS_OS2
+        dirs = QStringList{u"/@unixroot/usr/local/share"_s, u"/@unixroot/usr/share"_s};
+#else
         dirs = QStringList{u"/usr/local/share"_s, u"/usr/share"_s};
+#endif
 
     return dirs;
 }

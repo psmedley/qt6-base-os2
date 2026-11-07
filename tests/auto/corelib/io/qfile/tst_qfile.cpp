@@ -54,6 +54,9 @@ QT_END_NAMESPACE
 # include <unistd.h>
 # include <private/qcore_unix_p.h>
 #endif
+#ifdef Q_OS_OS2
+# include <qt_os2.h>
+#endif
 #ifdef Q_OS_DARWIN
 # include <sys/mount.h>
 #elif defined(Q_OS_LINUX)
@@ -287,8 +290,8 @@ private slots:
     void openDirectory();
     void writeNothing();
 
-#ifdef Q_OS_WIN
-    // All file paths are potentially valid, outside of Windows
+#ifdef Q_OS_DOSLIKE
+    // All file paths are potentially valid, outside of Windows and OS/2
     void invalidFile_data();
     void invalidFile();
 #endif
@@ -486,7 +489,7 @@ void tst_QFile::initTestCase()
 #if QT_CONFIG(process)
 #if defined(Q_OS_ANDROID)
     m_stdinProcess = QCoreApplication::applicationDirPath() + QLatin1String("/libstdinprocess_helper.so");
-#elif defined(Q_OS_WIN)
+#elif defined(Q_OS_DOSLIKE)
     m_stdinProcess = QFINDTESTDATA("stdinprocess_helper.exe");
 #else
     m_stdinProcess = QFINDTESTDATA("stdinprocess_helper");
@@ -681,8 +684,8 @@ void tst_QFile::open()
         QSKIP("Running this test as root doesn't make sense");
 #endif
 
-#if defined(Q_OS_WIN32)
-    QEXPECT_FAIL("noreadfile", "Windows does not currently support non-readable files.", Abort);
+#if defined(Q_OS_DOSLIKE)
+    QEXPECT_FAIL("noreadfile", "Windows and OS/2 do not currently support non-readable files.", Abort);
 #endif
     if (filename.isEmpty())
         QTest::ignoreMessage(QtWarningMsg, "QFSFileEngine::open: No file name specified");
@@ -1228,9 +1231,21 @@ void tst_QFile::ungetChar()
     QCOMPARE(buf[2], '4');
 }
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
 QString driveLetters()
 {
+#if defined(Q_OS_OS2)
+    ULONG dummy;
+    ULONG map;
+    QString result;
+    if (DosQueryCurrentDisk(&dummy, &map) == NO_ERROR) {
+        for (int i = 0; i < 26; ++i, map >>= 1) {
+            if (map & 0x1)
+                result.append(QLatin1Char('A' + i));
+        }
+    }
+    return result;
+#else
     wchar_t volumeName[MAX_PATH];
     wchar_t path[MAX_PATH];
     const HANDLE h = FindFirstVolumeW(volumeName, MAX_PATH);
@@ -1245,6 +1260,7 @@ QString driveLetters()
     } while (FindNextVolumeW(h, volumeName, MAX_PATH));
     FindVolumeClose(h);
     return result;
+#endif
 }
 
 static inline QChar invalidDriveLetter()
@@ -1430,11 +1446,14 @@ void tst_QFile::permissions_data()
 #endif
     QTest::newRow("data1") << m_testSourceFile << uint(QFile::ReadUser) << true << false;
     QTest::newRow("readonly") << QString::fromLatin1("readonlyfile") << uint(QFile::WriteUser) << false << false;
+#ifndef Q_OS_OS2
+    // OS/2 file names are limited to 260 chars in total and 256 per component, this is obviously too long.
     QTest::newRow("longfile") << QString::fromLatin1("longFileNamelongFileNamelongFileNamelongFileName"
                                                     "longFileNamelongFileNamelongFileNamelongFileName"
                                                     "longFileNamelongFileNamelongFileNamelongFileName"
                                                     "longFileNamelongFileNamelongFileNamelongFileName"
                                                     "longFileNamelongFileNamelongFileNamelongFileName.txt") << uint(QFile::ReadUser) << true << true;
+#endif
     QTest::newRow("resource1") << ":/tst_qfile/resources/file1.ext1" << uint(QFile::ReadUser) << true << false;
     QTest::newRow("resource2") << ":/tst_qfile/resources/file1.ext1" << uint(QFile::WriteUser) << false << false;
     QTest::newRow("resource3") << ":/tst_qfile/resources/file1.ext1" << uint(QFile::ExeUser) << false << false;
@@ -1836,7 +1855,7 @@ void tst_QFile::writeTextFile()
     QVERIFY2(file.open(QFile::WriteOnly | QFile::Truncate | QFile::Text),
              msgOpenFailed(file).constData());
     QByteArray out = in;
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     out.replace('\n', "\r\n");
 #endif
     QCOMPARE(file.write(in), qlonglong(in.size()));
@@ -2326,7 +2345,8 @@ void tst_QFile::longFileName_data()
     QTest::newRow( "148 chars" ) << QString::fromLatin1("longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName.txt");
-#ifndef Q_OS_VXWORKS
+#if !defined(Q_OS_VXWORKS) && !defined(Q_OS_OS2)
+    // OS/2 file names are limited to 260 chars in total and 256 per component, this is obviously too long.
     QTest::newRow( "244 chars" ) << QString::fromLatin1("longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
@@ -3015,7 +3035,7 @@ void tst_QFile::textFile()
     QByteArray data = file.readAll();
 
     QByteArray expected = part1 + part2;
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     expected.replace("\n", "\015\012");
 #endif
     QCOMPARE(data, expected);
@@ -3569,7 +3589,7 @@ void tst_QFile::map()
     file.close();
 
 #if !defined(Q_OS_VXWORKS)
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
     if (::getuid() != 0)
         // root always has permissions
 #endif
@@ -3918,7 +3938,7 @@ void tst_QFile::objectConstructors()
 
 void tst_QFile::caseSensitivity()
 {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     const bool caseSensitive = false;
 #elif defined(Q_OS_DARWIN)
      const bool caseSensitive = pathconf(QDir::currentPath().toLatin1().constData(), _PC_CASE_SENSITIVE) == 1;

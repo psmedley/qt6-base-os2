@@ -32,6 +32,10 @@
 #  include <sys/shm.h>
 #endif
 
+#ifdef Q_OS_OS2
+#include "qt_os2.h"
+#endif
+
 QT_BEGIN_NAMESPACE
 
 class QSharedMemoryPrivate;
@@ -142,6 +146,27 @@ public:
     Qt::HANDLE hand = nullptr;
 };
 
+class QSharedMemoryOS2
+{
+public:
+#ifdef Q_OS_OS2
+    static constexpr bool Enabled = true;
+#else
+    static constexpr bool Enabled = false;
+#endif
+    static bool runtimeSupportCheck() { return Enabled; }
+    static bool supports(QNativeIpcKey::Type type)
+    { return type == QNativeIpcKey::Type::OS2; }
+
+    bool handle(QSharedMemoryPrivate *self);
+    bool cleanHandle(QSharedMemoryPrivate *self);
+    bool create(QSharedMemoryPrivate *self, qsizetype size);
+    bool attach(QSharedMemoryPrivate *self, QSharedMemory::AccessMode mode);
+    bool detach(QSharedMemoryPrivate *self);
+
+    HEV semaphore;
+};
+
 class Q_AUTOTEST_EXPORT QSharedMemoryPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QSharedMemory)
@@ -170,8 +195,9 @@ public:
         QSharedMemoryPosix posix;
         QSharedMemorySystemV sysv;
         QSharedMemoryWin32 win32;
+        QSharedMemoryOS2 os2;
     };
-    QtIpcCommon::IpcStorageVariant<&Backend::posix, &Backend::sysv, &Backend::win32> backend;
+    QtIpcCommon::IpcStorageVariant<&Backend::posix, &Backend::sysv, &Backend::win32, &Backend::os2> backend;
 
     void constructBackend();
     void destructBackend();
@@ -207,6 +233,9 @@ public:
     { error = e; errorString = message; }
     void setUnixErrorString(QLatin1StringView function);
     void setWindowsErrorString(QLatin1StringView function);
+#if defined(Q_OS_OS2)
+    void setOS2ErrorString(APIRET arc, QLatin1String function);
+#endif
 
 #if QT_CONFIG(systemsemaphore)
     bool tryLocker(QSharedMemoryLocker *locker, const QString &function) {

@@ -82,7 +82,7 @@ public:
     static QStringList suffixes_sys(const QString &fullVersion);
     static constexpr QStringView prefix_sys()
     {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_OS2)
         return {};
 #elif defined(Q_OS_CYGWIN)
         return u"cyg";

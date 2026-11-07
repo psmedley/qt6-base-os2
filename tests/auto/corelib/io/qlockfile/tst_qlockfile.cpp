@@ -425,9 +425,9 @@ void tst_QLockFile::staleLockRace()
 
 void tst_QLockFile::noPermissions()
 {
-#if defined(Q_OS_WIN)
-    // A readonly directory still allows us to create files, on Windows.
-    QSKIP("No permission testing on Windows");
+#if defined(Q_OS_DOSLIKE)
+    // A readonly directory still allows us to create files, on Windows and OS/2.
+    QSKIP("No permission testing on Windows and OS/2");
 #elif defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS)
     if (::geteuid() == 0)
         QSKIP("Test is not applicable with root privileges");

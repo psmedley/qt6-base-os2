@@ -36,6 +36,9 @@ struct sem_t;
 #if QT_CONFIG(sysv_sem)
 #  include <sys/sem.h>
 #endif
+#ifdef Q_OS_OS2
+#include "qt_os2.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -95,6 +98,26 @@ struct QSystemSemaphoreWin32
     Qt::HANDLE semaphore = nullptr;
 };
 
+struct QSystemSemaphoreOS2
+{
+#ifdef Q_OS_OS2
+    static constexpr bool Enabled = true;
+#else
+    static constexpr bool Enabled = false;
+#endif
+    static bool supports(QNativeIpcKey::Type type)
+    { return type == QNativeIpcKey::Type::OS2; }
+    static bool runtimeSupportCheck() { return Enabled; }
+
+    // we can declare the members without the #if
+    void handle(QSystemSemaphorePrivate *self, QSystemSemaphore::AccessMode mode);
+    void cleanHandle(QSystemSemaphorePrivate *self);
+    bool modifySemaphore(QSystemSemaphorePrivate *self, int count);
+
+    HEV semaphore;
+
+};
+
 class QSystemSemaphorePrivate
 {
 public:
@@ -104,6 +127,9 @@ public:
 
     void setWindowsErrorString(QLatin1StringView function);    // Windows only
     void setUnixErrorString(QLatin1StringView function);
+#if defined(Q_OS_OS2)
+    void setOS2ErrorString(APIRET arc, QLatin1String function);
+#endif
     inline void setError(QSystemSemaphore::SystemSemaphoreError e, const QString &message)
     { error = e; errorString = message; }
     inline void clearError()
@@ -120,8 +146,9 @@ public:
         QSystemSemaphorePosix posix;
         QSystemSemaphoreSystemV sysv;
         QSystemSemaphoreWin32 win32;
+        QSystemSemaphoreOS2 os2;
     };
-    QtIpcCommon::IpcStorageVariant<&Backend::posix, &Backend::sysv, &Backend::win32> backend;
+    QtIpcCommon::IpcStorageVariant<&Backend::posix, &Backend::sysv, &Backend::win32, &Backend::os2> backend;
 
     void constructBackend();
     void destructBackend();

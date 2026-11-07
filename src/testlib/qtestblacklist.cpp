@@ -123,6 +123,9 @@ static QSet<QByteArray> keywords()
 #ifdef Q_OS_QNX
             << "qnx"
 #endif
+#ifdef Q_OS_OS2
+            << "os2"
+#endif
 #ifdef Q_OS_VXWORKS
             << "vxworks"
 #endif

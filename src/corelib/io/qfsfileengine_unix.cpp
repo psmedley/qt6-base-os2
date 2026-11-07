@@ -25,6 +25,11 @@
 #if defined(Q_OS_MACOS)
 # include <private/qcore_mac_p.h>
 #endif
+#if defined(Q_OS_OS2)
+// INCL_DOSDEVIOCTL can't go to qt_os2.h because of ALT conflicting with Qt::ALT in qnamespace.h!
+#define INCL_DOSDEVIOCTL
+#include <qt_os2.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -58,6 +63,10 @@ bool QFSFileEnginePrivate::nativeOpenImpl(QIODevice::OpenMode openMode, mode_t m
                "QFSFileEngine no longer supports buffered mode; upper layer must buffer");
     if (openMode & QIODevice::Unbuffered) {
         int flags = openModeToOpenFlags(openMode);
+#if defined(QT_OPEN_BINARY)
+        // always open in binary mode here as all QIODevice::Text processing is done by Qt
+        flags |= QT_OPEN_BINARY;
+#endif
 
         // Try to open the file in unbuffered mode.
         do {
@@ -83,7 +92,7 @@ bool QFSFileEnginePrivate::nativeOpenImpl(QIODevice::OpenMode openMode, mode_t m
         }
 
         // Seek to the end when in Append mode.
-        if (flags & QFile::Append) {
+        if (openMode & QIODevice::Append) {
             QT_OFF_T ret;
             do {
                 ret = QT_LSEEK(fd, 0, SEEK_END);
@@ -271,9 +280,37 @@ QString QFSFileEngine::currentPath(const QString &)
 
 QFileInfoList QFSFileEngine::drives()
 {
+#if defined(Q_OS_OS2)
+    QFileInfoList ret;
+
+    ULONG driveBits, dummy;
+    DosQueryCurrentDisk(&dummy, &driveBits);
+    driveBits &= 0x3ffffff;
+
+    char driveName[4] = "A:/";
+
+    while (driveBits) {
+        if (driveName[0] < 'C') {
+            // hide non-existent floppies
+            BIOSPARAMETERBLOCK  bpb;
+            UCHAR               ioc[2] = { 0, UCHAR(driveName[0] - 'A') };
+            if (DosDevIOCtl((HFILE)-1, IOCTL_DISK, DSK_GETDEVICEPARAMS,
+                            ioc, 2, NULL, &bpb, sizeof(bpb), NULL) != 0) {
+                driveBits &= ~1;
+            }
+        }
+        if (driveBits & 1)
+            ret.append(QFileInfo(QString::fromLatin1(driveName).toUpper()));
+        driveName[0]++;
+        driveBits = driveBits >> 1;
+    }
+
+    return ret;
+#else
     QFileInfoList ret;
     ret.append(QFileInfo(QFileSystemEngine::rootPath()));
     return ret;
+#endif
 }
 
 bool QFSFileEnginePrivate::doStat(QFileSystemMetaData::MetaDataFlags flags) const
@@ -433,7 +470,11 @@ bool QFSFileEngine::isRelativePath() const
 {
     Q_D(const QFSFileEngine);
     const QString fp = d->fileEntry.filePath();
+#ifndef Q_OS_OS2
     return fp.isEmpty() || fp.at(0) != u'/';
+#else
+    return fp.isEmpty() || (fp.at(0) != u'/' && fp.at(1) != u':');
+#endif
 }
 
 uint QFSFileEngine::ownerId(FileOwner own) const
@@ -570,7 +611,14 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
                    access, sharemode, nativeHandle(), realOffset);
     if (MAP_FAILED != mapAddress) {
         uchar *address = extra + static_cast<uchar*>(mapAddress);
+#ifdef Q_OS_OS2
+        // On OS/2, LIBCx mmap returns the same address for the same region,
+        // account for it (to make two map calls with two subsequent unmap calls
+        // succeed, see tst_QFile for an example).
+        maps.insert(address, std::pair<int,size_t>{extra, realSize});
+#else
         maps[address] = {extra, realSize};
+#endif
         return address;
     }
 
@@ -601,13 +649,22 @@ bool QFSFileEnginePrivate::unmap(uchar *ptr)
         return false;
     }
 
+#ifdef Q_OS_OS2
+    uchar *start = ptr - maps.value(ptr).first;
+    size_t len = maps.value(ptr).second;
+#else
     uchar *start = ptr - it->start;
     size_t len = it->length;
+#endif
     if (-1 == munmap(start, len)) {
         q->setError(QFile::UnspecifiedError, qt_error_string(errno));
         return false;
     }
+#ifdef Q_OS_OS2
+    maps.take(ptr);
+#else
     maps.erase(it);
+#endif
     return true;
 #else
     return false;

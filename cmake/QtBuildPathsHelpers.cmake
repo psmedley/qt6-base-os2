@@ -174,7 +174,7 @@ macro(qt_internal_setup_configure_install_paths)
         message(FATAL_ERROR "INSTALL_MKSPECSDIR must end with '/mkspecs'")
     endif()
 
-    if (WIN32)
+    if (WIN32 OR OS2)
         set(_default_libexec "${INSTALL_ARCHDATADIR}/bin")
     else()
         set(_default_libexec "${INSTALL_ARCHDATADIR}/libexec")

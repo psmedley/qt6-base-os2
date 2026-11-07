@@ -34,6 +34,7 @@ public:
         Android,
         VisionOS,
         HarmonyOS,
+        OS2,
     };
 
     constexpr QOperatingSystemVersionBase(OSType osType,
@@ -66,6 +67,8 @@ public:
         return Android;
 #elif defined(Q_OS_HARMONY)
         return HarmonyOS;
+#elif defined(Q_OS_OS2)
+        return OS2;
 #else
         return Unknown;
 #endif
@@ -174,6 +177,7 @@ public:
         Android,
         VisionOS,
         HarmonyOS,
+        OS2,
     };
 #endif
 
@@ -210,6 +214,10 @@ public:
     static const QOperatingSystemVersion AndroidPie;
     static const QOperatingSystemVersion Android10;
     static const QOperatingSystemVersion Android11;
+
+    static const QOperatingSystemVersion OS2Warp3;
+    static const QOperatingSystemVersion OS2Warp4;
+    static const QOperatingSystemVersion OS2Warp4_5;
 #else
     static constexpr QOperatingSystemVersionBase Windows7 { QOperatingSystemVersionBase::Windows, 6, 1 };
     static constexpr QOperatingSystemVersionBase Windows8 { QOperatingSystemVersionBase::Windows, 6, 2 };
@@ -289,6 +297,7 @@ public:
 #endif // QT_CORE_REMOVED_SINCE(6, 3)
 
     constexpr OSType type() const { return OSType(QOperatingSystemVersionBase::type()); }
+
     QT7_ONLY(Q_CORE_EXPORT) bool isAnyOfType(std::initializer_list<OSType> types) const;
 #if QT_CORE_REMOVED_SINCE(6, 3) || defined(Q_QDOC)
     QString name() const;

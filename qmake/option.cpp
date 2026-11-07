@@ -314,7 +314,7 @@ Option::init(int argc, char **argv)
 
     if(argc && argv) {
         QString argv0 = argv[0];
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         if (!argv0.endsWith(QLatin1String(".exe"), Qt::CaseInsensitive))
             argv0 += QLatin1String(".exe");
 #endif
@@ -520,7 +520,7 @@ Option::fixString(QString string, uchar flags)
     if (flags & Option::FixPathToNormalSeparators) {
         string.replace('\\', '/');
     } else if (flags & Option::FixPathToLocalSeparators) {
-#if defined(Q_OS_WIN32)
+#if defined(Q_OS_DOSLIKE)
         string.replace('/', '\\');
 #else
         string.replace('\\', '/');

@@ -20,7 +20,7 @@
 
 #include <QtCore/private/qtools_p.h>
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <sys/mman.h>   // for MAP_FAILED
 #endif
 
@@ -54,7 +54,7 @@ namespace CrashHandler {
         WindowsFaultHandler();
     };
     using FatalSignalHandler = WindowsFaultHandler;
-#elif defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
+#elif defined(Q_OS_UNIXLIKE) && !defined(Q_OS_WASM)
     class Q_TESTLIB_EXPORT FatalSignalHandler
     {
     public:

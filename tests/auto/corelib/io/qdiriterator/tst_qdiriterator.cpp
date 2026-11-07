@@ -86,7 +86,7 @@ private slots:
     void uncPaths_data();
     void uncPaths();
 #endif
-#ifndef Q_OS_WIN
+#ifndef Q_OS_DOSLIKE
     void hiddenDirs_hiddenFiles();
 #endif
 
@@ -169,7 +169,7 @@ void tst_QDirIterator::initTestCase()
     // "When used with directories, _access determines only whether the specified directory exists"
     if (_waccess(qUtf16Printable("//" + QTest::uncServerName() + "/testshare"), 0) == 0)
         uncServerAvailable = true;
-#else
+#elif !defined(Q_OS_DOSLIKE)
     createDirectory("hiddenDirs_hiddenFiles");
     createFile("hiddenDirs_hiddenFiles/normalFile");
     createFile("hiddenDirs_hiddenFiles/.hiddenFile");
@@ -654,7 +654,7 @@ void tst_QDirIterator::uncPaths()
 }
 #endif
 
-#ifndef Q_OS_WIN
+#ifndef Q_OS_DOSLIKE
 // In Unix it is easy to create hidden files, but in Windows it requires
 // a special call since hidden files need to be "marked" while in Unix
 // anything starting by a '.' is a hidden file.
@@ -688,7 +688,7 @@ void tst_QDirIterator::hiddenDirs_hiddenFiles()
         QCOMPARE(failures, 0);
     }
 }
-#endif // Q_OS_WIN
+#endif // Q_OS_DOSLIKE
 
 void tst_QDirIterator::hasNextFalseNoCrash()
 {

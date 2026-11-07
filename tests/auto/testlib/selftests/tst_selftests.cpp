@@ -161,7 +161,7 @@ static QByteArray runDiff(const QByteArrayList &expected, const QByteArrayList &
 {
     QByteArray result;
 #ifdef USE_DIFF
-#  ifndef Q_OS_WIN
+#  ifndef Q_OS_DOSLIKE
     const QString diff = QStandardPaths::findExecutable("diff");
 #  else
     const QString diff = QStandardPaths::findExecutable("diff.exe");
@@ -1367,7 +1367,7 @@ int main(int argc, char **argv)
 
     // Detect the location of the sub programs
     QString subProgram = "pass/pass";
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     subProgram += ".exe";
 #endif
     QString testdataDir = QFINDTESTDATA(subProgram);

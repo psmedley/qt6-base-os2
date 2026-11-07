@@ -1059,7 +1059,7 @@ void QPrintDialog::accept()
 
 */
 
-#if defined (Q_OS_UNIX)
+#if defined (Q_OS_UNIXLIKE)
 
 /*! \internal
 */
@@ -1416,7 +1416,7 @@ void QUnixPrintWidget::updatePrinter()
 ////////////////////////////////////////////////////////////////////////////////
 
 #endif // QT_CONFIG(cups)
-#endif // defined (Q_OS_UNIX)
+#endif // defined (Q_OS_UNIXLIKE)
 
 QT_END_NAMESPACE
 

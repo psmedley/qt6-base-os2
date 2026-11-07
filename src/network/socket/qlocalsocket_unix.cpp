@@ -35,12 +35,28 @@ namespace {
 static QString pathNameForConnection(const QString &connectingName,
                                      QLocalSocket::SocketOptions options)
 {
+#ifdef Q_OS_OS2
+    // suppress "unused parameter" warning without changing non-OS/2 code
+    (void)options;
+
+    // Local OS/2 sockets must always start with "\socket\"
+    QString connectingPathName;
+
+    const QLatin1String socketPath("\\socket\\");
+    connectingPathName = QDir::toNativeSeparators(connectingName);
+    if (connectingName.startsWith(socketPath)) {
+        return connectingPathName;
+    }
+
+    return socketPath + connectingPathName;
+#else
     if (options.testFlag(QLocalSocket::AbstractNamespaceOption)
         || connectingName.startsWith(u'/')) {
         return connectingName;
     }
 
     return QDir::tempPath() + u'/' + connectingName;
+#endif
 }
 
 static QLocalSocket::SocketOptions optionsForPlatform(QLocalSocket::SocketOptions srcOptions)
@@ -160,6 +176,9 @@ QString QLocalSocketPrivate::generateErrorString(QLocalSocket::LocalSocketError 
     case QLocalSocket::UnknownSocketError:
     default:
         errorString = QLocalSocket::tr("%1: Unknown error %2").arg(function).arg(errno);
+        const char *err = strerror(errno);
+        if (err)
+            errorString += QString(QLatin1String(" (%1)")).arg(QLatin1String(err));
     }
     return errorString;
 }

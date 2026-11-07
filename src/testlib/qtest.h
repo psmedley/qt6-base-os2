@@ -278,7 +278,7 @@ Q_CONSTRUCTOR_FUNCTION(qRegister##TestObject)
 #define QTEST_QAPP_SETUP(klaz) \
     klaz app(argc, argv); \
     app.setAttribute(Qt::AA_Use96Dpi, true);
-
+ 
 #if defined(QT_WIDGETS_LIB)
 #  include <QtTest/qtest_widgets.h>
 // Internal
@@ -294,7 +294,7 @@ Q_CONSTRUCTOR_FUNCTION(qRegister##TestObject)
 
 // For most tests:
 #define QTEST_MAIN(TestObject) QTEST_MAIN_WRAPPER(TestObject, QTEST_MAIN_SETUP())
-
+ 
 // For command-line tests
 #define QTEST_GUILESS_MAIN(TestObject) \
     QTEST_MAIN_WRAPPER(TestObject, QTEST_QAPP_SETUP(QCoreApplication))

@@ -385,13 +385,17 @@ QList<QSslCertificate> systemCaCertificates()
     const QList<QByteArray> certData = fetchSslCertificateData();
     for (auto certDatum : certData)
         systemCerts.append(QSslCertificate::fromData(certDatum, QSsl::Der));
-#elif defined(Q_OS_UNIX)
+#elif defined(Q_OS_UNIXLIKE)
     {
         const QList<QByteArray> directories = QSslSocketPrivate::unixRootCertDirectories();
         QSet<QString> certFiles = {
+#ifdef Q_OS_OS2
+            QStringLiteral("/@unixroot/etc/pki/tls/certs/ca-bundle.crt"), // OS/2
+#else
             QStringLiteral("/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"), // Red Hat 2013+
             QStringLiteral("/etc/pki/tls/certs/ca-bundle.crt"), // Red Hat older, Mandriva
             QStringLiteral("/usr/local/share/certs/ca-root-nss.crt") // FreeBSD's ca_root_nss
+#endif
         };
 
         static const size_t extLen = strlen(".pem"); // or strlen(".crt")

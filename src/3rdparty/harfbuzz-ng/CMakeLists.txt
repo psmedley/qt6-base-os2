@@ -109,7 +109,7 @@ qt_set_symbol_visibility_hidden(BundledHarfbuzz)
 ## Scopes:
 #####################################################################
 
-qt_internal_extend_target(BundledHarfbuzz CONDITION UNIX
+qt_internal_extend_target(BundledHarfbuzz CONDITION (UNIX OR OS2)
     DEFINES
         HAVE_PTHREAD
         HAVE_SCHED_H

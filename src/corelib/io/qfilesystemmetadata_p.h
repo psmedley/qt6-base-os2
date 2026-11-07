@@ -201,7 +201,7 @@ public:
     bool isWritable() const   { return permissions().testAnyFlags(QFile::WriteUser); }
     bool isExecutable() const { return permissions().testAnyFlags(QFile::ExeUser); }
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
     void fillFromStatxBuf(const struct statx &statBuffer);
     void fillFromStatBuf(const QT_STATBUF &statBuffer);
     void fillFromDirEnt(const QT_DIRENT &statBuffer);
@@ -259,28 +259,7 @@ inline bool QFileSystemMetaData::isBundle() const                   { return fal
 inline bool QFileSystemMetaData::isAlias() const                    { return false; }
 #endif
 
-#if defined(Q_OS_UNIX) || defined (Q_OS_WIN)
-inline QDateTime QFileSystemMetaData::fileTime(QFile::FileTime time) const
-{
-    switch (time) {
-    case QFile::FileModificationTime:
-        return modificationTime();
-
-    case QFile::FileAccessTime:
-        return accessTime();
-
-    case QFile::FileBirthTime:
-        return birthTime();
-
-    case QFile::FileMetadataChangeTime:
-        return metadataChangeTime();
-    }
-
-    return QDateTime();
-}
-#endif
-
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
 inline QDateTime QFileSystemMetaData::birthTime() const
 {
     return birthTime_
@@ -315,6 +294,27 @@ inline uint QFileSystemMetaData::ownerId(QAbstractFileEngine::FileOwner owner) c
         return userId();
     else
         return groupId();
+}
+#endif
+
+#if defined(Q_OS_UNIX) || defined (Q_OS_DOSLIKE)
+inline QDateTime QFileSystemMetaData::fileTime(QFile::FileTime time) const
+{
+    switch (time) {
+    case QFile::FileModificationTime:
+        return modificationTime();
+
+    case QFile::FileAccessTime:
+        return accessTime();
+
+    case QFile::FileBirthTime:
+        return birthTime();
+
+    case QFile::FileMetadataChangeTime:
+        return metadataChangeTime();
+    }
+
+    return QDateTime();
 }
 #endif
 

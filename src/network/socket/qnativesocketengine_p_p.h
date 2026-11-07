@@ -64,7 +64,9 @@ typedef INT (WSAAPI *LPFN_WSASENDMSG)(SOCKET s, LPWSAMSG lpMsg, DWORD dwFlags,
 union qt_sockaddr {
     sockaddr a;
     sockaddr_in a4;
+#ifndef Q_OS_OS2
     sockaddr_in6 a6;
+#endif
 };
 
 class QSocketNotifier;
@@ -166,11 +168,12 @@ public:
         switch (socketProtocol) {
         case QHostAddress::IPv6Protocol:
         case QHostAddress::AnyIPProtocol:
+#ifndef Q_OS_OS2
             // force to IPv6
             setSockaddr(&aa->a6, address, port);
             *sockAddrSize = sizeof(sockaddr_in6);
             return;
-
+#endif
         case QHostAddress::IPv4Protocol:
             // force to IPv4
             setSockaddr(&aa->a4, address, port);
@@ -180,7 +183,7 @@ public:
         case QHostAddress::UnknownNetworkLayerProtocol:
             // don't force
             break;
-        }
+         }
         *sockAddrSize = setSockaddr(&aa->a, address, port);
     }
 

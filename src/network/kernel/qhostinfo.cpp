@@ -34,6 +34,10 @@
 #  define QT_SOCKLEN_T int
 #endif
 
+#if defined(Q_OS_OS2)
+#include <libcx/net.h>
+#endif
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
@@ -361,7 +365,9 @@ QHostInfo QHostInfoAgent::reverseLookup(const QHostAddress &address)
     QHostInfo results;
     // Reverse lookup
     sockaddr_in sa4;
+#ifndef QT_NO_IPV6
     sockaddr_in6 sa6;
+#endif
     sockaddr *sa = nullptr;
     QT_SOCKLEN_T saSize;
     if (address.protocol() == QHostAddress::IPv4Protocol) {
@@ -370,12 +376,14 @@ QHostInfo QHostInfoAgent::reverseLookup(const QHostAddress &address)
         memset(&sa4, 0, sizeof(sa4));
         sa4.sin_family = AF_INET;
         sa4.sin_addr.s_addr = htonl(address.toIPv4Address());
+#ifndef QT_NO_IPV6
     } else {
         sa = reinterpret_cast<sockaddr *>(&sa6);
         saSize = sizeof(sa6);
         memset(&sa6, 0, sizeof(sa6));
         sa6.sin6_family = AF_INET6;
         memcpy(&sa6.sin6_addr, address.toIPv6Address().c, sizeof(sa6.sin6_addr));
+#endif
     }
 
     char hbuf[NI_MAXHOST];
@@ -441,6 +449,7 @@ QHostInfo QHostInfoAgent::lookup(const QString &hostName)
                     addresses.append(addr);
                 break;
             }
+#ifndef QT_NO_IPV6
             case AF_INET6: {
                 QHostAddress addr;
                 sockaddr_in6 *sa6 = (sockaddr_in6 *) node->ai_addr;
@@ -451,6 +460,7 @@ QHostInfo QHostInfoAgent::lookup(const QString &hostName)
                     addresses.append(addr);
                 break;
             }
+#endif
             default:
                 results.setError(QHostInfo::UnknownError);
                 results.setErrorString(QCoreApplication::translate("QHostInfoAgent", "Unknown address type"));

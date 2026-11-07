@@ -13,7 +13,7 @@
 #include <QtNetwork/QUdpSocket>
 #include <private/qnativesocketengine_p.h>
 #define NATIVESOCKETENGINE QNativeSocketEngine
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <private/qnet_unix_p.h>
 #include <sys/select.h>
 #endif
@@ -33,7 +33,7 @@ private slots:
     void constructing();
     void unexpectedDisconnection();
     void mixingWithTimers();
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
     void posixSockets();
 #endif
     void asyncMultipleDatagram();
@@ -278,7 +278,7 @@ void tst_QSocketNotifier::mixingWithTimers()
     QTRY_COMPARE(helper.socketActivated, true);
 }
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 // test only for posix
 void tst_QSocketNotifier::posixSockets()
 {

@@ -537,6 +537,8 @@ void tst_LargeFile::mapOffsetOverflow()
         }
         address = largeFile.map(offset, blockSize);
         QCOMPARE(!!address, succeeds);
+        if (address)
+            largeFile.unmap(address);
 
         if (succeeds) {
             QTest::ignoreMessage(QtWarningMsg, "QFSFileEngine::map: "
@@ -544,6 +546,8 @@ void tst_LargeFile::mapOffsetOverflow()
         }
         address = largeFile.map(offset + blockSize, blockSize);
         QCOMPARE(!!address, succeeds);
+        if (address)
+            largeFile.unmap(address);
     }
 }
 

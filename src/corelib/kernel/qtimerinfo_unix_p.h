@@ -18,6 +18,8 @@
 
 #include <QtCore/private/qglobal_p.h>
 
+// #define QTIMERINFO_DEBUG
+
 #include "qabstracteventdispatcher.h"
 
 #include <sys/time.h> // struct timespec
@@ -45,12 +47,20 @@ struct QTimerInfo
 
 class Q_CORE_EXPORT QTimerInfoList
 {
-public:
     using Duration = QAbstractEventDispatcher::Duration;
     using TimerInfo = QAbstractEventDispatcher::TimerInfoV2;
+#ifdef Q_OS_OS2
+    int zeroTimers;
+#endif
+
+public:
     QTimerInfoList();
 
     mutable std::chrono::steady_clock::time_point currentTime;
+
+#ifdef Q_OS_OS2
+    int zeroTimerCount() const { return zeroTimers; };
+#endif
 
     std::optional<Duration> timerWait();
     void timerInsert(QTimerInfo *);

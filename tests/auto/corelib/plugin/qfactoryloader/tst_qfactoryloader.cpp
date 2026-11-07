@@ -32,14 +32,18 @@ private slots:
     void staticPlugin();
 };
 
-static const char binFolderC[] = "bin";
+#define BIN_FOLDER "bin"
+static const char *binFolderC = BIN_FOLDER;
 
 void tst_QFactoryLoader::initTestCase()
 {
     // On Android the plugins are bundled into APK's libs subdir
 #ifndef Q_OS_ANDROID
     binFolder = QFINDTESTDATA(binFolderC);
-    QVERIFY2(!binFolder.isEmpty(), "Unable to locate 'bin' folder");
+    // Support running the test case from the build dir w/o installing.
+    if (binFolder.isEmpty())
+        binFolder = QFINDTESTDATA("../" BIN_FOLDER);
+    QVERIFY2(!binFolder.isEmpty(), "Unable to locate '" BIN_FOLDER "' folder");
 #endif
 }
 

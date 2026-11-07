@@ -10,10 +10,16 @@
 #include "qlist.h"
 #include "qalgorithms.h"
 
+#ifdef Q_OS_OS2
+#include "qmutex_p.h"
+#include <private/qreadwritelock_p.h>
+#include "qt_os2.h"
+#else
 #define Q_MUTEX_T void *
 #include <private/qmutex_p.h>
 #include <private/qreadwritelock_p.h>
 #include <qt_windows.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -26,12 +32,27 @@ class QWaitConditionEvent
 public:
     inline QWaitConditionEvent() : priority(0), wokenUp(false)
     {
+#ifdef Q_OS_OS2
+        DosCreateEventSem(NULL, &event, 0 /* manual reset */, FALSE);
+#else
         event = CreateEvent(NULL, TRUE, FALSE, NULL);
+#endif
     }
-    inline ~QWaitConditionEvent() { CloseHandle(event); }
+    inline ~QWaitConditionEvent()
+    {
+#ifdef Q_OS_OS2
+        DosCloseEventSem(event);
+#else
+        CloseHandle(event);
+#endif
+    }
     int priority;
     bool wokenUp;
+#ifdef Q_OS_OS2
+    HEV event;
+#else
     HANDLE event;
+#endif
 };
 
 typedef QList<QWaitConditionEvent *> EventQueue;
@@ -53,7 +74,13 @@ QWaitConditionEvent *QWaitConditionPrivate::pre()
     mtx.lock();
     QWaitConditionEvent *wce =
             freeQueue.isEmpty() ? new QWaitConditionEvent : freeQueue.takeFirst();
+#ifdef Q_OS_OS2
+    PTIB ptib;
+    DosGetInfoBlocks(&ptib, NULL);
+    wce->priority = ptib->tib_ptib2->tib2_ulpri;
+#else
     wce->priority = GetThreadPriority(GetCurrentThread());
+#endif
     wce->wokenUp = false;
 
     // insert 'wce' into the queue (sorted by priority)
@@ -72,6 +99,17 @@ QWaitConditionEvent *QWaitConditionPrivate::pre()
 bool QWaitConditionPrivate::wait(QWaitConditionEvent *wce, QDeadlineTimer deadline)
 {
     // wait for the event
+#ifdef Q_OS_OS2
+    while (true) {
+        unsigned long timeout = deadline.isForever()
+                ? -1
+                : deadline.remainingTime();
+        APIRET arc;
+        qDosNI(arc = DosWaitEventSem(wce->event, timeout));
+        bool ret = !arc;
+        return ret;
+    }
+#else
     while (true) {
         const DWORD timeout = deadline.isForever()
                 ? INFINITE
@@ -88,6 +126,7 @@ bool QWaitConditionPrivate::wait(QWaitConditionEvent *wce, QDeadlineTimer deadli
             return false;
         }
     }
+#endif
 }
 
 void QWaitConditionPrivate::post(QWaitConditionEvent *wce, bool ret)
@@ -96,13 +135,22 @@ void QWaitConditionPrivate::post(QWaitConditionEvent *wce, bool ret)
 
     // remove 'wce' from the queue
     queue.removeAll(wce);
+#ifdef Q_OS_OS2
+    ULONG cnt;
+    DosResetEventSem(wce->event, &cnt);
+#else
     ResetEvent(wce->event);
+#endif
     freeQueue.append(wce);
 
     // wakeups delivered after the timeout should be forwarded to the next waiter
     if (!ret && wce->wokenUp && !queue.isEmpty()) {
         QWaitConditionEvent *other = queue.constFirst();
+#ifdef Q_OS_OS2
+        DosPostEventSem(other->event);
+#else
         SetEvent(other->event);
+#endif
         other->wokenUp = true;
     }
 
@@ -178,7 +226,11 @@ void QWaitCondition::wakeOne()
     for (QWaitConditionEvent *current : std::as_const(d->queue)) {
         if (current->wokenUp)
             continue;
+#ifdef Q_OS_OS2
+        DosPostEventSem(current->event);
+#else
         SetEvent(current->event);
+#endif
         current->wokenUp = true;
         break;
     }
@@ -189,7 +241,11 @@ void QWaitCondition::wakeAll()
     // wake up the all threads in the queue
     QMutexLocker locker(&d->mtx);
     for (QWaitConditionEvent *current : std::as_const(d->queue)) {
+#ifdef Q_OS_OS2
+        DosPostEventSem(current->event);
+#else
         SetEvent(current->event);
+#endif
         current->wokenUp = true;
     }
 }

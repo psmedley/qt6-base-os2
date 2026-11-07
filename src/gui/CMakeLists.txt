@@ -19,6 +19,8 @@ if (QT_FEATURE_gui)
         set(_default_platform "ios")
     elseif(WATCHOS)
         set(_default_platform "minimal")
+    elseif(OS2)
+        set(_default_platform "os2")
     elseif(QNX)
         set(_default_platform "qnx")
     elseif(INTEGRITY)
@@ -853,12 +855,12 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_freetype
         WrapFreetype::WrapFreetype
 )
 
-qt_internal_extend_target(Gui CONDITION UNIX AND NOT APPLE
+qt_internal_extend_target(Gui CONDITION (UNIX OR OS2) AND NOT APPLE
     SOURCES
         text/unix/qgenericunixfontdatabase_p.h
 )
 
-qt_internal_extend_target(Gui CONDITION QT_FEATURE_fontconfig AND QT_FEATURE_freetype AND UNIX AND NOT APPLE
+qt_internal_extend_target(Gui CONDITION QT_FEATURE_fontconfig AND QT_FEATURE_freetype AND (UNIX OR OS2) AND NOT APPLE
     SOURCES
         text/unix/qfontconfigdatabase.cpp text/unix/qfontconfigdatabase_p.h
         text/unix/qfontenginemultifontconfig.cpp text/unix/qfontenginemultifontconfig_p.h
@@ -1116,6 +1118,11 @@ qt_internal_extend_target(Gui CONDITION UNIX AND (QT_FEATURE_xcb)
 qt_internal_extend_target(Gui CONDITION TARGET Qt::DBus AND UNIX AND (QT_FEATURE_xcb OR NOT UIKIT)
     LIBRARIES
         Qt::DBus
+)
+
+qt_internal_extend_target(Gui CONDITION OS2
+    SOURCES
+        platform/os2/qos2guieventdispatcher.cpp platform/os2/qos2guieventdispatcher_p.h
 )
 
 qt_internal_extend_target(Gui CONDITION UNIX AND QT_FEATURE_settings AND QT_FEATURE_dbus AND (QT_FEATURE_xcb OR QT_FEATURE_wayland)

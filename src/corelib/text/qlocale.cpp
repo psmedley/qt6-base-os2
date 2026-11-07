@@ -3,6 +3,13 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:critical reason:data-parser
 
+#if defined( __OS2__) && (__GNUC__ >= 10) 
+// GCC newer than 9 has stack alignment issues with this source file
+#pragma GCC push_options
+#pragma GCC target("no-sse")
+#define NO_SSE_OS2
+#endif
+
 #include "qglobal.h"
 
 #if defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 1000
@@ -5760,6 +5767,10 @@ QDebug operator<<(QDebug dbg, const QLocale &l)
 }
 #endif
 QT_END_NAMESPACE
+
+#if defined( __OS2__) && (__GNUC__ >= 10) 
+#pragma GCC pop_options
+#endif
 
 #ifndef QT_NO_QOBJECT
 #include "moc_qlocale.cpp"

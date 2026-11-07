@@ -6,8 +6,12 @@
 #include "qoffscreenwindow.h"
 #include "qoffscreencommon.h"
 
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
+#if defined(Q_OS_OS2)
+#include <QtGui/private/qos2guieventdispatcher_p.h>
+#else
 #include <QtGui/private/qgenericunixeventdispatcher_p.h>
+#endif
 #if defined(Q_OS_APPLE)
 #include <qpa/qplatformfontdatabase.h>
 #include <QtGui/private/qcoretextfontdatabase_p.h>
@@ -62,7 +66,7 @@ public:
 
 QOffscreenIntegration::QOffscreenIntegration(const QStringList& paramList)
 {
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
 #if defined(Q_OS_APPLE)
     m_fontDatabase.reset(new QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>);
 #else
@@ -352,8 +356,12 @@ QPlatformBackingStore *QOffscreenIntegration::createPlatformBackingStore(QWindow
 
 QAbstractEventDispatcher *QOffscreenIntegration::createEventDispatcher() const
 {
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
+#if defined(Q_OS_OS2)
+    return new QOffscreenEventDispatcher<QEventDispatcherOS2>();
+#else
     return createUnixEventDispatcher();
+#endif
 #elif defined(Q_OS_WIN)
     return new QOffscreenEventDispatcher<QEventDispatcherWin32>();
 #else

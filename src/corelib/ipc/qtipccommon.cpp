@@ -39,6 +39,8 @@ static QStringView staticTypeToString(QNativeIpcKey::Type type)
         return u"posix";
     case QNativeIpcKey::Type::Windows:
         return u"windows";
+    case QNativeIpcKey::Type::OS2:
+        return u"os2";
     }
     return {};
 }
@@ -50,6 +52,7 @@ static QString typeToString(QNativeIpcKey::Type type)
     case QNativeIpcKey::Type::SystemV:
     case QNativeIpcKey::Type::PosixRealtime:
     case QNativeIpcKey::Type::Windows:
+    case QNativeIpcKey::Type::OS2:
         return QString::fromRawData(typeString.constData(), typeString.size());
     }
 
@@ -69,6 +72,8 @@ static QNativeIpcKey::Type stringToType(QStringView typeString)
         return QNativeIpcKey::Type::PosixRealtime;
     if (typeString == staticTypeToString(QNativeIpcKey::Type::Windows))
         return QNativeIpcKey::Type::Windows;
+    if (typeString == staticTypeToString(QNativeIpcKey::Type::OS2))
+        return QNativeIpcKey::Type::OS2;
 
     auto fromNumber = [](QStringView number, int low, int high) {
         bool ok;
@@ -130,6 +135,30 @@ QNativeIpcKey QtIpcCommon::legacyPlatformSafeKey(const QString &key, QtIpcCommon
 #endif
     }
 
+    if (type == QNativeIpcKey::Type::OS2) {
+#if defined(Q_OS_OS2)
+        QString native;
+        if (ipcType == IpcType::SharedMemory) {
+            // use the shared mem namespace (prefix must match one in qsharedmemory_p.h!)
+            native = QLatin1String("\\SHAREMEM\\");
+        } else {
+            // assume the semaphore namespace
+            native = QLatin1String("\\SEM32\\");
+        }
+        for (QChar ch : key) {
+            if ((ch >= u'a' && ch <= u'z') ||
+               (ch >= u'A' && ch <= u'Z'))
+               native += ch;
+        }
+        // Make sure the resulting name fits the OS file name limit (note that
+        // SHA-1 is 20 bytes so its hex form length is 40 chars which means it will
+        // always fit given the limit is 260 chars if we take the right part)
+        if (isIpcSupported(ipcType, QNativeIpcKey::Type::OS2))
+            QNativeIpcKeyPrivate::setNativeAndLegacyKeys(k, native, key);
+        return k;
+#endif
+    }
+
     QString result;
     result.reserve(1 + 18 + key.size() + 40);
     switch (ipcType) {
@@ -153,6 +182,27 @@ QNativeIpcKey QtIpcCommon::legacyPlatformSafeKey(const QString &key, QtIpcCommon
         if (isIpcSupported(ipcType, QNativeIpcKey::Type::Windows))
             QNativeIpcKeyPrivate::setNativeAndLegacyKeys(k, result, key);
         return k;
+    case QNativeIpcKey::Type::OS2:
+        {
+            QString native;
+            if (ipcType == IpcType::SharedMemory) {
+                // use the shared mem namespace (prefix must match one in qsharedmemory_p.h!)
+                native = QLatin1String("\\SHAREMEM\\");
+            } else {
+                // assume the semaphore namespace
+                native = QLatin1String("\\SEM32\\");
+            }
+            // Make sure the resulting name fits the OS file name limit (note that
+            // SHA-1 is 20 bytes so its hex form length is 40 chars which means it will
+            // always fit given the limit is 260 chars if we take the right part)
+            int maxlen = CCHMAXPATH - native.length();
+            if (result.length() > maxlen)
+                result = result.right(maxlen);
+            native += result;
+            if (isIpcSupported(ipcType, QNativeIpcKey::Type::OS2))
+                QNativeIpcKeyPrivate::setNativeAndLegacyKeys(k, native, key);
+            return k;
+        }
     case QNativeIpcKey::Type::PosixRealtime:
         result.prepend(u'/');
         if (isIpcSupported(ipcType, QNativeIpcKey::Type::PosixRealtime))
@@ -232,6 +282,19 @@ QNativeIpcKey QtIpcCommon::platformSafeKey(const QString &key, QtIpcCommon::IpcT
 #ifdef Q_OS_WINDOWS
             result.truncate(MAX_PATH);
 #endif
+            k.setNativeKey(result);
+        }
+        return k;
+
+    case QNativeIpcKey::Type::OS2:
+        if (isIpcSupported(ipcType, QNativeIpcKey::Type::OS2)) {
+            QString prefix;
+            switch (ipcType) {
+            case IpcType::SharedMemory:     prefix = QLatin1String("\\SHAREMEM\\"); break;
+            case IpcType::SystemSemaphore:  prefix = QLatin1String("\\SEM32\\"); break;
+            }
+            QString result = prefix + key;
+            result.truncate(CCHMAXPATH);
             k.setNativeKey(result);
         }
         return k;

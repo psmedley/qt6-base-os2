@@ -36,6 +36,7 @@ QT_BEGIN_NAMESPACE
 #ifdef Q_OS_WIN
 #  define QT_SOCKLEN_T int
 #  define QT_SOCKOPTLEN_T int
+
 #endif
 
 namespace {
@@ -59,6 +60,7 @@ inline QT_SOCKLEN_T setSockaddr(sockaddr_in *sin, const QHostAddress &addr, quin
     return sizeof(*sin);
 }
 
+#ifndef Q_OS_OS2
 inline QT_SOCKLEN_T setSockaddr(sockaddr_in6 *sin6, const QHostAddress &addr, quint16 port = 0)
 {
     *sin6 = {};
@@ -74,6 +76,7 @@ inline QT_SOCKLEN_T setSockaddr(sockaddr_in6 *sin6, const QHostAddress &addr, qu
 #endif
     return sizeof(*sin6);
 }
+#endif
 
 inline QT_SOCKLEN_T setSockaddr(sockaddr *sa, const QHostAddress &addr, quint16 port = 0)
 {
@@ -83,8 +86,9 @@ inline QT_SOCKLEN_T setSockaddr(sockaddr *sa, const QHostAddress &addr, quint16 
 
     case QHostAddress::IPv6Protocol:
     case QHostAddress::AnyIPProtocol:
+#ifndef Q_OS_OS2
         return setSockaddr(reinterpret_cast<sockaddr_in6 *>(sa), addr, port);
-
+#endif
     case QHostAddress::UnknownNetworkLayerProtocol:
         break;
     }

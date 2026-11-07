@@ -32,7 +32,7 @@
 
 #include <algorithm>
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <time.h>
 #include <errno.h>
 #include <unistd.h>

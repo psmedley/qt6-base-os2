@@ -207,6 +207,11 @@ public:
     void setUnixProcessParameters(UnixProcessFlags flagsOnly);
 #endif
 
+#if defined(Q_OS_OS2) || defined(Q_CLANG_QDOC)
+    bool threadSafe() const;
+    void setThreadSafe(bool threadSafe);
+#endif // Q_OS_OS2 || Q_CLANG_QDOC
+
     QString workingDirectory() const;
     void setWorkingDirectory(const QString &dir);
 
@@ -277,6 +282,11 @@ private:
     struct Use_setChildProcessModifier_Instead {};
     QT_DEPRECATED_X("Use setChildProcessModifier() instead")
     virtual Use_setChildProcessModifier_Instead setupChildProcess();
+#endif
+#if defined(Q_OS_OS2)
+
+    Q_PRIVATE_SLOT(d_func(), void _q_notified(int))
+    friend class QProcessManager;
 #endif
 };
 

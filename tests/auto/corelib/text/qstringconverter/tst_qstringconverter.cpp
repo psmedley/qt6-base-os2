@@ -42,6 +42,11 @@ static bool localeIsUtf8()
 {
     return GetACP() == CP_UTF8;
 }
+#elif defined(Q_OS_OS2)
+static constexpr bool localeIsUtf8()
+{
+    return false;
+}
 #else
 static constexpr bool localeIsUtf8()
 {

@@ -692,6 +692,29 @@ qt_internal_extend_target(Core CONDITION WIN32
         userenv
 )
 
+qt_internal_extend_target(Core CONDITION OS2
+    SOURCES
+        global/qt_os2.h
+        global/qoperatingsystemversion_os2.cpp
+        io/qprocess_os2.cpp
+        io/qfsfileengine_unix.cpp
+        io/qfilesystemengine_unix.cpp
+        io/qlockfile_os2.cpp
+        io/qfilesystemiterator_unix.cpp
+        io/qstandardpaths_unix.cpp
+        io/qsettings.cpp io/qsettings.h io/qsettings_p.h
+        kernel/qcore_unix.cpp kernel/qcore_unix_p.h
+        kernel/qeventdispatcher_os2.cpp kernel/qeventdispatcher_os2_p.h
+        kernel/qtimerinfo_unix.cpp kernel/qtimerinfo_unix_p.h
+        ipc/qsharedmemory_os2.cpp
+        ipc/qsystemsemaphore_os2.cpp
+        text/qlocale_unix.cpp
+        thread/qthread_os2.cpp
+        thread/qmutex_os2.cpp
+        thread/qwaitcondition_win.cpp
+        io/qstorageinfo_unix.cpp
+)
+
 qt_internal_extend_target(Core CONDITION WIN32
     NO_UNITY_BUILD_SOURCES
         global/qsimd.cpp # Q_DECL_INIT_PRIORITY
@@ -1365,7 +1388,8 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND APPLE
         plugin/qlibrary_unix.cpp
         plugin/qmachparser.cpp plugin/qmachparser_p.h
 )
-qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND UNIX AND NOT APPLE
+
+qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND (UNIX OR OS2) AND NOT APPLE
     SOURCES
         plugin/qelfparser_p.cpp plugin/qelfparser_p.h
         plugin/qlibrary_unix.cpp
@@ -1386,7 +1410,7 @@ qt_internal_extend_target(Core CONDITION WATCHOS
         ${FWWatchKit}
 )
 
-qt_internal_extend_target(Core CONDITION QT_FEATURE_poll_select AND UNIX
+qt_internal_extend_target(Core CONDITION QT_FEATURE_poll_select AND (UNIX OR OS2)
     SOURCES
         kernel/qpoll.cpp
 )
@@ -1409,17 +1433,17 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_posix_shm AND UNIX
     LIBRARIES
         WrapRt::WrapRt
 )
-qt_internal_extend_target(Core CONDITION QT_FEATURE_sysv_shm
+qt_internal_extend_target(Core CONDITION QT_FEATURE_sysv_shm AND NOT OS2
     SOURCES
         ipc/qsharedmemory_systemv.cpp
 )
-qt_internal_extend_target(Core CONDITION QT_FEATURE_posix_sem
+qt_internal_extend_target(Core CONDITION QT_FEATURE_posix_sem AND NOT OS2
     SOURCES
         ipc/qsystemsemaphore_posix.cpp
     LIBRARIES
         WrapRt::WrapRt
 )
-qt_internal_extend_target(Core CONDITION QT_FEATURE_sysv_sem
+qt_internal_extend_target(Core CONDITION QT_FEATURE_sysv_sem AND NOT OS2
     SOURCES
         ipc/qsystemsemaphore_systemv.cpp
 )

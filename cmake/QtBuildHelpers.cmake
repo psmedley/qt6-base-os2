@@ -123,7 +123,7 @@ macro(qt_internal_set_qt_path_separator)
     # For adjusting variables when running tests, we need to know what
     # the correct variable is for separating entries in PATH-alike
     # variables.
-    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+    if((CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows") OR (CMAKE_HOST_SYSTEM_NAME STREQUAL "OS2"))
         set(QT_PATH_SEPARATOR "\\;")
     else()
         set(QT_PATH_SEPARATOR ":")

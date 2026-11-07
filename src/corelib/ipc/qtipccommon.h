@@ -26,12 +26,15 @@ public:
 
         PosixRealtime = 0x100,
         Windows,
+        OS2,
     };
     Q_ENUM(Type)
 
     static constexpr Type DefaultTypeForOs =
 #ifdef Q_OS_WIN
             Type::Windows
+#elif defined(Q_OS_OS2)
+            Type::OS2
 #else
             Type::PosixRealtime
 #endif
@@ -194,6 +197,8 @@ inline auto QNativeIpcKey::legacyDefaultTypeForOs() noexcept -> Type
 {
 #if defined(Q_OS_WIN)
     return Type::Windows;
+#elif defined(Q_OS_OS2)
+    return Type::OS2;
 #elif defined(QT_POSIX_IPC) || defined(Q_OS_HARMONY)
     return Type::PosixRealtime;
 #elif defined(Q_OS_DARWIN)

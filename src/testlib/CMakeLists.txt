@@ -159,7 +159,7 @@ qt_internal_extend_target(Test CONDITION OHOS
         hilog_ndk.z
 )
 
-qt_internal_extend_target(Test CONDITION UNIX
+qt_internal_extend_target(Test CONDITION UNIX OR OS2
     SOURCES
         qtestcrashhandler_unix.cpp
 )

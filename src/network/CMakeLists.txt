@@ -226,6 +226,17 @@ qt_internal_extend_target(Network CONDITION WIN32
         NOMINMAX
 )
 
+qt_internal_extend_target(Network CONDITION OS2
+    SOURCES
+        kernel/qhostinfo_unix.cpp
+        kernel/qnetworkinterface_unix.cpp
+        socket/qnativesocketengine_unix.cpp
+        socket/qnet_unix_p.h
+        kernel/qnetworkproxy_generic.cpp
+    DEFINES
+        QT_NO_IPV6
+)
+
 qt_internal_extend_target(Network CONDITION APPLE AND NOT UIKIT
     LIBRARIES
         ${FWCoreServices}
@@ -244,6 +255,11 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND QT_FEATURE_
         WrapResolv::WrapResolv
 )
 
+qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND OS2
+    SOURCES
+        kernel/qdnslookup_os2.cpp
+)
+
 qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND QT_FEATURE_harmony_dnsresolver
     SOURCES
         kernel/qdnslookup_unix.cpp
@@ -256,7 +272,7 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND WIN32
 
 qt_internal_extend_target(Network
     CONDITION QT_FEATURE_dnslookup AND NOT QT_FEATURE_libresolv
-              AND NOT QT_FEATURE_harmony_dnsresolver AND NOT WIN32
+              AND NOT QT_FEATURE_harmony_dnsresolver AND NOT WIN32 AND NOT OS2
     SOURCES
         kernel/qdnslookup_dummy.cpp
 )
@@ -344,7 +360,7 @@ qt_internal_extend_target(Network CONDITION INTEGRITY AND QT_FEATURE_localserver
         QT_LOCALSOCKET_TCP
 )
 
-qt_internal_extend_target(Network CONDITION QT_FEATURE_localserver AND UNIX AND NOT INTEGRITY
+qt_internal_extend_target(Network CONDITION QT_FEATURE_localserver AND (UNIX OR OS2) AND NOT INTEGRITY
     SOURCES
         socket/qlocalserver_unix.cpp
         socket/qlocalsocket_unix.cpp

@@ -1565,7 +1565,7 @@ QString QUrlPrivate::toLocalFile(QUrl::FormattingOptions options) const
         tmp += ourPath;
     } else {
         tmp = ourPath;
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         // magic for drives on windows
         if (ourPath.length() > 2 && ourPath.at(0) == u'/' && ourPath.at(2) == u':')
             tmp.remove(0, 1);

@@ -65,7 +65,7 @@ using namespace Qt::StringLiterals;
 # define SUFFIX         ".so"
 # define PREFIX         "lib"
 
-#elif defined(Q_OS_WIN)
+#elif defined(Q_OS_DOSLIKE)
 # undef dll_VALID
 # define dll_VALID      true
 # if !defined(QT_NO_DEBUG) && defined(Q_CC_MSVC)
@@ -171,6 +171,15 @@ static std::unique_ptr<QTemporaryFile> patchElf(const QString &source, ElfPatche
     })
 #endif // Q_OF_ELF
 
+// OS/2 doesn't support DLL snames longer than 8 chars.
+#if defined(Q_OS_OS2)
+# define THEPLUGIN "plugin"
+# define TST_QPLUGINLOADERLIB "tstpllib"
+#else
+# define THEPLUGIN "theplugin"
+# define TST_QPLUGINLOADERLIB "tst_qpluginloaderlib"
+#endif
+
 static QString sys_qualifiedLibraryName(const QString &fileName)
 {
 #ifdef Q_OS_ANDROID
@@ -244,7 +253,7 @@ void tst_QPluginLoader::cleanup()
     // so we report it only once.
     static bool failedAlready = false;
     if (!failedAlready) {
-        QLibrary lib(sys_qualifiedLibraryName("theplugin"));
+        QLibrary lib(sys_qualifiedLibraryName(THEPLUGIN));
         failedAlready = true;
         QVERIFY2(!lib.isLoaded(), "Plugin was leaked - will not check again");
         failedAlready = false;
@@ -274,7 +283,7 @@ void tst_QPluginLoader::errorString()
     QVERIFY(!unloaded);
     }
     {
-    QPluginLoader loader( sys_qualifiedLibraryName("tst_qpluginloaderlib"));     //not a plugin
+    QPluginLoader loader( sys_qualifiedLibraryName(TST_QPLUGINLOADERLIB));       //not a plugin
     bool loaded = loader.load();
     QVERIFY(loader.errorString() != unknown);
     QVERIFY(!loaded);
@@ -324,7 +333,7 @@ void tst_QPluginLoader::errorString()
 #endif
 
     static constexpr std::initializer_list<const char *> validplugins = {
-        "theplugin",
+        THEPLUGIN,
 #if defined(Q_OF_ELF) && QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
         "theoldplugin"
 #endif
@@ -371,7 +380,7 @@ void tst_QPluginLoader::loadHints()
     // Set the hints again
     loader.setLoadHints(QLibrary::ResolveAllSymbolsHint);
     QCOMPARE(loader.loadHints(), QLibrary::ResolveAllSymbolsHint);
-    loader.setFileName( sys_qualifiedLibraryName("theplugin"));     //a plugin
+    loader.setFileName( sys_qualifiedLibraryName(THEPLUGIN));       //a plugin
     QCOMPARE(loader.loadHints(), QLibrary::ResolveAllSymbolsHint);
 
     QPluginLoader loader4;
@@ -387,11 +396,11 @@ void tst_QPluginLoader::loadHints()
 
     QPluginLoader loader2;
     QCOMPARE(loader2.loadHints(), QLibrary::PreventUnloadHint);
-    loader2.setFileName(sys_qualifiedLibraryName("theplugin"));
+    loader2.setFileName(sys_qualifiedLibraryName(THEPLUGIN));
     // Hints are merged with hints from previous loaders.
     QCOMPARE(loader2.loadHints(), QLibrary::PreventUnloadHint | QLibrary::ResolveAllSymbolsHint);
 
-    QPluginLoader loader3(sys_qualifiedLibraryName("theplugin"));
+    QPluginLoader loader3(sys_qualifiedLibraryName(THEPLUGIN));
     QCOMPARE(loader3.loadHints(), QLibrary::PreventUnloadHint | QLibrary::ResolveAllSymbolsHint);
 }
 
@@ -402,7 +411,7 @@ void tst_QPluginLoader::deleteinstanceOnUnload()
 #endif
     for (int pass = 0; pass < 2; ++pass) {
         QPluginLoader loader1;
-        loader1.setFileName( sys_qualifiedLibraryName("theplugin"));     //a plugin
+        loader1.setFileName( sys_qualifiedLibraryName(THEPLUGIN));       //a plugin
         if (pass == 0)
             loader1.load(); // not recommended, instance() should do the job.
         PluginInterface *instance1 = qobject_cast<PluginInterface*>(loader1.instance());
@@ -410,7 +419,7 @@ void tst_QPluginLoader::deleteinstanceOnUnload()
         QCOMPARE(instance1->pluginName(), QLatin1String("Plugin ok"));
 
         QPluginLoader loader2;
-        loader2.setFileName( sys_qualifiedLibraryName("theplugin"));     //a plugin
+        loader2.setFileName( sys_qualifiedLibraryName(THEPLUGIN));       //a plugin
         if (pass == 0)
             loader2.load(); // not recommended, instance() should do the job.
         PluginInterface *instance2 = qobject_cast<PluginInterface*>(loader2.instance());
@@ -983,7 +992,7 @@ void tst_QPluginLoader::relativePath()
     const QString binDir = QFINDTESTDATA("bin");
     QVERIFY(!binDir.isEmpty());
     QCoreApplication::addLibraryPath(binDir);
-    const QString pluginName("theplugin" SUFFIX);
+    const QString pluginName(THEPLUGIN SUFFIX);
 #endif
     QPluginLoader loader(pluginName);
     loader.load(); // not recommended, instance() should do the job.
@@ -1017,7 +1026,7 @@ void tst_QPluginLoader::absolutePath()
     const QString binDir = QFINDTESTDATA("bin");
     QVERIFY(!binDir.isEmpty());
     QVERIFY(QDir::isAbsolutePath(binDir));
-    const QString pluginPath(binDir + "/" PREFIX "theplugin" SUFFIX);
+    const QString pluginPath(binDir + "/" PREFIX THEPLUGIN SUFFIX);
 #endif
     QPluginLoader loader(pluginPath);
     loader.load(); // not recommended, instance() should do the job.
@@ -1037,7 +1046,7 @@ void tst_QPluginLoader::reloadPlugin()
     QSKIP("This test requires Qt to create shared libraries.");
 #endif
     QPluginLoader loader;
-    loader.setFileName( sys_qualifiedLibraryName("theplugin"));     //a plugin
+    loader.setFileName( sys_qualifiedLibraryName(THEPLUGIN));       //a plugin
     loader.load(); // not recommended, instance() should do the job.
     PluginInterface *instance = qobject_cast<PluginInterface*>(loader.instance());
     QVERIFY(instance);
@@ -1114,10 +1123,10 @@ void tst_QPluginLoader::preloadedPlugin_data()
 {
     QTest::addColumn<bool>("doLoad");
     QTest::addColumn<QString>("libname");
-    QTest::newRow("create-plugin") << false << sys_qualifiedLibraryName("theplugin");
-    QTest::newRow("load-plugin") << true << sys_qualifiedLibraryName("theplugin");
-    QTest::newRow("create-non-plugin") << false << sys_qualifiedLibraryName("tst_qpluginloaderlib");
-    QTest::newRow("load-non-plugin") << true << sys_qualifiedLibraryName("tst_qpluginloaderlib");
+    QTest::newRow("create-plugin") << false << sys_qualifiedLibraryName(THEPLUGIN);
+    QTest::newRow("load-plugin") << true << sys_qualifiedLibraryName(THEPLUGIN);
+    QTest::newRow("create-non-plugin") << false << sys_qualifiedLibraryName(TST_QPLUGINLOADERLIB);
+    QTest::newRow("load-non-plugin") << true << sys_qualifiedLibraryName(TST_QPLUGINLOADERLIB);
 }
 
 void tst_QPluginLoader::preloadedPlugin()

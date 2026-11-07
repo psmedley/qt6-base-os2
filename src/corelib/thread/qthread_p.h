@@ -33,6 +33,10 @@
 
 #include <atomic>
 
+#if defined(Q_OS_OS2)
+# include "qt_os2.h"
+#endif
+
 QT_BEGIN_NAMESPACE
 
 class QAbstractEventDispatcher;
@@ -238,9 +242,19 @@ public:
     Qt::HANDLE handle;
     bool terminationEnabled, terminatePending;
 #endif // Q_OS_WIN
+
+#ifdef Q_OS_OS2
+    static void start(void *) Q_DECL_NOEXCEPT;
+    static void finish(void *, bool lockAnyway=true) Q_DECL_NOEXCEPT;
+
+    TID tid;
+    bool terminationEnabled, terminatePending;
+#endif // Q_OS_OS2
+
 #ifdef Q_OS_WASM
     static int idealThreadCount;
 #endif
+
     QThreadData *data;
 
     static QAbstractEventDispatcher *createEventDispatcher(QThreadData *data);

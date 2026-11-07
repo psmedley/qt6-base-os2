@@ -29,7 +29,7 @@ public:
     ~QPrintDialog();
 
     int exec() override;
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+#if defined(Q_OS_UNIXLIKE) && !defined(Q_OS_MACOS)
     virtual void accept() override;
 #endif
     void done(int result) override;
@@ -39,7 +39,7 @@ public:
     void setOptions(PrintDialogOptions options);
     PrintDialogOptions options() const;
 
-#if defined(Q_OS_UNIX) || defined(Q_OS_WIN)
+#if defined(Q_OS_UNIXLIKE) || defined(Q_OS_WIN)
     void setVisible(bool visible) override;
 #endif
 
@@ -56,14 +56,14 @@ Q_SIGNALS:
     void accepted(QPrinter *printer);
 
 private:
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+#if defined(Q_OS_UNIXLIKE) && !defined(Q_OS_MACOS)
     Q_PRIVATE_SLOT(d_func(), void _q_togglePageSetCombo(bool))
     Q_PRIVATE_SLOT(d_func(), void _q_collapseOrExpandDialog())
 #if QT_CONFIG(messagebox)
     Q_PRIVATE_SLOT(d_func(), void _q_checkFields())
 #endif // QT_CONFIG(messagebox)
     friend class QUnixPrintWidget;
-# endif // Q_OS_UNIX
+# endif // Q_OS_UNIXLIKE
 };
 
 QT_END_NAMESPACE

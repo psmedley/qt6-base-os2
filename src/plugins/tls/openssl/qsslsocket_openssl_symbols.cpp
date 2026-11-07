@@ -30,7 +30,7 @@
 # include <QtCore/qlibrary.h>
 #endif
 #include <QtCore/qdatetime.h>
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
 #include <QtCore/qdir.h>
 #include <QtCore/qdirlisting.h>
 #endif
@@ -516,10 +516,17 @@ DEFINEFUNC(void, EC_KEY_free, EC_KEY *ecdh, ecdh, return, DUMMYARG)
 
 #endif
 
+#ifdef Q_OS_OS2
+#define RESOLVEFUNC(func) \
+    if (!(_q_##func = _q_PTR_##func(libs.first->resolve("_"#func)))     \
+        && !(_q_##func = _q_PTR_##func(libs.second->resolve("_"#func)))) \
+        qsslSocketCannotResolveSymbolWarning(#func);
+#else
 #define RESOLVEFUNC(func) \
     if (!(_q_##func = _q_PTR_##func(libs.ssl->resolve(#func)))     \
         && !(_q_##func = _q_PTR_##func(libs.crypto->resolve(#func)))) \
         qsslSocketCannotResolveSymbolWarning(#func);
+#endif
 
 #if !defined QT_LINKED_OPENSSL
 
@@ -534,7 +541,7 @@ bool q_resolveOpenSslSymbols()
 }
 #else
 
-# ifdef Q_OS_UNIX
+# ifdef Q_OS_UNIXLIKE
 struct NumericallyLess
 {
     typedef bool result_type;
@@ -605,9 +612,16 @@ static QStringList libraryPathList()
 #  else
     paths = QString::fromLatin1(qgetenv("LD_LIBRARY_PATH")).split(u':', Qt::SkipEmptyParts);
 #  endif
+#  ifdef Q_OS_OS2
+    // local/lib should be checked before lib/. We might also support LIBPATH similarly to LD_LIBRARY_PATH
+    // later - but since it not exposed via getenv, parsing CONFIG.SYS is needed. Once it's done,
+    // the below line is not needed as LIBPATH contains both.
+    paths << "/@unixroot/usr/local/lib"_L1 << "/@unixroot/usr/lib"_L1;
+#  else
     paths << "/lib"_L1 << "/usr/lib"_L1 << "/usr/local/lib"_L1;
     paths << "/lib64"_L1 << "/usr/lib64"_L1 << "/usr/local/lib64"_L1;
     paths << "/lib32"_L1 << "/usr/lib32"_L1 << "/usr/local/lib32"_L1;
+#  endif
 
 #if defined(Q_OS_ANDROID)
     paths << "/system/lib"_L1;
@@ -650,6 +664,8 @@ static QStringList findAllLibSsl()
 {
 #if defined(Q_OS_HARMONY)
     return findAllLibs("libssl_openssl*"_L1);
+#elif defined(Q_OS_OS2)
+    return findAllLibs("ssl*.dll"_L1);
 #else
     return findAllLibs("libssl.*"_L1);
 #endif
@@ -659,6 +675,8 @@ static QStringList findAllLibCrypto()
 {
 #if defined(Q_OS_HARMONY)
     return findAllLibs("libcrypto_openssl*"_L1);
+#elif defined(Q_OS_OS2)
+    return findAllLibs("crypto*.dll"_L1);
 #else
     return findAllLibs("libcrypto.*"_L1);
 #endif
@@ -728,7 +746,7 @@ static LoadedOpenSsl loadOpenSsl()
 {
     LoadedOpenSsl result = { std::make_unique<QLibrary>(), std::make_unique<QLibrary>() };
 
-# if defined(Q_OS_UNIX)
+# if defined(Q_OS_UNIXLIKE)
     QLibrary * const libssl = result.ssl.get();
     QLibrary * const libcrypto = result.crypto.get();
 

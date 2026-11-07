@@ -54,6 +54,8 @@ public:
 
     static constexpr QSystemError nativeError(int error)
     { return QSystemError(error, NativeError); }
+#elif defined(Q_OS_OS2)
+    static Q_CORE_EXPORT QString os2String(int errorCode = -1);
 #endif
 
     // data members

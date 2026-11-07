@@ -16,7 +16,7 @@
 #include <QtCore/qttranslation.h>
 #include "private/qiodevice_p.h"
 #include "private/qtemporaryfile_p.h"
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <errno.h>
 #endif
 
@@ -169,7 +169,7 @@ bool QSaveFilePrivate::open(QIODevice::OpenMode mode)
     // request it from the file engine.
     if (!fileEngine->open(mode | QIODevice::Unbuffered)) {
         QFileDevice::FileError err = fileEngine->error();
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
         if (directWriteFallback && err == QFileDevice::OpenError && errno == EACCES) {
             if (openDirectly())
                 return true;

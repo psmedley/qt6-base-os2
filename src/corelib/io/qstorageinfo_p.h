@@ -21,6 +21,9 @@
 #include <QtCore/qtenvironmentvariables.h>
 #include <QtCore/private/qglobal_p.h>
 #include "qstorageinfo.h"
+#ifdef Q_OS_OS2
+#include "QtCore/qt_os2.h"
+#endif
 
 #ifdef Q_OS_UNIX
 #include <sys/types.h> // dev_t
@@ -43,6 +46,13 @@ public:
     {
 #ifdef Q_OS_WIN
         return QStorageInfo(QDir::fromNativeSeparators(QFile::decodeName(qgetenv("SystemDrive"))));
+#elif defined(Q_OS_OS2)
+        char root[] = "C:/"; // fallback to C: on any error
+        ULONG drive;
+        APIRET arc = DosQuerySysInfo(QSV_BOOT_DRIVE, QSV_BOOT_DRIVE, &drive, sizeof(drive));
+        if (arc == NO_ERROR && drive >= 1 && drive <= 26)
+        root[0] = 'A' + --drive;
+        return QStorageInfo(QLatin1String(root));
 #else
         return QStorageInfo(QStringLiteral("/"));
 #endif
@@ -56,7 +66,6 @@ protected:
     bool queryStorageProperty();
     void queryFileFsSectorSizeInformation();
 #elif defined(Q_OS_DARWIN)
-    void initRootPath();
     void retrievePosixInfo();
     void retrieveUrlProperties(bool initRootPath = false);
     void retrieveLabel();
@@ -86,7 +95,7 @@ public:
         setFromMountInfo(std::move(info));
     }
 
-#elif defined(Q_OS_UNIX)
+#elif defined(Q_OS_UNIX) || defined(Q_OS_OS2)
     void initRootPath();
     void retrieveVolumeInfo();
 #endif

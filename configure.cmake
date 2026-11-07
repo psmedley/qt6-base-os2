@@ -227,7 +227,7 @@ endif()
 qt_feature("version_tagging"
     PUBLIC
     AUTODETECT TRUE
-    CONDITION TEST_ld_version_script OR APPLE OR WIN32
+    CONDITION TEST_ld_version_script OR APPLE OR WIN32 OR OS2
 )
 qt_feature_definition("version_tagging" "QT_NO_VERSION_TAGGING" NEGATE)
 
@@ -1229,7 +1229,7 @@ qt_feature("static_compiler_runtime" PUBLIC
 )
 qt_feature("dlopen" PRIVATE
     LABEL "dlopen()"
-    CONDITION UNIX AND NOT INTEGRITY
+    CONDITION (UNIX OR OS2) AND NOT INTEGRITY
 )
 qt_feature("relocatable" PRIVATE
     LABEL "Relocatable"

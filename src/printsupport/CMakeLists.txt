@@ -84,7 +84,7 @@ qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printpreviewwidget
         widgets/qprintpreviewwidget.cpp widgets/qprintpreviewwidget.h
 )
 
-qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cups AND UNIX AND NOT APPLE
+qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cups AND (UNIX OR OS2) AND NOT APPLE
     SOURCES
         kernel/qcups.cpp kernel/qcups_p.h
 )
@@ -97,12 +97,12 @@ qt_internal_extend_target(PrintSupportPrivate CONDITION QT_FEATURE_cups AND UNIX
 )
 # Ensure that PrintSupport requires Cups if the 'cups' feature enabled and
 # Cups is never linked.
-if(QT_FEATURE_cups AND UNIX AND NOT APPLE)
+if(QT_FEATURE_cups AND (UNIX OR OS2) AND NOT APPLE)
     qt_internal_add_target_include_dirs(PrintSupport Cups::Cups)
     qt_record_extra_third_party_dependency(PrintSupport Cups::Cups)
 endif()
 
-qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cupsjobwidget AND UNIX AND NOT APPLE
+qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cupsjobwidget AND (UNIX OR OS2) AND NOT MACOS
     SOURCES
         widgets/qcupsjobwidget.cpp widgets/qcupsjobwidget.ui widgets/qcupsjobwidget_p.h
     ENABLE_AUTOGEN_TOOLS
@@ -191,7 +191,7 @@ qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printdialog AND WIN3
         dialogs/qprintdialog_win.cpp
 )
 
-qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printdialog AND UNIX AND NOT MACOS
+qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printdialog AND (UNIX OR OS2) AND NOT APPLE
     SOURCES
         dialogs/qpagesetupdialog_unix.cpp dialogs/qpagesetupdialog_unix_p.h
         dialogs/qprintdialog_unix.cpp

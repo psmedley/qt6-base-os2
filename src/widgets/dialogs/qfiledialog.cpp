@@ -1052,7 +1052,7 @@ QUrl QFileDialog::directoryUrl() const
 static inline bool isCaseSensitiveFileSystem(const QString &path)
 {
     Q_UNUSED(path);
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     // Return case insensitive unconditionally, even if someone has a case sensitive
     // file system mounted, wrongly capitalized drive letters will cause mismatches.
     return false;
@@ -1076,8 +1076,8 @@ static inline QString fileFromPath(const QString &rootPath, QString path)
         return path;
 
     if (path.at(0) == QDir::separator()
-#ifdef Q_OS_WIN
-            //On Windows both cases can happen
+#ifdef Q_OS_DOSLIKE
+            //On Windows and OS/2 both cases can happen
             || path.at(0) == u'/'
 #endif
             ) {
@@ -1824,7 +1824,7 @@ QLineEdit *QFileDialogPrivate::lineEdit() const {
 
 long QFileDialogPrivate::maxNameLength(const QString &path)
 {
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
     return ::pathconf(QFile::encodeName(path).data(), _PC_NAME_MAX);
 #elif defined(Q_OS_WIN)
     DWORD maxLength;
@@ -4223,7 +4223,7 @@ QStringList QFSCompleter::splitPath(const QString &path) const
 
     QString pathCopy = QDir::toNativeSeparators(path);
     QChar sep = QDir::separator();
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     if (pathCopy == "\\"_L1 || pathCopy == "\\\\"_L1)
         return QStringList(pathCopy);
     QString doubleSlash("\\\\"_L1);
@@ -4246,7 +4246,7 @@ QStringList QFSCompleter::splitPath(const QString &path) const
     }
 #endif
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QStringList parts = pathCopy.split(sep, Qt::SkipEmptyParts);
     if (!doubleSlash.isEmpty() && !parts.isEmpty())
         parts[0].prepend(doubleSlash);
@@ -4258,7 +4258,7 @@ QStringList QFSCompleter::splitPath(const QString &path) const
         parts[0] = sep;
 #endif
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     bool startsFromRoot = !parts.isEmpty() && parts[0].endsWith(u':');
 #else
     bool startsFromRoot = pathCopy[0] == sep;
@@ -4270,7 +4270,7 @@ QStringList QFSCompleter::splitPath(const QString &path) const
         else
             dirModel = sourceModel;
         QString currentLocation = QDir::toNativeSeparators(dirModel->rootPath());
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
         if (currentLocation.endsWith(u':'))
             currentLocation.append(sep);
 #endif

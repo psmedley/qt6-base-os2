@@ -67,7 +67,9 @@ QStringList QLibraryPrivate::suffixes_sys(const QString &fullVersion)
     }
 #elif defined(Q_OS_AIX)
     suffixes << ".a";
-
+#elif defined(Q_OS_OS2)
+    Q_UNUSED(fullVersion);
+    return QStringList(QStringLiteral(".dll"));
 #else
     if (!fullVersion.isEmpty()) {
         suffixes << ".so.%1"_L1.arg(fullVersion);
@@ -256,6 +258,11 @@ bool QLibraryPrivate::load_sys()
 
 bool QLibraryPrivate::unload_sys()
 {
+#if defined(Q_OS_OS2) && !defined(RTLD_NODELETE)
+    // Currently, LIBC doesn't support RTLD_NODELETE. Emulate it by not actually unloading the
+    // library (it will be unloaded by the system at process termination).
+    if (!(loadHints() & QLibrary::PreventUnloadHint)) {
+#endif
     bool doTryUnload = true;
 #ifndef RTLD_NODELETE
     if (loadHints() & QLibrary::PreventUnloadHint)
@@ -273,6 +280,9 @@ bool QLibraryPrivate::unload_sys()
                 .arg(fileName, QString::fromLocal8Bit(error));
         return false;
     }
+#if defined(Q_OS_OS2) && !defined(RTLD_NODELETE)
+    }
+#endif
     errorString.clear();
     return true;
 }

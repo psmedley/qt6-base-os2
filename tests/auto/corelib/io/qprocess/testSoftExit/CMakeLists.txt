@@ -21,3 +21,8 @@ qt_internal_extend_target(testSoftExit CONDITION UNIX
     SOURCES
         main_unix.cpp
 )
+
+qt_internal_extend_target(testSoftExit CONDITION OS2
+    SOURCES
+        main_os2.cpp
+)

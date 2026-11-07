@@ -174,6 +174,8 @@ public:
 
     mutable int cachedFd;
     mutable DWORD fileAttrib;
+#elif defined(Q_OS_OS2)
+    QMultiHash<uchar *, std::pair<int /*offset % PageSize*/, size_t /*length + offset % PageSize*/> > maps;
 #else
     struct StartAndLength {
         int start;     // offset % PageSize
@@ -256,7 +258,7 @@ protected:
 
     QAbstractFileEngine::FileFlags getPermissions(QAbstractFileEngine::FileFlags type) const;
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
     bool nativeOpenImpl(QIODevice::OpenMode openMode, mode_t mode);
 #endif
 };

@@ -53,7 +53,7 @@ public:
     Q_AUTOTEST_EXPORT bool isRelative() const;
     Q_AUTOTEST_EXPORT bool isClean() const;
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     Q_AUTOTEST_EXPORT bool isDriveRoot() const;
     static bool isDriveRootPath(const QString &path);
     static QString removeUncOrLongPathPrefix(QString path);

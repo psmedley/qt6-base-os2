@@ -23,7 +23,7 @@
 #include <QtCore/qstring.h>
 #include <QtCore/qlist.h>
 
-#if (defined Q_OS_MACOS) || (defined Q_OS_UNIX && QT_CONFIG(cups))
+#if (defined Q_OS_MACOS) || (defined Q_OS_UNIXLIKE && QT_CONFIG(cups))
 #include <cups/ppd.h>  // Use for type defs only, don't want to actually link in main module
 // ### QT_DECL_METATYPE_EXTERN_TAGGED once there's a qprint.cpp TU
 Q_DECLARE_METATYPE(ppd_file_t *)
@@ -143,7 +143,7 @@ Q_PRINTSUPPORT_EXPORT QPrint::OutputBinId outputBinKeyToOutputBinId(const QByteA
 Q_PRINTSUPPORT_EXPORT QByteArray outputBinIdToOutputBinKey(QPrint::OutputBinId id);
 Q_PRINTSUPPORT_EXPORT QPrint::InputSlot paperBinToInputSlot(int windowsId, const QString &name);
 
-#    if (defined Q_OS_MACOS) || (defined Q_OS_UNIX && QT_CONFIG(cups))
+#    if (defined Q_OS_MACOS) || (defined Q_OS_UNIXLIKE && QT_CONFIG(cups))
 // PPD utilities shared by CUPS and Mac plugins requiring CUPS headers
 // May turn into a proper internal QPpd class if enough shared between Mac and CUPS,
 // but where would it live?  Not in base module as don't want to link to CUPS.

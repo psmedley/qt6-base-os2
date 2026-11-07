@@ -9,11 +9,10 @@
 # And other helper scripts.
 function(qt_internal_create_wrapper_scripts)
     # Provide a convenience cmake wrapper.
-
     if(QT_GENERATE_WRAPPER_SCRIPTS_FOR_ALL_HOSTS)
         set(generate_unix TRUE)
         set(generate_non_unix TRUE)
-    elseif(CMAKE_HOST_UNIX)
+    elseif(CMAKE_HOST_UNIX OR OS2)
         set(generate_unix TRUE)
     else()
         set(generate_non_unix TRUE)
@@ -81,7 +80,7 @@ export CMAKE_GENERATOR=Xcode
     endif()
     if(generate_non_unix)
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/qt-cmake.bat.in"
-            "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-cmake-private.bat" @ONLY
+           "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-cmake-private.bat" @ONLY
             NEWLINE_STYLE CRLF)
         qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-cmake-private.bat"
                DESTINATION "${INSTALL_BINDIR}")
@@ -125,7 +124,7 @@ export CMAKE_GENERATOR=Xcode
             "${__relative_path_to_cmake_scripts_dir}")
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/qt-configure-module.bat.in"
             "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-configure-module.bat" @ONLY
-            NEWLINE_STYLE CRLF)
+             NEWLINE_STYLE CRLF)
         qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-configure-module.bat"
             DESTINATION "${INSTALL_BINDIR}")
     endif()

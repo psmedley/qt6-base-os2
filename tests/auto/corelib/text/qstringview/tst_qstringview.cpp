@@ -116,7 +116,7 @@ static_assert(CanConvert<QtPrivate::XmlStringRef>::value);
 //
 
 constexpr bool CanConvertFromWCharT =
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         true
 #else
         false

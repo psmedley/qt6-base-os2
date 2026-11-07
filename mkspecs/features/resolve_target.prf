@@ -15,9 +15,9 @@ exclusive_builds: load(exclusive_builds_post)
 
 QMAKE_RESOLVED_TARGET = $$absolute_path($$DESTDIR, $$OUT_PWD)/
 
-win32 {
+win32|os2 {
     contains(TEMPLATE, .*lib) {
-        !skip_target_version_ext:isEmpty(TARGET_VERSION_EXT):!isEmpty(VERSION) {
+        !os2:!skip_target_version_ext:isEmpty(TARGET_VERSION_EXT):!isEmpty(VERSION) {
             TARGET_VERSION_EXT = $$section(VERSION, ., 0, 0)
         }
         static:TARGET_EXT = .lib
@@ -27,7 +27,7 @@ win32 {
     }
     QMAKE_RESOLVED_TARGET = $${QMAKE_RESOLVED_TARGET}$${TARGET}$${TARGET_VERSION_EXT}$${TARGET_EXT}
 } else {
-    contains(TEMPLATE, .*lib):!if(plugin:no_plugin_name_prefix): LIBPREFIX = lib
+    contains(TEMPLATE, .*lib):!if(plugin:no_plugin_name_prefix): LIBPREFIX = $${QMAKE_PREFIX_SHLIB}
 
     mac {
         equals(TEMPLATE, lib) {
@@ -101,6 +101,7 @@ win32 {
             }
         } else {
             QMAKE_RESOLVED_TARGET = $${QMAKE_RESOLVED_TARGET}$${TARGET}
+            !isEmpty(QMAKE_EXTENSION_APP): QMAKE_RESOLVED_TARGET += $${QMAKE_RESOLVED_TARGET}.$${QMAKE_EXTENSION_APP}
         }
     }
 }

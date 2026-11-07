@@ -343,6 +343,7 @@ int main(void)
 }
 ")
 
+if (NOT OS2)
 qt_config_compile_test(sysv_shm
     LABEL "System V/XSI shared memory"
     CODE
@@ -375,6 +376,7 @@ int main(void)
     return 0;
 }
 ")
+endif(NOT OS2)
 
 if (LINUX)
     set(ipc_posix_TEST_LIBRARIES pthread WrapRt::WrapRt)
@@ -1059,7 +1061,7 @@ qt_feature("sharedmemory" PUBLIC
     SECTION "Kernel"
     LABEL "QSharedMemory"
     PURPOSE "Provides access to a shared memory segment."
-    CONDITION WIN32 OR TEST_sysv_shm OR TEST_posix_shm
+    CONDITION OS2 OR WIN32 OR TEST_sysv_shm OR TEST_posix_shm
 )
 qt_feature_definition("sharedmemory" "QT_NO_SHAREDMEMORY" NEGATE VALUE "1")
 qt_feature("shortcut" PUBLIC
@@ -1072,7 +1074,7 @@ qt_feature("systemsemaphore" PUBLIC
     SECTION "Kernel"
     LABEL "QSystemSemaphore"
     PURPOSE "Provides a general counting system semaphore."
-    CONDITION WIN32 OR TEST_sysv_sem OR TEST_posix_sem
+    CONDITION OS2 OR WIN32 OR TEST_sysv_sem OR TEST_posix_sem
 )
 qt_feature_definition("systemsemaphore" "QT_NO_SYSTEMSEMAPHORE" NEGATE VALUE "1")
 qt_feature("xmlstream" PUBLIC
