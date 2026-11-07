@@ -1,0 +1,54 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+\page qt-for-harmonyos-cmake-api.html
+\title Qt for HarmonyOS CMake API
+\brief Overview of the CMake commands, properties, and variables for HarmonyOS
+deployment.
+
+\note The HarmonyOS CMake API is in technology preview and may change in
+future releases.
+
+This page lists the CMake commands, target properties, and variables that
+configure how a Qt application is packaged into a HarmonyOS Ability Package
+(HAP).
+
+When you create a Qt executable with
+\l qt_add_executable() while targeting HarmonyOS, Qt
+automatically generates a \c {<target>_make_hap} build target that produces the
+HAP. The commands, properties, and variables below control the contents of that
+HAP and the metadata written into the HarmonyOS manifest files.
+
+A HarmonyOS application bundle is described by two kinds of manifest: the
+application-level \c {app.json5}, which holds metadata that applies to the whole
+bundle, and the module-level \c {module.json5}, which describes a single HAP
+module within that bundle. The target properties below mirror this split: the
+\c QT_HARMONYOS_APP_* properties set application-level metadata, such as the
+\l{cmake-target-property-QT_HARMONYOS_APP_VENDOR}{vendor}, version, label, and
+icon, while properties such as
+\l{cmake-target-property-QT_HARMONYOS_MODULE_DESCRIPTION}{QT_HARMONYOS_MODULE_DESCRIPTION}
+and
+\l{cmake-target-property-QT_HARMONYOS_ABILITY_ORIENTATION}{QT_HARMONYOS_ABILITY_ORIENTATION}
+set module-level metadata. See the Target Properties section below for the full
+list.
+
+\section1 Commands
+
+\list
+\li \l qt_add_harmonyos_permission() adds a
+    HarmonyOS permission to the application.
+\endlist
+
+\section1 Target Properties
+
+The following target properties affect how the HAP is built:
+
+\annotatedlist cmake-harmonyos-build-properties
+
+\section1 Variables
+
+The following variables affect how the HAP is built:
+
+\annotatedlist cmake-harmonyos-build-variables
+*/

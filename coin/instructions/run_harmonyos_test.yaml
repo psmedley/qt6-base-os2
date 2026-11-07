@@ -1,0 +1,135 @@
+type: Group
+instructions:
+  - type: ScheduleUploadTestResults
+  - type: EnvironmentVariable
+    variableName: COIN_CTEST_RESULTSDIR
+    variableValue: "{{.AgentWorkingDir}}/testresults"
+  - type: EnvironmentVariable
+    variableName: HDC
+    variableValue: "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc"
+  - type: EnvironmentVariable
+    variableName: REMOTE_NODE
+    variableValue: "/Applications/DevEco-Studio.app/Contents/tools/node/bin/node"
+  - type: EnvironmentVariable
+    variableName: REMOTE_HVIGOR
+    variableValue: "/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw.js"
+  - type: EnvironmentVariable
+    variableName: HARMONY_BROKER
+    variableValue: "10.204.0.152"
+  - type: EnvironmentVariable
+    variableName: REMOTE_TOOLS_DIR
+    variableValue: "/Users/qt/depot/ohos-scripts/test-runner"
+  - type: EnvironmentVariable
+    variableName: REMOTE_WORKING_DIR
+    variableValue: "/Users/qt/work/{{.Env.TESTED_MODULE_COIN}}_{{.Env.TESTED_MODULE_BRANCH_COIN}}_{{.Env.COIN_UNIQUE_JOB_ID}}"
+
+  # At the moment test runner uses relative path
+  - type: EnvironmentVariable
+    variableName: REMOTE_RESULTS_DIR
+    variableValue: "../../../work/{{.Env.TESTED_MODULE_COIN}}_{{.Env.TESTED_MODULE_BRANCH_COIN}}/testresults"
+  - type: EnvironmentVariable
+    variableName: REMOTE_OUTPUT_DIR
+    variableValue: "{{.Env.REMOTE_WORKING_DIR}}/output"
+  - type: EnvironmentVariable
+    variableName: REMOTE_RESULT_FILE
+    variableValue: "{{.Env.TESTED_MODULE_COIN}}_{{.Env.TESTED_MODULE_BRANCH_COIN}}_RESULT.TXT"
+
+  - type: ChangeDirectory
+    directory: "{{.InstallDir}}/"
+  - type: MakeDirectory
+    directory: "{{.InstallDir}}/tests"
+  - type: InstallTestBinaryArchive
+    relativeStoragePath: "{{.Env.MODULE_ARTIFACTS_RELATIVE_STORAGE_PATH}}/tests.tar.gz"
+    directory: "{{.InstallDir}}/tests"
+    maxTimeInSeconds: 1200
+    maxTimeBetweenOutput: 1200
+    userMessageOnFailure: >
+      Failed to install tests archive.
+  - type: ChangeDirectory
+    directory: "{{.InstallDir}}/tests"
+
+  - type: ExecuteCommand
+    command: "tar czf bundle.tar.gz harmonyos-tests-bundle"
+    maxTimeInSeconds: 14400
+    maxTimeBetweenOutput: 14400
+    userMessageOnFailure: >
+      Failed to pack tests.
+  - type: ExecuteCommand
+    command: ["ssh", "qt@{{.Env.HARMONY_BROKER}}", "rm -rf {{.Env.REMOTE_WORKING_DIR}}"]
+    maxTimeInSeconds: 60
+    maxTimeBetweenOutput: 60
+    userMessageOnFailure: "Removing work dir failed!"
+  - type: ExecuteCommand
+    command: ["ssh", "qt@{{.Env.HARMONY_BROKER}}", "mkdir -p {{.Env.REMOTE_WORKING_DIR}}"]
+    maxTimeInSeconds: 60
+    maxTimeBetweenOutput: 60
+    userMessageOnFailure: "Creating work dir failed!"
+  - type: ExecuteCommand
+    command: ["scp", "bundle.tar.gz", "qt@{{.Env.HARMONY_BROKER}}:{{.Env.REMOTE_WORKING_DIR}}"]
+    maxTimeInSeconds: 14400
+    maxTimeBetweenOutput: 14400
+    userMessageOnFailure: >
+      Failed to copy tests.
+  - type: ExecuteCommand
+    command: ["scp", "{{.InstallDir}}/tests/all_tests_hap.d", "qt@{{.Env.HARMONY_BROKER}}:{{.Env.REMOTE_WORKING_DIR}}"]
+    maxTimeInSeconds: 14400
+    maxTimeBetweenOutput: 14400
+    userMessageOnFailure: >
+      Failed to copy testlib list.
+  - type: ExecuteCommand
+    command: ["ssh", "qt@{{.Env.HARMONY_BROKER}}", "utils/list_tests.sh {{.Env.REMOTE_WORKING_DIR}}/all_tests_hap.d {{.Env.REMOTE_WORKING_DIR}}/all_tests.txt"]
+    maxTimeInSeconds: 14400
+    maxTimeBetweenOutput: 14400
+    userMessageOnFailure: >
+      Failed to fix testlib list.
+  - type: ExecuteCommand
+    command: ["ssh", "qt@{{.Env.HARMONY_BROKER}}", "tar xzf {{.Env.REMOTE_WORKING_DIR}}/bundle.tar.gz -C {{.Env.REMOTE_WORKING_DIR}}"]
+    maxTimeInSeconds: 600
+    maxTimeBetweenOutput: 600
+    userMessageOnFailure: "Extracting test failed!"
+  - type: ExecuteCommand
+    command: ["ssh", "qt@{{.Env.HARMONY_BROKER}}", "cp /Users/qt/signing/build-profile.json5 {{.Env.REMOTE_WORKING_DIR}}/harmonyos-tests-bundle/build-profile.json5"]
+    maxTimeInSeconds: 60
+    maxTimeBetweenOutput: 60
+    userMessageOnFailure: "Copying build-profile failed!"
+  - type: ExecuteCommand
+    command: ["ssh", "qt@{{.Env.HARMONY_BROKER}}", "cd {{.Env.REMOTE_WORKING_DIR}}/harmonyos-tests-bundle && {{.Env.REMOTE_NODE}} {{.Env.REMOTE_HVIGOR}} --mode module -p product=default assembleHap --analyze=normal --parallel --incremental --no-daemon"]
+    maxTimeInSeconds: 600
+    maxTimeBetweenOutput: 600
+    userMessageOnFailure: "Re-assembling hap failed!"
+  - type: ExecuteCommand
+    command: ["ssh", "qt@{{.Env.HARMONY_BROKER}}", "cp /Users/qt/utils/run_all_test.sh {{.Env.REMOTE_WORKING_DIR}}/run_all_test.sh"]
+    maxTimeInSeconds: 600
+    maxTimeBetweenOutput: 600
+    userMessageOnFailure: "Copying runner script failed!"
+  - type: ExecuteCommand
+    command: ["ssh", "qt@{{.Env.HARMONY_BROKER}}", "cd {{.Env.REMOTE_WORKING_DIR}} && ./run_all_test.sh"]
+    maxTimeInSeconds: 21600
+    maxTimeBetweenOutput: 1800
+    userMessageOnFailure: "Running hap failed!"
+  - type: MakeDirectory
+    directory: "/home/qt/work/testresults"
+  - type: ChangeDirectory
+    directory: "/home/qt/work/testresults"
+  - type: ExecuteCommand
+    command: ["scp", "qt@{{.Env.HARMONY_BROKER}}:{{.Env.REMOTE_WORKING_DIR}}/testresults.tar.gz", "{{.Env.COIN_CTEST_RESULTSDIR}}/testresults.tar.gz"]
+    maxTimeInSeconds: 14400
+    maxTimeBetweenOutput: 14400
+    userMessageOnFailure: >
+      Failed to copy testresults.
+  - type: ExecuteCommand
+    command: ["tar", "-xzf", "{{.Env.COIN_CTEST_RESULTSDIR}}/testresults.tar.gz","-C", "{{.Env.COIN_CTEST_RESULTSDIR}}/"]
+    maxTimeInSeconds: 600
+    maxTimeBetweenOutput: 600
+    userMessageOnFailure: "Extracting testresults failed!"
+  - type: ExecuteCommand
+    command: ["rm", "-f", "{{.Env.COIN_CTEST_RESULTSDIR}}/testresults.tar.gz"]
+    maxTimeInSeconds: 600
+    maxTimeBetweenOutput: 600
+    userMessageOnFailure: "Removing results archive failed!"
+  - type: ExecuteCommand
+    command: ["ssh", "qt@{{.Env.HARMONY_BROKER}}", "rm -rf {{.Env.REMOTE_WORKING_DIR}}"]
+    executeOn: always
+    maxTimeInSeconds: 60
+    maxTimeBetweenOutput: 60
+    userMessageOnFailure: "Removing work dir failed!"

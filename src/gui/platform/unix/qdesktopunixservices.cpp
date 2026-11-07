@@ -1,0 +1,701 @@
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:execute-external-code
+
+#include "qdesktopunixservices_p.h"
+#include <QtGui/private/qtguiglobal_p.h>
+#include "qguiapplication.h"
+#include "qwindow.h"
+#include <QtGui/qpa/qplatformwindow_p.h>
+#include <QtGui/qpa/qplatformwindow.h>
+#include <QtGui/qpa/qplatformnativeinterface.h>
+
+#include <QtCore/QDebug>
+#include <QtCore/QFile>
+#include <QtCore/QFileInfo>
+#if QT_CONFIG(process)
+# include <QtCore/QProcess>
+#endif
+#if QT_CONFIG(settings)
+#include <QtCore/QSettings>
+#endif
+#include <QtCore/QStandardPaths>
+#include <QtCore/QUrl>
+
+#if QT_CONFIG(dbus)
+// These QtCore includes are needed for xdg-desktop-portal support
+#include <QtCore/private/qcore_unix_p.h>
+
+#include <QtCore/QFileInfo>
+#include <QtCore/QUrlQuery>
+
+#include <QtDBus/QDBusConnection>
+#include <QtDBus/QDBusServiceWatcher>
+#include <QtDBus/QDBusMessage>
+#include <QtDBus/QDBusPendingCall>
+#include <QtDBus/QDBusPendingCallWatcher>
+#include <QtDBus/QDBusPendingReply>
+#include <QtDBus/QDBusUnixFileDescriptor>
+
+#include <fcntl.h>
+
+#endif // QT_CONFIG(dbus)
+
+#include <stdlib.h>
+
+QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
+
+#if QT_CONFIG(multiprocess)
+
+static inline QByteArray detectDesktopEnvironment()
+{
+    const QByteArray xdgCurrentDesktop = qgetenv("XDG_CURRENT_DESKTOP");
+    if (!xdgCurrentDesktop.isEmpty())
+        return xdgCurrentDesktop.toUpper(); // KDE, GNOME, UNITY, LXDE, MATE, XFCE...
+
+    // Classic fallbacks
+    if (!qEnvironmentVariableIsEmpty("KDE_FULL_SESSION"))
+        return QByteArrayLiteral("KDE");
+    if (!qEnvironmentVariableIsEmpty("GNOME_DESKTOP_SESSION_ID"))
+        return QByteArrayLiteral("GNOME");
+
+    // Fallback to checking $DESKTOP_SESSION (unreliable)
+    QByteArray desktopSession = qgetenv("DESKTOP_SESSION");
+
+    // This can be a path in /usr/share/xsessions
+    int slash = desktopSession.lastIndexOf('/');
+    if (slash != -1) {
+#if QT_CONFIG(settings)
+        QSettings desktopFile(QFile::decodeName(desktopSession + ".desktop"), QSettings::IniFormat);
+        desktopFile.beginGroup(QStringLiteral("Desktop Entry"));
+        QByteArray desktopName = desktopFile.value(QStringLiteral("DesktopNames")).toByteArray();
+        if (!desktopName.isEmpty())
+            return desktopName;
+#endif
+
+        // try decoding just the basename
+        desktopSession = desktopSession.mid(slash + 1);
+    }
+
+    if (desktopSession == "gnome")
+        return QByteArrayLiteral("GNOME");
+    else if (desktopSession == "xfce")
+        return QByteArrayLiteral("XFCE");
+    else if (desktopSession == "kde")
+        return QByteArrayLiteral("KDE");
+
+    return QByteArrayLiteral("UNKNOWN");
+}
+
+static inline bool checkExecutable(const QString &candidate, QString *result)
+{
+    *result = QStandardPaths::findExecutable(candidate);
+    return !result->isEmpty();
+}
+
+[[maybe_unused]]
+static inline bool detectWebBrowser(QDesktopUnixServices::LaunchType type,
+                                    const QByteArray &desktop, QString *browser)
+{
+    const char *browsers[] = {"google-chrome", "firefox", "mozilla", "opera"};
+
+    Q_PRE(browser->isEmpty());
+    if (checkExecutable(QStringLiteral("xdg-open"), browser))
+        return true;
+
+    if (type == QDesktopUnixServices::LaunchType::Browser) {
+        QString browserVariable = qEnvironmentVariable("DEFAULT_BROWSER");
+        if (browserVariable.isEmpty())
+            browserVariable = qEnvironmentVariable("BROWSER");
+        if (!browserVariable.isEmpty() && checkExecutable(browserVariable, browser))
+            return true;
+    }
+
+    if (desktop == QByteArrayView("KDE")) {
+        if (checkExecutable(QStringLiteral("kde-open"), browser))
+            return true;
+        if (checkExecutable(QStringLiteral("kde-open5"), browser))
+            return true;
+    } else if (desktop == QByteArrayView("GNOME")) {
+        if (checkExecutable(QStringLiteral("gnome-open"), browser))
+            return true;
+    }
+
+    for (size_t i = 0; i < sizeof(browsers)/sizeof(char *); ++i)
+        if (checkExecutable(QLatin1StringView(browsers[i]), browser))
+            return true;
+    return false;
+}
+
+bool QDesktopUnixServices::launchProcess(LaunchType type, const QUrl &url,
+                                         const QString &xdgActivationToken)
+{
+#if QT_CONFIG(process)
+    QString &program = type == LaunchType::Browser ? m_webBrowser : m_documentLauncher;
+    if (program.isEmpty())
+        detectWebBrowser(type, desktopEnvironment(), &program);
+
+    QString errorString;
+    QString urlString = url.toString(QUrl::FullyEncoded);
+    if (!program.isEmpty()) {
+        QProcess process;
+        Q_ASSERT(QFileInfo(program).isAbsolute());
+        // AXIVION Next Line Qt-Security-QProcessStart: executable is absolute from PATH
+        process.setProgram(program);
+        process.setArguments({ urlString });
+        qCDebug(lcQpaServices, "Launching %ls %ls", qUtf16Printable(program),
+                qUtf16Printable(urlString));
+
+        if (!xdgActivationToken.isEmpty()) {
+            auto env = QProcessEnvironment::systemEnvironment();
+            env.insert(u"XDG_ACTIVATION_TOKEN"_s, xdgActivationToken);
+            process.setProcessEnvironment(env);
+        }
+        // AXIVION Next Line Qt-Security-QProcessStart: executable is absolute from PATH
+        if (process.startDetached(nullptr))
+            return true;
+        errorString = process.errorString();
+    } else {
+        errorString = u"Unable to detect a launcher"_s;
+    }
+
+    qCWarning(lcQpaServices, "Launch of '%ls %ls' failed: %ls",
+              qUtf16Printable(program), qUtf16Printable(urlString),
+              qUtf16Printable(errorString));
+#else
+    Q_UNUSED(type);
+    Q_UNUSED(xdgActivationToken);
+    qCWarning(lcQpaServices, "Launch for '%ls' failed: QProcess not available",
+              qUtf16Printable(url.toEncoded()));
+#endif // QT_CONFIG(process)
+    return false;
+}
+
+#if QT_CONFIG(dbus)
+static inline bool checkNeedPortalSupport()
+{
+    return QFileInfo::exists("/.flatpak-info"_L1) || qEnvironmentVariableIsSet("SNAP");
+}
+
+static inline QDBusMessage xdgDesktopPortalOpenFile(const QUrl &url, const QString &parentWindow,
+                                                    const QString &xdgActivationToken)
+{
+    // DBus signature:
+    // OpenFile (IN   s      parent_window,
+    //           IN   h      fd,
+    //           IN   a{sv}  options,
+    //           OUT  o      handle)
+    // Options:
+    // handle_token (s) -  A string that will be used as the last element of the @handle.
+    // writable (b) - Whether to allow the chosen application to write to the file.
+
+    const int fd = qt_safe_open(QFile::encodeName(url.toLocalFile()), O_RDONLY);
+    if (fd != -1) {
+        QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
+                                                              "/org/freedesktop/portal/desktop"_L1,
+                                                              "org.freedesktop.portal.OpenURI"_L1,
+                                                              "OpenFile"_L1);
+
+        QDBusUnixFileDescriptor descriptor;
+        descriptor.giveFileDescriptor(fd);
+
+        QVariantMap options = {};
+
+        if (!xdgActivationToken.isEmpty()) {
+            options.insert("activation_token"_L1, xdgActivationToken);
+        }
+
+        message << parentWindow << QVariant::fromValue(descriptor) << options;
+
+        return QDBusConnection::sessionBus().call(message);
+    }
+
+    return QDBusMessage::createError(QDBusError::InternalError, qt_error_string());
+}
+
+static inline QDBusMessage xdgDesktopPortalOpenUrl(const QUrl &url, const QString &parentWindow,
+                                                   const QString &xdgActivationToken)
+{
+    // DBus signature:
+    // OpenURI (IN   s      parent_window,
+    //          IN   s      uri,
+    //          IN   a{sv}  options,
+    //          OUT  o      handle)
+    // Options:
+    // handle_token (s) -  A string that will be used as the last element of the @handle.
+    // writable (b) - Whether to allow the chosen application to write to the file.
+    //                This key only takes effect the uri points to a local file that is exported in the document portal,
+    //                and the chosen application is sandboxed itself.
+
+    QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
+                                                          "/org/freedesktop/portal/desktop"_L1,
+                                                          "org.freedesktop.portal.OpenURI"_L1,
+                                                          "OpenURI"_L1);
+    // FIXME parent_window_id and handle writable option
+    QVariantMap options;
+
+    if (!xdgActivationToken.isEmpty()) {
+        options.insert("activation_token"_L1, xdgActivationToken);
+    }
+
+    message << parentWindow << url.toString() << options;
+
+    return QDBusConnection::sessionBus().call(message);
+}
+
+static inline QDBusMessage xdgDesktopPortalSendEmail(const QUrl &url, const QString &parentWindow,
+                                                     const QString &xdgActivationToken)
+{
+    // DBus signature:
+    // ComposeEmail (IN   s      parent_window,
+    //               IN   a{sv}  options,
+    //               OUT  o      handle)
+    // Options:
+    // address (s) - The email address to send to.
+    // subject (s) - The subject for the email.
+    // body (s) - The body for the email.
+    // attachment_fds (ah) - File descriptors for files to attach.
+
+    QUrlQuery urlQuery(url);
+    QVariantMap options;
+    options.insert("address"_L1, url.path());
+    options.insert("subject"_L1, urlQuery.queryItemValue("subject"_L1));
+    options.insert("body"_L1, urlQuery.queryItemValue("body"_L1));
+
+    // O_PATH seems to be present since Linux 2.6.39, which is not case of RHEL 6
+#ifdef O_PATH
+    QList<QDBusUnixFileDescriptor> attachments;
+    const QStringList attachmentUris = urlQuery.allQueryItemValues("attachment"_L1);
+
+    for (const QString &attachmentUri : attachmentUris) {
+        const int fd = qt_safe_open(QFile::encodeName(attachmentUri), O_PATH);
+        if (fd != -1) {
+            QDBusUnixFileDescriptor descriptor(fd);
+            attachments << descriptor;
+            qt_safe_close(fd);
+        }
+    }
+
+    options.insert("attachment_fds"_L1, QVariant::fromValue(attachments));
+#endif
+
+    if (!xdgActivationToken.isEmpty()) {
+        options.insert("activation_token"_L1, xdgActivationToken);
+    }
+
+    QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
+                                                          "/org/freedesktop/portal/desktop"_L1,
+                                                          "org.freedesktop.portal.Email"_L1,
+                                                          "ComposeEmail"_L1);
+
+    message << parentWindow << options;
+
+    return QDBusConnection::sessionBus().call(message);
+}
+
+namespace {
+struct XDGDesktopColor
+{
+    double r = 0;
+    double g = 0;
+    double b = 0;
+
+    QColor toQColor() const
+    {
+        constexpr auto rgbMax = 255;
+        return { static_cast<int>(r * rgbMax), static_cast<int>(g * rgbMax),
+                 static_cast<int>(b * rgbMax) };
+    }
+};
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, XDGDesktopColor &myStruct)
+{
+    argument.beginStructure();
+    argument >> myStruct.r >> myStruct.g >> myStruct.b;
+    argument.endStructure();
+    return argument;
+}
+
+class XdgDesktopPortalColorPicker : public QPlatformServiceColorPicker
+{
+    Q_OBJECT
+public:
+    XdgDesktopPortalColorPicker(const QString &parentWindowId, QWindow *parent)
+        : QPlatformServiceColorPicker(parent), m_parentWindowId(parentWindowId)
+    {
+    }
+
+    void pickColor() override
+    {
+        // DBus signature:
+        // PickColor (IN   s      parent_window,
+        //            IN   a{sv}  options
+        //            OUT  o      handle)
+        // Options:
+        // handle_token (s) -  A string that will be used as the last element of the @handle.
+
+        QDBusMessage message = QDBusMessage::createMethodCall(
+                "org.freedesktop.portal.Desktop"_L1, "/org/freedesktop/portal/desktop"_L1,
+                "org.freedesktop.portal.Screenshot"_L1, "PickColor"_L1);
+        message << m_parentWindowId << QVariantMap();
+
+        QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(message);
+        auto watcher = new QDBusPendingCallWatcher(pendingCall, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this](QDBusPendingCallWatcher *watcher) {
+                    watcher->deleteLater();
+                    QDBusPendingReply<QDBusObjectPath> reply = *watcher;
+                    if (reply.isError()) {
+                        qWarning("DBus call to pick color failed: %s",
+                                 qPrintable(reply.error().message()));
+                        Q_EMIT colorPicked({});
+                    } else {
+                        QDBusConnection::sessionBus().connect(
+                                "org.freedesktop.portal.Desktop"_L1, reply.value().path(),
+                                "org.freedesktop.portal.Request"_L1, "Response"_L1, this,
+                                // clang-format off
+                                SLOT(gotColorResponse(uint,QVariantMap))
+                                // clang-format on
+                        );
+                    }
+                });
+    }
+
+private Q_SLOTS:
+    void gotColorResponse(uint result, const QVariantMap &map)
+    {
+        if (result != 0)
+            return;
+        if (map.contains(u"color"_s)) {
+            XDGDesktopColor color{};
+            map.value(u"color"_s).value<QDBusArgument>() >> color;
+            Q_EMIT colorPicked(color.toQColor());
+        } else {
+            Q_EMIT colorPicked({});
+        }
+        deleteLater();
+    }
+
+private:
+    const QString m_parentWindowId;
+};
+
+void registerWithHostPortal()
+{
+    static bool registered = false;
+    if (registered) {
+        return;
+    }
+
+    auto message = QDBusMessage::createMethodCall(
+            "org.freedesktop.portal.Desktop"_L1, "/org/freedesktop/portal/desktop"_L1,
+            "org.freedesktop.host.portal.Registry"_L1, "Register"_L1);
+    message.setArguments({ QGuiApplication::desktopFileName(), QVariantMap() });
+    auto watcher =
+            new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message), qGuiApp);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, watcher, [watcher] {
+        watcher->deleteLater();
+        if (watcher->isError()) {
+            // Expected error when running against an older portal
+            if (watcher->error().type() == QDBusError::UnknownInterface || watcher->error().type() == QDBusError::UnknownMethod)
+                qCInfo(lcQpaServices) << "Failed to register with host portal" << watcher->error();
+            else
+                qCWarning(lcQpaServices) << "Failed to register with host portal" << watcher->error();
+        } else {
+            qCDebug(lcQpaServices) << "Successfully registered with host portal as" << QGuiApplication::desktopFileName();
+            registered = true;
+        }
+    });
+}
+} // namespace
+
+#endif // QT_CONFIG(dbus)
+
+QDesktopUnixServices::QDesktopUnixServices()
+{
+    if (detectDesktopEnvironment() == QByteArrayLiteral("UNKNOWN"))
+        return;
+
+#if QT_CONFIG(dbus)
+    if (qEnvironmentVariableIntValue("QT_NO_XDG_DESKTOP_PORTAL") > 0) {
+        return;
+    }
+    QDBusMessage message = QDBusMessage::createMethodCall(
+            "org.freedesktop.portal.Desktop"_L1, "/org/freedesktop/portal/desktop"_L1,
+            "org.freedesktop.DBus.Properties"_L1, "Get"_L1);
+    message << "org.freedesktop.portal.Screenshot"_L1
+            << "version"_L1;
+
+    QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(message);
+    auto watcher = new QDBusPendingCallWatcher(pendingCall);
+    m_watcher = watcher;
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, watcher,
+                     [this](QDBusPendingCallWatcher *watcher) {
+                         watcher->deleteLater();
+                         QDBusPendingReply<QVariant> reply = *watcher;
+                         if (reply.isError()) {
+                             m_hasNoPortal = (reply.error().type() == QDBusError::ServiceUnknown);
+                         } else {
+                             if (reply.value().toUInt() >= 2)
+                                 m_hasScreenshotPortalWithColorPicking = true;
+                         }
+                     });
+
+    if (checkNeedPortalSupport()) {
+        return;
+    }
+
+    // The program might only set the desktopfilename after creating the app
+    // try again when it's running
+    if (!QGuiApplication::desktopFileName().isEmpty()) {
+        registerWithHostPortal();
+    } else {
+        QMetaObject::invokeMethod(
+                qGuiApp,
+                [] {
+                    if (QGuiApplication::desktopFileName().isEmpty()) {
+                        qCInfo(lcQpaServices) << "QGuiApplication::desktopFileName not set. Unable to register application with portal registry";
+                        return;
+                    }
+                    registerWithHostPortal();
+                },
+                Qt::QueuedConnection);
+    }
+    m_portalWatcher = std::make_unique<QDBusServiceWatcher>(
+            "org.freedesktop.portal.Desktop"_L1, QDBusConnection::sessionBus(),
+            QDBusServiceWatcher::WatchForRegistration);
+    QObject::connect(m_portalWatcher.get(), &QDBusServiceWatcher::serviceRegistered,
+                     m_portalWatcher.get(), &registerWithHostPortal);
+#endif
+}
+
+QDesktopUnixServices::~QDesktopUnixServices()
+{
+#if QT_CONFIG(dbus)
+    delete m_watcher;
+#endif
+}
+
+QPlatformServiceColorPicker *QDesktopUnixServices::colorPicker(QWindow *parent)
+{
+#if QT_CONFIG(dbus)
+    // Make double sure that we are in a wayland environment. In particular check
+    // WAYLAND_DISPLAY so also XWayland apps benefit from portal-based color picking.
+    // Outside wayland we'll rather rely on other means than the XDG desktop portal.
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
+        || QGuiApplication::platformName().startsWith("wayland"_L1)) {
+        return new XdgDesktopPortalColorPicker(portalWindowIdentifier(parent), parent);
+    }
+    return nullptr;
+#else
+    Q_UNUSED(parent);
+    return nullptr;
+#endif
+}
+
+QByteArray QDesktopUnixServices::desktopEnvironment() const
+{
+    static const QByteArray result = detectDesktopEnvironment();
+    return result;
+}
+
+QString QDesktopUnixServices::portalFocusWindowIdentifier()
+{
+    if (QWindow *focusWindow = QGuiApplication::focusWindow())
+        return portalWindowIdentifier(focusWindow);
+    return QString();
+}
+
+template <typename F>
+bool QDesktopUnixServices::runWithXdgActivationToken(F callback, const QUrl &url)
+{
+#if QT_CONFIG(wayland)
+    QWindow *window = qGuiApp->focusWindow();
+
+    if (!window)
+        return (this->*callback)(url, {});
+
+    auto waylandApp = dynamic_cast<QNativeInterface::QWaylandApplication *>(
+            qGuiApp->platformNativeInterface());
+    auto waylandWindow =
+            dynamic_cast<QNativeInterface::Private::QWaylandWindow *>(window->handle());
+
+    if (!waylandWindow || !waylandApp)
+        return (this->*callback)(url, {});
+
+    // we must capture url by value, because the callback will be run after
+    // the caller has returned to the event loop
+    auto functionToCall = [this, callback, url](const QString &xdgActivationToken) {
+        return (this->*callback)(url, xdgActivationToken);
+    };
+    QObject::connect(waylandWindow,
+                     &QNativeInterface::Private::QWaylandWindow::xdgActivationTokenCreated,
+                     waylandWindow, functionToCall, Qt::SingleShotConnection);
+    waylandWindow->requestXdgActivationToken(waylandApp->lastInputSerial());
+    return true;
+#else
+    return (this->*callback)(url, {});
+#endif
+}
+
+bool QDesktopUnixServices::openUrlWithoutPortal(const QUrl &url, const QString &xdgActivationToken)
+{
+    LaunchType launchType = url.scheme() == "mailto"_L1 ? LaunchType::Document : LaunchType::Browser;
+    return launchProcess(launchType, url, xdgActivationToken);
+};
+
+bool QDesktopUnixServices::openUrlWithPortal(const QUrl &url, const QString &xdgActivationToken)
+{
+#  if QT_CONFIG(dbus)
+    const QString parentWindow = portalFocusWindowIdentifier();
+    QDBusError error = url.scheme() == "mailto"_L1
+            ? xdgDesktopPortalSendEmail(url, parentWindow, xdgActivationToken)
+            : xdgDesktopPortalOpenUrl(url, parentWindow, xdgActivationToken);
+    if (!error.isValid())
+        return true;
+    if (error.type() == QDBusError::ServiceUnknown)
+        m_hasNoPortal = true;
+    // portal activation failed, fall back to executing
+    return openUrlWithoutPortal(url, xdgActivationToken);
+#  else
+    Q_UNUSED(url);
+    Q_UNUSED(xdgActivationToken);
+    Q_UNREACHABLE_RETURN(false);
+#  endif
+}
+
+bool QDesktopUnixServices::openUrl(const QUrl &url)
+{
+    if (!m_hasNoPortal)
+        return runWithXdgActivationToken(&QDesktopUnixServices::openUrlWithPortal, url);
+
+    return runWithXdgActivationToken(&QDesktopUnixServices::openUrlWithoutPortal, url);
+}
+
+bool QDesktopUnixServices::openDocumentWithoutPortal(const QUrl &url, const QString &xdgActivationToken)
+{
+    return launchProcess(LaunchType::Document, url, xdgActivationToken);
+}
+
+bool QDesktopUnixServices::openDocumentWithPortal(const QUrl &url, const QString &xdgActivationToken)
+{
+#  if QT_CONFIG(dbus)
+    const QString parentWindow = portalFocusWindowIdentifier();
+    QDBusError error = xdgDesktopPortalOpenFile(url, parentWindow, xdgActivationToken);
+    if (!error.isValid())
+        return true;
+    if (error.type() == QDBusError::ServiceUnknown)
+        m_hasNoPortal = true;
+    // portal activation failed, fall back to executing
+    return openDocumentWithoutPortal(url, xdgActivationToken);
+#  else
+    Q_UNUSED(url);
+    Q_UNUSED(xdgActivationToken);
+    Q_UNREACHABLE_RETURN(false);
+#  endif
+}
+
+bool QDesktopUnixServices::openDocument(const QUrl &url)
+{
+    if (!m_hasNoPortal)
+        return runWithXdgActivationToken(&QDesktopUnixServices::openDocumentWithPortal, url);
+
+    return runWithXdgActivationToken(&QDesktopUnixServices::openDocumentWithoutPortal, url);
+}
+
+#else
+QDesktopUnixServices::QDesktopUnixServices() = default;
+QDesktopUnixServices::~QDesktopUnixServices() = default;
+
+QByteArray QDesktopUnixServices::desktopEnvironment() const
+{
+    return QByteArrayLiteral("UNKNOWN");
+}
+
+bool QDesktopUnixServices::openUrl(const QUrl &url)
+{
+    Q_UNUSED(url);
+    qWarning("openUrl() not supported on this platform");
+    return false;
+}
+
+bool QDesktopUnixServices::openDocument(const QUrl &url)
+{
+    Q_UNUSED(url);
+    qWarning("openDocument() not supported on this platform");
+    return false;
+}
+
+QPlatformServiceColorPicker *QDesktopUnixServices::colorPicker(QWindow *parent)
+{
+    Q_UNUSED(parent);
+    return nullptr;
+}
+
+#endif // QT_CONFIG(multiprocess)
+
+QString QDesktopUnixServices::portalWindowIdentifier(QWindow *window)
+{
+    Q_UNUSED(window);
+    return QString();
+}
+
+
+void QDesktopUnixServices::registerDBusMenuForWindow(QWindow *window, const QString &service, const QString &path)
+{
+    Q_UNUSED(window);
+    Q_UNUSED(service);
+    Q_UNUSED(path);
+}
+
+void QDesktopUnixServices::unregisterDBusMenuForWindow(QWindow *window)
+{
+    Q_UNUSED(window);
+}
+
+
+bool QDesktopUnixServices::hasCapability(Capability capability) const
+{
+    switch (capability) {
+    case Capability::ColorPicking:
+        return m_hasScreenshotPortalWithColorPicking;
+    }
+    return false;
+}
+
+void QDesktopUnixServices::setApplicationBadge(qint64 number)
+{
+#if QT_CONFIG(dbus)
+    if (qGuiApp->desktopFileName().isEmpty()) {
+        qCWarning(lcQpaServices, "Cannot set badge number - QGuiApplication::desktopFileName() is empty");
+        return;
+    }
+
+
+    const QString launcherUrl = QStringLiteral("application://") + qGuiApp->desktopFileName() + QStringLiteral(".desktop");
+    const qint64 count = qBound(0, number, 9999);
+    QVariantMap dbusUnityProperties;
+
+    if (count > 0) {
+        dbusUnityProperties[QStringLiteral("count")] = count;
+        dbusUnityProperties[QStringLiteral("count-visible")] = true;
+    } else {
+        dbusUnityProperties[QStringLiteral("count-visible")] = false;
+    }
+
+    auto signal = QDBusMessage::createSignal(QStringLiteral("/com/canonical/unity/launcherentry/")
+        + qGuiApp->applicationName(), QStringLiteral("com.canonical.Unity.LauncherEntry"), QStringLiteral("Update"));
+
+    signal.setArguments({launcherUrl, dbusUnityProperties});
+
+    QDBusConnection::sessionBus().send(signal);
+#else
+    Q_UNUSED(number)
+#endif
+}
+
+QT_END_NAMESPACE
+
+#include "qdesktopunixservices.moc"

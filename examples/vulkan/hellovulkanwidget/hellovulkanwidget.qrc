@@ -1,0 +1,6 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file>color_vert.spv</file>
+    <file>color_frag.spv</file>
+</qresource>
+</RCC>

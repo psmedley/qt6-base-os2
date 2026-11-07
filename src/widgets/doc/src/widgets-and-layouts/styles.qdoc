@@ -1,0 +1,82 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page style-reference.html
+    \title Styles and Style Aware Widgets
+    \ingroup qt-gui-concepts
+    \brief How styles draw widgets, and how to customize or implement a style.
+
+    Styles (classes that inherit \l{QStyle}) draw on behalf of widgets and
+    encapsulate the look and feel of a GUI. \l QStyle is an abstract base class.
+    Qt's built-in widgets use it for nearly all of their drawing, so they look
+    exactly like the equivalent native widgets.
+
+    Qt comes with a selection of built-in styles. The \c windows and \c fusion
+    styles are part of the Qt Widgets module. The platform styles, such as
+    \c windows11 on Windows and \c macos on \macos, are plugins that are
+    available on their platform only. \l QStyleFactory lists the styles that are
+    available at runtime and creates them by name. \l QApplication::setStyle()
+    makes a style the application style, and users can select a style with the
+    \c -style command-line option.
+
+    A \l QStyle implementation is the way to give a production application its
+    own look. \l{Qt Labs StyleKit}{StyleKit} provides one, \l QStyleKitStyle,
+    that reads a QML description of the design. For when to use a style,
+    StyleKit, or a \l{Qt Style Sheets}{style sheet}, see
+    \l{Styling Approaches for Qt Widgets}.
+
+    \section1 Customizing a style
+
+    To change selected aspects of an existing style, inherit \l QProxyStyle and
+    reimplement the virtual functions that draw or measure the elements you want
+    to change. A proxy style wraps another style and forwards everything you
+    don't reimplement to it.
+
+    You can name the base style explicitly or leave it unspecified. An explicit
+    base style gives you full control and suits customizations that depend on a
+    particular style's behavior. Without a base style, the proxy wraps the
+    application style, so your customization applies on top of whatever the
+    platform provides.
+
+    \l{QStyle#Creating a Custom Style}{The QStyle class documentation} shows a
+    proxy style that replaces the arrows of a spin box.
+
+    \section1 Implementing a style
+
+    \l QCommonStyle provides a convenient base for full style implementations.
+    It implements the behavior that all of Qt's styles share, such as the layout
+    of subelements and the size calculations, and leaves the drawing to you.
+    Inherit \l QCommonStyle and reimplement the drawing functions, together with
+    the pixel metrics, subelement rectangles, and style hints that differ from
+    the common defaults. Qt's built-in styles aren't part of the public API and
+    can't serve as base classes; wrap them with \l QProxyStyle instead.
+
+    Implementing a full style is an involved task. The following pages describe
+    how the style API works, trace how a widget is drawn from its paint event to
+    the style, and list the elements, states, and options that each widget uses:
+
+    \list
+    \li \l{How a Style Draws a Widget} explains style elements, subelements,
+        pixel metrics, style hints, style options, the \l QStyle functions, and
+        the palette.
+    \li \l{Writing Style-Aware Widgets} shows how a custom widget draws through
+        the current style, so it looks right in every style.
+    \li \l{Styling a Checkbox: A Walkthrough} follows a \l QCheckBox from its
+        paint event through \l QCommonStyle and ends with a custom indicator.
+    \li \l{Widget Style Reference} lists, for each widget, the style elements it
+        draws, the state flags it sets, and the members of its style option.
+    \endlist
+
+    The elements the widgets draw are the same in every style, so you can also
+    use the reference when you write a style-aware widget or a delegate.
+
+    \section1 Classes for widget styling
+
+    Use these classes to customize an application's appearance.
+
+    \annotatedlist appearance
+
+    \sa QStyle, QProxyStyle, QCommonStyle, QStylePainter, QStyleOption,
+        {Styling Approaches for Qt Widgets}
+*/

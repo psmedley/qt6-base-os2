@@ -1,0 +1,178 @@
+#!/bin/bash
+# Copyright (C) 2026 The Qt Company Ltd.
+# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
+# Installs, runs, or uninstalls an app on a simulator via xcrun simctl,
+# or on a real device via xcrun devicectl.
+#
+# Usage: qt-apple-runner.sh <action> <app_executable> [test_args...]
+#
+# <action> is one of:
+#   install    - (re)install the app, starting from a clean data container
+#   run        - launch the app and propagate its exit code
+#   uninstall  - remove the app from the target
+#
+# If the first argument is not one of the actions above it is treated as the
+# app executable, and the combined install + run + uninstall flow is run.
+#
+# <app_executable> is the binary inside the .app bundle, as passed by CTest
+# when CROSSCOMPILING_EMULATOR is set. The bundle path is derived from it.
+#
+# Simulator: Set APPLE_SIMULATOR_UDID to target a specific booted simulator.
+# If unset, the first booted simulator matching the app's platform is used.
+#
+# Device: Set APPLE_DEVICE_UDID to target a specific connected device.
+# If unset, the first connected device is used.
+
+die() { echo "qt-apple-runner.sh: $*" >&2; exit 254; }
+
+case "$1" in
+    install|run|uninstall|all) action="$1"; shift ;;
+    # Anything else isn't an action, but the app executable, in which case we
+    # fall back to the combined install + run + uninstall flow.
+    *) action="all" ;;
+esac
+
+app="$1"; shift
+[ -n "$app" ] || die "⚠️ No app executable specified"
+
+bundle=$(dirname "$app")
+[ -d "$bundle" ] || die "⚠️ Bundle not found: $bundle"
+
+bundle_id=$(/usr/libexec/PlistBuddy -c "Print:CFBundleIdentifier" \
+    "$bundle/Info.plist" 2>/dev/null) \
+    || die "⚠️ Failed to read CFBundleIdentifier from $bundle/Info.plist"
+
+platform=$(vtool -show-build "$app" 2>/dev/null \
+    | awk '/^ *platform /{print $2; exit}')
+
+case "$platform" in
+    *SIMULATOR) target_type=simulator ;;
+    *)          target_type=device ;;
+esac
+
+case "$platform" in
+    IOS*)     runtime="iOS" ;;
+    TVOS*)    runtime="tvOS" ;;
+    WATCHOS*) runtime="watchOS" ;;
+    XROS*)    runtime="xrOS" ;;
+    *)        runtime="" ;;
+esac
+
+# Resolve the target the action will operate on. All actions need this.
+if [ "$target_type" = "simulator" ]; then
+    if [ -n "$APPLE_SIMULATOR_UDID" ]; then
+        udid="$APPLE_SIMULATOR_UDID"
+    else
+        udid=$(xcrun simctl list devices booted --json 2>/dev/null \
+            | jq -r --arg f "$runtime" \
+                '.devices | to_entries[]
+                 | select($f == "" or (.key | contains($f)))
+                 | .value[] | select(.state == "Booted") | .udid' \
+            | head -1)
+        [ -n "$udid" ] || die "⚠️ No booted $runtime simulator found; boot one or set APPLE_SIMULATOR_UDID"
+    fi
+else
+    if [ -n "$APPLE_DEVICE_UDID" ]; then
+        udid="$APPLE_DEVICE_UDID"
+    else
+        udid=$(xcrun devicectl list devices --quiet --json-output /dev/stdout 2>/dev/null \
+            | jq -r --arg r "$runtime" \
+                '.result.devices[]
+                 | select(.connectionProperties.tunnelState == "connected")
+                 | select($r == "" or .hardwareProperties.platform == $r)
+                 | .hardwareProperties.udid' \
+            | head -1)
+        [ -n "$udid" ] || die "⚠️ No connected $runtime device found; connect one or set APPLE_DEVICE_UDID"
+    fi
+fi
+
+forward_env() {
+    local prefix="$1"
+    while IFS='=' read -r key rest; do
+        case "$key" in
+            LC_*|LANG) ;;
+            *) [ -n "$key" ] && export "${prefix}${key}=${rest}" ;;
+        esac
+    done < <(env)
+}
+
+# Uninstalls the app from the target, clearing its data container.
+uninstall_app() {
+    if [ "$target_type" = "simulator" ]; then
+        xcrun simctl uninstall "$udid" "$bundle_id" 2>/dev/null || true
+    else
+        xcrun devicectl device uninstall app --device "$udid" "$bundle_id" 2>/dev/null || true
+    fi
+}
+
+# Installs the app, starting from a clean data container.
+install_app() {
+    # Uninstall first so each run starts with a clean data container
+    uninstall_app
+
+    if [ "$target_type" = "simulator" ]; then
+        xcrun simctl install "$udid" "$bundle" \
+            || die "⚠️ Failed to install $bundle on simulator $udid"
+    else
+        xcrun devicectl device install app --device "$udid" "$bundle" \
+            || die "⚠️ Failed to install $bundle on device $udid"
+    fi
+}
+
+# Launches the already-installed app and propagates its exit code.
+run_app() {
+    # Let the platform integration know it should set a custom cwd
+    # and write the exit code to a file.
+    export QT_RUNNING_VIA_TEST_RUNNER=1
+
+    if [ "$target_type" = "simulator" ]; then
+        forward_env "SIMCTL_CHILD_"
+
+        xcrun simctl launch --console-pty "$udid" "$bundle_id" "$@" \
+            || die "⚠️ Failed to launch $bundle on simulator $udid"
+
+        echo "DONE!"
+
+        tmp_dir="$(xcrun simctl get_app_container "$udid" "$bundle_id" data)/tmp" \
+            || die "⚠️ Failed to locate data container for $bundle_id on simulator $udid"
+    else
+        forward_env "DEVICECTL_CHILD_"
+
+        # Note: devicectl doesn't reliably propagate the app's exit code (e.g. it reports
+        # 0 even when dyld fails to load a library), so we don't trust the launch exit code
+        # and rely on the one Qt writes to a file in the data container.
+        xcrun devicectl device process launch --console \
+            --device "$udid" -- "$bundle_id" "$@" || true
+
+        echo "DONE!"
+
+        # Stage a local copy of the data container's tmp/ so the post-processing
+        # below can treat device and simulator the same way.
+        tmp_dir=$(mktemp -d) || die "⚠️ Failed to resolve tmp dir"
+        trap 'rm -rf "$tmp_dir"' EXIT
+        xcrun devicectl device copy from \
+            --quiet \
+            --device "$udid" \
+            --domain-type appDataContainer \
+            --domain-identifier "$bundle_id" \
+            --source "tmp" \
+            --destination "$tmp_dir" 2>/dev/null || true
+    fi
+
+    exit_code=$(cat "$tmp_dir/qt_exit_code.txt" 2>/dev/null)
+    exit_code="${exit_code:-253}"
+
+    if [ -d "$tmp_dir/testrunner" ]; then
+        cp -r "$tmp_dir/testrunner/." .
+    fi
+}
+
+case "$action" in
+    install)   install_app ;;
+    run)       run_app "$@" ;;
+    uninstall) uninstall_app ;;
+    all)       install_app; run_app "$@"; uninstall_app ;;
+esac
+
+exit "${exit_code:-0}"

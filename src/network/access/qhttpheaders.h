@@ -1,0 +1,402 @@
+// Copyright (C) 2023 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
+#ifndef QHTTPHEADERS_H
+#define QHTTPHEADERS_H
+
+#include <QtNetwork/qtnetworkglobal.h>
+
+#include <QtCore/qdatetime.h>
+#include <QtCore/qhashfunctions.h>
+#include <QtCore/qmetaobject.h>
+#include <QtCore/qobjectdefs.h>
+#include <QtCore/qshareddata.h>
+#include <QtCore/qcontainerfwd.h>
+#include <QtCore/qspan.h>
+#include <QtCore/qcomparehelpers.h>
+
+#include <initializer_list>
+#include <optional>
+
+QT_BEGIN_NAMESPACE
+
+class QDataStream;
+class QDebug;
+
+struct QT_TECH_PREVIEW_API QHttpHeaderRangeSpec // ### TP: what about non-integral ranges?
+{
+    std::optional<qint64> start;
+    std::optional<qint64> end;
+
+    constexpr bool isValid() const noexcept
+    {
+        if (!start && !end)
+            return false;
+        if (start && start < 0)
+            return false;
+        if (end && end < 0)
+            return false;
+        if (start && end && *start > *end)
+            return false;
+        return true;
+    }
+
+#ifndef QT_NO_DEBUG_STREAM
+    friend Q_NETWORK_EXPORT QDebug operator<<(QDebug debug, const QHttpHeaderRangeSpec &range);
+#endif
+
+private:
+    friend constexpr bool comparesEqual(const QHttpHeaderRangeSpec &lhs,
+                                        const QHttpHeaderRangeSpec &rhs) noexcept
+    {
+        return lhs.start == rhs.start && lhs.end == rhs.end;
+    }
+    Q_DECLARE_EQUALITY_COMPARABLE_LITERAL_TYPE(QHttpHeaderRangeSpec)
+
+    friend size_t qHash(QHttpHeaderRangeSpec range, size_t seed = 0) noexcept
+    {
+        return qHashMulti(seed, range.start, range.end);
+    }
+};
+
+class QHttpHeaderRangeSetPrivate;
+QT_DECLARE_QESDP_SPECIALIZATION_DTOR(QHttpHeaderRangeSetPrivate)
+class QT_TECH_PREVIEW_API QHttpHeaderRangeSet // ### TP: only does bytes=, but sounds like it could also do seconds=
+{
+    QExplicitlySharedDataPointer<QHttpHeaderRangeSetPrivate> d_ptr;
+    Q_DECLARE_PRIVATE(QHttpHeaderRangeSet)
+public:
+    Q_NETWORK_EXPORT QHttpHeaderRangeSet();
+    Q_NETWORK_EXPORT QHttpHeaderRangeSet(const QHttpHeaderRangeSet &other);
+    QHttpHeaderRangeSet(QHttpHeaderRangeSet &&) = default;
+    Q_NETWORK_EXPORT Q_IMPLICIT QHttpHeaderRangeSet(QSpan<const QHttpHeaderRangeSpec> r);
+    Q_IMPLICIT QHttpHeaderRangeSet(std::initializer_list<QHttpHeaderRangeSpec> r)
+        : QHttpHeaderRangeSet(QSpan<const QHttpHeaderRangeSpec>{r}) {}
+    Q_NETWORK_EXPORT QHttpHeaderRangeSet &operator=(const QHttpHeaderRangeSet &other);
+    QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QHttpHeaderRangeSet)
+    Q_NETWORK_EXPORT ~QHttpHeaderRangeSet();
+
+    void swap(QHttpHeaderRangeSet &other) noexcept { d_ptr.swap(other.d_ptr); }
+
+    Q_NETWORK_EXPORT QSpan<const QHttpHeaderRangeSpec> ranges() const noexcept;
+    Q_NETWORK_EXPORT void setRanges(QSpan<const QHttpHeaderRangeSpec> r);
+
+    // ### normalization (a canonical form of sorted, non-overlapping ranges)
+    // and the set functions on top of it to be added in 6.13:
+    // - normalize/normalized/isNormalized
+    // - contains
+    // - unite
+    // - intersect
+    // ...
+
+private:
+#ifndef QT_NO_DEBUG_STREAM
+    friend Q_NETWORK_EXPORT QDebug operator<<(QDebug debug, const QHttpHeaderRangeSet &ranges);
+#endif
+
+    Q_NETWORK_EXPORT friend bool comparesEqual(const QHttpHeaderRangeSet &lhs,
+                                               const QHttpHeaderRangeSet &rhs) noexcept;
+    Q_DECLARE_EQUALITY_COMPARABLE(QHttpHeaderRangeSet)
+
+    Q_NETWORK_EXPORT friend size_t qHash(const QHttpHeaderRangeSet &key, size_t seed) noexcept;
+    friend size_t qHash(const QHttpHeaderRangeSet &key) noexcept { return qHash(key, size_t{0}); }
+};
+
+Q_DECLARE_SHARED(QHttpHeaderRangeSet)
+
+class QHttpHeadersPrivate;
+QT_DECLARE_QESDP_SPECIALIZATION_DTOR_WITH_EXPORT(QHttpHeadersPrivate, Q_NETWORK_EXPORT)
+class QHttpHeaders
+{
+    Q_GADGET_EXPORT(Q_NETWORK_EXPORT)
+public:
+    enum class WellKnownHeader {
+        // IANA Permanent status:
+        AIM,
+        Accept,
+        AcceptAdditions,
+        AcceptCH,
+        AcceptDatetime,
+        AcceptEncoding,
+        AcceptFeatures,
+        AcceptLanguage,
+        AcceptPatch,
+        AcceptPost,
+        AcceptRanges,
+        AcceptSignature,
+        AccessControlAllowCredentials,
+        AccessControlAllowHeaders,
+        AccessControlAllowMethods,
+        AccessControlAllowOrigin,
+        AccessControlExposeHeaders,
+        AccessControlMaxAge,
+        AccessControlRequestHeaders,
+        AccessControlRequestMethod,
+        Age,
+        Allow,
+        ALPN,
+        AltSvc,
+        AltUsed,
+        Alternates,
+        ApplyToRedirectRef,
+        AuthenticationControl,
+        AuthenticationInfo,
+        Authorization,
+        CacheControl,
+        CacheStatus,
+        CalManagedID,
+        CalDAVTimezones,
+        CapsuleProtocol,
+        CDNCacheControl,
+        CDNLoop,
+        CertNotAfter,
+        CertNotBefore,
+        ClearSiteData,
+        ClientCert,
+        ClientCertChain,
+        Close,
+        Connection,
+        ContentDigest,
+        ContentDisposition,
+        ContentEncoding,
+        ContentID,
+        ContentLanguage,
+        ContentLength,
+        ContentLocation,
+        ContentRange,
+        ContentSecurityPolicy,
+        ContentSecurityPolicyReportOnly,
+        ContentType,
+        Cookie,
+        CrossOriginEmbedderPolicy,
+        CrossOriginEmbedderPolicyReportOnly,
+        CrossOriginOpenerPolicy,
+        CrossOriginOpenerPolicyReportOnly,
+        CrossOriginResourcePolicy,
+        DASL,
+        Date,
+        DAV,
+        DeltaBase,
+        Depth,
+        Destination,
+        DifferentialID,
+        DPoP,
+        DPoPNonce,
+        EarlyData,
+        ETag,
+        Expect,
+        ExpectCT,
+        Expires,
+        Forwarded,
+        From,
+        Hobareg,
+        Host,
+        If,
+        IfMatch,
+        IfModifiedSince,
+        IfNoneMatch,
+        IfRange,
+        IfScheduleTagMatch,
+        IfUnmodifiedSince,
+        IM,
+        IncludeReferredTokenBindingID,
+        KeepAlive,
+        Label,
+        LastEventID,
+        LastModified,
+        Link,
+        Location,
+        LockToken,
+        MaxForwards,
+        MementoDatetime,
+        Meter,
+        MIMEVersion,
+        Negotiate,
+        NEL,
+        ODataEntityId,
+        ODataIsolation,
+        ODataMaxVersion,
+        ODataVersion,
+        OptionalWWWAuthenticate,
+        OrderingType,
+        Origin,
+        OriginAgentCluster,
+        OSCORE,
+        OSLCCoreVersion,
+        Overwrite,
+        PingFrom,
+        PingTo,
+        Position,
+        Prefer,
+        PreferenceApplied,
+        Priority,
+        ProxyAuthenticate,
+        ProxyAuthenticationInfo,
+        ProxyAuthorization,
+        ProxyStatus,
+        PublicKeyPins,
+        PublicKeyPinsReportOnly,
+        Range,
+        RedirectRef,
+        Referer,
+        Refresh,
+        ReplayNonce,
+        ReprDigest,
+        RetryAfter,
+        ScheduleReply,
+        ScheduleTag,
+        SecPurpose,
+        SecTokenBinding,
+        SecWebSocketAccept,
+        SecWebSocketExtensions,
+        SecWebSocketKey,
+        SecWebSocketProtocol,
+        SecWebSocketVersion,
+        Server,
+        ServerTiming,
+        SetCookie,
+        Signature,
+        SignatureInput,
+        SLUG,
+        SoapAction,
+        StatusURI,
+        StrictTransportSecurity,
+        Sunset,
+        SurrogateCapability,
+        SurrogateControl,
+        TCN,
+        TE,
+        Timeout,
+        Topic,
+        Traceparent,
+        Tracestate,
+        Trailer,
+        TransferEncoding,
+        TTL,
+        Upgrade,
+        Urgency,
+        UserAgent,
+        VariantVary,
+        Vary,
+        Via,
+        WantContentDigest,
+        WantReprDigest,
+        WWWAuthenticate,
+        XContentTypeOptions,
+        XFrameOptions,
+        // IANA Deprecated status:
+        AcceptCharset,
+        CPEPInfo,
+        Pragma,
+        ProtocolInfo,
+        ProtocolQuery,
+    };
+    Q_ENUM(WellKnownHeader)
+
+    Q_NETWORK_EXPORT QHttpHeaders() noexcept;
+    Q_NETWORK_EXPORT ~QHttpHeaders();
+
+    Q_NETWORK_EXPORT QHttpHeaders(const QHttpHeaders &other);
+    QHttpHeaders(QHttpHeaders &&other) noexcept = default;
+    Q_NETWORK_EXPORT QHttpHeaders &operator=(const QHttpHeaders &other);
+    QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QHttpHeaders)
+    void swap(QHttpHeaders &other) noexcept { d.swap(other.d); }
+
+    Q_NETWORK_EXPORT bool append(QAnyStringView name, QAnyStringView value);
+    Q_NETWORK_EXPORT bool append(WellKnownHeader name, QAnyStringView value);
+
+    Q_NETWORK_EXPORT bool insert(qsizetype i, QAnyStringView name, QAnyStringView value);
+    Q_NETWORK_EXPORT bool insert(qsizetype i, WellKnownHeader name, QAnyStringView value);
+
+    Q_NETWORK_EXPORT bool replace(qsizetype i, QAnyStringView name, QAnyStringView newValue);
+    Q_NETWORK_EXPORT bool replace(qsizetype i, WellKnownHeader name, QAnyStringView newValue);
+
+    Q_NETWORK_EXPORT bool replaceOrAppend(QAnyStringView name, QAnyStringView newValue);
+    Q_NETWORK_EXPORT bool replaceOrAppend(WellKnownHeader name, QAnyStringView newValue);
+
+    Q_NETWORK_EXPORT bool contains(QAnyStringView name) const;
+    Q_NETWORK_EXPORT bool contains(WellKnownHeader name) const;
+
+    Q_NETWORK_EXPORT void clear();
+    Q_NETWORK_EXPORT void removeAll(QAnyStringView name);
+    Q_NETWORK_EXPORT void removeAll(WellKnownHeader name);
+    Q_NETWORK_EXPORT void removeAt(qsizetype i);
+
+    Q_NETWORK_EXPORT QByteArrayView value(QAnyStringView name, QByteArrayView defaultValue = {}) const noexcept;
+    Q_NETWORK_EXPORT QByteArrayView value(WellKnownHeader name, QByteArrayView defaultValue = {}) const noexcept;
+
+    Q_NETWORK_EXPORT QList<QByteArray> values(QAnyStringView name) const;
+    Q_NETWORK_EXPORT QList<QByteArray> values(WellKnownHeader name) const;
+
+    Q_NETWORK_EXPORT QByteArrayView valueAt(qsizetype i) const noexcept;
+    Q_NETWORK_EXPORT QLatin1StringView nameAt(qsizetype i) const noexcept;
+
+    Q_NETWORK_EXPORT QByteArray combinedValue(QAnyStringView name) const;
+    Q_NETWORK_EXPORT QByteArray combinedValue(WellKnownHeader name) const;
+
+    Q_NETWORK_EXPORT std::optional<qint64> intValue(QAnyStringView name) const noexcept;
+    Q_NETWORK_EXPORT std::optional<qint64> intValue(WellKnownHeader name) const noexcept;
+
+    Q_NETWORK_EXPORT std::optional<QList<qint64>> intValues(QAnyStringView name) const;
+    Q_NETWORK_EXPORT std::optional<QList<qint64>> intValues(WellKnownHeader name) const;
+
+    Q_NETWORK_EXPORT std::optional<qint64> intValueAt(qsizetype i) const noexcept;
+
+    Q_NETWORK_EXPORT std::optional<QDateTime> dateTimeValue(QAnyStringView name) const;
+    Q_NETWORK_EXPORT std::optional<QDateTime> dateTimeValue(WellKnownHeader name) const;
+
+    Q_NETWORK_EXPORT std::optional<QList<QDateTime>> dateTimeValues(QAnyStringView name) const;
+    Q_NETWORK_EXPORT std::optional<QList<QDateTime>> dateTimeValues(WellKnownHeader name) const;
+
+    Q_NETWORK_EXPORT std::optional<QDateTime> dateTimeValueAt(qsizetype i) const;
+
+    Q_NETWORK_EXPORT void setDateTimeValue(QAnyStringView name, const QDateTime &dateTime);
+    Q_NETWORK_EXPORT void setDateTimeValue(WellKnownHeader name, const QDateTime &dateTime);
+
+    Q_NETWORK_EXPORT std::optional<QHttpHeaderRangeSet> rangeValues() const;
+    Q_NETWORK_EXPORT void setRangeValues(const QHttpHeaderRangeSet &ranges);
+
+    Q_NETWORK_EXPORT qsizetype size() const noexcept;
+    Q_NETWORK_EXPORT void reserve(qsizetype size);
+    bool isEmpty() const noexcept { return size() == 0; }
+
+    Q_NETWORK_EXPORT static QByteArrayView wellKnownHeaderName(WellKnownHeader name) noexcept;
+
+    Q_NETWORK_EXPORT static QHttpHeaders
+    fromListOfPairs(const QList<std::pair<QByteArray, QByteArray>> &headers);
+    Q_NETWORK_EXPORT static QHttpHeaders
+    fromMultiMap(const QMultiMap<QByteArray, QByteArray> &headers);
+    Q_NETWORK_EXPORT static QHttpHeaders
+    fromMultiHash(const QMultiHash<QByteArray, QByteArray> &headers);
+
+    Q_NETWORK_EXPORT QList<std::pair<QByteArray, QByteArray>> toListOfPairs() const;
+    Q_NETWORK_EXPORT QMultiMap<QByteArray, QByteArray> toMultiMap() const;
+    Q_NETWORK_EXPORT QMultiHash<QByteArray, QByteArray> toMultiHash() const;
+
+private:
+#ifndef QT_NO_DEBUG_STREAM
+    friend Q_NETWORK_EXPORT QDebug operator<<(QDebug debug, const QHttpHeaders &headers);
+#endif
+
+#ifndef QT_NO_DATASTREAM
+    friend Q_NETWORK_EXPORT QDataStream &operator<<(QDataStream &stream, const QHttpHeaders &headers);
+    friend Q_NETWORK_EXPORT QDataStream &operator>>(QDataStream &stream, QHttpHeaders &headers);
+#endif
+
+    Q_ALWAYS_INLINE void verify([[maybe_unused]] qsizetype pos = 0,
+                                [[maybe_unused]] qsizetype n = 1) const
+    {
+        Q_ASSERT(pos >= 0);
+        Q_ASSERT(pos <= size());
+        Q_ASSERT(n >= 0);
+        Q_ASSERT(n <= size() - pos);
+    }
+    QExplicitlySharedDataPointer<QHttpHeadersPrivate> d;
+};
+
+Q_DECLARE_SHARED(QHttpHeaders)
+
+QT_END_NAMESPACE
+
+#endif // QHTTPHEADERS_H

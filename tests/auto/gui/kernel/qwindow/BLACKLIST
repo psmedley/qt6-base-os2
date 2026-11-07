@@ -1,0 +1,39 @@
+[positioning]
+macos ci
+[modalWithChildWindow]
+# QTBUG-69160
+android
+[modalWindowEnterEventOnHide_QTBUG35109]
+osx
+android
+windows
+# QT6HAROS-118
+harmonyos
+[spuriousMouseMove]
+# QTBUG-69162
+windows-10
+android
+# QT6HAROS-119
+harmonyos
+[modalWindowPosition]
+# QTBUG-69161
+android
+# QTBUG-87392
+[paintEvent]
+android
+[isActive]
+android
+[modalWindowModality]
+android
+[enterLeaveOnWindowShowHide]
+windows-10
+windows-11
+android
+macos-26 # QTBUG-142157
+# QT6HAROS-120
+harmonyos
+[stateChangeSignal]
+macos # QTBUG-140388
+[mouseToTouchTranslation]
+# QT6HAROS-113
+harmonyos

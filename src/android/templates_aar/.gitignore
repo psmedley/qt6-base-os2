@@ -1,0 +1,17 @@
+.gradle/
+.idea/
+.zed/
+.qtcreator/
+.settings/
+.project
+.cxx
+.externalNativeBuild
+.DS_Store
+*.iml
+*.swp
+*.tmp
+*.pro.user*
+CMakeLists.txt.user*
+build/
+captures/
+local.properties

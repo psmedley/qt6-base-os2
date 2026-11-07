@@ -1,0 +1,531 @@
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
+#include "qopenglprogrambinarycache_p.h"
+#include <QOpenGLContext>
+#include <QOpenGLExtraFunctions>
+#include <QSysInfo>
+#include <QStandardPaths>
+#include <QDir>
+#include <QSaveFile>
+#include <QCoreApplication>
+#include <QCryptographicHash>
+#include <q20memory.h>
+#include <limits>
+
+#ifdef Q_OS_UNIX
+#include <sys/mman.h>
+#include <private/qcore_unix_p.h>
+#endif
+
+QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
+
+Q_LOGGING_CATEGORY(lcOpenGLProgramDiskCache, "qt.opengl.diskcache")
+
+#ifndef GL_CONTEXT_LOST
+#define GL_CONTEXT_LOST                   0x0507
+#endif
+
+#ifndef GL_PROGRAM_BINARY_LENGTH
+#define GL_PROGRAM_BINARY_LENGTH          0x8741
+#endif
+
+#ifndef GL_NUM_PROGRAM_BINARY_FORMATS
+#define GL_NUM_PROGRAM_BINARY_FORMATS     0x87FE
+#endif
+
+const quint32 BINSHADER_MAGIC = 0x5174;
+const quint32 BINSHADER_VERSION = 0x3;
+const quint32 BINSHADER_QTVERSION = QT_VERSION;
+
+namespace {
+struct GLEnvInfo
+{
+    GLEnvInfo();
+
+    QByteArray glvendor;
+    QByteArray glrenderer;
+    QByteArray glversion;
+};
+}
+
+GLEnvInfo::GLEnvInfo()
+{
+    QOpenGLContext *ctx = QOpenGLContext::currentContext();
+    Q_ASSERT(ctx);
+    QOpenGLFunctions *f = ctx->functions();
+    const char *vendor = reinterpret_cast<const char *>(f->glGetString(GL_VENDOR));
+    const char *renderer = reinterpret_cast<const char *>(f->glGetString(GL_RENDERER));
+    const char *version = reinterpret_cast<const char *>(f->glGetString(GL_VERSION));
+    if (vendor)
+        glvendor = QByteArray(vendor);
+    if (renderer)
+        glrenderer = QByteArray(renderer);
+    if (version)
+        glversion = QByteArray(version);
+}
+
+QByteArray QOpenGLProgramBinaryCache::ProgramDesc::cacheKey() const
+{
+    QCryptographicHash keyBuilder(QCryptographicHash::Sha1);
+    for (const QOpenGLProgramBinaryCache::ShaderDesc &shader : shaders)
+        keyBuilder.addData(shader.source);
+
+    return keyBuilder.result().toHex();
+}
+
+static inline bool qt_ensureWritableDir(const QString &name)
+{
+    QDir::root().mkpath(name);
+    return QFileInfo(name).isWritable();
+}
+
+QOpenGLProgramBinaryCache::QOpenGLProgramBinaryCache()
+    : m_cacheWritable(false)
+{
+    const QString cachePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (!cachePath.isEmpty()) {
+        m_cacheDir = cachePath + "/qtshadercache-"_L1 + QSysInfo::buildAbi() + u'/';
+        m_cacheWritable = qt_ensureWritableDir(m_cacheDir);
+    }
+
+    qCDebug(lcOpenGLProgramDiskCache, "Cache location '%s' writable = %d", qPrintable(m_cacheDir), m_cacheWritable);
+}
+
+QString QOpenGLProgramBinaryCache::cacheFileName(const QByteArray &cacheKey) const
+{
+    return m_cacheDir + QString::fromUtf8(cacheKey);
+}
+
+#define BASE_HEADER_SIZE (int(4 * sizeof(quint32)))
+#define FULL_HEADER_SIZE(stringsSize) (BASE_HEADER_SIZE + 12 + stringsSize + 8)
+#define PADDING_SIZE(fullHeaderSize) (((fullHeaderSize + 3) & ~3) - fullHeaderSize)
+
+namespace {
+class CacheFileReader
+{
+public:
+    CacheFileReader(const uchar *p, qsizetype size) : m_p(p), m_end(p + size) { }
+
+    quint64 remaining() const { return quint64(m_end - m_p); }
+    const uchar *cursor() const { return m_p; }
+
+    bool readUInt(quint32 *v)
+    {
+        if (remaining() < sizeof(quint32))
+            return false;
+        memcpy(v, m_p, sizeof(quint32));
+        m_p += sizeof(quint32);
+        return true;
+    }
+
+    // Returns non-null terminated strings just pointing to inside the cache
+    // file data, so callers must print these via the stream qCDebug and not
+    // constData().
+    bool readStr(QByteArray *ba)
+    {
+        quint32 len;
+        if (!readUInt(&len) || quint64(len) > remaining())
+            return false;
+        *ba = QByteArray::fromRawData(reinterpret_cast<const char *>(m_p), len);
+        m_p += len;
+        return true;
+    }
+
+    bool skip(quint64 n)
+    {
+        if (remaining() < n)
+            return false;
+        m_p += n;
+        return true;
+    }
+
+private:
+    const uchar *m_p;
+    const uchar *m_end;
+};
+} // namespace
+
+bool QOpenGLProgramBinaryCache::verifyHeader(const QByteArray &buf) const
+{
+    if (buf.size() < BASE_HEADER_SIZE) {
+        qCDebug(lcOpenGLProgramDiskCache, "Cached size too small");
+        return false;
+    }
+    CacheFileReader reader(reinterpret_cast<const uchar *>(buf.constData()), buf.size());
+    quint32 v;
+    if (!reader.readUInt(&v) || v != BINSHADER_MAGIC) {
+        qCDebug(lcOpenGLProgramDiskCache, "Magic does not match");
+        return false;
+    }
+    if (!reader.readUInt(&v) || v != BINSHADER_VERSION) {
+        qCDebug(lcOpenGLProgramDiskCache, "Version does not match");
+        return false;
+    }
+    if (!reader.readUInt(&v) || v != BINSHADER_QTVERSION) {
+        qCDebug(lcOpenGLProgramDiskCache, "Qt version does not match");
+        return false;
+    }
+    if (!reader.readUInt(&v) || v != sizeof(quintptr)) {
+        qCDebug(lcOpenGLProgramDiskCache, "Architecture does not match");
+        return false;
+    }
+    return true;
+}
+
+bool QOpenGLProgramBinaryCache::setProgramBinary(uint programId, uint blobFormat, const void *p, uint blobSize)
+{
+    QOpenGLContext *context = QOpenGLContext::currentContext();
+    QOpenGLExtraFunctions *funcs = context->extraFunctions();
+    while (true) {
+        GLenum error = funcs->glGetError();
+        if (error == GL_NO_ERROR || error == GL_CONTEXT_LOST)
+            break;
+    }
+#if QT_CONFIG(opengles2)
+    if (context->isOpenGLES() && context->format().majorVersion() < 3) {
+        initializeProgramBinaryOES(context);
+        programBinaryOES(programId, blobFormat, p, blobSize);
+    } else
+#endif
+    funcs->glProgramBinary(programId, blobFormat, p, blobSize);
+
+    GLenum err = funcs->glGetError();
+    if (err != GL_NO_ERROR) {
+        qCDebug(lcOpenGLProgramDiskCache, "Program binary failed to load for program %u, size %d, "
+                                  "format 0x%x, err = 0x%x",
+                programId, blobSize, blobFormat, err);
+        return false;
+    }
+    GLint linkStatus = 0;
+    funcs->glGetProgramiv(programId, GL_LINK_STATUS, &linkStatus);
+    if (linkStatus != GL_TRUE) {
+        qCDebug(lcOpenGLProgramDiskCache, "Program binary failed to load for program %u, size %d, "
+                                  "format 0x%x, linkStatus = 0x%x, err = 0x%x",
+                programId, blobSize, blobFormat, linkStatus, err);
+        return false;
+    }
+
+    qCDebug(lcOpenGLProgramDiskCache, "Program binary set for program %u, size %d, format 0x%x, err = 0x%x",
+            programId, blobSize, blobFormat, err);
+    return true;
+}
+
+#ifdef Q_OS_UNIX
+class FdWrapper
+{
+    Q_DISABLE_COPY_MOVE(FdWrapper)
+public:
+    FdWrapper(const QString &fn)
+    {
+        fd = qt_safe_open(QFile::encodeName(fn).constData(), O_RDONLY);
+    }
+    ~FdWrapper()
+    {
+        if (fd != -1)
+            qt_safe_close(fd);
+    }
+    auto map()
+    {
+        struct R {
+            size_t mapSize;
+            void *ptr;
+
+            Q_DISABLE_COPY_MOVE(R)
+            explicit R(size_t sz, void *p)
+                : mapSize{sz}, ptr{p} {}
+            ~R()
+            {
+                if (ptr != MAP_FAILED)
+                    munmap(ptr, mapSize);
+            }
+
+            explicit operator bool() const noexcept { return ptr != MAP_FAILED; }
+        };
+
+        off_t offs = lseek(fd, 0, SEEK_END);
+        if (offs == (off_t) -1) {
+            qErrnoWarning(errno, "lseek failed for program binary");
+            return R{0, MAP_FAILED};
+        }
+        auto mapSize = static_cast<size_t>(offs);
+        return R{
+            mapSize,
+            mmap(nullptr, mapSize, PROT_READ, MAP_SHARED, fd, 0),
+        };
+    }
+
+    int fd;
+};
+#endif
+
+class DeferredFileRemove
+{
+public:
+    DeferredFileRemove(const QString &fn)
+        : fn(fn),
+          active(false)
+    {
+    }
+    ~DeferredFileRemove()
+    {
+        if (active)
+            QFile(fn).remove();
+    }
+    void setActive()
+    {
+        active = true;
+    }
+
+    QString fn;
+    bool active;
+};
+
+bool QOpenGLProgramBinaryCache::load(const QByteArray &cacheKey, uint programId)
+{
+    QMutexLocker lock(&m_mutex);
+    if (const MemCacheEntry *e = m_memCache.object(cacheKey))
+        return setProgramBinary(programId, e->format, e->blob.constData(), e->blob.size());
+
+    QByteArray buf;
+    const QString fn = cacheFileName(cacheKey);
+    DeferredFileRemove undertaker(fn);
+#ifdef Q_OS_UNIX
+    FdWrapper fdw(fn);
+    if (fdw.fd == -1)
+        return false;
+    char header[BASE_HEADER_SIZE];
+    qint64 bytesRead = qt_safe_read(fdw.fd, header, BASE_HEADER_SIZE);
+    if (bytesRead == BASE_HEADER_SIZE)
+        buf = QByteArray::fromRawData(header, BASE_HEADER_SIZE);
+#else
+    QFile f(fn);
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    buf = f.read(BASE_HEADER_SIZE);
+#endif
+
+    if (!verifyHeader(buf)) {
+        undertaker.setActive();
+        return false;
+    }
+
+#ifdef Q_OS_UNIX
+    const auto map = fdw.map();
+    if (!map || map.mapSize < size_t(BASE_HEADER_SIZE)) {
+        undertaker.setActive();
+        return false;
+    }
+    CacheFileReader reader(static_cast<const uchar *>(map.ptr) + BASE_HEADER_SIZE,
+                           qsizetype(map.mapSize) - BASE_HEADER_SIZE);
+#else
+    buf = f.readAll();
+    // QTBUG-142080: QByteArray::constData() confuses GCC, do it differently
+    CacheFileReader reader(reinterpret_cast<const uchar *>(q20::to_address(buf.cbegin())), buf.size());
+#endif
+
+    GLEnvInfo info;
+
+    QByteArray vendor;
+    QByteArray renderer;
+    QByteArray version;
+    quint32 blobFormat = 0;
+    quint32 blobSize = 0;
+    if (!reader.readStr(&vendor) || !reader.readStr(&renderer) || !reader.readStr(&version)
+        || !reader.readUInt(&blobFormat) || !reader.readUInt(&blobSize)
+        || !reader.skip(PADDING_SIZE(FULL_HEADER_SIZE(vendor.size() + renderer.size() + version.size()))))
+    {
+        qCDebug(lcOpenGLProgramDiskCache, "Cached program binary is truncated");
+        undertaker.setActive();
+        return false;
+    }
+
+    if (vendor != info.glvendor) {
+        qCDebug(lcOpenGLProgramDiskCache) << "GL_VENDOR does not match" << vendor << info.glvendor;
+        undertaker.setActive();
+        return false;
+    }
+    if (renderer != info.glrenderer) {
+        qCDebug(lcOpenGLProgramDiskCache) << "GL_RENDERER does not match" << renderer << info.glrenderer;
+        undertaker.setActive();
+        return false;
+    }
+    if (version != info.glversion) {
+        qCDebug(lcOpenGLProgramDiskCache) <<  "GL_VERSION does not match" << version << info.glversion;
+        undertaker.setActive();
+        return false;
+    }
+
+    if (blobSize > reader.remaining() || blobSize > quint32(std::numeric_limits<int>::max())) {
+        qCDebug(lcOpenGLProgramDiskCache, "Cached program binary claims %u bytes, file has %llu",
+                blobSize, reader.remaining());
+        undertaker.setActive();
+        return false;
+    }
+
+    const uchar *p = reader.cursor();
+    return setProgramBinary(programId, blobFormat, p, blobSize)
+        && m_memCache.insert(cacheKey, new MemCacheEntry(p, blobSize, blobFormat));
+}
+
+static inline void writeUInt(uchar **p, quint32 value)
+{
+    memcpy(*p, &value, sizeof(quint32));
+    *p += sizeof(quint32);
+}
+
+static inline void writeStr(uchar **p, const QByteArray &str)
+{
+    writeUInt(p, str.size());
+    memcpy(*p, str.constData(), str.size());
+    *p += str.size();
+}
+
+static inline bool writeFile(const QString &filename, const QByteArray &data)
+{
+#if QT_CONFIG(temporaryfile)
+    QSaveFile f(filename);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        f.write(data);
+        if (f.commit())
+            return true;
+    }
+#else
+    QFile f(filename);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (f.write(data) == data.length())
+            return true;
+    }
+#endif
+    return false;
+}
+
+void QOpenGLProgramBinaryCache::save(const QByteArray &cacheKey, uint programId)
+{
+    QMutexLocker lock(&m_mutex);
+
+    if (!m_cacheWritable)
+        return;
+
+    GLEnvInfo info;
+
+    QOpenGLContext *context = QOpenGLContext::currentContext();
+    QOpenGLExtraFunctions *funcs = context->extraFunctions();
+    GLint blobSize = 0;
+    while (true) {
+        GLenum error = funcs->glGetError();
+        if (error == GL_NO_ERROR || error == GL_CONTEXT_LOST)
+            break;
+    }
+    funcs->glGetProgramiv(programId, GL_PROGRAM_BINARY_LENGTH, &blobSize);
+
+    const int headerSize = FULL_HEADER_SIZE(info.glvendor.size() + info.glrenderer.size() + info.glversion.size());
+
+    // Add padding to make the blob start 4-byte aligned in order to support
+    // OpenGL implementations on ARM that choke on non-aligned pointers passed
+    // to glProgramBinary.
+    const int paddingSize = PADDING_SIZE(headerSize);
+
+    const int totalSize = headerSize + paddingSize + blobSize;
+
+    qCDebug(lcOpenGLProgramDiskCache, "Program binary is %d bytes, err = 0x%x, total %d", blobSize, funcs->glGetError(), totalSize);
+    if (!blobSize)
+        return;
+
+    QByteArray blob(totalSize, Qt::Uninitialized);
+    uchar *p = reinterpret_cast<uchar *>(blob.data());
+
+    writeUInt(&p, BINSHADER_MAGIC);
+    writeUInt(&p, BINSHADER_VERSION);
+    writeUInt(&p, BINSHADER_QTVERSION);
+    writeUInt(&p, sizeof(quintptr));
+
+    writeStr(&p, info.glvendor);
+    writeStr(&p, info.glrenderer);
+    writeStr(&p, info.glversion);
+
+    quint32 blobFormat = 0;
+    uchar *blobFormatPtr = p;
+    writeUInt(&p, blobFormat);
+    writeUInt(&p, blobSize);
+
+    for (int i = 0; i < paddingSize; ++i)
+        *p++ = 0;
+
+    GLint outSize = 0;
+#if QT_CONFIG(opengles2)
+    if (context->isOpenGLES() && context->format().majorVersion() < 3) {
+        initializeProgramBinaryOES(context);
+        getProgramBinaryOES(programId, blobSize, &outSize, &blobFormat, p);
+    } else
+#endif
+    funcs->glGetProgramBinary(programId, blobSize, &outSize, &blobFormat, p);
+    if (blobSize != outSize) {
+        qCDebug(lcOpenGLProgramDiskCache, "glGetProgramBinary returned size %d instead of %d", outSize, blobSize);
+        return;
+    }
+
+    writeUInt(&blobFormatPtr, blobFormat);
+
+    const QString filename = cacheFileName(cacheKey);
+    if (!writeFile(filename, blob))
+        qCDebug(lcOpenGLProgramDiskCache, "Failed to write %s to shader cache", qPrintable(filename));
+}
+
+#if QT_CONFIG(opengles2)
+void QOpenGLProgramBinaryCache::initializeProgramBinaryOES(QOpenGLContext *context)
+{
+    if (m_programBinaryOESInitialized)
+        return;
+    m_programBinaryOESInitialized = true;
+
+    Q_ASSERT(context);
+    getProgramBinaryOES = (void (QOPENGLF_APIENTRYP)(GLuint program, GLsizei bufSize, GLsizei *length, GLenum *binaryFormat, GLvoid *binary))context->getProcAddress("glGetProgramBinaryOES");
+    programBinaryOES = (void (QOPENGLF_APIENTRYP)(GLuint program, GLenum binaryFormat, const GLvoid *binary, GLint length))context->getProcAddress("glProgramBinaryOES");
+}
+#endif
+
+QOpenGLProgramBinarySupportCheck::QOpenGLProgramBinarySupportCheck(QOpenGLContext *context)
+    : QOpenGLSharedResource(context->shareGroup()),
+      m_supported(false)
+{
+    if (QCoreApplication::testAttribute(Qt::AA_DisableShaderDiskCache)) {
+        qCDebug(lcOpenGLProgramDiskCache, "Shader cache disabled via app attribute");
+        return;
+    }
+    if (qEnvironmentVariableIntValue("QT_DISABLE_SHADER_DISK_CACHE")) {
+        qCDebug(lcOpenGLProgramDiskCache, "Shader cache disabled via env var");
+        return;
+    }
+
+    QOpenGLContext *ctx = QOpenGLContext::currentContext();
+    if (ctx) {
+        if (ctx->isOpenGLES()) {
+            qCDebug(lcOpenGLProgramDiskCache, "OpenGL ES v%d context", ctx->format().majorVersion());
+            if (ctx->format().majorVersion() >= 3) {
+                m_supported = true;
+            } else {
+                const bool hasExt = ctx->hasExtension("GL_OES_get_program_binary");
+                qCDebug(lcOpenGLProgramDiskCache, "GL_OES_get_program_binary support = %d", hasExt);
+                if (hasExt)
+                    m_supported = true;
+            }
+        } else {
+            const bool hasExt = ctx->hasExtension("GL_ARB_get_program_binary");
+            qCDebug(lcOpenGLProgramDiskCache, "GL_ARB_get_program_binary support = %d", hasExt);
+            if (hasExt)
+                m_supported = true;
+        }
+        if (m_supported) {
+            GLint fmtCount = 0;
+            ctx->functions()->glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, &fmtCount);
+            qCDebug(lcOpenGLProgramDiskCache, "Supported binary format count = %d", fmtCount);
+            m_supported = fmtCount > 0;
+        }
+    }
+    qCDebug(lcOpenGLProgramDiskCache, "Shader cache supported = %d", m_supported);
+}
+
+QT_END_NAMESPACE

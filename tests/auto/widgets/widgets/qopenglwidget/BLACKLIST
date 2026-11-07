@@ -1,0 +1,8 @@
+# Temporary solution COIN-966
+rhel
+
+# QTBUG-87436
+[clearAndGrab]
+android
+[stackWidgetOpaqueChildIsVisible]
+android

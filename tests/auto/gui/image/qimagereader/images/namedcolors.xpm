@@ -1,0 +1,19 @@
+/* XPM */
+static char *xman[] = {
+/* width height ncolors chars_per_pixel */
+"8 8 4 1",
+/* colors */
+"e g4 black c pale turquoise 4",
+"f m white c light golden rod yellow g4 grey",
+"g g white c lemon chiffon m black",
+"h g4 black c pale turquoise 5",
+/* pixels */
+"eeeeeeee",
+"ffffffff",
+"gggggggg",
+"hhhhhhhh",
+"gggggggg",
+"gggggggg",
+"gggggggg",
+"gggggggg"
+};

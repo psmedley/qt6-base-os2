@@ -1,0 +1,102 @@
+type: Group
+instructions:
+  - type: Group
+    instructions:
+      - type: WriteFile
+        fileContents: |
+            #!/bin/bash
+            RESULT=1 # 0 upon success
+            TIMEOUT=240
+            COUNT=0
+            QEMUPID=0
+            QEMUIPADDR="{{.Env.QNX_QEMU_IPADDR}}"
+            mkqnximage --type=qemu --graphics=no --ip=${QEMUIPADDR} --build --run=-h </dev/null &>/dev/null & disown
+
+            while [[ "QEMUPID" -eq 0 ]]
+            do
+                QEMUPID=`pidof qemu-system-x86_64`
+
+                if [[ "QEMUPID" -eq 0 ]]; then
+                    echo "QEMU not yet started, wait 1 sec."
+                    COUNT=$((COUNT+1))
+                    sleep 1
+                else
+                    echo "QEMU running with PID: $QEMUPID"
+                fi
+
+                if [[ "COUNT" -eq "TIMEOUT" ]]; then
+                    echo "Timeout waiting QEMU to start"
+                    exit 1
+                fi
+            done
+
+            # Wait for a login that works, not for something answering on
+            # port 22. sshd boots with /system/etc/ssh/sshd_config, which
+            # permits no login; post_startup.sh later swaps in
+            # /system/data/etc/ssh/sshd_config with AuthenticationMethods
+            # none. The old check probed with no user and took the resulting
+            # "Permission denied" as readiness, so it never waited.
+            while :; do
+                echo "Waiting QEMU SSH coming up"
+                if ssh -o BatchMode=yes -o ConnectTimeout=2 \
+                       -o StrictHostKeyChecking=no ${QNX_QEMU_SSH} true 2>&1; then
+                    echo "QEMU SSH login ok"
+                    RESULT=0
+                    break
+                fi
+                TIMEOUT=$((TIMEOUT-1))
+                if [ $TIMEOUT -eq 0 ]; then
+                    echo "QEMU SSH timed out"
+                    exit 1
+                fi
+                sleep 1
+            done
+
+            # QNX 8.0 mkqnximage no longer populates /etc/resolv.conf in
+            # static-IP boot mode (dhcpcd never runs with --ip=). Without
+            # this, DNS-dependent tests like tst_qhostinfo fail to resolve
+            # *.test.qt-project.org. The -s guard makes this a no-op on
+            # QNX 7.1, whose mkqnximage already provisions resolv.conf.
+            ssh -o PreferredAuthentications=publickey -o BatchMode=yes \
+                -o StrictHostKeyChecking=no ${QNX_QEMU_SSH} '
+                if [ ! -s /etc/resolv.conf ]; then
+                    mkdir -p /data/var/dhcpcd
+                    {
+                        d=$(getconf _CS_DOMAIN 2>/dev/null)
+                        [ -n "$d" ] && [ "$d" != undefined ] && echo "search $d"
+                        r=$(getconf _CS_RESOLVE 2>/dev/null)
+                        if [ -n "$r" ] && [ "$r" != undefined ]; then
+                            echo "$r" | sed "s/nameserver_/nameserver /"
+                        else
+                            # Fall back to the default gateway. On Coin this is
+                            # the host VM bridge running dnsmasq on :53.
+                            gw=$(netstat -rn 2>/dev/null | awk "/^default/ {print \$2; exit}")
+                            [ -n "$gw" ] && echo "nameserver $gw"
+                        fi
+                    } > /data/var/dhcpcd/resolv.conf
+                    chmod 644 /data/var/dhcpcd/resolv.conf
+                fi'
+            exit $RESULT
+        filename: "{{.Env.QNX_QEMU}}/start_qnx_qemu.sh"
+        fileMode: 493
+      - type: ChangeDirectory
+        directory: "{{.Env.QNX_QEMU}}"
+      - type: ExecuteCommand
+        command: "{{.Env.QNX_QEMU}}/start_qnx_qemu.sh"
+        maxTimeInSeconds: 300
+        maxTimeBetweenOutput: 100
+        userMessageOnFailure: >
+          Failed to start QNX qemu, check logs.
+        disable_if:
+          condition: property
+          property: host.os
+          equals_value: Windows
+    enable_if:
+      condition: and
+      conditions:
+        - condition: property
+          property: target.os
+          equals_value: QNX
+        - condition: property
+          property: features
+          not_contains_value: DisableTests
