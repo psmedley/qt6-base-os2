@@ -146,19 +146,25 @@ public:
     void startThread();
     void stopThread();
 
+    // The select thread is needed for sockets and for non-zero timers (zero timers are fired
+    // directly from processEvents, see #processTimersAndSockets).
+    inline bool needThread() const {
+        return !socketNotifiers.isEmpty() || timerList.size() > timerList.zeroTimerCount();
+    }
+
     inline void maybeStartThread() {
-        if (!socketNotifiers.isEmpty() /*|| timerList.count() > timerList.zeroTimerCount()*/) // FIXME 6.7
+        if (needThread())
             startThread();
     }
 
     inline void maybeStopThread() {
-        if (tid != -1 && socketNotifiers.isEmpty() /* && timerList.count() == timerList.zeroTimerCount()*/) // FIXME 6.7
+        if (tid != -1 && !needThread())
             stopThread();
     }
 
     inline void maybeStopOrStartThread() {
         if (tid != -1) {
-            if (socketNotifiers.isEmpty() /*&& timerList.count() == timerList.zeroTimerCount()*/) // FIXME 6.7
+            if (!needThread())
                 stopThread();
             else
                 startThread();
@@ -389,13 +395,10 @@ void QEventDispatcherOS2Private::prepareForSelect(bool wakeUp)
     // Get the maximum time we can wait.
     timeout = nullptr;
     waitTime = { 0l, 0l };
-    timespec waitTimeTS = { 0l, 0l };
-#if 0  // FIXME 6.7
-    if (timerList.timerWait(waitTimeTS)) {
-        waitTime = timespecToTimeval(waitTimeTS);
+    if (std::optional<QAbstractEventDispatcher::Duration> wait = timerList.timerWait()) {
+        waitTime = timespecToTimeval(durationToTimespec(*wait));
         timeout = &waitTime;
     }
-#endif
     // Inform the select thread we have new data. Note that there may be no new data because all
     // exising sockets are pending and there are no timers. In this case we will leave the select
     // thread Waiting: #maybeStartThread called on any socket/timer change (and also after
@@ -434,7 +437,7 @@ int QEventDispatcherOS2Private::processTimersAndSockets()
 
 void QEventDispatcherOS2Private::startThread()
 {
-    Q_ASSERT(!socketNotifiers.isEmpty()/* || timerList.count() > timerList.zeroTimerCount()*/); // FIXME 6.7
+    Q_ASSERT(needThread());
 
     QMutexLocker locker(&mutex);
 
@@ -604,7 +607,7 @@ void QEventDispatcherOS2Private::threadMain(void *arg)
             }
         } else if (timeout) {
             // No sockets, simply wait for the next timer.
-            unsigned long msecs = timeout->tv_sec * 1000ul + timeout->tv_usec / 1000ul;
+            unsigned long msecs = timeout->tv_sec * 1000ul + (timeout->tv_usec + 999ul) / 1000ul; // round up to avoid spinning before expiry
             d->cond.wait(locker.mutex(), msecs);
         }
 

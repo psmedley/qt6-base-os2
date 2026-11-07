@@ -53,11 +53,14 @@
 #include <ctype.h>
 
 #include <qthread.h>
+#include <private/qdebug_p.h>
 
 QT_BEGIN_NAMESPACE
 
-// defined in qprocess.cpp
-extern QByteArray qt_prettyDebug(const char *data, int len, int maxSize);
+static inline QByteArray qt_prettyDebug(const char *data, qint64 len, qsizetype maxSize)
+{
+    return QtDebugUtils::toPrintable(data, len, maxSize);
+}
 
 // redirect qDebug output to a file in the root directory of the current drive
 static void msgHandler(QtMsgType, const QMessageLogContext &ctx, const QString &msg)

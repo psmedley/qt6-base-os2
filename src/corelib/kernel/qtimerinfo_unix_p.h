@@ -49,9 +49,6 @@ class Q_CORE_EXPORT QTimerInfoList
 {
     using Duration = QAbstractEventDispatcher::Duration;
     using TimerInfo = QAbstractEventDispatcher::TimerInfoV2;
-#ifdef Q_OS_OS2
-    int zeroTimers;
-#endif
 
 public:
     QTimerInfoList();
@@ -59,7 +56,14 @@ public:
     mutable std::chrono::steady_clock::time_point currentTime;
 
 #ifdef Q_OS_OS2
-    int zeroTimerCount() const { return zeroTimers; };
+    // Number of zero-interval timers (QEventDispatcherOS2 fires them from processEvents rather
+    // than waking up its select thread for them).
+    qsizetype zeroTimerCount() const
+    {
+        return std::count_if(timers.cbegin(), timers.cend(), [](const QTimerInfo *t) {
+            return t->interval == Duration::zero();
+        });
+    }
 #endif
 
     std::optional<Duration> timerWait();

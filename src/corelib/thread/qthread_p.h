@@ -244,8 +244,8 @@ public:
 #endif // Q_OS_WIN
 
 #ifdef Q_OS_OS2
-    static void start(void *) Q_DECL_NOEXCEPT;
-    static void finish(void *, bool lockAnyway=true) Q_DECL_NOEXCEPT;
+    static void start(void *) noexcept;
+    void finish(bool lockAnyway = true) noexcept;
 
     TID tid;
     bool terminationEnabled, terminatePending;
