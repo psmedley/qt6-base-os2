@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#include "qplatformdefs.h"
+
 #include "private/qlockfile_p.h"
 #include "private/qfilesystementry_p.h"
 #include "qt_os2.h"
@@ -48,7 +50,10 @@
 #include "QtCore/qdebug.h"
 #include "QtCore/qthread.h"
 
-#include <share.h>
+#include <fcntl.h>  // O_RDWR etc.
+#include <io.h>     // sopen
+#include <share.h>  // SH_DENYWR
+#include <unistd.h> // write, fsync, close
 
 QT_BEGIN_NAMESPACE
 
