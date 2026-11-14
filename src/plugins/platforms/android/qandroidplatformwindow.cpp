@@ -27,7 +27,8 @@ QAndroidPlatformWindow::QAndroidPlatformWindow(QWindow *window)
       m_surfaceContainerType(SurfaceContainer::TextureView), m_nativeParentQtWindow(nullptr),
       m_androidSurfaceObject(nullptr)
 {
-    // Please add any initialization in the function below
+    if (window->surfaceType() == QSurface::RasterSurface)
+        window->setSurfaceType(QSurface::OpenGLSurface);
 }
 
 void QAndroidPlatformWindow::initialize()
@@ -291,7 +292,7 @@ void QAndroidPlatformWindow::applicationStateChanged(Qt::ApplicationState)
 void QAndroidPlatformWindow::createSurface()
 {
     const bool windowStaysOnTop = bool(window()->flags() & Qt::WindowStaysOnTopHint);
-    const bool isOpaque = !format().hasAlpha() && qFuzzyCompare(window()->opacity(), 1.0);
+    const bool isOpaque = !format().hasAlpha() && qFuzzyCompare(window()->opacity(), qreal(1.0));
 
     m_nativeQtWindow.callMethod<void>("createSurface", windowStaysOnTop, 32, isOpaque,
                                       m_surfaceContainerType);
@@ -318,6 +319,8 @@ void QAndroidPlatformWindow::onSurfaceChanged(QtJniTypes::Surface surface)
     } else {
         clearSurface();
     }
+
+    sendExpose();
 
     unlockSurface();
 }

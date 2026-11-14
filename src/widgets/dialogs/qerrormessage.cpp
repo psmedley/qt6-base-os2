@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qerrormessage.h"
 
@@ -407,7 +408,9 @@ void QErrorMessage::showMessage(const QString &message, const QString &type)
 
 void QErrorMessagePrivate::setVisible(bool visible)
 {
-    Q_Q(QErrorMessage);
+    // Don't use Q_Q here! This function is called from ~QDialog,
+    // so Q_Q calling q_func() invokes undefined behavior (invalid cast in q_func()).
+    const auto q = static_cast<QDialog *>(q_ptr);
 
     if (canBeNativeDialog())
         setNativeDialogVisible(visible);

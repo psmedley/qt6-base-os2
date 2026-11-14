@@ -1065,7 +1065,7 @@
 
     The path specified by this variable can contain custom Java classes under
     \c src directory. By default, the \l androiddeployqt tool copies the
-    application template from the Qt for Android installation path into your
+    application template from the \Q4A installation path into your
     project's build directory, then it copies the contents of the path specified
     by this variable on top of that, overwriting any existing files. For
     instance, you can make a custom \c {AndroidManifest.xml} for your application,
@@ -1088,7 +1088,7 @@
     \note This variable applies only to Android targets.
 
     Specifies the target Android API level for the project. By default, this
-    variable is set to API level 34.
+    variable is set to API level 35.
 
     \section1 ANDROID_VERSION_CODE
 
@@ -2638,7 +2638,7 @@
 
     Specifies the hard minimum version of \macos that the application supports.
 
-    For more information, see \l{Qt for \macos#Supported Versions}{\macos Supported Versions}.
+    For more information, see \l{Qt for \macos#Supported Configurations}{\macos Supported Configurations}.
 
     \section1 QMAKE_MAKEFILE
 

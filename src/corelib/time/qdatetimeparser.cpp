@@ -1,5 +1,6 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qplatformdefs.h"
 #include "private/qdatetimeparser_p.h"
@@ -12,6 +13,9 @@
 #include "qtimezone.h"
 #include "qvarlengtharray.h"
 #include "private/qlocale_p.h"
+#if QT_CONFIG(timezone)
+#include "private/qtimezoneprivate_p.h"
+#endif
 
 #include "private/qstringiterator_p.h"
 #include "private/qtenvironmentvariables_p.h"
@@ -784,7 +788,7 @@ QDateTimeParser::parseSection(const QDateTime &currentValue, int sectionIndex, i
 
     const int sectionmaxsize = sectionMaxSize(sectionIndex);
     const bool negate = (sn.type == YearSection && m_text.size() > offset
-                         && m_text.at(offset) == u'-');
+                         && calendar.isProleptic() && m_text.at(offset) == u'-');
     const int negativeYearOffset = negate ? 1 : 0;
 
     QStringView sectionTextRef =
@@ -947,6 +951,12 @@ QDateTimeParser::parseSection(const QDateTime &currentValue, int sectionIndex, i
                     } else {
                         result = ParsedSection(Intermediate, lastVal, used);
                     }
+                } else if (!lastVal && !calendar.hasYearZero()
+                           && (sn.type == YearSection
+                               || (sn.type == YearSection2Digits && currentValue.isValid()
+                                   && currentValue.date().year() / 100 == 0))) {
+                    // Year zero prohibited
+                    result = ParsedSection(unfilled ? Acceptable : Invalid, lastVal, used);
                 } else {
                     result = ParsedSection(Acceptable, lastVal, used);
                 }
@@ -1208,6 +1218,27 @@ static int startsWithLocalTimeZone(QStringView name, const QDateTime &when, cons
     return int(longest);
 }
 
+#if QT_CONFIG(timezone)
+static auto findZoneByLongName(QStringView str, const QLocale &locale, const QDateTime &when)
+{
+    struct R
+    {
+        QTimeZone zone;
+        qsizetype nameLength = 0;
+        bool isValid() const { return nameLength > 0 && zone.isValid(); }
+    } result;
+    auto pfx = QTimeZonePrivate::findLongNamePrefix(str, locale, when.toMSecsSinceEpoch());
+    if (!pfx.nameLength) // Incomplete data in when: try without time-point.
+        pfx = QTimeZonePrivate::findLongNamePrefix(str, locale);
+    if (pfx.nameLength > 0) {
+        result = R{ QTimeZone(pfx.ianaId), pfx.nameLength };
+        Q_ASSERT(result.zone.isValid());
+        // TODO: we should be able to take pfx.timeType into account.
+    }
+    return result;
+}
+#endif // timezone
+
 /*!
   \internal
 */
@@ -1293,9 +1324,14 @@ QDateTimeParser::scanString(const QDateTime &defaultValue, bool fixup) const
                     timeZone = QTimeZone::fromSecondsAheadOfUtc(sect.value);
 #if QT_CONFIG(timezone)
                 } else if (startsWithLocalTimeZone(zoneName, usedDateTime, locale()) != sect.used) {
-                    QTimeZone namedZone = QTimeZone(zoneName.toLatin1());
-                    Q_ASSERT(namedZone.isValid());
-                    timeZone = namedZone;
+                    if (QTimeZone namedZone = QTimeZone(zoneName.toLatin1()); namedZone.isValid()) {
+                        timeZone = namedZone;
+                    } else {
+                        auto found = findZoneByLongName(zoneName, locale(), usedDateTime);
+                        Q_ASSERT(found.isValid());
+                        Q_ASSERT(found.nameLength == zoneName.length());
+                        timeZone = found.zone;
+                    }
 #endif
                 } else {
                     timeZone = QTimeZone::LocalTime;
@@ -1833,12 +1869,17 @@ QDateTimeParser::findTimeZoneName(QStringView str, const QDateTime &when) const
         lastSlash = slash;
     }
 
-    for (; index > systemLength; --index) {  // Find longest match
-        str.truncate(index);
-        QTimeZone zone(str.toLatin1());
+    // Find longest IANA ID match:
+    for (QStringView copy = str; index > systemLength; --index) {
+        copy.truncate(index);
+        QTimeZone zone(copy.toLatin1());
         if (zone.isValid())
             return ParsedSection(Acceptable, zone.offsetFromUtc(when), index);
     }
+    // Not a known IANA ID.
+
+    if (auto found = findZoneByLongName(str, locale(), when); found.isValid())
+        return ParsedSection(Acceptable, found.zone.offsetFromUtc(when), found.nameLength);
 #endif
     if (systemLength > 0)  // won't actually use the offset, but need it to be valid
         return ParsedSection(Acceptable, when.toLocalTime().offsetFromUtc(), systemLength);

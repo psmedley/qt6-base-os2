@@ -1227,7 +1227,15 @@ void tst_QDateTime::toString_strformat()
     QCOMPARE(testDateTime.toString("yyyy-MM-dd hh:mm:ss t"), QString("2013-01-01 01:02:03 UTC"));
     QCOMPARE(testDateTime.toString("yyyy-MM-dd hh:mm:ss tt"), QString("2013-01-01 01:02:03 +0000"));
     QCOMPARE(testDateTime.toString("yyyy-MM-dd hh:mm:ss ttt"), QString("2013-01-01 01:02:03 +00:00"));
-    QCOMPARE(testDateTime.toString("yyyy-MM-dd hh:mm:ss tttt"), QString("2013-01-01 01:02:03 UTC"));
+
+#if QT_CONFIG(icu) && !defined(Q_STL_DINKUMWARE)
+    // The Dinkum (VxWorks) exception may just be because it has an old ICU.
+    // Hopefully other timezone backends shall eventually agree with this:
+    const QString longForm = u"2013-01-01 01:02:03 Coordinated Universal Time"_s;
+#else
+    const QString longForm = u"2013-01-01 01:02:03 UTC"_s;
+#endif // (Note: #if-ery is not allowed within a macro's parameter list.)
+    QCOMPARE(testDateTime.toString(u"yyyy-MM-dd hh:mm:ss tttt"_s), longForm);
 }
 #endif // datestring
 
@@ -3298,6 +3306,8 @@ void tst_QDateTime::fromStringStringFormat_data()
             << u"2001-09-15T09:33:01.001 "_s << u"yyyy-MM-ddThh:mm:ss.z t"_s << 1900 << QDateTime();
     QTest::newRow("invalid-month-year<min") // This used to fail an unfounded assertion.
             << u"0024:91:06 08:52:20"_s << u"yyyy:MM:dd HH:mm:ss"_s << 1900 << QDateTime();
+    QTest::newRow("invalid-year")
+            << u"0000:11:06 08:51:20"_s << u"yyyy:MM:dd HH:mm:ss"_s << 1900 << QDateTime();
 #if QT_CONFIG(timezone)
     QTimeZone southBrazil("America/Sao_Paulo");
     if (southBrazil.isValid()) {
@@ -3370,6 +3380,10 @@ void tst_QDateTime::fromStringStringFormat_data()
     QTest::newRow("UTC:min")
             << u"0100 Jan 1 00:00:00 +00:00"_s << u"yyyy MMM d HH:mm:ss t"_s << 100
             << QDate(100, 1, 1).startOfDay(QTimeZone::UTC);
+    // Reproducer for QTBUG-135382:
+    QTest::newRow("year-zero")
+            << u"0000-01-01T00:00:00.000"_s << u"yyyy-MM-ddThh:mm:ss.zzz"_s << 1900
+            << QDateTime();
 
     // fuzzer test
     QTest::newRow("integer overflow found by fuzzer")
@@ -3834,7 +3848,7 @@ void tst_QDateTime::printNegativeYear() const
 #if QT_CONFIG(datetimeparser)
 void tst_QDateTime::roundtripTextDate() const
 {
-    /* This code path should not result in warnings. */
+    QTest::failOnWarning(); // This code path should not result in warnings.
     const QDateTime now(QDateTime::currentDateTime());
     // TextDate drops millis:
     const QDateTime theDateTime(now.addMSecs(-now.time().msec()));

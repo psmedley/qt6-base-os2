@@ -1,6 +1,7 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // Copyright (C) 2020 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include <qstringconverter.h>
 #include <private/qstringconverter_p.h>
@@ -843,17 +844,10 @@ int QUtf8::compareUtf8(QByteArrayView utf8, QStringView utf16, Qt::CaseSensitivi
         simdCompareAscii(src1, end1, src2, end2);
 
         if (src1 < end1 && src2 < end2) {
-            char32_t uc1 = *src1++;
+            char32_t uc1 = QUtf8Functions::nextUcs4FromUtf8(src1, end1);
             char32_t uc2 = *src2++;
 
             if (uc1 >= 0x80) {
-                char32_t *output = &uc1;
-                qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraitsNoAscii>(uc1, output, src1, end1);
-                if (res < 0) {
-                    // decoding error
-                    uc1 = QChar::ReplacementCharacter;
-                }
-
                 // Only decode the UTF-16 surrogate pair if the UTF-8 code point
                 // wasn't US-ASCII (a surrogate cannot match US-ASCII).
                 if (QChar::isHighSurrogate(uc2) && src2 < end2 && QChar::isLowSurrogate(*src2))
@@ -874,21 +868,13 @@ int QUtf8::compareUtf8(QByteArrayView utf8, QStringView utf16, Qt::CaseSensitivi
 
 int QUtf8::compareUtf8(QByteArrayView utf8, QLatin1StringView s, Qt::CaseSensitivity cs)
 {
-    char32_t uc1 = QChar::Null;
-    auto src1 = reinterpret_cast<const uchar *>(utf8.data());
+    auto src1 = reinterpret_cast<const qchar8_t *>(utf8.data());
     auto end1 = src1 + utf8.size();
     auto src2 = reinterpret_cast<const uchar *>(s.latin1());
     auto end2 = src2 + s.size();
 
     while (src1 < end1 && src2 < end2) {
-        uchar b = *src1++;
-        char32_t *output = &uc1;
-        const qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src1, end1);
-        if (res < 0) {
-            // decoding error
-            uc1 = QChar::ReplacementCharacter;
-        }
-
+        char32_t uc1 = QUtf8Functions::nextUcs4FromUtf8(src1, end1);
         char32_t uc2 = *src2++;
         if (cs == Qt::CaseInsensitive) {
             uc1 = QChar::toCaseFolded(uc1);
@@ -907,35 +893,23 @@ int QUtf8::compareUtf8(QByteArrayView lhs, QByteArrayView rhs, Qt::CaseSensitivi
     if (lhs.isEmpty())
         return qt_lencmp(0, rhs.size());
 
+    if (rhs.isEmpty())
+        return qt_lencmp(lhs.size(), 0);
+
     if (cs == Qt::CaseSensitive) {
         const auto l = std::min(lhs.size(), rhs.size());
         int r = memcmp(lhs.data(), rhs.data(), l);
         return r ? r : qt_lencmp(lhs.size(), rhs.size());
     }
 
-    char32_t uc1 = QChar::Null;
-    auto src1 = reinterpret_cast<const uchar *>(lhs.data());
+    auto src1 = reinterpret_cast<const qchar8_t *>(lhs.data());
     auto end1 = src1 + lhs.size();
-    char32_t uc2 = QChar::Null;
-    auto src2 = reinterpret_cast<const uchar *>(rhs.data());
+    auto src2 = reinterpret_cast<const qchar8_t *>(rhs.data());
     auto end2 = src2 + rhs.size();
 
     while (src1 < end1 && src2 < end2) {
-        uchar b = *src1++;
-        char32_t *output = &uc1;
-        qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src1, end1);
-        if (res < 0) {
-            // decoding error
-            uc1 = QChar::ReplacementCharacter;
-        }
-
-        b = *src2++;
-        output = &uc2;
-        res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src2, end2);
-        if (res < 0) {
-            // decoding error
-            uc2 = QChar::ReplacementCharacter;
-        }
+        char32_t uc1 = QUtf8Functions::nextUcs4FromUtf8(src1, end1);
+        char32_t uc2 = QUtf8Functions::nextUcs4FromUtf8(src2, end2);
 
         uc1 = QChar::toCaseFolded(uc1);
         uc2 = QChar::toCaseFolded(uc2);
@@ -2685,11 +2659,19 @@ QStringDecoder QStringDecoder::decoderForHtml(QByteArrayView data)
 #endif // !QT_BOOTSTRAPPED
 
 /*!
-    Returns the canonical name for encoding \a e.
+    Returns the canonical name for encoding \a e or \nullptr if \a e is an
+    invalid value.
+
+    \note In Qt versions prior to 6.10, 6.9.1, 6.8.4 or 6.5.9, calling this
+    function with an invalid argument resulted in undefined behavior. Since the
+    above-mentioned Qt versions, it returns nullptr instead.
 */
-const char *QStringConverter::nameForEncoding(QStringConverter::Encoding e)
+const char *QStringConverter::nameForEncoding(QStringConverter::Encoding e) noexcept
 {
-    return encodingInterfaces[int(e)].name;
+    auto i = size_t(e);
+    if (Q_UNLIKELY(i >= std::size(encodingInterfaces)))
+        return nullptr;
+    return encodingInterfaces[i].name;
 }
 
 /*!
@@ -2781,7 +2763,8 @@ const char *QStringConverter::nameForEncoding(QStringConverter::Encoding e)
 
     \note \a out must be large enough to be able to hold all the decoded data. Use
     requiredSpace() to determine the maximum size requirement to be able to encode
-    \a in.
+    \a in. This function may write to any bytes between \a out and \c{out +
+    requiredSpace()}, including those past the returned end pointer.
 
     \sa requiredSpace()
 */
@@ -2876,7 +2859,9 @@ const char *QStringConverter::nameForEncoding(QStringConverter::Encoding e)
 
     \a out needs to be large enough to be able to hold all the decoded data. Use
     \l{requiredSpace} to determine the maximum size requirements to decode an encoded
-    data buffer of \c in.size() bytes.
+    data buffer of \c in.size() bytes. This function may write to any bytes
+    between \a out and \c{out + requiredSpace()}, including those past the
+    returned end pointer.
 
     \sa requiredSpace
 */

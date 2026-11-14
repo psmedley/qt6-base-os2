@@ -2,6 +2,7 @@
 // Copyright (C) 2022 Intel Corporation.
 // Copyright (C) 2021 Alex Trotsenko.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:execute-external-code
 
 //#define QPROCESS_DEBUG
 #include "qdebug.h"
@@ -180,7 +181,7 @@ struct ChildError
     int code;
     char function[_POSIX_PIPE_BUF - sizeof(code)];
 };
-static_assert(std::is_trivial_v<ChildError>);
+static_assert(std::is_trivially_copy_constructible_v<ChildError>);
 #ifdef PIPE_BUF
 static_assert(PIPE_BUF >= sizeof(ChildError)); // PIPE_BUF may be bigger
 #endif

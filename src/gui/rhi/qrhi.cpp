@@ -4,6 +4,7 @@
 #include "qrhi_p.h"
 #include <qmath.h>
 #include <QLoggingCategory>
+#include "private/qloggingregistry_p.h"
 
 #include "qrhinull_p.h"
 #ifndef QT_NO_OPENGL
@@ -24,7 +25,11 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(QRHI_LOG_INFO, "qt.rhi.general")
+// Play nice with QSG_INFO since that is still the most commonly used
+// way to get graphics info printed from Qt Quick apps, and the Quick
+// scenegraph is our primary user.
+Q_LOGGING_CATEGORY_WITH_ENV_OVERRIDE(QRHI_LOG_INFO, "QSG_INFO", "qt.rhi.general")
+
 Q_LOGGING_CATEGORY(QRHI_LOG_RUB, "qt.rhi.rub")
 
 /*!
@@ -148,6 +153,17 @@ Q_LOGGING_CATEGORY(QRHI_LOG_RUB, "qt.rhi.rub")
     \c{qsb --qt6 color.frag -o color.frag.qsb}. Alternatively, the Qt Shader
     Tools module offers build system integration for CMake, the
     \c qt_add_shaders() CMake function, that can achieve the same at build time.
+
+    \section1 Security Considerations
+
+    All data consumed by QRhi and related classes such as QShader are considered
+    trusted content.
+
+    \warning Application developers are advised to carefully consider the
+    potential implications before allowing the feeding of user-provided content
+    that is not part of the application and is not under the developers'
+    control. (this includes all vertex/index data, shaders, pipeline and draw
+    call parameters, etc.)
 
     \section1 Design Fundamentals
 
@@ -813,8 +829,12 @@ Q_LOGGING_CATEGORY(QRHI_LOG_RUB, "qt.rhi.rub")
     \value BaseInstance Indicates that instanced draw commands support the \c
     firstInstance argument. When reported as not supported, the firstInstance
     value is ignored and the instance ID starts from 0. In practice this feature
-    will be unsupported with OpenGL, and with Metal on older iOS devices,
-    including the iOS Simulator.
+    will be unsupported with with Metal on older iOS devices, including the iOS
+    Simulator, and all versions of OpenGL. The latter is due to OpenGL ES not
+    supporting draw calls with a base instance at all. Currently QRhi's OpenGL
+    backend does not implement the functionality for OpenGL (non-ES) either,
+    because portable applications cannot rely on a non-zero base instance in
+    practice due to GLES.
 
     \value TriangleFanTopology Indicates that QRhiGraphicsPipeline::setTopology()
     supports QRhiGraphicsPipeline::TriangleFan. In practice this feature will be
@@ -5433,6 +5453,20 @@ void QRhiImplementation::updateLayoutDesc(QRhiShaderResourceBindings *srb)
 }
 
 /*!
+    \fn virtual bool QRhiShaderResourceBindings::create() = 0
+
+    Creates the corresponding resource binding set. Depending on the underlying
+    graphics API, this may involve creating native graphics resources, and
+    therefore it should not be assumed that this is a cheap operation.
+
+    If create() has been called before with no corresponding destroy(), then
+    destroy() is called implicitly first.
+
+    \return \c true when successful, \c false when failed.
+    Regardless of the return value, calling destroy() is always safe.
+ */
+
+/*!
     \fn void QRhiShaderResourceBindings::setBindings(std::initializer_list<QRhiShaderResourceBinding> list)
     Sets the \a list of bindings.
  */
@@ -5503,7 +5537,7 @@ void QRhiImplementation::updateLayoutDesc(QRhiShaderResourceBindings *srb)
 
     \value ImageLoadStore Image load and store
 
-    \value BufferLoad Storage buffer store (with GLSL this maps to reading from
+    \value BufferLoad Storage buffer load (with GLSL this maps to reading from
     a shader storage buffer)
 
     \value BufferStore Storage buffer store (with GLSL this maps to writing to
@@ -8487,21 +8521,11 @@ QRhi::~QRhi()
     delete d;
 }
 
-bool QRhiImplementation::rubLogEnabled = false;
-
 void QRhiImplementation::prepareForCreate(QRhi *rhi, QRhi::Implementation impl, QRhi::Flags flags)
 {
     q = rhi;
 
-    // Play nice with QSG_INFO since that is still the most commonly used
-    // way to get graphics info printed from Qt Quick apps, and the Quick
-    // scenegraph is our primary user.
-    if (qEnvironmentVariableIsSet("QSG_INFO"))
-        const_cast<QLoggingCategory &>(QRHI_LOG_INFO()).setEnabled(QtDebugMsg, true);
-
     debugMarkers = flags.testFlag(QRhi::EnableDebugMarkers);
-
-    rubLogEnabled = QRHI_LOG_RUB().isDebugEnabled();
 
     implType = impl;
     implThread = QThread::currentThread();
@@ -9375,7 +9399,7 @@ void QRhiResourceUpdateBatchPrivate::free()
         bufferLargeAllocTotal += op.data.largeAlloc(); // alloc when > 1 KB
     }
 
-    if (rhi->rubLogEnabled) {
+    if (QRHI_LOG_RUB().isDebugEnabled()) {
         qDebug() << "[rub] release to pool upd.batch #" << poolIndex
                 << "/ bufferOps active" << activeBufferOpCount
                 << "of" << bufferOps.count()
@@ -9760,8 +9784,15 @@ void QRhiCommandBuffer::setStencilRef(quint32 refValue)
     first instance ID is specified by \a firstInstance.
 
     \note \a firstInstance may not be supported, and is ignored when the
-    QRhi::BaseInstance feature is reported as not supported. The first ID is
-    always 0 in that case.
+    QRhi::BaseInstance feature is reported as not supported. The first instance
+    ID is always 0 in that case. QRhi::BaseInstance is never supported with
+    OpenGL at the moment, mainly due to OpenGL ES limitations, and therefore
+    portable applications should not be designed to rely on this argument.
+
+    \note Shaders that need to access the index of the current vertex or
+    instance must use \c gl_VertexIndex and \c gl_InstanceIndex, i.e., the
+    Vulkan-compatible built-in variables, instead of \c gl_VertexID and \c
+    gl_InstanceID.
 
     \note This function can only be called inside a render pass, meaning
     between a beginPass() and endPass() call.
@@ -9787,18 +9818,25 @@ void QRhiCommandBuffer::draw(quint32 vertexCount,
     \l{QRhi::NonFourAlignedEffectiveIndexBufferOffset}{NonFourAlignedEffectiveIndexBufferOffset}
     feature will be reported as not-supported.
 
+    \a vertexOffset (also called \c{base vertex}) is a signed value that is
+    added to the element index before indexing into the vertex buffer. Support
+    for this is not always available, and the value is ignored when the feature
+    QRhi::BaseVertex is reported as unsupported.
+
     For instanced drawing set \a instanceCount to a value other than 1. When
     drawing multiple instances, the first instance ID is specified by \a
     firstInstance.
 
     \note \a firstInstance may not be supported, and is ignored when the
-    QRhi::BaseInstance feature is reported as not supported. The first ID is
-    always 0 in that case.
+    QRhi::BaseInstance feature is reported as not supported. The first instance
+    ID is always 0 in that case. QRhi::BaseInstance is never supported with
+    OpenGL at the moment, mainly due to OpenGL ES limitations, and therefore
+    portable applications should not be designed to rely on this argument.
 
-    \a vertexOffset (also called \c{base vertex}) is a signed value that is
-    added to the element index before indexing into the vertex buffer. Support
-    for this is not always available, and the value is ignored when the feature
-    QRhi::BaseVertex is reported as unsupported.
+    \note Shaders that need to access the index of the current vertex or
+    instance must use \c gl_VertexIndex and \c gl_InstanceIndex, i.e., the
+    Vulkan-compatible built-in variables, instead of \c gl_VertexID and \c
+    gl_InstanceID.
 
     \note This function can only be called inside a render pass, meaning
     between a beginPass() and endPass() call.
@@ -10401,6 +10439,11 @@ QByteArray QRhi::pipelineCacheData()
     called at a low frequency, ideally only once e.g. when starting the
     application.
 
+    \warning Serialized pipeline cache data is assumed to be trusted content. Qt
+    performs robust parsing of the header and metadata included in \a data,
+    application developers are however advised to never pass in data from
+    untrusted sources.
+
     \sa pipelineCacheData(), isFeatureSupported()
  */
 void QRhi::setPipelineCacheData(const QByteArray &data)
@@ -10829,8 +10872,7 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain, BeginFrameFlags f
     if (d->inFrame)
         qWarning("Attempted to call beginFrame() within a still active frame; ignored");
 
-    if (d->rubLogEnabled)
-        qDebug("[rub] new frame");
+    qCDebug(QRHI_LOG_RUB) << "[rub] new frame";
 
     QRhi::FrameOpResult r = !d->inFrame ? d->beginFrame(swapChain, flags) : FrameOpSuccess;
     if (r == FrameOpSuccess)
@@ -10980,8 +11022,7 @@ QRhi::FrameOpResult QRhi::beginOffscreenFrame(QRhiCommandBuffer **cb, BeginFrame
     if (d->inFrame)
         qWarning("Attempted to call beginOffscreenFrame() within a still active frame; ignored");
 
-    if (d->rubLogEnabled)
-        qDebug("[rub] new offscreen frame");
+    qCDebug(QRHI_LOG_RUB) << "[rub] new offscreen frame";
 
     QRhi::FrameOpResult r = !d->inFrame ? d->beginOffscreenFrame(cb, flags) : FrameOpSuccess;
     if (r == FrameOpSuccess)

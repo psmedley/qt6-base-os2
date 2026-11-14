@@ -1,5 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #define QT_NO_URL_CAST_FROM_STRING
 
@@ -857,7 +858,9 @@ void QFileDialog::setVisible(bool visible)
 */
 void QFileDialogPrivate::setVisible(bool visible)
 {
-    Q_Q(QFileDialog);
+    // Don't use Q_Q here! This function is called from ~QDialog,
+    // so Q_Q calling q_func() invokes undefined behavior (invalid cast in q_func()).
+    const auto q = static_cast<QDialog *>(q_ptr);
 
     if (canBeNativeDialog()){
         if (setNativeDialogVisible(visible)){
@@ -869,7 +872,7 @@ void QFileDialogPrivate::setVisible(bool visible)
             if (!nativeDialogInUse)
                 completer->setModel(nullptr);
 #endif
-        } else {
+        } else if (visible) {
             createWidgets();
             q->setAttribute(Qt::WA_DontShowOnScreen, false);
 #if QT_CONFIG(fscompleter)
@@ -2517,7 +2520,7 @@ QUrl QFileDialog::getSaveFileUrl(QWidget *parent,
     native file dialog and not a QFileDialog. However, the native Windows file
     dialog does not support displaying files in the directory chooser. You need
     to pass the \l{QFileDialog::}{DontUseNativeDialog} option, or set the global
-    \\l{Qt::}{AA_DontUseNativeDialogs} application attribute to display files using a
+    \l{Qt::}{AA_DontUseNativeDialogs} application attribute to display files using a
     QFileDialog.
 
     Note that the \macos native file dialog does not show a title bar.

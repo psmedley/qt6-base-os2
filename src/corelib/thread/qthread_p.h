@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QTHREAD_P_H
 #define QTHREAD_P_H
@@ -17,18 +18,19 @@
 //
 //
 
-#include "qplatformdefs.h"
 #include "QtCore/qthread.h"
-#include "QtCore/qmutex.h"
-#include "QtCore/qstack.h"
-#if QT_CONFIG(thread)
-#include "QtCore/qwaitcondition.h"
-#endif
-#include "QtCore/qmap.h"
+
 #include "QtCore/qcoreapplication.h"
 #include "private/qobject_p.h"
+#include "QtCore/qmap.h"
+#include "QtCore/qmutex.h"
+#include "QtCore/qstack.h"
 
-#include <algorithm>
+#if QT_CONFIG(thread)
+#include "private/qthreadstorage_p.h"
+#include "QtCore/qwaitcondition.h"
+#endif
+
 #include <atomic>
 
 #if defined(Q_OS_OS2)

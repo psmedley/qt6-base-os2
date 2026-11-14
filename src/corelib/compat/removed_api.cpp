@@ -934,6 +934,8 @@ QUrl QUrl::fromEncoded(const QByteArray &input, ParsingMode mode)
 #endif // QT_CORE_REMOVED_SINCE(6, 7)
 
 #if QT_CORE_REMOVED_SINCE(6, 8)
+
+#if QT_CONFIG(itemmodel)
 #include "qabstractitemmodel.h"
 
 bool QPersistentModelIndex::operator<(const QPersistentModelIndex &other) const noexcept
@@ -955,6 +957,8 @@ bool QPersistentModelIndex::operator!=(const QModelIndex &other) const noexcept
 {
     return !comparesEqual(*this, other);
 }
+
+#endif // QT_CONFIG(itemmodel)
 
 #include "qbitarray.h" // inlined API
 
@@ -1167,6 +1171,7 @@ auto QStringConverter::encodingForName(const char *name) noexcept -> std::option
 #endif
 
 #include "qtimer.h" // inlined API
+                    // removed inline API (MSVC)
 
 void QTimer::singleShot(std::chrono::milliseconds interval, Qt::TimerType timerType,
                         const QObject *receiver, const char *member)

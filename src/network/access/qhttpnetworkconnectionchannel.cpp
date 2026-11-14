@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2014 BlackBerry Limited. All rights reserved.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:network-protocol
 
 #include "qhttpnetworkconnectionchannel_p.h"
 #include "qhttpnetworkconnection_p.h"
@@ -285,7 +286,7 @@ void QHttpNetworkConnectionChannel::_q_readyRead()
 void QHttpNetworkConnectionChannel::handleUnexpectedEOF()
 {
     Q_ASSERT(reply);
-    if (reconnectAttempts <= 0) {
+    if (reconnectAttempts <= 0 || !request.methodIsIdempotent()) {
         // too many errors reading/receiving/parsing the status, close the socket and emit error
         requeueCurrentlyPipelinedRequests();
         close();

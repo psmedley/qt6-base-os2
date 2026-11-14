@@ -67,12 +67,8 @@ macro(_qt_internal_get_moc_flags _moc_flags)
         set(${_moc_flags} ${${_moc_flags}} "-D${_current}")
     endforeach()
 
-    if(WIN32)
-        set(${_moc_flags} ${${_moc_flags}} -DWIN32)
-    endif()
-    if (MSVC)
-        set(${_moc_flags} ${${_moc_flags}} --compiler-flavor=msvc)
-    endif()
+    _qt_internal_get_moc_compiler_flavor_flags(flavor_flags)
+    set(${_moc_flags} ${${_moc_flags}} ${flavor_flags})
 endmacro()
 
 # helper macro to set up a moc rule
@@ -95,6 +91,9 @@ function(_qt_internal_create_moc_command infile outfile moc_flags moc_options
         set(extra_output_files "${outfile}.json")
         set(${out_json_file} "${extra_output_files}" PARENT_SCOPE)
     endif()
+
+    _qt_internal_get_moc_compiler_flavor_flags(flavor_flags)
+    list(APPEND _moc_parameters ${flavor_flags})
 
     if(moc_target)
         set(_moc_parameters_file ${_moc_parameters_file}$<$<BOOL:$<CONFIG>>:_$<CONFIG>>)
@@ -670,6 +669,31 @@ function(_qt_internal_disable_autorcc_zstd_when_not_supported target)
     endif()
 endfunction()
 
+# Link given target to PlatformExampleInternal when the target is part of an example build.
+function(_qt_internal_link_to_platform_example_internal target)
+    # The first variable is set when examples are built using ExternalProject_Add.
+    # The second is set when examples are built in-tree, the scope is in the <repo>/examples subdir.
+    if(QT_INTERNAL_IS_EXAMPLE_EP_BUILD
+        OR QT_INTERNAL_IS_EXAMPLE_IN_TREE_BUILD)
+        target_link_libraries("${target}" PRIVATE
+            ${QT_CMAKE_EXPORT_NAMESPACE}::PlatformExampleInternal)
+    endif()
+endfunction()
+
+# Set up warnings as errors for targets built in example projects.
+function(_qt_internal_setup_warnings_are_errors_for_example_target target)
+    # Only enable warnings as errors when the global variable is enabled and the repo is known
+    # to have clean examples.
+    if(QT_INTERNAL_IS_EXAMPLE_EP_BUILD
+        OR QT_INTERNAL_IS_EXAMPLE_IN_TREE_BUILD)
+        if(WARNINGS_ARE_ERRORS AND QT_REPO_EXAMPLES_WARNINGS_CLEAN)
+            _qt_internal_set_skip_warnings_are_errors("${target}" FALSE)
+        else()
+            _qt_internal_set_skip_warnings_are_errors("${target}" TRUE)
+        endif()
+    endif()
+endfunction()
+
 function(_qt_internal_create_executable target)
     if(ANDROID)
         list(REMOVE_ITEM ARGN "WIN32" "MACOSX_BUNDLE")
@@ -681,12 +705,14 @@ function(_qt_internal_create_executable target)
         # visibility=hidden. Not having this flag set will cause the
         # executable to have main() hidden and can then no longer be loaded
         # through dlopen()
-        set_property(TARGET "${target}" PROPERTY C_VISIBILITY_PRESET default)
-        set_property(TARGET "${target}" PROPERTY CXX_VISIBILITY_PRESET default)
-        set_property(TARGET "${target}" PROPERTY OBJC_VISIBILITY_PRESET default)
-        set_property(TARGET "${target}" PROPERTY OBJCXX_VISIBILITY_PRESET default)
-        set_property(TARGET "${target}"
-                     PROPERTY _qt_android_apply_arch_suffix_called_from_qt_impl TRUE)
+        set_target_properties("${target}" PROPERTIES
+            C_VISIBILITY_PRESET default
+            CXX_VISIBILITY_PRESET default
+            OBJC_VISIBILITY_PRESET default
+            OBJCXX_VISIBILITY_PRESET default
+            _qt_android_apply_arch_suffix_called_from_qt_impl TRUE
+        )
+
         qt6_android_apply_arch_suffix("${target}")
         set_property(TARGET "${target}" PROPERTY _qt_is_android_executable TRUE)
     else()
@@ -697,6 +723,8 @@ function(_qt_internal_create_executable target)
     endif()
 
     _qt_internal_disable_autorcc_zstd_when_not_supported("${target}")
+    _qt_internal_link_to_platform_example_internal("${target}")
+    _qt_internal_setup_warnings_are_errors_for_example_target("${target}")
     _qt_internal_set_up_static_runtime_library("${target}")
 endfunction()
 
@@ -837,12 +865,18 @@ function(qt6_finalize_target target)
         endif()
     endif()
 
+    _qt_internal_work_around_autogen_discarded_dependencies_from_target_libs("${target}")
+
+    get_target_property(is_immediately_finalized "${target}" _qt_is_immediately_finalized)
+    get_target_property(uses_automoc ${target} AUTOMOC)
+    if(uses_automoc)
+        _qt_internal_get_moc_compiler_flavor_flags(flavor_flags)
+        set_property(TARGET "${target}" APPEND PROPERTY AUTOMOC_MOC_OPTIONS ${flavor_flags})
+    endif()
     if(target_type STREQUAL "SHARED_LIBRARY" OR
         target_type STREQUAL "STATIC_LIBRARY" OR
         target_type STREQUAL "MODULE_LIBRARY" OR
         target_type STREQUAL "OBJECT_LIBRARY")
-        get_target_property(is_immediately_finalized "${target}" _qt_is_immediately_finalized)
-        get_target_property(uses_automoc ${target} AUTOMOC)
         if(uses_automoc AND NOT is_immediately_finalized)
             qt6_extract_metatypes(${target})
         endif()
@@ -1599,10 +1633,11 @@ function(_qt_internal_generate_win32_rc_file target)
         # Generate RC File
         set(rc_file_output "${target_binary_dir}/")
         if(QT_GENERATOR_IS_MULTI_CONFIG)
-            string(APPEND rc_file_output "$<CONFIG>/")
+            set(rc_file_suffix "-$<CONFIG>")
+        else()
+            set(rc_file_suffix "")
         endif()
-        string(APPEND rc_file_output "${target}_resource.rc")
-        set(target_rc_file "${rc_file_output}")
+        string(APPEND rc_file_output "${target}_resource${rc_file_suffix}.rc")
 
         set(company_name "")
         get_target_property(target_company_name ${target} QT_TARGET_COMPANY_NAME)
@@ -2799,6 +2834,8 @@ function(_qt_internal_add_library target)
     cmake_policy(POP)
 
     _qt_internal_disable_autorcc_zstd_when_not_supported("${target}")
+    _qt_internal_link_to_platform_example_internal("${target}")
+    _qt_internal_setup_warnings_are_errors_for_example_target("${target}")
     _qt_internal_set_up_static_runtime_library(${target})
 
     if(NOT type_to_create STREQUAL "INTERFACE" AND NOT type_to_create STREQUAL "OBJECT")
@@ -3087,10 +3124,10 @@ function(_qt_internal_setup_deploy_support)
 
     # Check whether we will have to adjust the RPATH of plugins.
     if("${QT_DEPLOY_FORCE_ADJUST_RPATHS}" STREQUAL "")
-        set(must_adjust_plugins_rpath "")
-        if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows"
-                AND NOT CMAKE_INSTALL_LIBDIR STREQUAL QT6_INSTALL_LIBS)
+        if(UNIX AND NOT APPLE)
             set(must_adjust_plugins_rpath ON)
+        else()
+            set(must_adjust_plugins_rpath OFF)
         endif()
     else()
         set(must_adjust_plugins_rpath "${QT_DEPLOY_FORCE_ADJUST_RPATHS}")
@@ -3164,13 +3201,13 @@ if(NOT QT_DEPLOY_LIB_DIR)
     set(QT_DEPLOY_LIB_DIR \"${CMAKE_INSTALL_LIBDIR}\")
 endif()
 if(NOT QT_DEPLOY_PLUGINS_DIR)
-    set(QT_DEPLOY_PLUGINS_DIR \"plugins\")
+    set(QT_DEPLOY_PLUGINS_DIR \"${QT6_INSTALL_PLUGINS}\")
 endif()
 if(NOT QT_DEPLOY_QML_DIR)
-    set(QT_DEPLOY_QML_DIR \"qml\")
+    set(QT_DEPLOY_QML_DIR \"${QT6_INSTALL_QML}\")
 endif()
 if(NOT QT_DEPLOY_TRANSLATIONS_DIR)
-    set(QT_DEPLOY_TRANSLATIONS_DIR \"translations\")
+    set(QT_DEPLOY_TRANSLATIONS_DIR \"${QT6_INSTALL_TRANSLATIONS}\")
 endif()
 if(NOT QT_DEPLOY_PREFIX)
     set(QT_DEPLOY_PREFIX \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")
@@ -3560,7 +3597,7 @@ macro(qt6_standard_project_setup)
             if(QT_OSX_ARCHITECTURES)
                 list(LENGTH QT_OSX_ARCHITECTURES qt_osx_arch_count)
             endif()
-            if(NOT qt_osx_arch_count GREATER 1 AND ${CMAKE_OSX_SYSROOT} MATCHES "^[a-z]+simulator$")
+            if(NOT qt_osx_arch_count GREATER 1 AND "${CMAKE_OSX_SYSROOT}" MATCHES "^[a-z]+simulator$")
                 # Xcode expects the base SDK to be the device SDK
                 set(simulator_sysroot "${CMAKE_OSX_SYSROOT}")
                 string(REGEX REPLACE "simulator" "os" CMAKE_OSX_SYSROOT "${CMAKE_OSX_SYSROOT}")
@@ -3836,7 +3873,7 @@ function(qt6_generate_deploy_app_script)
         qt6_generate_deploy_script(${generate_args}
             CONTENT "
 qt6_deploy_runtime_dependencies(
-    EXECUTABLE $<TARGET_FILE_NAME:${arg_TARGET}>.app
+    EXECUTABLE \"$<TARGET_FILE_NAME:${arg_TARGET}>.app\"
 ${common_deploy_args})
 ")
 
@@ -3844,7 +3881,7 @@ ${common_deploy_args})
         qt6_generate_deploy_script(${generate_args}
             CONTENT "
 qt6_deploy_runtime_dependencies(
-    EXECUTABLE $<TARGET_FILE:${arg_TARGET}>
+    EXECUTABLE \"$<TARGET_FILE:${arg_TARGET}>\"
     GENERATE_QT_CONF
 ${common_deploy_args})
 ")
@@ -3854,7 +3891,7 @@ ${common_deploy_args})
         qt6_generate_deploy_script(${generate_args}
             CONTENT "
 qt6_deploy_runtime_dependencies(
-    EXECUTABLE $<TARGET_FILE:${arg_TARGET}>
+    EXECUTABLE \"$<TARGET_FILE:${arg_TARGET}>\"
     GENERATE_QT_CONF
 ${common_deploy_args})
 ")

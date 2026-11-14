@@ -514,7 +514,7 @@ static inline bool asciiIsLetter(char ch)
 
 namespace {
 
-struct PosixZone
+struct PosixZone // TODO: QTBUG-112006 - make this cross-platform.
 {
     enum {
         InvalidOffset = INT_MIN,
@@ -600,7 +600,7 @@ static auto validatePosixRule(const QByteArray &posixRule, bool requireOffset = 
     // See also calculatePosixTransition()'s reference.
     const auto parts = posixRule.split(',');
     const struct { bool isValid, hasDst; } fail{false, false}, good{true, parts.size() > 1};
-    const QByteArray &zoneinfo = parts.at(0);
+    const QByteArray &zoneinfo = parts.at(0).trimmed();
     if (zoneinfo.isEmpty())
         return fail;
 
@@ -656,7 +656,7 @@ static QList<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray 
 
     PosixZone stdZone, dstZone;
     {
-        const QByteArray &zoneinfo = parts.at(0);
+        const QByteArray &zoneinfo = parts.at(0).trimmed();
         const char *begin = zoneinfo.constBegin();
 
         stdZone = PosixZone::parse(begin, zoneinfo.constEnd());
@@ -1030,7 +1030,7 @@ QString QTzTimeZonePrivate::displayName(QTimeZone::TimeType timeType,
             if (nameType == QTimeZone::ShortName)
                 return tran.abbreviation;
             // Save base class repeating the data(timeType) query:
-            if (locale.language() == QLocale::C)
+            if (isAnglicLocale(locale))
                 return isoOffsetFormat(tran.offsetFromUtc);
         }
     }
@@ -1176,8 +1176,8 @@ QTimeZonePrivate::Data QTzTimeZonePrivate::data(QTimeZone::TimeType timeType) co
 
 bool QTzTimeZonePrivate::isDataLocale(const QLocale &locale) const
 {
-    // TZ data uses English / C locale names:
-    return locale.language() == QLocale::C || locale.language() == QLocale::English;
+    // TZ data uses en-Latn-* / C locale names:
+    return isAnglicLocale(locale);
 }
 
 bool QTzTimeZonePrivate::hasTransitions() const

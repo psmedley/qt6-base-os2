@@ -107,6 +107,12 @@ public:
         menuRightBorder      = 15, // right border on menus
         menuCheckMarkWidth   = 12  // checkmarks width on menus
     };
+
+private:
+    Qt::ColorScheme colorScheme() const
+    {
+        return QGuiApplicationPrivate::platformTheme()->colorScheme();
+    }
 };
 
 QT_END_NAMESPACE

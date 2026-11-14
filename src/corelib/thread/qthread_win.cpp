@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qthread.h"
 #include "qthread_p.h"
@@ -264,7 +265,21 @@ unsigned int __stdcall QT_ENSURE_STACK_ALIGNED_FOR_SSE QThreadPrivate::start(voi
     QString threadName = std::exchange(thr->d_func()->objectName, {});
     if (Q_LIKELY(threadName.isEmpty()))
         threadName = QString::fromUtf8(thr->metaObject()->className());
+#ifndef QT_WIN_SERVER_2016_COMPAT
     SetThreadDescription(GetCurrentThread(), reinterpret_cast<const wchar_t *>(threadName.utf16()));
+#else
+    HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+    if (kernelbase != NULL) {
+        typedef HRESULT (WINAPI *DESCFUNC)(HANDLE, PCWSTR);
+
+        DESCFUNC setThreadDescription =
+            (DESCFUNC)GetProcAddress(kernelbase, "SetThreadDescription");
+        if (setThreadDescription != NULL) {
+            setThreadDescription(GetCurrentThread(),
+                                 reinterpret_cast<const wchar_t *>(threadName.utf16()));
+        }
+    }
+#endif
 
     emit thr->started(QThread::QPrivateSignal());
     QThread::setTerminationEnabled(true);

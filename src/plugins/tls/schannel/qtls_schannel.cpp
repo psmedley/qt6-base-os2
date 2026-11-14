@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:cryptography
 
 // #define QSSLSOCKET_DEBUG
 
@@ -7,6 +8,7 @@
 #include "qtlskey_schannel_p.h"
 #include "qx509_schannel_p.h"
 #include "qtls_schannel_p.h"
+#include "../shared/qasn1element_p.h"
 
 #include <QtNetwork/private/qsslcertificate_p.h>
 #include <QtNetwork/private/qsslcipher_p.h>
@@ -126,8 +128,9 @@ using namespace Qt::StringLiterals;
 Q_LOGGING_CATEGORY(lcTlsBackendSchannel, "qt.tlsbackend.schannel");
 
 // Defined in qsslsocket_qt.cpp.
-QByteArray _q_makePkcs12(const QList<QSslCertificate> &certs, const QSslKey &key,
+extern QByteArray _q_makePkcs12(const QList<QSslCertificate> &certs, const QSslKey &key,
                          const QString &passPhrase);
+extern QAsn1Element _q_PKCS12_key(const QSslKey &key);
 
 namespace {
 bool supportsTls13();
@@ -806,7 +809,7 @@ QT_WARNING_POP
     \internal
     Used by verifyCertContext to check if a client cert is used by a server or vice versa.
 */
-bool netscapeWrongCertType(const QList<QSslCertificateExtension> &extensions, bool isClient)
+bool netscapeWrongCertType(const QList<QSslCertificateExtension> &extensions, bool isClient, bool isLeaf)
 {
     const auto netscapeIt = std::find_if(
             extensions.cbegin(), extensions.cend(),
@@ -820,8 +823,13 @@ bool netscapeWrongCertType(const QList<QSslCertificateExtension> &extensions, bo
         dataStream >> netscapeCertType;
         if (dataStream.status() != QDataStream::Status::Ok)
             return true;
-        const int expectedPeerCertType = isClient ? NETSCAPE_SSL_SERVER_AUTH_CERT_TYPE
-                                                  : NETSCAPE_SSL_CLIENT_AUTH_CERT_TYPE;
+        const int expectedPeerCertType = [&]() {
+            if (isLeaf) {
+                return isClient ? NETSCAPE_SSL_SERVER_AUTH_CERT_TYPE
+                                : NETSCAPE_SSL_CLIENT_AUTH_CERT_TYPE;
+            }
+            return NETSCAPE_SSL_CA_CERT_TYPE;
+        }();
         if ((netscapeCertType & expectedPeerCertType) == 0)
             return true;
     }
@@ -1003,7 +1011,6 @@ TlsCryptographSchannel::~TlsCryptographSchannel()
     closeCertificateStores();
     deallocateContext();
     freeCredentialsHandle();
-    CertFreeCertificateContext(localCertContext);
 }
 
 void TlsCryptographSchannel::init(QSslSocket *qObj, QSslSocketPrivate *dObj)
@@ -1098,12 +1105,6 @@ bool TlsCryptographSchannel::acquireCredentialsHandle()
         return false;
     }
 
-    const CERT_CHAIN_CONTEXT *chainContext = nullptr;
-    auto freeCertChain = qScopeGuard([&chainContext]() {
-        if (chainContext)
-            CertFreeCertificateChain(chainContext);
-    });
-
     DWORD certsCount = 0;
     // Set up our certificate stores before trying to use one...
     initializeCertificateStores();
@@ -1114,36 +1115,11 @@ bool TlsCryptographSchannel::acquireCredentialsHandle()
     if (!configuration.localCertificateChain().isEmpty() && !localCertificateStore)
         return true; // 'true' because "tst_QSslSocket::setEmptyKey" expects us to not disconnect
 
+    PCCERT_CONTEXT localCertificate = nullptr;
     if (localCertificateStore != nullptr) {
-        CERT_CHAIN_FIND_BY_ISSUER_PARA findParam;
-        ZeroMemory(&findParam, sizeof(findParam));
-        findParam.cbSize = sizeof(findParam);
-        findParam.pszUsageIdentifier = isClient ? szOID_PKIX_KP_CLIENT_AUTH : szOID_PKIX_KP_SERVER_AUTH;
-
-        // There should only be one chain in our store, so.. we grab that one.
-        chainContext = CertFindChainInStore(localCertificateStore.get(),
-                                            X509_ASN_ENCODING,
-                                            0,
-                                            CERT_CHAIN_FIND_BY_ISSUER,
-                                            &findParam,
-                                            nullptr);
-        if (!chainContext) {
-            const QString message = isClient
-                    ? QSslSocket::tr("The certificate provided cannot be used for a client.")
-                    : QSslSocket::tr("The certificate provided cannot be used for a server.");
-            setErrorAndEmit(d, QAbstractSocket::SocketError::SslInvalidUserDataError, message);
-            return false;
-        }
-        Q_ASSERT(chainContext->cChain == 1);
-        Q_ASSERT(chainContext->rgpChain[0]);
-        Q_ASSERT(chainContext->rgpChain[0]->cbSize >= 1);
-        Q_ASSERT(chainContext->rgpChain[0]->rgpElement[0]);
-        Q_ASSERT(!localCertContext);
-        localCertContext = CertDuplicateCertificateContext(chainContext->rgpChain[0]
-                                                                   ->rgpElement[0]
-                                                                   ->pCertContext);
         certsCount = 1;
-        Q_ASSERT(localCertContext);
+        localCertificate = static_cast<PCCERT_CONTEXT>(configuration.localCertificate().handle());
+        Q_ASSERT(localCertificate);
     }
 
     const QList<QSslCipher> ciphers = configuration.ciphers();
@@ -1167,7 +1143,7 @@ bool TlsCryptographSchannel::acquireCredentialsHandle()
         SCH_CREDENTIALS_VERSION,
         0,
         certsCount,
-        &localCertContext,
+        &localCertificate,
         nullptr,
         0,
         nullptr,
@@ -1724,9 +1700,6 @@ void TlsCryptographSchannel::reset()
     connectionInfo = {};
     streamSizes = {};
 
-    CertFreeCertificateContext(localCertContext);
-    localCertContext = nullptr;
-
     contextAttributes = 0;
     intermediateBuffer.clear();
     schannelState = SchannelState::InitializeHandshake;
@@ -2236,6 +2209,70 @@ bool TlsCryptographSchannel::checkSslErrors()
     return true;
 }
 
+static void attachPrivateKeyToCertificate(const QSslCertificate &certificate,
+                                          const QSslKey &privateKey)
+{
+    QAsn1Element elem = _q_PKCS12_key(privateKey);
+    QByteArray buffer;
+    QDataStream stream(&buffer, QDataStream::WriteOnly);
+    elem.write(stream);
+    NCRYPT_PROV_HANDLE provider = 0;
+    SECURITY_STATUS status = NCryptOpenStorageProvider(&provider, MS_KEY_STORAGE_PROVIDER, 0);
+    if (status != SEC_E_OK) {
+        qCWarning(lcTlsBackendSchannel())
+                << "Failed to open ncrypt storage provider:" << schannelErrorToString(status);
+        return;
+    }
+    const auto freeProvider = qScopeGuard([provider]() { NCryptFreeObject(provider); });
+
+    const QString certName = certificate.subjectInfo(QSslCertificate::CommonName).front();
+    QSpan<const QChar> nameSpan(certName);
+    NCryptBuffer nbuffer{ ULONG(nameSpan.size_bytes() + sizeof(char16_t)),
+                          NCRYPTBUFFER_PKCS_KEY_NAME,
+                          const_reinterpret_cast<void *>(nameSpan.data()) };
+    NCryptBufferDesc bufferDesc{ NCRYPTBUFFER_VERSION, 1, &nbuffer };
+    NCRYPT_KEY_HANDLE ncryptKey = 0;
+    status = NCryptImportKey(provider, 0, NCRYPT_PKCS8_PRIVATE_KEY_BLOB, &bufferDesc, &ncryptKey,
+                             PBYTE(buffer.data()), buffer.size(), 0);
+    if (status != SEC_E_OK) {
+        qCWarning(lcTlsBackendSchannel())
+                << "Failed to import private key:" << schannelErrorToString(status);
+        return;
+    }
+    const auto freeKey = qScopeGuard([ncryptKey]() { NCryptFreeObject(ncryptKey); });
+
+    CERT_CONTEXT *context = PCERT_CONTEXT(certificate.handle());
+    Q_ASSERT(context);
+
+    CRYPT_DATA_BLOB keyBlob = { sizeof(ncryptKey), PBYTE(&ncryptKey) };
+    BOOL ok =
+            CertSetCertificateContextProperty(context, CERT_NCRYPT_KEY_HANDLE_PROP_ID, 0, &keyBlob);
+    if (!ok) {
+        auto error = GetLastError();
+        if (lcTlsBackendSchannel().isWarningEnabled())
+            qErrnoWarning(int(error), "Failed to set ncrypt handle property.");
+        return;
+    }
+
+    CRYPT_KEY_PROV_INFO provInfo{
+        const_reinterpret_cast<LPWSTR>(certName.constData()),
+        const_cast<LPWSTR>(MS_KEY_STORAGE_PROVIDER),
+        0,
+        CERT_SET_KEY_PROV_HANDLE_PROP_ID | CERT_SET_KEY_CONTEXT_PROP_ID,
+        0,
+        nullptr,
+        0,
+    };
+    ok = CertSetCertificateContextProperty(context, CERT_KEY_PROV_INFO_PROP_ID,
+                                           CERT_SET_PROPERTY_INHIBIT_PERSIST_FLAG, &provInfo);
+    if (!ok) {
+        auto error = GetLastError();
+        if (lcTlsBackendSchannel().isWarningEnabled())
+            qErrnoWarning(int(error), "Failed to set key provider info property.");
+        return;
+    }
+}
+
 void TlsCryptographSchannel::initializeCertificateStores()
 {
     //// helper function which turns a chain into a certificate store
@@ -2252,7 +2289,10 @@ void TlsCryptographSchannel::initializeCertificateStores()
         CRYPT_DATA_BLOB pfxBlob;
         pfxBlob.cbData = DWORD(pkcs12.length());
         pfxBlob.pbData = reinterpret_cast<unsigned char *>(pkcs12.data());
-        return QHCertStorePointer(PFXImportCertStore(&pfxBlob, passphrase, 0));
+        // ALWAYS_CNG to import using "Cryptography API: Next Generation (CNG)"
+        // NO_PERSIST_KEY to request not persisting anything imported to disk
+        constexpr DWORD flags = PKCS12_ALWAYS_CNG_KSP | PKCS12_NO_PERSIST_KEY;
+        return QHCertStorePointer(PFXImportCertStore(&pfxBlob, passphrase, flags));
     };
 
     if (!configuration.localCertificateChain().isEmpty()) {
@@ -2262,10 +2302,34 @@ void TlsCryptographSchannel::initializeCertificateStores()
             return;
         }
         if (localCertificateStore == nullptr) {
-            localCertificateStore = createStoreFromCertificateChain(configuration.localCertificateChain(),
-                                                                    configuration.privateKey());
-            if (localCertificateStore == nullptr)
+            localCertificateStore =
+                    createStoreFromCertificateChain(configuration.localCertificateChain(), {});
+            if (localCertificateStore) {
+                const CERT_CONTEXT *certificateContext = CertFindCertificateInStore(
+                        localCertificateStore.get(), X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0,
+                        CERT_FIND_ANY, nullptr, nullptr);
+                if (certificateContext) {
+                    auto *backend = QTlsBackend::backend<X509CertificateSchannel>(
+                            configuration.localCertificate());
+                    backend->certificateContext.reset(
+                            CertDuplicateCertificateContext(certificateContext));
+
+                    DWORD keySpec = 0;
+                    BOOL mustFree = FALSE;
+                    NCRYPT_KEY_HANDLE testKey = 0;
+                    BOOL ok = CryptAcquireCertificatePrivateKey(
+                            certificateContext, CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG, nullptr,
+                            &testKey, &keySpec, &mustFree);
+                    if (mustFree)
+                        NCryptFreeObject(testKey);
+                    if (!ok) {
+                        attachPrivateKeyToCertificate(configuration.localCertificate(),
+                                                      configuration.privateKey());
+                    }
+                }
+            } else {
                 qCWarning(lcTlsBackendSchannel, "Failed to load certificate chain!");
+            }
         }
     }
 
@@ -2508,7 +2572,7 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
         // While netscape shouldn't be relevant now it defined an extension which is
         // still in use. Schannel does not check this automatically, so we do it here.
         // It is used to differentiate between client and server certificates.
-        if (netscapeWrongCertType(extensions, isClient))
+        if (netscapeWrongCertType(extensions, isClient, i == 0))
             element->TrustStatus.dwErrorStatus |= CERT_TRUST_IS_NOT_VALID_FOR_USAGE;
 
         if (element->TrustStatus.dwErrorStatus & CERT_TRUST_IS_NOT_VALID_FOR_USAGE) {

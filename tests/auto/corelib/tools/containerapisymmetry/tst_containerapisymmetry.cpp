@@ -56,6 +56,8 @@ struct Movable
         ++instanceCount;
     }
 
+    Movable &operator=(const Movable &m) = default;
+
     ~Movable()
     {
         --instanceCount;
@@ -923,16 +925,30 @@ void tst_ContainerApiSymmetry::assign_impl() const
         QCOMPARE_EQ(c.capacity(), grownCapacity);
     }
     {
-        // range version for non input iterator
+        // range version for forward iterator
         auto c = make<Container>(4);
-        auto iter = make<Container>(1);
+        auto src = std::forward_list<V>();
 
-        iter.assign(8, tData);
-        RET_CHECK(c.assign(iter.begin(), iter.end())); // may reallocate
+        src.assign(8, tData);
+        RET_CHECK(c.assign(src.begin(), src.end())); // may reallocate
         CHECK(c, tData, c.size(), S(8));
 
         const S oldCapacity = c.capacity();
-        c.assign(iter.begin(), iter.begin());
+        c.assign(src.begin(), src.begin());
+        CHECK(c, tData, c.size(), S(0));
+        QCOMPARE_EQ(c.capacity(), oldCapacity);
+    }
+    {
+        // range version for random-access iterator
+        auto c = make<Container>(4);
+        auto src = std::vector<V>();
+
+        src.assign(8, tData);
+        RET_CHECK(c.assign(src.begin(), src.end())); // may reallocate
+        CHECK(c, tData, c.size(), S(8));
+
+        const S oldCapacity = c.capacity();
+        c.assign(src.begin(), src.begin());
         CHECK(c, tData, c.size(), S(0));
         QCOMPARE_EQ(c.capacity(), oldCapacity);
     }

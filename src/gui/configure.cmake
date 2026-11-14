@@ -90,9 +90,13 @@ if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
 endif()
 qt_add_qmake_lib_dependency(xcb_icccm xcb)
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
+    qt_find_package(XCB 0.3.8 COMPONENTS UTIL PROVIDED_TARGETS XCB::UTIL MODULE_NAME gui QMAKE_LIB xcb_util)
+endif()
+qt_add_qmake_lib_dependency(xcb_util xcb)
+if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(XCB 0.3.9 COMPONENTS IMAGE PROVIDED_TARGETS XCB::IMAGE MODULE_NAME gui QMAKE_LIB xcb_image)
 endif()
-qt_add_qmake_lib_dependency(xcb_image xcb_shm xcb)
+qt_add_qmake_lib_dependency(xcb_image xcb_shm xcb_util xcb)
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(XCB 0.3.9 COMPONENTS KEYSYMS PROVIDED_TARGETS XCB::KEYSYMS MODULE_NAME gui QMAKE_LIB xcb_keysyms)
 endif()
@@ -515,6 +519,7 @@ qt_config_compile_test(xcb_syslibs
     LIBRARIES
         XCB::CURSOR
         XCB::ICCCM
+        XCB::UTIL
         XCB::IMAGE
         XCB::KEYSYMS
         XCB::RANDR
@@ -530,6 +535,7 @@ qt_config_compile_test(xcb_syslibs
 "// xkb.h is using a variable called 'explicit', which is a reserved keyword in C++
 #define explicit dont_use_cxx_explicit
 #include <xcb/xcb.h>
+#include <xcb/xcb_util.h>
 #include <xcb/xcb_image.h>
 #include <xcb/xcb_keysyms.h>
 #include <xcb/xcb_cursor.h>
@@ -853,7 +859,7 @@ qt_feature("openvg" PUBLIC
 )
 qt_feature("egl" PUBLIC
     LABEL "EGL"
-    CONDITION ( QT_FEATURE_opengl OR QT_FEATURE_openvg ) AND EGL_FOUND AND ( QT_FEATURE_dlopen OR NOT UNIX OR INTEGRITY )
+    CONDITION ( QT_FEATURE_opengl OR QT_FEATURE_openvg ) AND EGL_FOUND AND ( QT_FEATURE_dlopen OR NOT UNIX OR INTEGRITY OR VXWORKS)
 )
 qt_feature_definition("egl" "QT_NO_EGL" NEGATE VALUE "1")
 qt_feature("egl_x11" PRIVATE
@@ -1101,7 +1107,6 @@ qt_feature("im" PUBLIC
     SECTION "Kernel"
     LABEL "QInputContext"
     PURPOSE "Provides complex input methods."
-    CONDITION QT_FEATURE_library
 )
 qt_feature_definition("im" "QT_NO_IM" NEGATE VALUE "1")
 qt_feature("highdpiscaling" PUBLIC
@@ -1410,4 +1415,9 @@ qt_configure_add_report_entry(
     TYPE ERROR
     MESSAGE "XCB plugin requires xkbcommon and xkbcommon-x11, but -no-xkbcommon was provided."
     CONDITION ( NOT INPUT_xcb STREQUAL '' ) AND ( NOT INPUT_xcb STREQUAL 'no' ) AND INPUT_xkbcommon STREQUAL 'no'
+)
+qt_configure_add_report_entry(
+    TYPE ERROR
+    MESSAGE "The desktopservices feature is required on macOS and iOS, and cannot be disabled."
+    CONDITION APPLE AND NOT QT_FEATURE_desktopservices
 )

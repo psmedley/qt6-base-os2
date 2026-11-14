@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:network-protocol
 
 #include "qsocks5socketengine_p.h"
 
@@ -967,7 +968,7 @@ QSocks5SocketEngine::~QSocks5SocketEngine()
 
 static int nextDescriptor()
 {
-    static QBasicAtomicInt counter;
+    Q_CONSTINIT static QBasicAtomicInt counter = Q_BASIC_ATOMIC_INITIALIZER(0);
     return 1 + counter.fetchAndAddRelaxed(1);
 }
 

@@ -477,12 +477,6 @@ QRegion& QRegion::operator|=(const QRegion &r)
 
     \sa intersected()
 */
-#if !defined (Q_OS_UNIXLIKE) && !defined (Q_OS_WINLIKE)
-QRegion& QRegion::operator+=(const QRect &r)
-{
-    return operator+=(QRegion(r));
-}
-#endif
 
 /*!
   \fn QRegion& QRegion::operator&=(const QRegion &r)
@@ -500,7 +494,7 @@ QRegion& QRegion::operator&=(const QRegion &r)
    \overload
    \since 4.4
  */
-#if defined (Q_OS_UNIXLIKE) || defined (Q_OS_WINLIKE)
+#if defined (Q_OS_UNIXLIKE) || defined (Q_OS_DOSLIKE)
 QRegion& QRegion::operator&=(const QRect &r)
 {
     return *this = *this & r;
@@ -634,7 +628,7 @@ bool QRegion::intersects(const QRegion &region) const
 */
 
 
-#if !defined (Q_OS_UNIXLIKE) && !defined (Q_OS_WINLIKE) || defined(Q_QDOC)
+#if !defined (Q_OS_UNIXLIKE) && !defined (Q_OS_DOSLIKE) || defined(Q_QDOC)
 /*
     \overload
     \since 4.4
@@ -1068,8 +1062,6 @@ Q_GUI_EXPORT QPainterPath qt_regionToPath(const QRegion &region)
 
     return result;
 }
-
-#if defined(Q_OS_UNIXLIKE) || defined(Q_OS_WINLIKE)
 
 //#define QT_REGION_DEBUG
 /*
@@ -3812,7 +3804,6 @@ QRegion::QRegion(const QRect &r, RegionType t)
         d = const_cast<QRegionData*>(&shared_empty);
     } else {
         d = new QRegionData;
-        d->ref.initializeOwned();
         if (t == Rectangle) {
             d->qt_rgn = new QRegionPrivate(r);
         } else if (t == Ellipse) {
@@ -3831,7 +3822,6 @@ QRegion::QRegion(const QPolygon &a, Qt::FillRule fillRule)
                                                fillRule == Qt::WindingFill ? WindingRule : EvenOddRule);
         if (qt_rgn) {
             d =  new QRegionData;
-            d->ref.initializeOwned();
             d->qt_rgn = qt_rgn;
         } else {
             d = const_cast<QRegionData*>(&shared_empty);
@@ -3854,7 +3844,6 @@ QRegion::QRegion(const QBitmap &bm)
         d = const_cast<QRegionData*>(&shared_empty);
     } else {
         d = new QRegionData;
-        d->ref.initializeOwned();
         d->qt_rgn = qt_bitmapToRegion(bm);
     }
 }
@@ -4330,9 +4319,6 @@ bool QRegion::intersects(const QRect &rect) const
     }
     return false;
 }
-
-
-#endif
 
 #if defined(Q_OS_WIN) || defined(Q_QDOC)
 

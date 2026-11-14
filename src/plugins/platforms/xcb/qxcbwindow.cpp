@@ -39,6 +39,7 @@
 
 #include <qpa/qplatformbackingstore.h>
 #include <qpa/qwindowsysteminterface.h>
+#include <qplatformdefs.h>
 
 #include <stdio.h>
 
@@ -805,7 +806,10 @@ void QXcbWindow::hide()
         }
     }
 
+    // Avoid race with requestActivate()
+    QMutexLocker locker(&m_mappedMutex);
     m_mapped = false;
+    m_deferredActivation = false;
 
     // Hiding a modal window doesn't send an enter event to its transient parent when the
     // mouse is already over the parent window, so the enter event must be emulated.
@@ -1094,6 +1098,7 @@ void QXcbWindow::setNetWmState(Qt::WindowFlags flags)
 
 void QXcbWindow::setNetWmStateOnUnmappedWindow()
 {
+    QMutexLocker locker(&m_mappedMutex);
     if (Q_UNLIKELY(m_mapped))
         qCDebug(lcQpaXcb()) << "internal info: " << Q_FUNC_INFO << "called on mapped window";
 

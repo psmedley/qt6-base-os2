@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QLOGGINGREGISTRY_P_H
 #define QLOGGINGREGISTRY_P_H
@@ -84,31 +85,29 @@ private:
     QList<QLoggingRule> _rules;
 };
 
-class Q_AUTOTEST_EXPORT QLoggingRegistry
+class QLoggingRegistry
 {
     Q_DISABLE_COPY_MOVE(QLoggingRegistry)
 public:
-    QLoggingRegistry();
+    Q_AUTOTEST_EXPORT QLoggingRegistry();
 
-    void initializeRules();
+    Q_AUTOTEST_EXPORT void initializeRules();
 
     void registerCategory(QLoggingCategory *category, QtMsgType enableForLevel);
     void unregisterCategory(QLoggingCategory *category);
 
-#ifndef QT_BUILD_INTERNAL
-    Q_CORE_EXPORT   // always export from QtCore
-#endif
-    void registerEnvironmentOverrideForCategory(const char *categoryName, const char *environment);
+    Q_CORE_EXPORT void registerEnvironmentOverrideForCategory(const char *categoryName,
+                                                              const char *environment);
 
     void setApiRules(const QString &content);
 
     QLoggingCategory::CategoryFilter
     installFilter(QLoggingCategory::CategoryFilter filter);
 
-    static QLoggingRegistry *instance();
+    Q_CORE_EXPORT static QLoggingRegistry *instance();
 
 private:
-    void updateRules();
+    Q_AUTOTEST_EXPORT void updateRules();
 
     static void defaultCategoryFilter(QLoggingCategory *category);
 

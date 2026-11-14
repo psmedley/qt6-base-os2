@@ -37,7 +37,13 @@ namespace {
 class ImageReader
 {
 public:
-    ImageReader(const QString &fileName) : m_reader(fileName), m_atEnd(false) { }
+    ImageReader(const QString &fileName, QSize size)
+        : m_reader(fileName)
+        , m_atEnd(false)
+    {
+        if (m_reader.supportsOption(QImageIOHandler::ScaledSize))
+            m_reader.setScaledSize(size);
+    }
 
     QByteArray format() const { return m_reader.format(); }
     bool supportsReadSize() const { return m_reader.supportsOption(QImageIOHandler::Size); }
@@ -289,9 +295,9 @@ QPixmapIconEngineEntry *QPixmapIconEngine::bestMatch(const QSize &size, qreal sc
 
     if (pe->pixmap.isNull()) {
         // delay-load the image
-        ImageReader imageReader(pe->fileName);
         QImage image, prevImage;
         const QSize realSize = size * scale;
+        ImageReader imageReader(pe->fileName, realSize);
         bool fittingImageFound = false;
         if (imageReader.supportsReadSize()) {
             // find the image with the best size without loading the entire image
@@ -450,7 +456,7 @@ void QPixmapIconEngine::addFile(const QString &fileName, const QSize &size, QIco
         return;
     const QString abs = fileName.startsWith(u':') ? fileName : QFileInfo(fileName).absoluteFilePath();
     const bool ignoreSize = !size.isValid();
-    ImageReader imageReader(abs);
+    ImageReader imageReader(abs, size);
     const QByteArray format = imageReader.format();
     if (format.isEmpty()) // Device failed to open or unsupported format.
         return;
@@ -602,6 +608,9 @@ QFactoryLoader *qt_iconEngineFactoryLoader()
   Use the QImageReader::supportedImageFormats() and
   QImageWriter::supportedImageFormats() functions to retrieve a
   complete list of the supported file formats.
+
+  \note If using an SVG image file, make sure to add it before any non-SVG files,
+  so that the correct \l{Icon Engines}{icon engine} gets selected.
 
   \section1 Creating an icon from a theme or icon library
 
@@ -902,6 +911,8 @@ QPixmap QIcon::pixmap(const QSize &size, Mode mode, State state) const
   might be smaller than requested, but never larger, unless the device-pixel ratio
   of the returned pixmap is larger than 1.
 
+  \note The requested devicePixelRatio might not match the returned one. This delays the
+  scaling of the QPixmap until it is drawn later on.
   \note Prior to Qt 6.8 this function wronlgy passed the device dependent pixmap size to
   QIconEngine::scaledPixmap(), since Qt 6.8 it's the device independent size (not scaled
   with the \a devicePixelRatio).
@@ -917,15 +928,10 @@ QPixmap QIcon::pixmap(const QSize &size, qreal devicePixelRatio, Mode mode, Stat
     if (devicePixelRatio == -1)
         devicePixelRatio = qApp->devicePixelRatio();
 
-    // Handle the simple normal-dpi case
-    if (!(devicePixelRatio > 1.0)) {
-        QPixmap pixmap = d->engine->pixmap(size, mode, state);
-        pixmap.setDevicePixelRatio(1.0);
-        return pixmap;
-    }
-
-    // Try get a pixmap that is big enough to be displayed at device pixel resolution.
     QPixmap pixmap = d->engine->scaledPixmap(size, mode, state, devicePixelRatio);
+    // even though scaledPixmap() should return a pixmap with an appropriate size, we
+    // can not rely on it. Therefore we simply set the dpr to a correct size to make
+    // sure the pixmap is not larger than requested.
     pixmap.setDevicePixelRatio(d->pixmapDevicePixelRatio(devicePixelRatio, size, pixmap.size()));
     return pixmap;
 }

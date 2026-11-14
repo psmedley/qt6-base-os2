@@ -2,6 +2,7 @@
 // Copyright (C) 2016 Intel Corporation.
 // Copyright (C) 2019 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qbytearray.h"
 #include "qbytearraymatcher.h"
@@ -1887,6 +1888,15 @@ QByteArray::QByteArray(qsizetype size, Qt::Initialization)
 }
 
 /*!
+    \fn QByteArray::QByteArray(QByteArrayView v)
+    \since 6.8
+
+    Constructs a byte array initialized with the byte array view's data.
+
+    The QByteArray will be null if and only if \a v is null.
+*/
+
+/*!
     Sets the size of the byte array to \a size bytes.
 
     If \a size is greater than the current size, the byte array is
@@ -1989,7 +1999,7 @@ void QByteArray::reallocData(qsizetype alloc, QArrayData::AllocationOption optio
         if (dd.size > 0)
             ::memcpy(dd.data(), d.data(), dd.size);
         dd.data()[dd.size] = 0;
-        d = dd;
+        d.swap(dd);
     } else {
         d->reallocate(alloc, option);
     }
@@ -2005,7 +2015,7 @@ void QByteArray::reallocGrowData(qsizetype n)
         Q_CHECK_PTR(dd.data());
         dd->copyAppend(d.data(), d.data() + d.size);
         dd.data()[dd.size] = 0;
-        d = dd;
+        d.swap(dd);
     } else {
         d->reallocate(d.constAllocatedCapacity() + n, QArrayData::Grow);
     }
@@ -4037,7 +4047,8 @@ double QByteArray::toDouble(bool *ok) const
 
 auto QtPrivate::toDouble(QByteArrayView a) noexcept -> ParsedNumber<double>
 {
-    auto r = qt_asciiToDouble(a.data(), a.size(), WhitespacesAllowed);
+    a = a.trimmed();
+    auto r = qt_asciiToDouble(a.data(), a.size());
     if (r.ok())
         return ParsedNumber{r.result};
     else
@@ -4916,7 +4927,7 @@ QByteArray QByteArray::fromEcmaUint8Array(emscripten::val uint8array)
     \since 6.5
     \ingroup platform-type-conversions
 
-    \sa toEcmaUint8Array()
+    \sa fromEcmaUint8Array()
 */
 emscripten::val QByteArray::toEcmaUint8Array()
 {

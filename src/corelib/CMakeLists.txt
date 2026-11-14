@@ -73,6 +73,7 @@ qt_internal_add_module(Core
         global/qsysinfo.cpp global/qsysinfo.h
         global/qsystemdetection.h
         global/qtclasshelpermacros.h
+        global/qtclasshelper_p.h
         global/qtconfiginclude.h
         global/qtconfigmacros.h
         global/qtdeprecationmarkers.h
@@ -197,7 +198,7 @@ qt_internal_add_module(Core
         serialization/qcbormap.h
         serialization/qcborstream.h
         serialization/qcborvalue.cpp serialization/qcborvalue.h serialization/qcborvalue_p.h
-        serialization/qdatastream.cpp serialization/qdatastream.h serialization/qdatastream_p.h
+        serialization/qdatastream.cpp serialization/qdatastream.h
         serialization/qjson_p.h
         serialization/qjsonarray.cpp serialization/qjsonarray.h
         serialization/qjsoncbor.cpp
@@ -752,7 +753,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_thread
         thread/qreadwritelock.cpp thread/qreadwritelock_p.h
         thread/qsemaphore.cpp thread/qsemaphore.h
         thread/qthreadpool.cpp thread/qthreadpool.h thread/qthreadpool_p.h
-        thread/qthreadstorage.cpp
+        thread/qthreadstorage.cpp thread/qthreadstorage_p.h
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_thread AND UNIX
@@ -1293,6 +1294,7 @@ if(QT_FEATURE_permissions AND APPLE)
         SOURCES
             kernel/qpermissions_darwin.mm
             platform/darwin/qdarwinpermissionplugin.mm
+            platform/darwin/qdarwinpermissionplugin_p.h
         PLUGIN_TYPES
             permissions
     )
@@ -1467,8 +1469,8 @@ qt_internal_apply_gc_binaries_conditional(Core PUBLIC)
 if(WIN32 OR UIKIT)
     # find_package(Qt6Core) should call find_package(Qt6EntryPointPrivate) so that we can
     # link against EntryPointPrivate. Normally this is handled automatically for deps, but
-    # for some reason it doesn't work for the EntryPointPrivate, so we need to add it manually.
-    qt_record_extra_qt_package_dependency(Core EntryPointPrivate "${PROJECT_VERSION}")
+    # it doesn't work for EntryPointPrivate since its linker line contains the generator expression.
+    qt_internal_register_target_dependencies(Core PUBLIC Qt6::EntryPointPrivate)
 
     set(entrypoint_conditions "$<NOT:$<BOOL:$<TARGET_PROPERTY:qt_no_entrypoint>>>")
     list(APPEND entrypoint_conditions "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>")

@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #ifndef QLOCALE_TOOLS_P_H
 #define QLOCALE_TOOLS_P_H
@@ -81,7 +82,7 @@ void qt_doubleToAscii(double d, QLocaleData::DoubleForm form, int precision,
 template <typename UcsInt>
 [[nodiscard]] inline UcsInt unicodeForDigit(uint digit, UcsInt zero)
 {
-    // Must match qlocale.cpp's NumberTokenizer's digit-digestion.
+    // Must match qlocale.cpp's NumericTokenizer's digit-digestion.
     Q_ASSERT(digit < 10);
     if (!digit)
         return zero;

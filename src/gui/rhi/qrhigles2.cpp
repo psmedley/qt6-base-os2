@@ -1414,7 +1414,12 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::BaseVertex:
         return caps.baseVertex;
     case QRhi::BaseInstance:
-        return false; // not in ES 3.2, so won't bother
+        // The glDraw*BaseInstance variants of draw calls are not in GLES 3.2,
+        // so won't bother, even though they would be available in GL 4.2+.
+        // Furthermore, not supporting this avoids having to deal with the
+        // gl_InstanceID vs gl_InstanceIndex mess in shaders and in the shader
+        // transpiling pipeline.
+        return false;
     case QRhi::TriangleFanTopology:
         return true;
     case QRhi::ReadBackNonUniformBuffer:
@@ -1737,6 +1742,11 @@ void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         cbD->currentGraphicsPipeline = ps;
         cbD->currentComputePipeline = nullptr;
         cbD->currentPipelineGeneration = psD->generation;
+        if (psD->lastUsedInFrameNo != frameNo) {
+            psD->lastUsedInFrameNo = frameNo;
+            psD->currentSrb = nullptr;
+            psD->currentSrbGeneration = 0;
+        }
 
         QGles2CommandBuffer::Command &cmd(cbD->commands.get());
         cmd.cmd = QGles2CommandBuffer::Command::BindGraphicsPipeline;
@@ -2126,6 +2136,7 @@ QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginF
 
     executeDeferredReleases();
     swapChainD->cb.resetState();
+    frameNo += 1;
 
     if (swapChainD->timestamps.active[swapChainD->currentTimestampPairIndex]) {
         double elapsedSec = 0;
@@ -2169,7 +2180,6 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrame
         f->glFlush();
     }
 
-    swapChainD->frameCount += 1;
     currentSwapChain = nullptr;
 
     ctx->handle()->endFrame();
@@ -4348,7 +4358,10 @@ void QRhiGles2::bindShaderResources(QGles2CommandBuffer *cbD,
         {
             QGles2Texture *texD = QRHI_RES(QGles2Texture, b->u.simage.tex);
             Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedWithLoadStore));
-            const bool layered = texD->m_flags.testFlag(QRhiTexture::CubeMap);
+            // arrays, cubemaps, and 3D textures expose the whole texture with all layers/slices
+            const bool layered = texD->m_flags.testFlag(QRhiTexture::CubeMap)
+                                 || texD->m_flags.testFlag(QRhiTexture::ThreeDimensional)
+                                 || texD->m_flags.testFlag(QRhiTexture::TextureArray);
             GLenum access = GL_READ_WRITE;
             if (b->type == QRhiShaderResourceBinding::ImageLoad)
                 access = GL_READ_ONLY;
@@ -4727,6 +4740,11 @@ void QRhiGles2::setComputePipeline(QRhiCommandBuffer *cb, QRhiComputePipeline *p
         cbD->currentGraphicsPipeline = nullptr;
         cbD->currentComputePipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
+        if (psD->lastUsedInFrameNo != frameNo) {
+            psD->lastUsedInFrameNo = frameNo;
+            psD->currentSrb = nullptr;
+            psD->currentSrbGeneration = 0;
+        }
 
         QGles2CommandBuffer::Command &cmd(cbD->commands.get());
         cmd.cmd = QGles2CommandBuffer::Command::BindComputePipeline;
@@ -5683,8 +5701,8 @@ bool QGles2Texture::create()
                         rhiD->glTexImage1D(target, level, GLint(glintformat), mipSize.width(), 0,
                                            glformat, gltype, nullptr);
                 }
-            } else if (is3D || isArray) {
-                const int layerCount = is3D ? qMax(1, m_depth) : qMax(0, m_arraySize);
+            } else if (isArray) {
+                const int layerCount = qMax(0, m_arraySize);
                 if (hasMipMaps) {
                     for (int level = 0; level != mipLevelCount; ++level) {
                         const QSize mipSize = rhiD->q->sizeForMipLevel(level, size);
@@ -5693,6 +5711,19 @@ bool QGles2Texture::create()
                     }
                 } else {
                     rhiD->f->glTexImage3D(target, 0, GLint(glintformat), size.width(), size.height(), layerCount,
+                                          0, glformat, gltype, nullptr);
+                }
+            } else if (is3D) {
+                if (hasMipMaps) {
+                    const int depth = qMax(1, m_depth);
+                    for (int level = 0; level != mipLevelCount; ++level) {
+                        const QSize mipSize = rhiD->q->sizeForMipLevel(level, size);
+                        const int mipDepth = rhiD->q->sizeForMipLevel(level, QSize(depth, depth)).width();
+                        rhiD->f->glTexImage3D(target, level, GLint(glintformat), mipSize.width(), mipSize.height(), mipDepth,
+                                              0, glformat, gltype, nullptr);
+                    }
+                } else {
+                    rhiD->f->glTexImage3D(target, 0, GLint(glintformat), size.width(), size.height(), qMax(1, m_depth),
                                           0, glformat, gltype, nullptr);
                 }
             } else if (hasMipMaps || isCube) {
@@ -6373,18 +6404,11 @@ bool QGles2GraphicsPipeline::create()
             // force replacing existing cache entry (if there is one, then
             // something is wrong with it, as there was no hit)
             rhiD->trySaveToPipelineCache(program, cacheKey, true);
+        } else {
+            // legacy QOpenGLShaderProgram style behavior: the "pipeline cache"
+            // was not enabled, so instead store to the Qt 5 disk cache
+            rhiD->trySaveToDiskCache(program, cacheKey);
         }
-        // legacy QOpenGLShaderProgram style behavior: do this always, even
-        // though it is superfluous with the "pipeline cache" enabled. Continue
-        // storing to the Qt 5 style individual-file disk cache, because there
-        // is no guarantee one retrieves the "pipeline cache" blob and writes it
-        // out. Classic example: if Qt Quick only retrieves and stores the
-        // combined cache contents when exiting, applications that never exit
-        // cleanly (because they are killed, Ctrl+C'd, etc.) never store any
-        // program binaries! Therefore, to maintain Qt 5 behavioral
-        // compatibility, continue writing out the individual files no matter
-        // what.
-        rhiD->trySaveToDiskCache(program, cacheKey);
     } else {
         Q_ASSERT(cacheResult == QRhiGles2::ProgramCacheHit);
         if (rhiD->rhiFlags.testFlag(QRhi::EnablePipelineCacheDataSave)) {
@@ -6500,9 +6524,11 @@ bool QGles2ComputePipeline::create()
             // force replacing existing cache entry (if there is one, then
             // something is wrong with it, as there was no hit)
             rhiD->trySaveToPipelineCache(program, cacheKey, true);
+        } else {
+            // legacy QOpenGLShaderProgram style behavior: the "pipeline cache"
+            // was not enabled, so instead store to the Qt 5 disk cache
+            rhiD->trySaveToDiskCache(program, cacheKey);
         }
-        // legacy QOpenGLShaderProgram style behavior
-        rhiD->trySaveToDiskCache(program, cacheKey);
     } else {
         Q_ASSERT(cacheResult == QRhiGles2::ProgramCacheHit);
         if (rhiD->rhiFlags.testFlag(QRhi::EnablePipelineCacheDataSave)) {
@@ -6652,8 +6678,6 @@ bool QGles2SwapChain::createOrResize()
         initSwapChainRenderTarget(&rtRight);
         rtRight.d.stereoTarget = QRhiSwapChain::RightBuffer;
     }
-
-    frameCount = 0;
 
     QRHI_RES_RHI(QRhiGles2);
     if (rhiD->rhiFlags.testFlag(QRhi::EnableTimestamps) && rhiD->caps.timestamps)

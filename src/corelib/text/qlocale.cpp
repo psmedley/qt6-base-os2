@@ -1,6 +1,7 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // Copyright (C) 2021 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #if defined( __OS2__) && (__GNUC__ >= 10) 
 // GCC newer than 9 has stack alignment issues with this source file
@@ -160,22 +161,25 @@ QLocale::Language QLocalePrivate::codeToLanguage(QStringView code,
     }
 
     if (codeTypes.testFlag(QLocale::LegacyLanguageCode) && uc3 == 0) {
-        // legacy codes
-        if (uc1 == 'n' && uc2 == 'o') // no -> nb
-            return QLocale::NorwegianBokmal;
-        if (uc1 == 't' && uc2 == 'l') // tl -> fil
-            return QLocale::Filipino;
-        if (uc1 == 's' && uc2 == 'h') // sh -> sr[_Latn]
-            return QLocale::Serbian;
-        if (uc1 == 'm' && uc2 == 'o') // mo -> ro
-            return QLocale::Romanian;
-        // Android uses the following deprecated codes
-        if (uc1 == 'i' && uc2 == 'w') // iw -> he
-            return QLocale::Hebrew;
-        if (uc1 == 'i' && uc2 == 'n') // in -> id
-            return QLocale::Indonesian;
-        if (uc1 == 'j' && uc2 == 'i') // ji -> yi
-            return QLocale::Yiddish;
+        constexpr struct LegacyCodes {
+            AlphaCode code;
+            QLocale::Language language;
+        } legacyCodes[] = {
+            { {'n', 'o'}, QLocale::NorwegianBokmal }, // no -> nb
+            { {'t', 'l'}, QLocale::Filipino },        // tl -> fil
+            { {'s', 'h'}, QLocale::Serbian },         // sh -> sr[_Latn]
+            { {'m', 'o'}, QLocale::Romanian },        // mo -> ro
+            // Android uses the following deprecated codes:
+            { {'i', 'w'}, QLocale::Hebrew },          // iw -> he
+            { {'i', 'n'}, QLocale::Indonesian },      // in -> id
+            { {'j', 'i'}, QLocale::Yiddish },         // ji -> yi
+        };
+        // We don't need binary search for seven entries (and they're not
+        // sorted), so search linearly:
+        for (const auto &e : legacyCodes) {
+            if (codeBuf == e.code)
+                return e.language;
+        }
     }
     return QLocale::AnyLanguage;
 }
@@ -192,8 +196,10 @@ QLocale::Script QLocalePrivate::codeToScript(QStringView code) noexcept
     unsigned char c2 = code[2].toLower().toLatin1();
     unsigned char c3 = code[3].toLower().toLatin1();
 
+    constexpr qsizetype NumScripts = QLocale::LastScript + 1;
+    static_assert(sizeof(script_code_list) == 4 * NumScripts + 1); // +1 for an extra NUL
     const unsigned char *c = script_code_list;
-    for (qsizetype i = 0; i < QLocale::LastScript; ++i, c += 4) {
+    for (qsizetype i = 0; i < NumScripts; ++i, c += 4) {
         if (c0 == c[0] && c1 == c[1] && c2 == c[2] && c3 == c[3])
             return QLocale::Script(i);
     }
@@ -2942,14 +2948,17 @@ QLocale QLocale::system()
 */
 QList<QLocale> QLocale::matchingLocales(Language language, Script script, Territory territory)
 {
+    QList<QLocale> result;
+
     const QLocaleId filter { language, script, territory };
     if (!filter.isValid())
-        return QList<QLocale>();
+        return result;
 
-    if (language == C)
-        return QList<QLocale>{QLocale(C)};
+    if (language == C) {
+        result.emplace_back(C);
+        return result;
+    }
 
-    QList<QLocale> result;
     if (filter.matchesAll())
         result.reserve(locale_data_size);
 
@@ -3100,20 +3109,7 @@ static QString rawMonthName(const QCalendarLocale &localeData,
                             const char16_t *monthsData, int month,
                             QLocale::FormatType type)
 {
-    QLocaleData::DataRange range;
-    switch (type) {
-    case QLocale::LongFormat:
-        range = localeData.longMonth();
-        break;
-    case QLocale::ShortFormat:
-        range = localeData.shortMonth();
-        break;
-    case QLocale::NarrowFormat:
-        range = localeData.narrowMonth();
-        break;
-    default:
-        return QString();
-    }
+    const QLocaleData::DataRange range = localeData.monthName(type);
     return range.getListEntry(monthsData, month - 1);
 }
 
@@ -3125,22 +3121,10 @@ static QString rawStandaloneMonthName(const QCalendarLocale &localeData,
                                       const char16_t *monthsData, int month,
                                       QLocale::FormatType type)
 {
-    QLocaleData::DataRange range;
-    switch (type) {
-    case QLocale::LongFormat:
-        range = localeData.longMonthStandalone();
-        break;
-    case QLocale::ShortFormat:
-        range = localeData.shortMonthStandalone();
-        break;
-    case QLocale::NarrowFormat:
-        range = localeData.narrowMonthStandalone();
-        break;
-    default:
-        return QString();
-    }
-    QString name = range.getListEntry(monthsData, month - 1);
-    return name.isEmpty() ? rawMonthName(localeData, monthsData, month, type) : name;
+    const QLocaleData::DataRange range = localeData.standaloneMonthName(type);
+    if (QString name = range.getListEntry(monthsData, month - 1); !name.isEmpty())
+        return name;
+    return rawMonthName(localeData, monthsData, month, type);
 }
 
 /*!
@@ -3460,9 +3444,9 @@ Qt::LayoutDirection QLocale::textDirection() const
 */
 QString QLocale::toUpper(const QString &str) const
 {
-#if QT_CONFIG(icu)
+#if !defined(QT_BOOTSTRAPPED) && QT_CONFIG(icu)
     bool ok = true;
-    QString result = QIcu::toUpper(d->bcp47Name('_'), str, &ok);
+    QString result = d->toUpper(str, &ok);
     if (ok)
         return result;
     // else fall through and use Qt's toUpper
@@ -3484,12 +3468,12 @@ QString QLocale::toUpper(const QString &str) const
 */
 QString QLocale::toLower(const QString &str) const
 {
-#if QT_CONFIG(icu)
+#if !defined(QT_BOOTSTRAPPED) && QT_CONFIG(icu)
     bool ok = true;
-    const QString result = QIcu::toLower(d->bcp47Name('_'), str, &ok);
+    const QString result = d->toLower(str, &ok);
     if (ok)
         return result;
-    // else fall through and use Qt's toUpper
+    // else fall through and use Qt's toLower
 #endif
     return str.toLower();
 }
@@ -3758,15 +3742,24 @@ QString QCalendarBackend::dateTimeToString(QStringView format, const QDateTime &
                         text = when.timeRepresentation().displayName(when, mode, locale);
                         if (!text.isEmpty())
                             return text;
-                        // else fall back to an unlocalized one if we can manage it:
-                    } // else: prefer QDateTime's abbreviation, for backwards-compatibility.
+                        // else fall back to an unlocalized one if we can find one.
+                    }
+                    if (type == Long) {
+                        // If no long name found, use IANA ID:
+                        text = QString::fromLatin1(when.timeZone().id());
+                        if (!text.isEmpty())
+                            return text;
+                    }
+                    // else: prefer QDateTime's abbreviation, for backwards-compatibility.
 #endif // else, make do with non-localized abbreviation:
                     // Absent timezone_locale data, Offset might still reach here:
                     if (type == Offset) // Our prior failure might not have tried this:
                         text = when.toOffsetFromUtc(when.offsetFromUtc()).timeZoneAbbreviation();
                     if (text.isEmpty()) // Notably including type != Offset
                         text = when.timeZoneAbbreviation();
-                    return type == Offset ? offsetFromAbbreviation(std::move(text)) : text;
+                    if (type == Offset)
+                        text = offsetFromAbbreviation(std::move(text));
+                    return text;
                 };
 
                 used = true;
@@ -3861,7 +3854,7 @@ QString QLocaleData::doubleToString(double d, int precision, DoubleForm form,
                 converted.append(QChar::highSurrogate(digit));
                 converted.append(QChar::lowSurrogate(digit));
             }
-            digits = converted;
+            digits = std::move(converted);
         } else {
             Q_ASSERT(zero.size() == 1);
             Q_ASSERT(!zero.at(0).isSurrogate());
@@ -3951,7 +3944,9 @@ QString QLocaleData::doubleToString(double d, int precision, DoubleForm form,
         }
     }
 
-    return prefix + (flags & CapitalEorX ? std::move(numStr).toUpper() : numStr);
+    return prefix + (flags & CapitalEorX
+                     ? std::move(numStr).toUpper()
+                     : std::move(numStr).toLower());
 }
 
 QString QLocaleData::decimalForm(QString &&digits, int decpt, int precision,
@@ -4045,7 +4040,7 @@ QString QLocaleData::signPrefix(bool negative, unsigned flags) const
     if (flags & AlwaysShowSign)
         return positiveSign();
     if (flags & BlankBeforePositive)
-        return QStringView(u" ").toString();
+        return u" "_s;
     return {};
 }
 
@@ -4067,9 +4062,7 @@ QString QLocaleData::longLongToString(qlonglong n, int precision,
 QString QLocaleData::unsLongLongToString(qulonglong l, int precision,
                                          int base, int width, unsigned flags) const
 {
-    const QString zero = zeroDigit();
-    QString resultZero = base == 10 ? zero : QStringLiteral("0");
-    return applyIntegerFormatting(l ? qulltoa(l, base, zero) : resultZero,
+    return applyIntegerFormatting(qulltoa(l, base, zeroDigit()),
                                   false, precision, base, width, flags);
 }
 
@@ -4205,6 +4198,7 @@ public:
     bool done() const { return !(m_index < m_text.size()); }
     qsizetype index() const { return m_index; }
     inline int asBmpDigit(char16_t digit) const;
+    inline bool isInfNanChar(char ch) const { return matchInfNaN.matches(ch); }
     char nextToken();
 };
 
@@ -4244,10 +4238,8 @@ char NumericTokenizer::nextToken()
             if (Q_LIKELY(isAsciiDigit(ascii) || ('+' <= ascii && ascii <= lastMark)
                          // No caller presently (6.5) passes DoubleStandardMode,
                          // so !IntegerMode implies scientific, for now.
-                         || (m_mode != QLocaleData::IntegerMode
-                             && matchInfNaN.matches(ascii))
-                         || (m_mode == QLocaleData::DoubleScientificMode
-                             && ascii == 'e'))) {
+                         || (m_mode != QLocaleData::IntegerMode && isInfNanChar(ascii))
+                         || (m_mode == QLocaleData::DoubleScientificMode && ascii == 'e'))) {
                 return ascii;
             }
         }
@@ -4258,7 +4250,7 @@ char NumericTokenizer::nextToken()
         char ascii = asciiLower(ch.toLatin1());
         if (isAsciiDigit(ascii) || ascii == '-' || ascii == '+'
             // Also its Inf and NaN letters:
-            || (m_mode != QLocaleData::IntegerMode && matchInfNaN.matches(ascii))) {
+            || (m_mode != QLocaleData::IntegerMode && isInfNanChar(ascii))) {
             ++m_index;
             return ascii;
         }
@@ -4290,8 +4282,8 @@ char NumericTokenizer::nextToken()
     // Must match qlocale_tools.h's unicodeForDigit()
     if (m_guide.zeroLen == 1) {
         if (!ch.isSurrogate()) {
-            const uint gap = asBmpDigit(ch.unicode());
-            if (gap < 10u) {
+            const int gap = asBmpDigit(ch.unicode());
+            if (gap >= 0 && gap < 10) {
                 ++m_index;
                 return '0' + gap;
             }
@@ -4368,97 +4360,131 @@ bool QLocaleData::numberToCLocale(QStringView s, QLocale::NumberOptions number_o
         return false;
     NumericTokenizer tokens(s, numericData(mode), mode);
 
-    // Digit-grouping details (all modes):
-    qsizetype digitsInGroup = 0;
-    qsizetype last_separator_idx = -1;
-    qsizetype start_of_digits_idx = -1;
+    // Reflects order constraints on possible parts of a number:
+    enum { Whole, Grouped, Fraction, Exponent, Name } stage = Whole;
+    // Grouped is just Whole with some digit-grouping separators in it.
+    // Name is Inf or NaN; excludes all others (so none can be after it).
 
-    // Floating-point details (non-integer modes):
-    qsizetype decpt_idx = -1;
-    qsizetype exponent_idx = -1;
+    // Fractional part *or* whole-number part can be empty, but not both, unless
+    // we have Name. Exponent must have some digits in it.
+    bool wantDigits = true;
+
+    // Digit-grouping details (all modes):
+    bool needHigherGroup = false; // Set when first group is too short to be the only one
+    qsizetype digitsInGroup = 0;
+    const auto badLeastGroup = [&, least=m_grouping_least]() {
+        // In principle we could object to a complete absence of grouping, when
+        // digitsInGroup >= qMax(m_grouping_top, m_grouping_least), unless the
+        // locale itself would omit them. However, when merely not rejecting
+        // grouping separators, we have historically accepted ungrouped digits,
+        // so objecting now would break existing code.
+        if (stage == Grouped) {
+            Q_ASSERT(!number_options.testFlag(QLocale::RejectGroupSeparator));
+            // First group was invalid if it was short and we've not seen a separator since:
+            if (needHigherGroup)
+                return true;
+            // Were there enough digits since the last group separator?
+            if (digitsInGroup != least)
+                return true;
+        }
+        return false;
+    };
 
     char last = '\0';
     while (!tokens.done()) {
-        qsizetype idx = tokens.index(); // before nextToken() advances
         char out = tokens.nextToken();
         if (out == 0)
             return false;
-        Q_ASSERT(tokens.index() > idx); // it always *should* advance (except on zero return)
 
+        // Note that out can only be '.', 'e' or an inf/NaN character if the
+        // mode allows it (else nextToken() would return 0 instead), so we don't
+        // need to check mode.
         if (out == '.') {
-            // Fail if more than one decimal point or point after e
-            if (decpt_idx != -1 || exponent_idx != -1)
+            if (stage > Grouped) // Too late to start a fractional part.
                 return false;
-            decpt_idx = idx;
+            // That's the end of the integral part - check size of last group:
+            if (badLeastGroup())
+                return false;
+            stage = Fraction;
         } else if (out == 'e') {
-            exponent_idx = idx;
-        }
-
-        if (number_options.testFlag(QLocale::RejectLeadingZeroInExponent)
-                && exponent_idx != -1 && out == '0') {
-            // After the exponent there can only be '+', '-' or digits.
-            // If we find a '0' directly after some non-digit, then that is a
-            // leading zero, acceptable only if it is the whole exponent.
-            if (!tokens.done() && !isAsciiDigit(last))
+            if (wantDigits || stage == Name || stage > Fraction)
                 return false;
-        }
 
-        if (number_options.testFlag(QLocale::RejectTrailingZeroesAfterDot) && decpt_idx >= 0) {
-            // In a fractional part, a 0 just before the exponent is trailing:
-            if (idx == exponent_idx && last == '0')
-                return false;
-        }
-
-        if (!number_options.testFlag(QLocale::RejectGroupSeparator)) {
-            if (isAsciiDigit(out)) {
-                if (start_of_digits_idx == -1)
-                    start_of_digits_idx = idx;
-                ++digitsInGroup;
-            } else if (out == ',') {
-                // Don't allow group chars after the decimal point or exponent
-                if (decpt_idx != -1 || exponent_idx != -1)
+            if (stage < Fraction) {
+                // The 'e' ends the whole-number part, so check its last group:
+                if (badLeastGroup())
                     return false;
-
-                if (last_separator_idx == -1) {
-                    // Check distance from the beginning of the digits:
-                    if (start_of_digits_idx == -1 || m_grouping_top > digitsInGroup
-                        || digitsInGroup >= m_grouping_least + m_grouping_top) {
-                        return false;
-                    }
-                } else {
-                    // Check distance from the last separator:
-                    if (digitsInGroup != m_grouping_higher)
-                        return false;
-                }
-
-                last_separator_idx = idx;
-                digitsInGroup = 0;
-            } else if (mode != IntegerMode && (out == '.' || idx == exponent_idx)
-                       && last_separator_idx != -1) {
-                // Were there enough digits since the last group separator?
-                if (digitsInGroup != m_grouping_least)
+            } else if (number_options.testFlag(QLocale::RejectTrailingZeroesAfterDot)) {
+                // In a fractional part, a 0 just before the exponent is trailing:
+                if (last == '0')
                     return false;
-
-                // stop processing separators
-                last_separator_idx = -1;
             }
+            stage = Exponent;
+            wantDigits = true; // We need some in the exponent
         } else if (out == ',') {
-            return false;
+            if (number_options.testFlag(QLocale::RejectGroupSeparator))
+                return false;
+
+            switch (stage) {
+            case Whole:
+                // Check size of most significant group
+                if (digitsInGroup == 0 || digitsInGroup > qMax(m_grouping_top, m_grouping_higher))
+                    return false;
+                Q_ASSERT(!needHigherGroup);
+                // First group is only allowed fewer than m_grouping_top digits
+                // if it's followed by an m_grouping_higher group, i.e. there's
+                // a later group separator:
+                if (m_grouping_top > digitsInGroup)
+                    needHigherGroup = true;
+                stage = Grouped;
+                break;
+            case Grouped:
+                // Check size of group between two separators:
+                if (digitsInGroup != m_grouping_higher)
+                    return false;
+                needHigherGroup = false; // We just found it, if needed.
+                break;
+            // Only allow group chars within the whole-number part:
+            case Fraction:
+            case Exponent:
+            case Name:
+                return false;
+            }
+            digitsInGroup = 0;
+        } else if (isAsciiDigit(out)) {
+            if (stage == Name)
+                return false;
+            if (out == '0' && number_options.testFlag(QLocale::RejectLeadingZeroInExponent)
+                && stage > Fraction && !tokens.done() && !isAsciiDigit(last)) {
+                // After the exponent there can only be '+', '-' or digits.  If
+                // we find a '0' directly after some non-digit, then that is a
+                // leading zero, acceptable only if it is the whole exponent.
+                return false;
+            }
+            wantDigits = false;
+            ++digitsInGroup;
+        } else if (stage == Whole && tokens.isInfNanChar(out)) {
+            if (!wantDigits) // Mixed digits with Inf/NaN
+                return false;
+            wantDigits = false;
+            stage = Name;
         }
+        // else: nothing special to do.
 
         last = out;
         if (out != ',') // Leave group separators out of the result.
             result->append(out);
     }
+    if (wantDigits)
+        return false;
 
-    if (!number_options.testFlag(QLocale::RejectGroupSeparator) && last_separator_idx != -1) {
-        // Were there enough digits since the last group separator?
-        if (digitsInGroup != m_grouping_least)
+    if (!number_options.testFlag(QLocale::RejectGroupSeparator)) {
+        // If this is the end of the whole-part, check least significant group:
+        if (stage < Fraction && badLeastGroup())
             return false;
     }
 
-    if (number_options.testFlag(QLocale::RejectTrailingZeroesAfterDot)
-            && decpt_idx != -1 && exponent_idx == -1) {
+    if (number_options.testFlag(QLocale::RejectTrailingZeroesAfterDot) && stage == Fraction) {
         // In the fractional part, a final zero is trailing:
         if (last == '0')
             return false;
@@ -4468,7 +4494,7 @@ bool QLocaleData::numberToCLocale(QStringView s, QLocale::NumberOptions number_o
     return true;
 }
 
-ParsingResult
+QLocaleData::ParsingResult
 QLocaleData::validateChars(QStringView str, NumberMode numMode, int decDigits,
                            QLocale::NumberOptions number_options) const
 {
@@ -4805,9 +4831,11 @@ QString QLocale::formattedDataSize(qint64 bytes, int precision, DataSizeFormats 
     if (!bytes) {
         power = 0;
     } else if (format & DataSizeBase1000) {
-        power = int(std::log10(QtPrivate::qUnsignedAbs(bytes)) / 3);
-    } else { // Compute log2(bytes) / 10:
-        power = int((63 - qCountLeadingZeroBits(QtPrivate::qUnsignedAbs(bytes))) / 10);
+        constexpr auto log10_1000 = 3; // std::log10(1000U)
+        power = int(std::log10(QtPrivate::qUnsignedAbs(bytes))) / log10_1000;
+    } else {
+        constexpr auto log2_1024 = 10; // QtPrivate::log2i(1024U);
+        power = QtPrivate::log2i(QtPrivate::qUnsignedAbs(bytes)) / log2_1024;
         base = 1024;
     }
     // Only go to doubles if we'll be using a quantifier:
@@ -4879,7 +4907,7 @@ QStringList QLocale::uiLanguages(TagSeparator separator) const
         if (separator != TagSeparator::Dash) {
             // Map from default separator, Dash, used by backends:
             const QChar join = QLatin1Char(sep);
-            uiLanguages = uiLanguages.replaceInStrings(u"-", QStringView(&join, 1));
+            uiLanguages.replaceInStrings(u"-", QStringView(&join, 1));
         }
         // ... but we need to include likely-adjusted forms of each of those, too.
         // For now, collect up locale Ids representing the entries, for later processing:

@@ -1578,7 +1578,7 @@ void tst_QWindow::touchInterruptedByPopup()
 
     // Launch a popup window
     InputTestWindow popup;
-    window.setObjectName("popup");
+    popup.setObjectName("popup");
     popup.setFlags(Qt::Popup);
     popup.setModality(Qt::WindowModal);
     popup.resize(m_testWindowSize /  2);
@@ -2460,7 +2460,6 @@ void tst_QWindow::modalWindowEnterEventOnHide_QTBUG35109()
         modal.setModality(Qt::ApplicationModal);
         modal.show();
         QVERIFY(QTest::qWaitForWindowExposed(&modal));
-        modal.requestActivate();
         QVERIFY(QTest::qWaitForWindowActive(&modal));
 
         QCoreApplication::processEvents();
@@ -2525,7 +2524,6 @@ void tst_QWindow::modalWindowEnterEventOnHide_QTBUG35109()
         modal.setModality(Qt::ApplicationModal);
         modal.show();
         QVERIFY(QTest::qWaitForWindowExposed(&modal));
-        modal.requestActivate();
         QVERIFY(QTest::qWaitForWindowActive(&modal));
 
         QCoreApplication::processEvents();
@@ -2554,7 +2552,6 @@ void tst_QWindow::modalWindowEnterEventOnHide_QTBUG35109()
         root.show();
 
         QVERIFY(QTest::qWaitForWindowExposed(&root));
-        root.requestActivate();
         QVERIFY(QTest::qWaitForWindowActive(&root));
         QVERIFY(!child.isVisible());
 
@@ -2575,7 +2572,6 @@ void tst_QWindow::modalWindowEnterEventOnHide_QTBUG35109()
         modal.setModality(Qt::ApplicationModal);
         modal.show();
         QVERIFY(QTest::qWaitForWindowExposed(&modal));
-        modal.requestActivate();
         QVERIFY(QTest::qWaitForWindowActive(&modal));
 
         QCoreApplication::processEvents();
@@ -2930,7 +2926,7 @@ void tst_QWindow::stateChangeSignal()
     // - wait for signal spy to have reached target count
     // - extract state from signal and compare to target
 #define CHECK_STATE(State)\
-    QTRY_VERIFY(QTest::qWaitFor([&w](){return (w.windowState() == State); }));\
+    QVERIFY(QTest::qWaitFor([&w](){return (w.windowState() == State); }));\
     CHECK_SIGNAL(State)
 #define CHECK_SIGNAL(State)\
     QTRY_COMPARE(spy.count(), signalCount);\

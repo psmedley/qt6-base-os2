@@ -195,9 +195,11 @@ function(qt_internal_extend_target target)
                             ${private_visibility_option} ${arg_LINK_OPTIONS})
 
         if(NOT is_interface_lib)
+            _qt_internal_get_moc_compiler_flavor_flags(flavor_flags)
             set_property(TARGET "${target}" APPEND PROPERTY
-                AUTOMOC_MOC_OPTIONS "${arg_MOC_OPTIONS}"
+                AUTOMOC_MOC_OPTIONS "${arg_MOC_OPTIONS}" ${flavor_flags}
             )
+
             # Plugin types associated to a module
             if(NOT "x${arg_PLUGIN_TYPES}" STREQUAL "x")
                 qt_internal_add_plugin_types("${target}" "${arg_PLUGIN_TYPES}")
@@ -233,7 +235,7 @@ function(qt_internal_extend_target target)
         endif()
 
         set(all_libraries ${arg_LIBRARIES} ${arg_PUBLIC_LIBRARIES})
-        qt_internal_work_around_autogen_discarded_dependencies(${target} ${all_libraries})
+        _qt_internal_work_around_autogen_discarded_dependencies(${target} ${all_libraries})
 
         if(QT_GENERATE_SBOM)
             set(sbom_args "")
@@ -248,7 +250,12 @@ function(qt_internal_extend_target target)
                 FORWARD_MULTI
                     ${__qt_internal_sbom_multi_args}
             )
-            _qt_internal_extend_sbom(${target} ${sbom_args})
+            # Don't call extend_sbom unless we actually have any SBOM args, to prevent
+            # recording of a target if it has no SBOM info. Relevant for QtFooModulePrivate targets
+            # which don't appear in the SBOM atm.
+            if(sbom_args)
+                _qt_internal_extend_sbom(${target} ${sbom_args})
+            endif()
         endif()
 
         set(target_private "${target}Private")
@@ -270,10 +277,18 @@ function(qt_internal_extend_target target)
                 "Ensure the target exists or remove the option.")
             message(AUTHOR_WARNING "${warning_message}")
         endif()
-        qt_register_target_dependencies("${target}"
-                                        "${arg_PUBLIC_LIBRARIES};${arg_PRIVATE_MODULE_INTERFACE}"
-                                        "${qt_libs_private};${arg_LIBRARIES}")
 
+        set(qt_register_target_dependencies_args "")
+        if(arg_PUBLIC_LIBRARIES OR arg_PRIVATE_MODULE_INTERFACE)
+            list(APPEND qt_register_target_dependencies_args
+                PUBLIC ${arg_PUBLIC_LIBRARIES} ${arg_PRIVATE_MODULE_INTERFACE})
+        endif()
+        if(qt_libs_private OR arg_LIBRARIES)
+            list(APPEND qt_register_target_dependencies_args
+                PRIVATE ${qt_libs_private} ${arg_LIBRARIES})
+        endif()
+        qt_internal_register_target_dependencies("${target}"
+            ${qt_register_target_dependencies_args})
 
         qt_autogen_tools(${target}
                          ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
@@ -1775,7 +1790,6 @@ function(qt_internal_add_platform_internal_target target)
     qt_internal_mark_as_internal_library("${target}")
 
     qt_internal_add_sbom("${target}"
-        TYPE QT_MODULE
-        IMMEDIATE_FINALIZATION
+        SBOM_ENTITY_TYPE QT_MODULE
     )
 endfunction()

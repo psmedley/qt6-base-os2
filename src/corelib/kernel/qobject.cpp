@@ -8,6 +8,7 @@
 #include "qobject_p_p.h"
 #include "qmetaobject_p.h"
 
+#include <QtCore/private/qtclasshelper_p.h>
 #include "qabstracteventdispatcher.h"
 #include "qabstracteventdispatcher_p.h"
 #include "qcoreapplication.h"
@@ -1637,6 +1638,8 @@ QThread *QObject::thread() const
     however: objects with no thread affinity can be "pulled" to the
     current thread.
 
+    In Qt versions prior to 6.7, this function had no return value (\c void).
+
     \sa thread()
  */
 bool QObject::moveToThread(QThread *targetThread QT6_IMPL_NEW_OVERLOAD_TAIL)
@@ -2406,6 +2409,14 @@ void QObject::removeEventFilter(QObject *obj)
     thread with no running event loop, the object will be destroyed when the
     thread finishes.
 
+    A common pattern when using a worker \c QObject in a \c QThread
+    is to connect the thread's \c finished() signal to the worker's
+    \c deleteLater() slot to ensure it is safely deleted:
+
+    \code
+    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
+    \endcode
+
     Note that entering and leaving a new event loop (e.g., by opening a modal
     dialog) will \e not perform the deferred deletion; for the object to be
     deleted, the control must return to the event loop from which deleteLater()
@@ -2893,6 +2904,12 @@ static inline void check_and_warn_compat(const QMetaObject *sender, const QMetaM
     Returns a handle to the connection that can be used to disconnect
     it later.
 
+    \a signal must be a member function decleared as a signal in \a sender.
+
+    \a method must be a member function declared as a signal, slot, or
+    \l{Q_INVOKABLE}{invokable} in \a receiver, that is, functions registered
+    with the meta-object system.
+
     You must use the \c SIGNAL() and \c SLOT() macros when specifying
     the \a signal and the \a method, for example:
 
@@ -3176,6 +3193,13 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const QMetaMetho
     Disconnects \a signal in object \a sender from \a method in object
     \a receiver. Returns \c true if the connection is successfully broken;
     otherwise returns \c false.
+
+    \a signal, if not \nullptr, must be a member function decleared as a signal
+    in \a sender.
+
+    \a method, if not \nullptr, must be a member function declared as a signal,
+    slot, or \l{Q_INVOKABLE}{invokable} in \a receiver, that is, functions
+    registered with the meta-object system.
 
     A signal-slot connection is removed when either of the objects
     involved are destroyed.
@@ -3741,6 +3765,14 @@ bool QMetaObjectPrivate::disconnect(const QObject *sender,
         QObjectPrivate::ConnectionDataPointer connections(scd);
 
         if (signal_index < 0) {
+            // wildcard disconnect - warn if this disconnects destroyed()
+            if (!receiver && method_index < 0 && sender->d_func()->isSignalConnected(0)) {
+                qWarning("QObject::disconnect: wildcard call disconnects from destroyed signal of"
+                         " %s::%s", sender->metaObject()->className(),
+                                    sender->objectName().isEmpty()
+                                        ? "unnamed"
+                                        : sender->objectName().toLocal8Bit().data());
+            }
             // remove from all connection lists
             for (int sig_index = -1; sig_index < scd->signalVectorCount(); ++sig_index) {
                 if (disconnectHelper(connections.data(), sig_index, receiver, method_index, slot, senderMutex, disconnectType))
@@ -4291,18 +4323,12 @@ bool QObject::doSetProperty(const char *name, const QVariant *lvalue, QVariant *
         } else {
             if (idx == -1) {
                 d->extraData->propertyNames.append(name);
-                if (rvalue)
-                    d->extraData->propertyValues.append(std::move(*rvalue));
-                else
-                    d->extraData->propertyValues.append(*lvalue);
+                q_choose_append(d->extraData->propertyValues, value, rvalue);
             } else {
                 if (value.userType() == d->extraData->propertyValues.at(idx).userType()
                         && value == d->extraData->propertyValues.at(idx))
                     return false;
-                if (rvalue)
-                    d->extraData->propertyValues[idx] = std::move(*rvalue);
-                else
-                    d->extraData->propertyValues[idx] = *lvalue;
+                q_choose_assign(d->extraData->propertyValues[idx], value, rvalue);
             }
         }
 

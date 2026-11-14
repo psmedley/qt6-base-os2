@@ -215,6 +215,16 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
     to be registered with QMetaType using either Q_DECLARE_METATYPE()
     or qRegisterMetaType().
 
+    Do not use this macro to avoid complaints or errors from \l moc about
+    incomplete property types when the pointee type is used as a complete type in
+    other contexts in the program. Use \l{Q_MOC_INCLUDE} instead when
+    the full definition of the type is available, but you prefer a forward
+    declaration in the header to reduce compilation times.
+
+    \warning Don't use Q_DECLARE_OPAQUE_POINTER with pointers to a Q_OBJECT or
+    a gadget class, as that risks introducing inconsistent information in the
+    meta-type system.
+
     \sa Q_DECLARE_METATYPE(), qRegisterMetaType()
 */
 
@@ -432,7 +442,7 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
     Additional types can be registered using qRegisterMetaType() or by calling
     registerType().
 
-    \sa type(), typeName()
+    \sa type()
 */
 
 /*!
@@ -1007,6 +1017,7 @@ static constexpr struct : QMetaTypeModuleHelper
         using LongLong = qlonglong;
         using ULong = unsigned long;
         using ULongLong = qulonglong;
+        using Float16 = qfloat16;
         using Float = float;
         using Double = double;
         using Bool = bool;
@@ -1031,7 +1042,7 @@ static constexpr struct : QMetaTypeModuleHelper
             if constexpr(std::is_integral_v<To>) \
                 result = source.toInteger(); \
             else \
-                result = source.toDouble(); \
+                result = To(source.toDouble()); \
         } \
         return true; \
     ); \
@@ -1046,7 +1057,7 @@ static constexpr struct : QMetaTypeModuleHelper
             if constexpr(std::is_integral_v<To>) \
                 result = source.toInteger(); \
             else \
-                result = source.toDouble(); \
+                result = To(source.toDouble()); \
         } \
         return true; \
     )
@@ -1067,6 +1078,7 @@ static constexpr struct : QMetaTypeModuleHelper
     QMETATYPE_CONVERTER_ASSIGN(To, ULong); \
     QMETATYPE_CONVERTER_ASSIGN(To, LongLong); \
     QMETATYPE_CONVERTER_ASSIGN(To, ULongLong); \
+    QMETATYPE_CONVERTER(To, Float16, result = qRound64(source); return true;); \
     QMETATYPE_CONVERTER(To, Float, result = qRound64(source); return true;); \
     QMETATYPE_CONVERTER(To, Double, result = qRound64(source); return true;); \
     QMETATYPE_CONVERTER(To, QChar, result = source.unicode(); return true;); \
@@ -1105,16 +1117,17 @@ static constexpr struct : QMetaTypeModuleHelper
     QMETATYPE_CONVERTER_ASSIGN(To, ULong); \
     QMETATYPE_CONVERTER_ASSIGN(To, LongLong); \
     QMETATYPE_CONVERTER_ASSIGN(To, ULongLong); \
+    QMETATYPE_CONVERTER_ASSIGN(To, Float16); \
     QMETATYPE_CONVERTER_ASSIGN(To, Float); \
     QMETATYPE_CONVERTER_ASSIGN(To, Double); \
     QMETATYPE_CONVERTER(To, QString, \
         bool ok = false; \
-        result = source.toDouble(&ok); \
+        result = To(source.toDouble(&ok)); \
         return ok; \
     ); \
     QMETATYPE_CONVERTER(To, QByteArray, \
         bool ok = false; \
-        result = source.toDouble(&ok); \
+        result = To(source.toDouble(&ok)); \
         return ok; \
     ); \
     CONVERT_CBOR_AND_JSON(To)
@@ -1134,6 +1147,7 @@ static constexpr struct : QMetaTypeModuleHelper
         INTEGRAL_CONVERTER(ULong);
         INTEGRAL_CONVERTER(LongLong);
         INTEGRAL_CONVERTER(ULongLong);
+        FLOAT_CONVERTER(Float16);
         FLOAT_CONVERTER(Float);
         FLOAT_CONVERTER(Double);
 
@@ -1185,6 +1199,10 @@ static constexpr struct : QMetaTypeModuleHelper
         QMETATYPE_CONVERTER_ASSIGN_NUMBER(QString, ULong);
         QMETATYPE_CONVERTER_ASSIGN_NUMBER(QString, UInt);
         QMETATYPE_CONVERTER_ASSIGN_NUMBER(QString, ULongLong);
+        QMETATYPE_CONVERTER(QString, Float16,
+            result = QString::number(source, 'g', QLocale::FloatingPointShortest);
+            return true;
+        );
         QMETATYPE_CONVERTER(QString, Float,
             result = QString::number(source, 'g', QLocale::FloatingPointShortest);
             return true;
@@ -1253,6 +1271,10 @@ static constexpr struct : QMetaTypeModuleHelper
         QMETATYPE_CONVERTER_ASSIGN_NUMBER(QByteArray, ULong);
         QMETATYPE_CONVERTER_ASSIGN_NUMBER(QByteArray, UInt);
         QMETATYPE_CONVERTER_ASSIGN_NUMBER(QByteArray, ULongLong);
+        QMETATYPE_CONVERTER(QByteArray, Float16,
+            result = QByteArray::number(source, 'g', QLocale::FloatingPointShortest);
+            return true;
+        );
         QMETATYPE_CONVERTER(QByteArray, Float,
             result = QByteArray::number(source, 'g', QLocale::FloatingPointShortest);
             return true;
@@ -1394,8 +1416,9 @@ static constexpr struct : QMetaTypeModuleHelper
         QMETATYPE_CONVERTER_ASSIGN(QCborValue, Char);
         QMETATYPE_CONVERTER_ASSIGN(QCborValue, SChar);
         QMETATYPE_CONVERTER_ASSIGN(QCborValue, Short);
-        QMETATYPE_CONVERTER_ASSIGN(QCborValue, Double);
-        QMETATYPE_CONVERTER_ASSIGN(QCborValue, Float);
+        QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QCborValue, Double);
+        QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QCborValue, Float);
+        QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QCborValue, Float16);
         QMETATYPE_CONVERTER(QCborValue, QStringList,
             result = QCborArray::fromStringList(source);
             return true;
@@ -1582,6 +1605,7 @@ static constexpr struct : QMetaTypeModuleHelper
         QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QJsonValue, UInt);
         QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QJsonValue, Double);
         QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QJsonValue, Float);
+        QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QJsonValue, Float16);
         QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QJsonValue, ULong);
         QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QJsonValue, Long);
         QMETATYPE_CONVERTER_ASSIGN_DOUBLE(QJsonValue, LongLong);
@@ -2501,7 +2525,14 @@ bool QMetaType::canView(QMetaType fromType, QMetaType toType)
 
 /*!
     Returns \c true if QMetaType::convert can convert from \a fromType to
-    \a toType.
+    \a toType. Note this is mostly about the ability to execute the conversion,
+    while the actual conversion may fail when attempted (for example,
+    converting a floating point value to an integer outside of its range).
+
+    The registerConverter() function can be used to register additional
+    conversions, either between a built-in type and a non-built-in one, or
+    between two non-built-in types. This function will return \c true if the
+    conversion path is registered.
 
     The following conversions are supported by Qt:
 
@@ -2555,11 +2586,18 @@ bool QMetaType::canView(QMetaType fromType, QMetaType toType)
     \row \li \l QMetaType::QUuid \li \l QMetaType::QByteArray, \l QMetaType::QString
     \endtable
 
-    Casting between primitive type (int, float, bool etc.) is supported.
+    Other supported conversions include between all primitive types (\c int, \c
+    float, \c bool, etc., including all enums) and between any pointer type and
+    \c{std::nullptr_t}. Enumerations can also be converted to QString and
+    QByteArray.
 
-    Converting between pointers of types derived from QObject will also return true for this
-    function if a qobject_cast from the type described by \a fromType to the type described
-    by \a toType would succeed.
+    If both \a fromType and \a toType are types deriving from QObject (or
+    pointers to them), this function will also return \c true if one of the
+    types is derived from the other. That is, it returns true if
+    \c{static_cast<>} from the type described by \a fromType to the type
+    described by \a toType would compile. The convert() function operates like
+    qobject_cast() and verifies the dynamic type of the object pointed to by
+    the QVariant.
 
     A cast from a sequential container will also return true for this
     function if the \a toType is QVariantList.
@@ -2819,7 +2857,7 @@ static const QtPrivate::QMetaTypeInterface *interfaceForTypeNoWarning(int typeId
     Returns \c true if the datatype with ID \a type is registered;
     otherwise returns \c false.
 
-    \sa type(), typeName(), Type
+    \sa type(), Type
 */
 bool QMetaType::isRegistered(int type)
 {

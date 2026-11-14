@@ -1,6 +1,7 @@
 // Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
 // Copyright (C) 2019 Mail.ru Group.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 #ifndef QSTRINGVIEW_H
 #define QSTRINGVIEW_H
 
@@ -130,9 +131,9 @@ public:
     constexpr QStringView(const Char *str, qsizetype len)
 #if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0) || defined(QT_BOOTSTRAPPED)
         : m_data(castHelper(str)),
-          m_size((Q_ASSERT(len >= 0), Q_ASSERT(str || !len), len))
+          m_size((Q_PRE(len >= 0), Q_PRE(str || !len), len))
 #else
-        : m_size((Q_ASSERT(len >= 0), Q_ASSERT(str || !len), len)),
+        : m_size((Q_PRE(len >= 0), Q_PRE(str || !len), len)),
           m_data(castHelper(str))
 #endif
     {}
@@ -284,7 +285,7 @@ public:
     [[nodiscard]] inline qsizetype indexOf(QLatin1StringView s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
 
     [[nodiscard]] bool contains(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
-    { return indexOf(QStringView(&c, 1), 0, cs) != qsizetype(-1); }
+    { return indexOf(c, 0, cs) != qsizetype(-1); }
     [[nodiscard]] bool contains(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return indexOf(s, 0, cs) != qsizetype(-1); }
     [[nodiscard]] inline bool contains(QLatin1StringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
@@ -404,8 +405,8 @@ public:
     [[nodiscard]] const_reverse_iterator crend()   const noexcept { return rend(); }
 
     [[nodiscard]] constexpr bool empty() const noexcept { return size() == 0; }
-    [[nodiscard]] constexpr QChar front() const { return Q_ASSERT(!empty()), QChar(m_data[0]); }
-    [[nodiscard]] constexpr QChar back()  const { return Q_ASSERT(!empty()), QChar(m_data[m_size - 1]); }
+    [[nodiscard]] constexpr QChar front() const { return Q_PRE(!empty()), QChar(m_data[0]); }
+    [[nodiscard]] constexpr QChar back()  const { return Q_PRE(!empty()), QChar(m_data[m_size - 1]); }
 
     [[nodiscard]] Q_IMPLICIT operator std::u16string_view() const noexcept
     { return std::u16string_view(m_data, size_t(m_size)); }
@@ -441,10 +442,10 @@ private:
     Q_ALWAYS_INLINE constexpr void verify([[maybe_unused]] qsizetype pos = 0,
                                           [[maybe_unused]] qsizetype n = 1) const
     {
-        Q_ASSERT(pos >= 0);
-        Q_ASSERT(pos <= size());
-        Q_ASSERT(n >= 0);
-        Q_ASSERT(n <= size() - pos);
+        Q_PRE(pos >= 0);
+        Q_PRE(pos <= size());
+        Q_PRE(n >= 0);
+        Q_PRE(n <= size() - pos);
     }
 
     constexpr int compare_single_char_helper(int diff) const noexcept

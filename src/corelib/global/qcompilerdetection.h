@@ -78,7 +78,9 @@
 #  if _MSC_VER < 1938 // stdext is deprecated since VS 2022 17.8
 #    define QT_MAKE_CHECKED_ARRAY_ITERATOR(x, N) stdext::make_checked_array_iterator(x, size_t(N)) // Since _MSC_VER >= 1500
 #  endif
-#  define Q_COMPILER_COMPLAINS_ABOUT_RETURN_AFTER_UNREACHABLE
+#  ifdef Q_CC_MSVC_ONLY
+#    define Q_COMPILER_COMPLAINS_ABOUT_RETURN_AFTER_UNREACHABLE
+#  endif
 
 #elif defined(__BORLANDC__) || defined(__TURBOC__)
 #  define Q_CC_BOR
@@ -122,7 +124,13 @@
       // define to verify the Clang version we hard-code the versions
       // based on the best available info we have about the actual
       // version: http://en.wikipedia.org/wiki/Xcode#Toolchain_Versions
-#      if __apple_build_version__   >= 14030022 // Xcode 14.3
+#      if __apple_build_version__   >= 17000013 // Xcode 16.3
+#        define Q_CC_CLANG 1914
+#      elif __apple_build_version__ >= 16000026 // Xcode 16.0
+#        define Q_CC_CLANG 1706
+#      elif __apple_build_version__ >= 15000040 // Xcode 15.0
+#        define Q_CC_CLANG 1600
+#      elif __apple_build_version__ >= 14030022 // Xcode 14.3
 #        define Q_CC_CLANG 1500
 #      elif __apple_build_version__ >= 14000029 // Xcode 14.0
 #        define Q_CC_CLANG 1400

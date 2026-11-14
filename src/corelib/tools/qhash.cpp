@@ -1390,7 +1390,7 @@ size_t qHash(long double key, size_t seed) noexcept
     \qhashold{QHash}
 */
 
-/*! \fn size_t qHash(const QByteArrayView &key, size_t seed = 0)
+/*! \fn size_t qHash(QByteArrayView key, size_t seed = 0)
     \since 6.0
     \qhashold{QHash}
 */
@@ -1515,18 +1515,23 @@ size_t qHash(long double key, size_t seed) noexcept
     QHash will not shrink automatically if items are removed from the
     table. To minimize the memory used by the hash, call squeeze().
 
-    If you want to navigate through all the (key, value) pairs stored
-    in a QHash, you can use an iterator. QHash provides both
-    \l{Java-style iterators} (QHashIterator and QMutableHashIterator)
-    and \l{STL-style iterators} (QHash::const_iterator and
-    QHash::iterator). Here's how to iterate over a QHash<QString,
-    int> using a Java-style iterator:
-
-    \snippet code/src_corelib_tools_qhash.cpp 7
-
-    Here's the same code, but using an STL-style iterator:
+    To iterate through all the (key, value) pairs stored in a
+    QHash, use \l {asKeyValueRange}():
 
     \snippet code/src_corelib_tools_qhash.cpp 8
+
+    This function returns a range object that can be used with structured
+    bindings. For manual iterator control, you can also use traditional
+    \l{STL-style iterators} (QHash::const_iterator and QHash::iterator):
+
+    \snippet code/src_corelib_tools_qhash.cpp qhash-iterator-stl-style
+
+    To modify values, use iterators:
+
+    \snippet code/src_corelib_tools_qhash.cpp qhash-iterator-modify-values
+
+    QHash also provides \l{Java-style iterators} (QHashIterator and
+    QMutableHashIterator) for compatibility.
 
     QHash is unordered, so an iterator's sequence cannot be assumed
     to be predictable. If ordering by key is required, use a QMap.
@@ -2979,6 +2984,24 @@ size_t qHash(long double key, size_t seed) noexcept
     \sa replace, emplace
 */
 
+/*! \fn template <class Key, class T> QMultiHash<Key, T>::iterator QMultiHash<Key, T>::erase(const_iterator pos)
+    \since 5.7
+
+    Removes the (key, value) pair associated with the iterator \a pos
+    from the hash, and returns an iterator to the next item in the
+    hash.
+
+    This function never causes QMultiHash to
+    rehash its internal data structure. This means that it can safely
+    be called while iterating, and won't affect the order of items in
+    the hash. For example:
+
+    \snippet code/src_corelib_tools_qhash.cpp 15multihash
+
+    \include qhash.cpp qhash-iterator-invalidation-func-desc
+
+    \sa remove(), take(), find()
+*/
 
 /*! \fn template <class Key, class T> QMultiHash &QMultiHash<Key, T>::unite(const QMultiHash &other)
     \since 5.13

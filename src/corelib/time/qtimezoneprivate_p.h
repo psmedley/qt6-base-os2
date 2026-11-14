@@ -22,6 +22,8 @@
 #include "private/qlocale_p.h"
 #include "private/qdatetime_p.h"
 
+#include <optional>
+
 #if QT_CONFIG(icu)
 #include <unicode/ucal.h>
 #endif
@@ -101,6 +103,13 @@ public:
     virtual Data data(qint64 forMSecsSinceEpoch) const;
     virtual Data data(QTimeZone::TimeType timeType) const;
     virtual bool isDataLocale(const QLocale &locale) const;
+    static bool isAnglicLocale(const QLocale &locale)
+    {
+        // Sufficiently like the C locale for displayName()-related purposes:
+        const QLocale::Language lang = locale.language();
+        return lang == QLocale::C
+            || (lang == QLocale::English && locale.script() == QLocale::LatinScript);
+    }
     QDateTimePrivate::ZoneState stateAtZoneTime(qint64 forLocalMSecs,
                                                 QDateTimePrivate::TransitionOptions resolve) const;
 
@@ -137,10 +146,18 @@ public:
     static QByteArray ianaIdToWindowsId(const QByteArray &ianaId);
     static QByteArray windowsIdToDefaultIanaId(const QByteArray &windowsId);
     static QByteArray windowsIdToDefaultIanaId(const QByteArray &windowsId,
-                                                QLocale::Territory territory);
+                                               QLocale::Territory territory);
     static QList<QByteArray> windowsIdToIanaIds(const QByteArray &windowsId);
     static QList<QByteArray> windowsIdToIanaIds(const QByteArray &windowsId,
-                                                 QLocale::Territory territory);
+                                                QLocale::Territory territory);
+    struct NamePrefixMatch
+    {
+        QByteArray ianaId;
+        qsizetype nameLength = 0;
+        QTimeZone::TimeType timeType = QTimeZone::GenericTime;
+    };
+    static NamePrefixMatch findLongNamePrefix(QStringView text, const QLocale &locale,
+                                              std::optional<qint64> atEpochMillis = std::nullopt);
 
     // returns "UTC" QString and QByteArray
     [[nodiscard]] static inline QString utcQString()
@@ -152,6 +169,14 @@ public:
     {
         return QByteArrayLiteral("UTC");
     }
+
+
+#ifdef QT_BUILD_INTERNAL // For the benefit of a test
+    [[nodiscard]] static inline const QTimeZonePrivate *extractPrivate(const QTimeZone &zone)
+    {
+        return zone.d.operator->();
+    }
+#endif
 
 protected:
     // Zones CLDR data says match a condition.

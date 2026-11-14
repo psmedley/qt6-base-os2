@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qtableview.h"
 
@@ -1020,6 +1021,25 @@ void QTableViewPrivate::sortIndicatorChanged(int column, Qt::SortOrder order)
     model->sort(column, order);
 }
 
+QStyleOptionViewItem::ViewItemPosition QTableViewPrivate::viewItemPosition(
+        const QModelIndex &index) const
+{
+    int visualColumn = horizontalHeader->visualIndex(index.column());
+    int count = horizontalHeader->count();
+
+    if (count <= 0 || visualColumn < 0 || visualColumn >= count)
+        return QStyleOptionViewItem::Invalid;
+
+    if (count == 1 && visualColumn == 0)
+        return QStyleOptionViewItem::OnlyOne;
+    else if (visualColumn == 0)
+        return QStyleOptionViewItem::Beginning;
+    else if (visualColumn == count - 1)
+        return QStyleOptionViewItem::End;
+    else
+        return QStyleOptionViewItem::Middle;
+}
+
 /*!
   \internal
   Draws a table cell.
@@ -1043,6 +1063,7 @@ void QTableViewPrivate::drawCell(QPainter *painter, const QStyleOptionViewItem &
         }
         opt.palette.setCurrentColorGroup(cg);
     }
+    opt.viewItemPosition = viewItemPosition(index);
 
     if (index == q->currentIndex()) {
         const bool focus = (q->hasFocus() || viewport->hasFocus()) && q->currentIndex().isValid();
@@ -2816,7 +2837,7 @@ void QTableView::setGridStyle(Qt::PenStyle style)
     necessary at word-breaks; otherwise it is not wrapped at all.
     This property is \c true by default.
 
-    Note that even of wrapping is enabled, the cell will not be
+    Note that even if wrapping is enabled, the cell will not be
     expanded to fit all text. Ellipsis will be inserted according to
     the current \l{QAbstractItemView::}{textElideMode}.
 

@@ -2033,10 +2033,6 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
         const QDialogButtonBox *buttonBox = nullptr;
         if (qobject_cast<const QMessageBox *> (widget))
             buttonBox = widget->findChild<const QDialogButtonBox *>(QLatin1String("qt_msgbox_buttonbox"));
-#if QT_CONFIG(inputdialog)
-        else if (qobject_cast<const QInputDialog *> (widget))
-            buttonBox = widget->findChild<const QDialogButtonBox *>(QLatin1String("qt_inputdlg_buttonbox"));
-#endif // QT_CONFIG(inputdialog)
         if (buttonBox) {
             //draw white panel part
             QWindowsThemeData theme(widget, painter,
@@ -4580,9 +4576,6 @@ int QWindowsVistaStyle::pixelMetric(PixelMetric metric, const QStyleOption *opti
 void QWindowsVistaStyle::polish(QWidget *widget)
 {
     QWindowsStyle::polish(widget);
-    if (!QWindowsVistaStylePrivate::useVista())
-        return;
-
     if (false
 #if QT_CONFIG(abstractbutton)
         || qobject_cast<QAbstractButton*>(widget)
@@ -4599,35 +4592,39 @@ void QWindowsVistaStyle::polish(QWidget *widget)
         || qobject_cast<QAbstractSpinBox*>(widget)
         || qobject_cast<QSpinBox*>(widget)
 #endif // QT_CONFIG(spinbox)
+#if QT_CONFIG(lineedit)
+        || qobject_cast<QLineEdit*>(widget)
+#endif // QT_CONFIG(lineedit)
+        || qobject_cast<QGroupBox*>(widget)
             ) {
         widget->setAttribute(Qt::WA_Hover);
+    } else if (QTreeView *tree = qobject_cast<QTreeView *> (widget)) {
+        tree->viewport()->setAttribute(Qt::WA_Hover);
+    } else if (QListView *list = qobject_cast<QListView *> (widget)) {
+        list->viewport()->setAttribute(Qt::WA_Hover);
     }
+
+    if (!QWindowsVistaStylePrivate::useVista())
+        return;
 
 #if QT_CONFIG(rubberband)
     if (qobject_cast<QRubberBand*>(widget))
         widget->setWindowOpacity(0.6);
-#endif
-
-#if QT_CONFIG(lineedit)
-    if (qobject_cast<QLineEdit*>(widget))
-        widget->setAttribute(Qt::WA_Hover);
     else
-#endif // QT_CONFIG(lineedit)
-        if (qobject_cast<QGroupBox*>(widget))
-            widget->setAttribute(Qt::WA_Hover);
+#endif
 #if QT_CONFIG(commandlinkbutton)
-        else if (qobject_cast<QCommandLinkButton*>(widget)) {
-            widget->setProperty("_qt_usingVistaStyle", true);
-            QFont buttonFont = widget->font();
-            buttonFont.setFamilies(QStringList{QLatin1String("Segoe UI")});
-            widget->setFont(buttonFont);
-            QPalette pal = widget->palette();
-            pal.setColor(QPalette::Active, QPalette::ButtonText, QColor(21, 28, 85));
-            pal.setColor(QPalette::Active, QPalette::BrightText, QColor(7, 64, 229));
-            widget->setPalette(pal);
-        }
+        if (qobject_cast<QCommandLinkButton*>(widget)) {
+                widget->setProperty("_qt_usingVistaStyle", true);
+                QFont buttonFont = widget->font();
+                buttonFont.setFamilies(QStringList{QLatin1String("Segoe UI")});
+                widget->setFont(buttonFont);
+                QPalette pal = widget->palette();
+                pal.setColor(QPalette::Active, QPalette::ButtonText, QColor(21, 28, 85));
+                pal.setColor(QPalette::Active, QPalette::BrightText, QColor(7, 64, 229));
+                widget->setPalette(pal);
+        } else
 #endif // QT_CONFIG(commandlinkbutton)
-        else if (widget->inherits("QTipLabel")) {
+        if (widget->inherits("QTipLabel")) {
             //note that since tooltips are not reused
             //we do not have to care about unpolishing
             widget->setContentsMargins(3, 0, 4, 0);
@@ -4647,22 +4644,6 @@ void QWindowsVistaStyle::polish(QWidget *widget)
             if (buttonBox)
                 buttonBox->setContentsMargins(0, 9, 0, 0);
 #endif
-        }
-#if QT_CONFIG(inputdialog)
-        else if (qobject_cast<QInputDialog *> (widget)) {
-            widget->setAttribute(Qt::WA_StyledBackground);
-#if QT_CONFIG(dialogbuttonbox)
-            QDialogButtonBox *buttonBox = widget->findChild<QDialogButtonBox *>(QLatin1String("qt_inputdlg_buttonbox"));
-            if (buttonBox)
-                buttonBox->setContentsMargins(0, 9, 0, 0);
-#endif
-        }
-#endif // QT_CONFIG(inputdialog)
-        else if (QTreeView *tree = qobject_cast<QTreeView *> (widget)) {
-            tree->viewport()->setAttribute(Qt::WA_Hover);
-        }
-        else if (QListView *list = qobject_cast<QListView *> (widget)) {
-            list->viewport()->setAttribute(Qt::WA_Hover);
         }
 }
 
@@ -4731,16 +4712,6 @@ void QWindowsVistaStyle::unpolish(QWidget *widget)
                 buttonBox->setContentsMargins(0, 0, 0, 0);
 #endif
         }
-#if QT_CONFIG(inputdialog)
-        else if (qobject_cast<QInputDialog *> (widget)) {
-            widget->setAttribute(Qt::WA_StyledBackground, false);
-#if QT_CONFIG(dialogbuttonbox)
-            QDialogButtonBox *buttonBox = widget->findChild<QDialogButtonBox *>(QLatin1String("qt_inputdlg_buttonbox"));
-            if (buttonBox)
-                buttonBox->setContentsMargins(0, 0, 0, 0);
-#endif
-        }
-#endif // QT_CONFIG(inputdialog)
         else if (QTreeView *tree = qobject_cast<QTreeView *> (widget)) {
             tree->viewport()->setAttribute(Qt::WA_Hover, false);
         }

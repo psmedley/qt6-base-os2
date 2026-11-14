@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2013 Samuel Gaist <samuel.gaist@deltech.ch>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qlistview.h"
 
@@ -984,6 +985,7 @@ void QListView::initViewItemOption(QStyleOptionViewItem *option) const
     if (d->gridSize().isValid()) {
         option->rect.setSize(d->gridSize());
     }
+    option->viewItemPosition = QStyleOptionViewItem::OnlyOne;
 }
 
 

@@ -28,6 +28,7 @@
 #if QT_CONFIG(menu)
 #include <QMenu>
 #endif
+#include <QtGui/private/qaccessiblehelper_p.h>
 #include <QtWidgets/private/qwidget_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -90,16 +91,6 @@ static qsizetype qt_accAmpIndex(const QString &text)
     Q_UNUSED(text);
     return -1;
 #endif
-}
-
-QString qt_accStripAmp(const QString &text)
-{
-    QString newText(text);
-    qsizetype ampIndex = qt_accAmpIndex(newText);
-    if (ampIndex != -1)
-        newText.remove(ampIndex, 1);
-
-    return newText.replace("&&"_L1, "&"_L1);
 }
 
 QString qt_accHotKey(const QString &text)
@@ -406,6 +397,8 @@ QStringList QAccessibleWidget::actionNames() const
     if (widget()->isEnabled()) {
         if (widget()->focusPolicy() != Qt::NoFocus)
             names << setFocusAction();
+        if (widget()->contextMenuPolicy() == Qt::ActionsContextMenu && widget()->actions().size() > 0)
+            names << showMenuAction();
     }
     return names;
 }
@@ -420,6 +413,11 @@ void QAccessibleWidget::doAction(const QString &actionName)
         if (widget()->isWindow())
             widget()->activateWindow();
         widget()->setFocus();
+    } else if (actionName == showMenuAction()) {
+        QContextMenuEvent e(QContextMenuEvent::Other,
+            QPoint(), widget()->mapToGlobal(QPoint()),
+            QGuiApplication::keyboardModifiers());
+        QCoreApplication::sendEvent(widget(), &e);
     }
 }
 

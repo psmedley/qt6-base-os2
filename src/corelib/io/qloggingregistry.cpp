@@ -1,5 +1,6 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qloggingregistry_p.h"
 
@@ -11,6 +12,7 @@
 #include <QtCore/qtextstream.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qcoreapplication.h>
+#include <QtCore/qscopedvaluerollback.h>
 
 #if QT_CONFIG(settings)
 #include <QtCore/qsettings.h>
@@ -422,6 +424,10 @@ QLoggingRegistry::installFilter(QLoggingCategory::CategoryFilter filter)
 
 QLoggingRegistry *QLoggingRegistry::instance()
 {
+    Q_CONSTINIT thread_local bool recursionGuard = false;
+    if (recursionGuard)
+        return nullptr;
+    QScopedValueRollback<bool> rollback(recursionGuard, true);
     return qtLoggingRegistry();
 }
 

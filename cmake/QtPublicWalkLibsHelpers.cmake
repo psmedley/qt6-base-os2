@@ -153,9 +153,16 @@ function(__qt_internal_walk_libs
                     lib "${lib}")
             endwhile()
 
-            # Skip static plugins.
+            # Skip processing static plugins.
+            # There are some abuses of this genex marker, because the more generic one below did
+            # not exist yet.
             set(_is_plugin_marker_genex "\\$<BOOL:QT_IS_PLUGIN_GENEX>")
-            if(lib MATCHES "${_is_plugin_marker_genex}")
+
+            # Skip any genex expressions that contain the marker. Useful in cases like processing
+            # link expressions for prl file generation, where some link expressions should be
+            # skipped either because they don't make sense or they are handled differently.
+            set(_is_skip_marker_genex "\\$<BOOL:QT_SKIP_WALK_LIBS_PROCESSING>")
+            if(lib MATCHES "${_is_plugin_marker_genex}" OR lib MATCHES "${_is_skip_marker_genex}")
                 continue()
             endif()
 
@@ -240,10 +247,7 @@ function(__qt_internal_walk_libs
                 endif()
                 if(operation STREQUAL "promote_3rd_party_global")
                     set(lib_target_unaliased "${lib_target}")
-                    get_target_property(aliased_target ${lib_target} ALIASED_TARGET)
-                    if(aliased_target)
-                        set(lib_target_unaliased ${aliased_target})
-                    endif()
+                    _qt_internal_dealias_target(lib_target_unaliased)
 
                     get_property(is_imported TARGET ${lib_target_unaliased} PROPERTY IMPORTED)
 

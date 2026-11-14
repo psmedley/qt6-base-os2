@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QNET_UNIX_P_H
 #define QNET_UNIX_P_H
@@ -73,7 +74,7 @@ static inline int qt_safe_accept(int s, struct sockaddr *addr, QT_SOCKLEN_T *add
     Q_ASSERT((flags & ~O_NONBLOCK) == 0);
 
     int fd;
-#ifdef QT_THREADSAFE_CLOEXEC
+#if QT_CONFIG(accept4)
     // use accept4
     int sockflags = SOCK_CLOEXEC;
     if (flags & O_NONBLOCK)

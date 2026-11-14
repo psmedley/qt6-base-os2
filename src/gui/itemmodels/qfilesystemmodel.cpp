@@ -1,5 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qfilesystemmodel_p.h"
 #include "qfilesystemmodel.h"
@@ -237,7 +238,7 @@ QModelIndex QFileSystemModel::index(int row, int column, const QModelIndex &pare
     const QFileSystemModelPrivate::QFileSystemNode *indexNode = parentNode->children.value(childName);
     Q_ASSERT(indexNode);
 
-    return createIndex(row, column, const_cast<QFileSystemModelPrivate::QFileSystemNode*>(indexNode));
+    return createIndex(row, column, indexNode);
 }
 
 /*!
@@ -450,6 +451,14 @@ QFileSystemModelPrivate::QFileSystemNode *QFileSystemModelPrivate::node(const QS
 
         QFileSystemModelPrivate::QFileSystemNode *node;
         if (!alreadyExisted) {
+#ifdef Q_OS_WIN
+            // Special case: elementPath is a drive root path (C:). If we do not have the trailing
+            // '/' it will be read as a relative path (QTBUG-133746)
+            if (elementPath.length() == 2 && elementPath.at(0).isLetter()
+                && elementPath.at(1) == u':') {
+                elementPath.append(u'/');
+            }
+#endif
             // Someone might call ::index("file://cookie/monster/doesn't/like/veggies"),
             // a path that doesn't exists, I.E. don't blindly create directories.
             QFileInfo info(elementPath);
@@ -1282,13 +1291,15 @@ Qt::DropActions QFileSystemModel::supportedDropActions() const
 */
 QHash<int, QByteArray> QFileSystemModel::roleNames() const
 {
-    auto ret = QAbstractItemModel::roleNames();
-    ret.insert(QFileSystemModel::FileIconRole,
-               QByteArrayLiteral("fileIcon")); // == Qt::decoration
-    ret.insert(QFileSystemModel::FilePathRole, QByteArrayLiteral("filePath"));
-    ret.insert(QFileSystemModel::FileNameRole, QByteArrayLiteral("fileName"));
-    ret.insert(QFileSystemModel::FilePermissions, QByteArrayLiteral("filePermissions"));
-    ret.insert(QFileSystemModel::FileInfoRole, QByteArrayLiteral("fileInfo"));
+    static auto ret = [] {
+        auto ret = QAbstractItemModelPrivate::defaultRoleNames();
+        ret.insert(QFileSystemModel::FileIconRole, "fileIcon"_ba); // == Qt::decoration
+        ret.insert(QFileSystemModel::FilePathRole, "filePath"_ba);
+        ret.insert(QFileSystemModel::FileNameRole, "fileName"_ba);
+        ret.insert(QFileSystemModel::FilePermissions, "filePermissions"_ba);
+        ret.insert(QFileSystemModel::FileInfoRole, "fileInfo"_ba);
+        return ret;
+    }();
     return ret;
 }
 

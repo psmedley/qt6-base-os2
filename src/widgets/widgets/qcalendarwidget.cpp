@@ -1576,20 +1576,15 @@ protected:
     {
         Q_UNUSED(e);
 
+        QStylePainter painter(this);
         QStyleOptionToolButton opt;
         initStyleOption(&opt);
 
-        if (opt.state & QStyle::State_MouseOver || isDown()) {
-            //act as normal button
-            setPalette(QPalette());
-        } else {
-            //set the highlight color for button text
-            QPalette toolPalette = palette();
-            toolPalette.setColor(QPalette::ButtonText, toolPalette.color(QPalette::HighlightedText));
-            setPalette(toolPalette);
-        }
+        // set the highlight color for button text so it remains legible on top of navBarBackground
+        if (!opt.state.testFlag(QStyle::State_MouseOver) || isDown())
+            opt.palette.setColor(QPalette::ButtonText, opt.palette.color(QPalette::HighlightedText));
 
-        QToolButton::paintEvent(e);
+        painter.drawComplexControl(QStyle::CC_ToolButton, opt);
     }
 };
 
@@ -2891,7 +2886,7 @@ QMap<QDate, QTextCharFormat> QCalendarWidget::dateTextFormat() const
 
 /*!
     Returns a QTextCharFormat for \a date. The char format can be
-    empty if the date is not renderd specially.
+    empty if the date is not rendered specially.
 */
 QTextCharFormat QCalendarWidget::dateTextFormat(QDate date) const
 {

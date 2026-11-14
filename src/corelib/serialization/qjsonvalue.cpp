@@ -1,6 +1,7 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // Copyright (C) 2022 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include <qjsonobject.h>
 #include <qjsonvalue.h>
@@ -173,9 +174,14 @@ QJsonValue::QJsonValue(int v)
 /*!
     \overload
     Creates a value of type Double, with value \a v.
-    NOTE: the integer limits for IEEE 754 double precision data is 2^53 (-9007199254740992 to +9007199254740992).
-    If you pass in values outside this range expect a loss of precision to occur.
- */
+
+    This is stored internally as a 64-bit integer, so retains its full
+    precision, as long as it is retrieved with \l toInteger(). However,
+    retrieving its value with \l toDouble() will lose precision unless the value
+    lies between ±2^53.
+
+    \sa toInteger(), toDouble()
+*/
 QJsonValue::QJsonValue(qint64 v)
     : value(v)
 {
@@ -482,12 +488,15 @@ QJsonValue QJsonValue::fromVariant(const QVariant &variant)
     case QMetaType::UShort:
     case QMetaType::Int:
     case QMetaType::UInt:
+    case QMetaType::Long:
     case QMetaType::LongLong:
         return QJsonValue(variant.toLongLong());
+    case QMetaType::ULong:
     case QMetaType::ULongLong:
         if (variant.toULongLong() <= static_cast<uint64_t>(std::numeric_limits<qint64>::max()))
             return QJsonValue(variant.toLongLong());
         Q_FALLTHROUGH();
+    case QMetaType::Float16:
     case QMetaType::Float:
     case QMetaType::Double: {
         double v = variant.toDouble();

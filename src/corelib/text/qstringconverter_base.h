@@ -1,5 +1,6 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #ifndef QSTRINGCONVERTER_BASE_H
 #define QSTRINGCONVERTER_BASE_H
@@ -167,7 +168,7 @@ public:
     Q_CORE_EXPORT static std::optional<Encoding> encodingForName(const char *name) noexcept;
 #endif
     Q_CORE_EXPORT static std::optional<Encoding> encodingForName(QAnyStringView name) noexcept;
-    Q_CORE_EXPORT static const char *nameForEncoding(Encoding e);
+    Q_DECL_PURE_FUNCTION Q_CORE_EXPORT static const char *nameForEncoding(Encoding e) noexcept;
     Q_CORE_EXPORT static std::optional<Encoding>
     encodingForData(QByteArrayView data, char16_t expectedFirstCharacter = 0) noexcept;
     Q_CORE_EXPORT static std::optional<Encoding> encodingForHtml(QByteArrayView data);

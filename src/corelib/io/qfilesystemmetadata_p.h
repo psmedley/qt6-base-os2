@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QFILESYSTEMMETADATA_P_H
 #define QFILESYSTEMMETADATA_P_H
@@ -327,6 +328,9 @@ inline void QFileSystemMetaData::fillFromFileAttribute(DWORD fileAttribute,bool 
     entryFlags |= ((fileAttribute & FILE_ATTRIBUTE_DIRECTORY) ? DirectoryType: FileType);
     entryFlags |= ExistsAttribute;
     knownFlagsMask |= FileType | DirectoryType | HiddenAttribute | ExistsAttribute;
+
+    // this function is never called for a .lnk file
+    knownFlagsMask |= WinLnkType;
 }
 
 inline void QFileSystemMetaData::fillFromFindData(WIN32_FIND_DATA &findData, bool setLinkType, bool isDriveRoot)

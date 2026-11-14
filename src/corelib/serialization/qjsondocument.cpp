@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include <qjsondocument.h>
 #include <qjsonobject.h>
@@ -284,7 +285,7 @@ QByteArray QJsonDocument::toJson(JsonFormat format) const
  */
 QJsonDocument QJsonDocument::fromJson(const QByteArray &json, QJsonParseError *error)
 {
-    QJsonPrivate::Parser parser(json.constData(), json.size());
+    QJsonPrivate::Parser parser(json);
     QJsonDocument result;
     const QCborValue val = parser.parse(error);
     if (val.isArray() || val.isMap()) {

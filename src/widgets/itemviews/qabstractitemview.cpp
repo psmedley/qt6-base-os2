@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qabstractitemview.h"
 
@@ -861,7 +862,7 @@ void QAbstractItemView::setItemDelegate(QAbstractItemDelegate *delegate)
 
     if (d->itemDelegate) {
         if (d->delegateRefCount(d->itemDelegate) == 1)
-            d->disconnectDelegate(delegate);
+            d->disconnectDelegate(d->itemDelegate);
     }
 
     if (delegate) {
@@ -1821,12 +1822,13 @@ void QAbstractItemView::mousePressEvent(QMouseEvent *event)
     QItemSelectionModel::SelectionFlags command = selectionCommand(index, event);
     d->noSelectionOnMousePress = command == QItemSelectionModel::NoUpdate || !index.isValid();
     QPoint offset = d->offset();
-    d->draggedPosition = pos + offset;
+    d->draggedPosition = pos;
+    d->draggedPositionOffset = offset;
 
 #if QT_CONFIG(draganddrop)
     // update the pressed position when drag was enable
     if (d->dragEnabled)
-        d->pressedPosition = d->draggedPosition;
+        d->pressedPosition = d->draggedPosition + d->draggedPositionOffset;
 #endif
 
     if (!(command & QItemSelectionModel::Current)) {
@@ -1883,7 +1885,8 @@ void QAbstractItemView::mouseMoveEvent(QMouseEvent *event)
     Q_D(QAbstractItemView);
     QPoint bottomRight = event->position().toPoint();
 
-    d->draggedPosition = bottomRight + d->offset();
+    d->draggedPosition = bottomRight;
+    d->draggedPositionOffset = d->offset();
 
     if (state() == ExpandingState || state() == CollapsingState)
         return;
@@ -2058,7 +2061,8 @@ void QAbstractItemView::dragEnterEvent(QDragEnterEvent *event)
 void QAbstractItemView::dragMoveEvent(QDragMoveEvent *event)
 {
     Q_D(QAbstractItemView);
-    d->draggedPosition = event->position().toPoint() + d->offset();
+    d->draggedPosition = event->position().toPoint();
+    d->draggedPositionOffset = d->offset();
     if (dragDropMode() == InternalMove
         && (event->source() != this || !(event->possibleActions() & Qt::MoveAction)))
         return;
@@ -4077,7 +4081,8 @@ void QAbstractItemView::doAutoScroll()
     const int verticalValue = verticalScroll->value();
     const int horizontalValue = horizontalScroll->value();
 
-    const QPoint pos = d->draggedPosition - d->offset();
+    const QPoint pos = d->draggedPosition;
+
     const QRect area = QWidgetPrivate::get(d->viewport)->clipRect();
 
     // do the scrolling if we are in the scroll margins
@@ -4117,7 +4122,8 @@ void QAbstractItemView::doAutoScroll()
             // update our dragged position manually after the scroll. "pos" is the old
             // draggedPosition - d->offset(), and d->offset() is now updated after scrolling, so
             // pos + d->offset() gives us the new position.
-            d->draggedPosition = pos + d->offset();
+            d->draggedPosition = pos;
+            d->draggedPositionOffset = d->offset();
             break;
         }
         default:
@@ -4421,7 +4427,7 @@ bool QAbstractItemViewPrivate::shouldAutoScroll(const QPoint &pos) const
 {
     if (!autoScroll)
         return false;
-    QRect area = static_cast<QAbstractItemView*>(viewport)->d_func()->clipRect(); // access QWidget private by bending C++ rules
+    const QRect area = QWidgetPrivate::get(viewport)->clipRect();
     return (pos.y() - area.top() < autoScrollMargin)
         || (area.bottom() - pos.y() < autoScrollMargin)
         || (pos.x() - area.left() < autoScrollMargin)

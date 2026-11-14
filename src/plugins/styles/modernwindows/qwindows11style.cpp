@@ -7,6 +7,7 @@
 #include <private/qstyle_p.h>
 #include <private/qstylehelper_p.h>
 #include <private/qapplication_p.h>
+#include <private/qcombobox_p.h>
 #include <qstyleoption.h>
 #include <qpainter.h>
 #include <QGraphicsDropShadowEffect>
@@ -900,14 +901,6 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
             painter->drawRoundedRect(rect,
                                      secondLevelRoundingRadius, secondLevelRoundingRadius);
 
-            painter->setPen(Qt::NoPen);
-            if (!isRaised)
-                painter->setBrush(WINUI3Colors[colorSchemeIndex][controlFillTertiary]);
-            else if (isMouseOver)
-                painter->setBrush(WINUI3Colors[colorSchemeIndex][controlFillSecondary]);
-            else
-                painter->setBrush(option->palette.button());
-            painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
             if (isRaised) {
                 const qreal sublineOffset = secondLevelRoundingRadius - 0.5;
                 painter->setPen(QPen(WINUI3Colors[colorSchemeIndex][controlStrokeSecondary]));
@@ -972,7 +965,7 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
             if (frame->frameShape == QFrame::NoFrame)
                 break;
             QRectF rect = option->rect.adjusted(1,1,-1,-1);
-            if (widget && widget->inherits("QComboBoxPrivateContainer")) {
+            if (qobject_cast<const QComboBoxPrivateContainer *>(widget)) {
                 painter->setPen(Qt::NoPen);
                 painter->setBrush(WINUI3Colors[colorSchemeIndex][menuPanelFill]);
                 painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
@@ -995,6 +988,16 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
         }
         break;
     }
+    case PE_PanelItemViewItem:
+        if (const QStyleOptionViewItem *vopt = qstyleoption_cast<const QStyleOptionViewItem *>(option)) {
+            if (vopt->backgroundBrush.style() != Qt::NoBrush) {
+                painter->save();
+                painter->setBrushOrigin(vopt->rect.topLeft());
+                painter->fillRect(vopt->rect, vopt->backgroundBrush);
+                painter->restore();
+            }
+        }
+        break;
     case PE_PanelItemViewRow:
         if (const QStyleOptionViewItem *vopt = qstyleoption_cast<const QStyleOptionViewItem *>(option)) {
             const QRect &rect = vopt->rect;
@@ -1024,18 +1027,14 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
         }
         break;
     case QStyle::PE_Widget: {
-#if QT_CONFIG(dialogbuttonbox)
-        const QDialogButtonBox *buttonBox = nullptr;
-        if (qobject_cast<const QMessageBox *> (widget))
-            buttonBox = widget->findChild<const QDialogButtonBox *>(QLatin1String("qt_msgbox_buttonbox"));
-#if QT_CONFIG(inputdialog)
-        else if (qobject_cast<const QInputDialog *> (widget))
-            buttonBox = widget->findChild<const QDialogButtonBox *>(QLatin1String("qt_inputdlg_buttonbox"));
-#endif // QT_CONFIG(inputdialog)
-        if (buttonBox) {
-            painter->fillRect(option->rect,option->palette.window());
+        if (widget && widget->palette().isBrushSet(QPalette::Active, widget->backgroundRole())) {
+            const QBrush bg = widget->palette().brush(widget->backgroundRole());
+            auto wp = QWidgetPrivate::get(widget);
+            painter->save();
+            wp->updateBrushOrigin(painter, bg);
+            painter->fillRect(option->rect, bg);
+            painter->restore();
         }
-#endif
         break;
     }
     case QStyle::PE_FrameWindow:
@@ -1111,7 +1110,6 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                                   QPainter *painter, const QWidget *widget) const
 {
     Q_D(const QWindows11Style);
-    QRect rect(option->rect);
     State flags = option->state;
 
     painter->save();
@@ -1341,9 +1339,12 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
         break;
     case QStyle::CE_ProgressBarLabel:
         if (const QStyleOptionProgressBar* progbaropt = qstyleoption_cast<const QStyleOptionProgressBar*>(option)) {
-            QRect rect = subElementRect(SE_ProgressBarLabel, progbaropt, widget);
-            painter->setPen(progbaropt->palette.text().color());
-            painter->drawText(rect, progbaropt->text,progbaropt->textAlignment);
+            const bool vertical = !(progbaropt->state & QStyle::State_Horizontal);
+            if (!vertical) {
+                QRect rect = subElementRect(SE_ProgressBarLabel, progbaropt, widget);
+                painter->setPen(progbaropt->palette.text().color());
+                painter->drawText(rect, progbaropt->text, progbaropt->textAlignment);
+            }
         }
         break;
     case CE_PushButtonLabel:
@@ -1358,6 +1359,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 int indicatorSize = proxy()->pixelMetric(PM_MenuButtonIndicator, btn, widget);
                 QLineF menuSplitter;
                 QRectF indicatorRect;
+                painter->save();
                 painter->setFont(assetFont);
 
                 if (btn->direction == Qt::LeftToRight) {
@@ -1374,6 +1376,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 painter->drawText(indicatorRect, QStringLiteral(u"\uE70D"), Qt::AlignVCenter | Qt::AlignHCenter);
                 painter->setPen(QPen(WINUI3Colors[colorSchemeIndex][controlStrokePrimary]));
                 painter->drawLine(menuSplitter);
+                painter->restore();
             }
             if (!btn->icon.isNull()) {
                 //Center both icon and text
@@ -1436,7 +1439,9 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 }
                 painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
             } else {
-                if (flags & (State_Sunken))
+                if (option->palette.isBrushSet(QPalette::Current, QPalette::Button))
+                    painter->setBrush(option->palette.button());
+                else if (flags & (State_Sunken))
                     painter->setBrush(flags & State_On ? option->palette.accent().color().lighter(120) : WINUI3Colors[colorSchemeIndex][controlFillTertiary]);
                 else if (flags & State_MouseOver)
                     painter->setBrush(flags & State_On ? option->palette.accent().color().lighter(110) : WINUI3Colors[colorSchemeIndex][controlFillSecondary]);
@@ -1653,113 +1658,109 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
     }
     case CE_ItemViewItem: {
         if (const QStyleOptionViewItem *vopt = qstyleoption_cast<const QStyleOptionViewItem *>(option)) {
-            if (const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(widget)) {
-                QRect checkRect = proxy()->subElementRect(SE_ItemViewItemCheckIndicator, vopt, widget);
-                QRect iconRect = proxy()->subElementRect(SE_ItemViewItemDecoration, vopt, widget);
-                QRect textRect = proxy()->subElementRect(SE_ItemViewItemText, vopt, widget);
+            QRect checkRect = proxy()->subElementRect(SE_ItemViewItemCheckIndicator, vopt, widget);
+            QRect iconRect = proxy()->subElementRect(SE_ItemViewItemDecoration, vopt, widget);
+            QRect textRect = proxy()->subElementRect(SE_ItemViewItemText, vopt, widget);
 
-                const QRect &rect = vopt->rect;
-                const bool isRtl = option->direction == Qt::RightToLeft;
-                bool onlyOne = vopt->viewItemPosition == QStyleOptionViewItem::OnlyOne ||
-                               vopt->viewItemPosition == QStyleOptionViewItem::Invalid;
-                bool isFirst = vopt->viewItemPosition == QStyleOptionViewItem::Beginning;
-                bool isLast = vopt->viewItemPosition == QStyleOptionViewItem::End;
+            // draw the background
+            proxy()->drawPrimitive(PE_PanelItemViewItem, option, painter, widget);
 
-                painter->setPen(highContrastTheme == true ? vopt->palette.buttonText().color() : WINUI3Colors[colorSchemeIndex][frameColorLight]);
+            const QRect &rect = vopt->rect;
+            const bool isRtl = option->direction == Qt::RightToLeft;
+            bool onlyOne = vopt->viewItemPosition == QStyleOptionViewItem::OnlyOne ||
+                           vopt->viewItemPosition == QStyleOptionViewItem::Invalid;
+            bool isFirst = vopt->viewItemPosition == QStyleOptionViewItem::Beginning;
+            bool isLast = vopt->viewItemPosition == QStyleOptionViewItem::End;
+
+            if (isRtl) {
                 if (isFirst) {
-                    painter->drawLine(rect.topRight() + QPointF(0.5, 0.0),
-                                      rect.bottomRight() + QPointF(0.5, 0.0));
+                    isFirst = false;
+                    isLast = true;
                 } else if (isLast) {
-                    painter->drawLine(rect.topLeft() - QPointF(0.5, 0.0),
-                                      rect.bottomLeft() - QPointF(0.5, 0.0));
+                    isFirst = true;
+                    isLast = false;
+                }
+            }
+
+            const bool highlightCurrent = vopt->state.testAnyFlags(State_Selected | State_MouseOver);
+            if (highlightCurrent) {
+                if (highContrastTheme) {
+                    painter->setBrush(vopt->palette.highlight());
                 } else {
+                    const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(widget);
+                    painter->setBrush(view && view->alternatingRowColors()
+                                              ? vopt->palette.highlight()
+                                              : WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
+                }
+            } else {
+                painter->setBrush(vopt->backgroundBrush);
+            }
+            painter->setPen(Qt::NoPen);
+
+            if (onlyOne) {
+                painter->drawRoundedRect(rect.marginsRemoved(QMargins(2, 2, 2, 2)),
+                                         secondLevelRoundingRadius, secondLevelRoundingRadius);
+            } else if (isFirst) {
+                painter->save();
+                painter->setClipRect(rect);
+                painter->drawRoundedRect(rect.marginsRemoved(QMargins(2, 2, -secondLevelRoundingRadius, 2)),
+                                         secondLevelRoundingRadius, secondLevelRoundingRadius);
+                painter->restore();
+            } else if (isLast) {
+                painter->save();
+                painter->setClipRect(rect);
+                painter->drawRoundedRect(rect.marginsRemoved(QMargins(-secondLevelRoundingRadius, 2, 2, 2)),
+                                         secondLevelRoundingRadius, secondLevelRoundingRadius);
+                painter->restore();
+            } else {
+                painter->drawRect(rect.marginsRemoved(QMargins(0, 2, 0, 2)));
+            }
+
+            // draw the check mark
+            if (vopt->features & QStyleOptionViewItem::HasCheckIndicator) {
+                QStyleOptionViewItem option(*vopt);
+                option.rect = checkRect;
+                option.state = option.state & ~QStyle::State_HasFocus;
+
+                switch (vopt->checkState) {
+                case Qt::Unchecked:
+                    option.state |= QStyle::State_Off;
+                    break;
+                case Qt::PartiallyChecked:
+                    option.state |= QStyle::State_NoChange;
+                    break;
+                case Qt::Checked:
+                    option.state |= QStyle::State_On;
+                    break;
+                }
+                proxy()->drawPrimitive(QStyle::PE_IndicatorItemViewItemCheck, &option, painter, widget);
+            }
+
+            // draw the icon
+            QIcon::Mode mode = QIcon::Normal;
+            if (!(vopt->state & QStyle::State_Enabled))
+                mode = QIcon::Disabled;
+            else if (vopt->state & QStyle::State_Selected)
+                mode = QIcon::Selected;
+            QIcon::State state = vopt->state & QStyle::State_Open ? QIcon::On : QIcon::Off;
+            vopt->icon.paint(painter, iconRect, vopt->decorationAlignment, mode, state);
+
+            painter->setPen(highlightCurrent && highContrastTheme ? vopt->palette.base().color()
+                                                                  : vopt->palette.text().color());
+            d->viewItemDrawText(painter, vopt, textRect);
+
+            // paint a vertical marker for QListView
+            if (vopt->state & State_Selected) {
+                if (const QListView *lv = qobject_cast<const QListView *>(widget);
+                    lv && lv->viewMode() != QListView::IconMode && !highContrastTheme) {
+                    painter->setPen(vopt->palette.accent().color());
+                    const auto xPos = isRtl ? rect.right() - 1 : rect.left();
                     const QLineF lines[2] = {
-                        QLineF(rect.topRight() + QPointF(0.5, 0.0),
-                               rect.bottomRight() + QPointF(0.5, 0.0)),
-                        QLineF(rect.topLeft() - QPointF(0.5, 0.0),
-                               rect.bottomLeft() - QPointF(0.5, 0.0)),
+                        QLineF(xPos, rect.y() + 2, xPos, rect.y() + rect.height() - 2),
+                        QLineF(xPos + 1, rect.y() + 2, xPos + 1, rect.y() + rect.height() - 2),
                     };
                     painter->drawLines(lines, 2);
                 }
-
-                const bool isTreeView = qobject_cast<const QTreeView *>(widget);
-
-                if ((vopt->state & State_Selected || vopt->state & State_MouseOver) && !(isTreeView && vopt->state & State_MouseOver) && vopt->showDecorationSelected) {
-                    painter->setBrush(WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
-                    QWidget *editorWidget = view ? view->indexWidget(view->currentIndex()) : nullptr;
-                    if (editorWidget) {
-                        QPalette pal = editorWidget->palette();
-                        QColor editorBgColor = vopt->backgroundBrush == Qt::NoBrush ? vopt->palette.color(widget->backgroundRole()) : vopt->backgroundBrush.color();
-                        editorBgColor.setAlpha(255);
-                        pal.setColor(editorWidget->backgroundRole(),editorBgColor);
-                        editorWidget->setPalette(pal);
-                    }
-                } else {
-                    painter->setBrush(vopt->backgroundBrush);
-                }
-                painter->setPen(Qt::NoPen);
-
-                if (onlyOne) {
-                    painter->drawRoundedRect(rect.marginsRemoved(QMargins(2, 2, 2, 2)),
-                                             secondLevelRoundingRadius, secondLevelRoundingRadius);
-                } else if (isFirst) {
-                    painter->drawRoundedRect(rect.marginsRemoved(QMargins(2, 2, 0, 2)),
-                                             secondLevelRoundingRadius, secondLevelRoundingRadius);
-                } else if (isLast) {
-                    painter->drawRoundedRect(rect.marginsRemoved(QMargins(0, 2, 2, 2)),
-                                             secondLevelRoundingRadius, secondLevelRoundingRadius);
-                } else {
-                    painter->drawRect(rect.marginsRemoved(QMargins(0, 2, 0, 2)));
-                }
-
-                // draw the check mark
-                if (vopt->features & QStyleOptionViewItem::HasCheckIndicator) {
-                    QStyleOptionViewItem option(*vopt);
-                    option.rect = checkRect;
-                    option.state = option.state & ~QStyle::State_HasFocus;
-
-                    switch (vopt->checkState) {
-                    case Qt::Unchecked:
-                        option.state |= QStyle::State_Off;
-                        break;
-                    case Qt::PartiallyChecked:
-                        option.state |= QStyle::State_NoChange;
-                        break;
-                    case Qt::Checked:
-                        option.state |= QStyle::State_On;
-                        break;
-                    }
-                    proxy()->drawPrimitive(QStyle::PE_IndicatorItemViewItemCheck, &option, painter, widget);
-                }
-
-                // draw the icon
-                QIcon::Mode mode = QIcon::Normal;
-                if (!(vopt->state & QStyle::State_Enabled))
-                    mode = QIcon::Disabled;
-                else if (vopt->state & QStyle::State_Selected)
-                    mode = QIcon::Selected;
-                QIcon::State state = vopt->state & QStyle::State_Open ? QIcon::On : QIcon::Off;
-                vopt->icon.paint(painter, iconRect, vopt->decorationAlignment, mode, state);
-
-                if (!view || !view->isPersistentEditorOpen(vopt->index)) {
-                    painter->setPen(QPen(option->palette.text().color()));
-                    d->viewItemDrawText(painter, vopt, textRect);
-                }
-                if (vopt->state & State_Selected && (isFirst || onlyOne)) {
-                    if (const QListView *lv = qobject_cast<const QListView *>(widget);
-                        lv && lv->viewMode() != QListView::IconMode) {
-                        painter->setPen(QPen(vopt->palette.accent().color()));
-                        const auto xPos = isRtl ? rect.right() - 1 : rect.left();
-                        const QLineF lines[2] = {
-                            QLineF(xPos, rect.y() + 2, xPos, rect.y() + rect.height() - 2),
-                            QLineF(xPos + 1, rect.y() + 2, xPos + 1, rect.y() + rect.height() - 2),
-                        };
-                        painter->drawLines(lines, 2);
-                    }
-                }
-            } else {
-                QRect textRect = proxy()->subElementRect(SE_ItemViewItemText, vopt, widget);
-                d->viewItemDrawText(painter, vopt, textRect);
             }
         }
         break;
@@ -1802,8 +1803,7 @@ QRect QWindows11Style::subElementRect(QStyle::SubElement element, const QStyleOp
         if (const auto *item = qstyleoption_cast<const QStyleOptionViewItem *>(option)) {
             const int decorationOffset = item->features.testFlag(QStyleOptionViewItem::HasDecoration) ? item->decorationSize.width() : 0;
             const int checkboxOffset = item->features.testFlag(QStyleOptionViewItem::HasCheckIndicator) ? 16 : 0;
-            if (widget && widget->parentWidget()
-             && widget->parentWidget()->inherits("QComboBoxPrivateContainer")) {
+            if (widget && qobject_cast<QComboBoxPrivateContainer *>(widget->parentWidget())) {
                 if (option->direction == Qt::LeftToRight)
                     ret = option->rect.adjusted(decorationOffset + checkboxOffset + 5, 0, -5, 0);
                 else
@@ -2091,6 +2091,24 @@ QSize QWindows11Style::sizeFromContents(ContentsType type, const QStyleOption *o
                 contentSize += QSize(8, 0); // arrow margins
         }
         break;
+    case CT_HeaderSection:
+        // windows vista does not honor the indicator (as it was drawn above the text, not on the
+        // side) so call QWindowsStyle::styleHint directly to get the correct size hint
+        contentSize = QWindowsStyle::sizeFromContents(type, option, size, widget);
+        break;
+    case CT_RadioButton:
+    case CT_CheckBox:
+        // the indicator needs 2px more in width when there is no text, not needed when
+        // the style draws the text
+        contentSize = QWindowsVistaStyle::sizeFromContents(type, option, size, widget);
+        if (size.width() == 0)
+            contentSize.rwidth() += 2;
+        break;
+    case CT_PushButton:
+        contentSize = QWindowsVistaStyle::sizeFromContents(type, option, size, widget);
+        contentSize.rwidth() += 2 * 2; // the CE_PushButtonBevel draws a rounded rect with
+                                       // QMargins(2, 2, 2, 2) removed
+        break;
     default:
         contentSize = QWindowsVistaStyle::sizeFromContents(type, option, size, widget);
         break;
@@ -2138,9 +2156,11 @@ int QWindows11Style::pixelMetric(PixelMetric metric, const QStyleOption *option,
 
 void QWindows11Style::polish(QWidget* widget)
 {
-    QWindowsVistaStyle::polish(widget);
+    if (!qobject_cast<QCommandLinkButton *>(widget))
+        QWindowsVistaStyle::polish(widget);
     const bool isScrollBar = qobject_cast<QScrollBar *>(widget);
-    if (isScrollBar || qobject_cast<QMenu *>(widget) || widget->inherits("QComboBoxPrivateContainer")) {
+    const auto comboBoxContainer = qobject_cast<const QComboBoxPrivateContainer *>(widget);
+    if (isScrollBar || qobject_cast<QMenu *>(widget) || comboBoxContainer) {
         bool wasCreated = widget->testAttribute(Qt::WA_WState_Created);
         bool layoutDirection = widget->testAttribute(Qt::WA_RightToLeft);
         widget->setAttribute(Qt::WA_OpaquePaintEvent,false);
@@ -2150,28 +2170,23 @@ void QWindows11Style::polish(QWidget* widget)
         widget->setWindowFlag(Qt::NoDropShadowWindowHint);
         widget->setAttribute(Qt::WA_RightToLeft, layoutDirection);
         widget->setAttribute(Qt::WA_WState_Created, wasCreated);
-        auto pal = widget->palette();
-        pal.setColor(widget->backgroundRole(), Qt::transparent);
-        widget->setPalette(pal);
-        if (!isScrollBar
-            && widget->graphicsProxyWidget() == nullptr) { // for menus and combobox containers...
-            QGraphicsDropShadowEffect* dropshadow = new QGraphicsDropShadowEffect(widget);
-            dropshadow->setBlurRadius(3);
-            dropshadow->setXOffset(3);
-            dropshadow->setYOffset(3);
-            widget->setGraphicsEffect(dropshadow);
+        if (!isScrollBar) {
+            bool inGraphicsView = widget->graphicsProxyWidget() != nullptr;
+            if (!inGraphicsView && comboBoxContainer && comboBoxContainer->parentWidget())
+                inGraphicsView = comboBoxContainer->parentWidget()->graphicsProxyWidget() != nullptr;
+            if (!inGraphicsView) { // for menus and combobox containers...
+                QGraphicsDropShadowEffect *dropshadow = new QGraphicsDropShadowEffect(widget);
+                dropshadow->setBlurRadius(3);
+                dropshadow->setXOffset(3);
+                dropshadow->setYOffset(3);
+                widget->setGraphicsEffect(dropshadow);
+            }
         }
     } else if (QComboBox* cb = qobject_cast<QComboBox*>(widget)) {
         if (cb->isEditable()) {
             QLineEdit *le = cb->lineEdit();
             le->setFrame(false);
         }
-    } else if (qobject_cast<QCommandLinkButton *>(widget)) {
-        widget->setProperty("_qt_usingVistaStyle",false);
-        QPalette pal = widget->palette();
-        pal.setColor(QPalette::ButtonText, pal.text().color());
-        pal.setColor(QPalette::BrightText, pal.text().color());
-        widget->setPalette(pal);
     } else if (qobject_cast<QGraphicsView *>(widget) && !qobject_cast<QTextEdit *>(widget)) {
         QPalette pal = widget->palette();
         pal.setColor(QPalette::Base, pal.window().color());
@@ -2182,28 +2197,38 @@ void QWindows11Style::polish(QWidget* widget)
                && !qobject_cast<QMdiArea *>(widget)
 #endif
         ) {
-        QPalette pal = scrollarea->viewport()->palette();
-        const QPalette originalPalette = pal;
-        pal.setColor(scrollarea->viewport()->backgroundRole(), Qt::transparent);
-        scrollarea->viewport()->setPalette(pal);
-        scrollarea->viewport()->setProperty("_q_original_background_palette", originalPalette);
-        if (const auto tableView = qobject_cast<QTableView *>(widget))
-            widget->setAttribute(Qt::WA_Hover, true);
+        if (scrollarea->frameShape() == QFrame::StyledPanel) {
+            const auto vp = scrollarea->viewport();
+            const bool isAutoFillBackground = vp->autoFillBackground();
+            const bool isStyledBackground = vp->testAttribute(Qt::WA_StyledBackground);
+            vp->setProperty("_q_original_autofill_background", isAutoFillBackground);
+            vp->setProperty("_q_original_styled_background", isStyledBackground);
+            vp->setAutoFillBackground(false);
+            vp->setAttribute(Qt::WA_StyledBackground, true);
+        }
+        // QTreeView & QListView are already set in the base windowsvista style
+        if (auto table = qobject_cast<QTableView *>(widget))
+            table->viewport()->setAttribute(Qt::WA_Hover, true);
     }
 }
 
 void QWindows11Style::unpolish(QWidget *widget)
 {
-    QWindowsVistaStyle::unpolish(widget);
+    if (!qobject_cast<QCommandLinkButton *>(widget))
+        QWindowsVistaStyle::unpolish(widget);
     if (const auto *scrollarea = qobject_cast<QAbstractScrollArea *>(widget);
         scrollarea
 #if QT_CONFIG(mdiarea)
         && !qobject_cast<QMdiArea *>(widget)
 #endif
         ) {
-        const QPalette pal = scrollarea->viewport()->property("_q_original_background_palette").value<QPalette>();
-        scrollarea->viewport()->setPalette(pal);
-        scrollarea->viewport()->setProperty("_q_original_background_palette", QVariant());
+        const auto vp = scrollarea->viewport();
+        const auto wasAutoFillBackground = vp->property("_q_original_autofill_background").toBool();
+        vp->setAutoFillBackground(wasAutoFillBackground);
+        vp->setProperty("_q_original_autofill_background", QVariant());
+        const auto origStyledBackground = vp->property("_q_original_styled_background").toBool();
+        vp->setAttribute(Qt::WA_StyledBackground, origStyledBackground);
+        vp->setProperty("_q_original_styled_background", QVariant());
     }
 }
 
@@ -2220,10 +2245,11 @@ static void populateLightSystemBasePalette(QPalette &result)
     static QString oldStyleSheet;
     const bool styleSheetChanged = oldStyleSheet != qApp->styleSheet();
 
-    const QColor textColor = QColor(0x00,0x00,0x00,0xE4);
-    const QColor textDisabled = QColor(0x00,0x00,0x00,0x5C);
-    const QColor btnFace = QColor(0xFF,0xFF,0xFF,0xB3);
-    const QColor alternateBase = QColor(0x00,0x00,0x00,0x09);
+    constexpr QColor textColor = QColor(0x00,0x00,0x00,0xE4);
+    constexpr QColor textDisabled = QColor(0x00, 0x00, 0x00, 0x5C);
+    constexpr QColor btnFace = QColor(0xFF, 0xFF, 0xFF, 0xB3);
+    constexpr QColor base = QColor(0xFF, 0xFF, 0xFF, 0xFF);
+    constexpr QColor alternateBase = QColor(0x00, 0x00, 0x00, 0x09);
     const QColor btnHighlight = result.accent().color();
     const QColor btnColor = result.button().color();
 
@@ -2235,7 +2261,7 @@ static void populateLightSystemBasePalette(QPalette &result)
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::Mid, btnColor.darker(150));
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::Text, textColor);
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::BrightText, btnHighlight);
-    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Base, btnFace);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Base, base);
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::Window, QColor(0xF3,0xF3,0xF3,0xFF));
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::ButtonText, textColor);
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::Midlight, btnColor.lighter(125));
@@ -2252,7 +2278,7 @@ static void populateLightSystemBasePalette(QPalette &result)
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Mid, btnColor.darker(150));
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Text, textColor);
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::BrightText, btnHighlight);
-    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Base, btnFace);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Base, base);
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Window, QColor(0xF3,0xF3,0xF3,0xFF));
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::ButtonText, textColor);
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Midlight, btnColor.lighter(125));
@@ -2273,7 +2299,7 @@ static void populateDarkSystemBasePalette(QPalette &result)
     static QString oldStyleSheet;
     const bool styleSheetChanged = oldStyleSheet != qApp->styleSheet();
 
-    const QColor alternateBase = QColor(0xFF,0xFF,0xFF,0x0F);
+    constexpr QColor alternateBase = QColor(0xFF, 0xFF, 0xFF, 0x0F);
 
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::AlternateBase, alternateBase);
 
@@ -2313,6 +2339,9 @@ void QWindows11Style::polish(QPalette& result)
 
 QBrush QWindows11Style::buttonFillBrush(const QStyleOption *option)
 {
+    if (option->palette.isBrushSet(QPalette::Current, QPalette::Button))
+        return option->palette.button();
+
     const bool isOn = (option->state & QStyle::State_On || option->state & QStyle::State_NoChange);
     QBrush brush = isOn ? option->palette.accent() : option->palette.window();
     if (!isOn && option->state & QStyle::State_AutoRaise)

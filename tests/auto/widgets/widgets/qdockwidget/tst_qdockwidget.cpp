@@ -42,9 +42,12 @@ private slots:
     void widget();
     void features();
     void setFloating();
+    void setFloatingReparenting();
     void allowedAreas();
     void toggleViewAction();
     void visibilityChanged();
+    void visibilityChangedOnDestruction_data();
+    void visibilityChangedOnDestruction();
     void updateTabBarOnVisibilityChanged();
     void dockLocationChanged();
     void setTitleBarWidget();
@@ -463,8 +466,14 @@ void tst_QDockWidget::setFloating()
     dw.setFloating(dw.isFloating());
     QCOMPARE(spy.size(), 0);
     spy.clear();
+}
 
-#if defined(QT_BUILD_INTERNAL) && !defined(Q_OS_WIN)
+void tst_QDockWidget::setFloatingReparenting()
+{
+#ifdef Q_OS_WIN
+    QSKIP("Test skipped on Windows platforms");
+#endif // Q_OS_WIN
+#ifdef QT_BUILD_INTERNAL
     // Check that setFloating() reparents the dock widget to the main window,
     // in case it has a QDockWidgetGroupWindow parent
     QPointer<QDockWidget> d1;
@@ -479,7 +488,9 @@ void tst_QDockWidget::setFloating()
     d1->setFloating(true);
     QTRY_COMPARE(mainWindow, d1->parentWidget());
     QTRY_COMPARE(mainWindow, d2->parentWidget());
-#endif // defined(QT_BUILD_INTERNAL) && !defined(Q_OS_WIN)
+#else
+    QSKIP("test requires -developer-build option");
+#endif // defined(QT_BUILD_INTERNAL)
 }
 
 void tst_QDockWidget::allowedAreas()
@@ -706,6 +717,45 @@ void tst_QDockWidget::visibilityChanged()
     mw.addDockWidget(Qt::RightDockWidgetArea, &dw2);
     QTRY_COMPARE(spy.size(), 1);
     QCOMPARE(spy.at(0).at(0).toBool(), true);
+}
+
+// QTBUG-136485 - QDockWidget didn't emit visibilityChanged when getting
+// destroyed until 6.9.0; it did in 6.9.0, causing regressions in applications.
+// So make sure we don't emit that signal when a QDockWidget gets destroyed.
+// When implicitly destroyed as a child of a QMainWindow, it gets hidden first,
+// so it emits the signal.
+void tst_QDockWidget::visibilityChangedOnDestruction_data()
+{
+    QTest::addColumn<bool>("explicitDestroy");
+    QTest::addColumn<bool>("floating");
+    QTest::addColumn<int>("signalCount");
+
+    QTest::addRow("Explicit, docked") << true << false << 0;
+    QTest::addRow("Explicit, floating") << true << true << 0;
+    QTest::addRow("Implicit, docked") << false << false << 1;
+    QTest::addRow("Implicit, floating") << false << true << 0;
+}
+
+void tst_QDockWidget::visibilityChangedOnDestruction()
+{
+    QFETCH(const bool, explicitDestroy);
+    QFETCH(const bool, floating);
+    QFETCH(const int, signalCount);
+
+    std::unique_ptr<QMainWindow> mw(new QMainWindow);
+    QDockWidget *dw = new QDockWidget;
+    mw->addDockWidget(Qt::LeftDockWidgetArea, dw);
+    if (floating)
+        dw->setFloating(true);
+    mw->show();
+    QVERIFY(QTest::qWaitForWindowExposed(mw.get()));
+
+    QSignalSpy spy(dw, &QDockWidget::visibilityChanged);
+    if (explicitDestroy)
+        delete dw;
+    else
+        mw.reset();
+    QCOMPARE(spy.count(), signalCount);
 }
 
 void tst_QDockWidget::updateTabBarOnVisibilityChanged()

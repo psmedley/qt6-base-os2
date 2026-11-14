@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qthread.h"
 #include "qthreadstorage.h"
@@ -279,7 +280,7 @@ QThreadPrivate::~QThreadPrivate()
     \l{Mandelbrot} example, as that is the name of the QThread subclass).
     Note that this is currently not available with release builds on Windows.
 
-    \sa {Thread Support in Qt}, QThreadStorage, {Synchronizing Threads},
+    \sa {Multi-threading in Qt}, QThreadStorage, {Synchronizing Threads},
         Mandelbrot, {Producer and Consumer using Semaphores},
         {Producer and Consumer using Wait Conditions}
 */
@@ -483,6 +484,16 @@ QThread::~QThread()
     \threadsafe
     Returns \c true if the thread is finished; otherwise returns \c false.
 
+    A thread is considered finished if it has returned from the run() function
+    and the finished() signal has been emitted.
+
+//! [execution-after-finished]
+    Note the thread may still run for arbitrary amount of time after the
+    finished() signal is emitted, running clean-up operations such as executing
+    the destructors to \c{thread_local} variables. To synchronize with all
+    effects from the thread, call wait() and verify it returned true.
+//! [execution-after-finished]
+
     \sa isRunning()
 */
 bool QThread::isFinished() const
@@ -495,6 +506,11 @@ bool QThread::isFinished() const
 /*!
     \threadsafe
     Returns \c true if the thread is running; otherwise returns \c false.
+
+    A thread is considered to be running if QThread has been started with
+    start() but is not yet finished.
+
+    \include qthread.cpp execution-after-finished
 
     \sa isFinished()
 */
@@ -876,6 +892,12 @@ QThread::Priority QThread::priority() const
     This provides similar functionality to the POSIX \c
     pthread_join() function.
 
+    \note On some operating systems, this function may return true while the
+    operating system thread is still running and may be executing clean-up code
+    such as C++11 \c{thread_local} destructors. Operating systems where this
+    function only returns true after the OS thread has fully exited include
+    Linux, Windows, and Apple operating systems.
+
     \sa sleep(), terminate()
 */
 
@@ -1153,7 +1175,7 @@ void QThread::setEventDispatcher(QAbstractEventDispatcher *eventDispatcher)
     } else {
         eventDispatcher->moveToThread(this);
         if (eventDispatcher->thread() == this) // was the move successful?
-            d->data->eventDispatcher = eventDispatcher;
+            d->data->eventDispatcher.storeRelaxed(eventDispatcher);
         else
             qWarning("QThread::setEventDispatcher: Could not move event dispatcher to target thread");
     }

@@ -88,6 +88,7 @@ public:
     QRect undockedGeometry;
     QString fixedWindowTitle;
     QString dockedWindowTitle;
+    bool inDestructor = false;
 
     bool mousePressEvent(QMouseEvent *event);
     bool mouseDoubleClickEvent(QMouseEvent *event);
@@ -117,7 +118,7 @@ class Q_WIDGETS_EXPORT QDockWidgetLayout : public QLayout
 {
     Q_OBJECT
 public:
-    QDockWidgetLayout(QWidget *parent = nullptr);
+    explicit QDockWidgetLayout(QWidget *parent = nullptr);
     ~QDockWidgetLayout();
     void addItem(QLayoutItem *item) override;
     QLayoutItem *itemAt(int index) const override;

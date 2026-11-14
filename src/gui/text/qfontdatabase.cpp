@@ -194,20 +194,29 @@ QtFontSize *QtFontStyle::pixelSize(unsigned short size, bool add)
     return pixelSizes + (count++);
 }
 
-QtFontStyle *QtFontFoundry::style(const QtFontStyle::Key &key, const QString &styleName, bool create)
+QtFontStyle *QtFontFoundry::style(const QtFontStyle::Key &key, const QString &styleName, StyleRetrievalFlags flags)
 {
     int pos = 0;
     for (; pos < count; pos++) {
-        bool hasStyleName = !styleName.isEmpty(); // search styleName first if available
-        if (hasStyleName && !styles[pos]->styleName.isEmpty()) {
-            if (styles[pos]->styleName == styleName)
+        bool hasStyleName = !styleName.isEmpty() && !styles[pos]->styleName.isEmpty();
+        bool hasStyleNameMatch = styles[pos]->styleName == styleName;
+        bool hasKeyMatch = styles[pos]->key == key;
+
+        // If MatchAllProperties are set, then both the key and style name have to match, otherwise
+        // we consider it a different font. If it is not set, then we prefer matches on the style
+        // name if there is one. If no style name is part of the request (or the font does not
+        // have one) we match on the key.
+        if (flags & MatchAllProperties) {
+            if (hasStyleNameMatch && hasKeyMatch)
                 return styles[pos];
-        } else {
-            if (styles[pos]->key == key)
+        } else if (hasStyleName) {
+            if (hasStyleNameMatch)
                 return styles[pos];
+        } else if (hasKeyMatch) {
+            return styles[pos];
         }
     }
-    if (!create)
+    if (!(flags & AddWhenMissing))
         return nullptr;
 
 //     qDebug("adding key (weight=%d, style=%d, oblique=%d stretch=%d) at %d", key.weight, key.style, key.oblique, key.stretch, pos);
@@ -556,8 +565,9 @@ void qt_registerFont(const QString &familyName, const QString &stylename,
     }
 
     QtFontFoundry *foundry = f->foundry(foundryname, true);
-    QtFontStyle *fontStyle = foundry->style(styleKey, QString{}, true);
-    fontStyle->styleName = stylename;
+    QtFontStyle *fontStyle = foundry->style(styleKey,
+                                            stylename,
+                                            QtFontFoundry::StyleRetrievalFlags::AllRetrievalFlags);
     fontStyle->smoothScalable = scalable;
     fontStyle->antialiased = antialiased;
     QtFontSize *size = fontStyle->pixelSize(pixelSize ? pixelSize : SMOOTH_SCALABLE, true);
@@ -1491,7 +1501,9 @@ QStringList QFontDatabase::styles(const QString &family)
             for (int k = 0; k < foundry->count; k++) {
                 QtFontStyle::Key ke(foundry->styles[k]->key);
                 ke.stretch = 0;
-                allStyles.style(ke, foundry->styles[k]->styleName, true);
+                allStyles.style(ke,
+                                foundry->styles[k]->styleName,
+                                QtFontFoundry::AddWhenMissing);
             }
         }
     }
@@ -1539,7 +1551,6 @@ bool QFontDatabase::isFixedPitch(const QString &family,
 bool QFontDatabase::isBitmapScalable(const QString &family,
                                       const QString &style)
 {
-    bool bitmapScalable = false;
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
@@ -1547,7 +1558,8 @@ bool QFontDatabase::isBitmapScalable(const QString &family,
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
 
     QtFontFamily *f = d->family(familyName);
-    if (!f) return bitmapScalable;
+    if (!f)
+        return false;
 
     QtFontStyle::Key styleKey(style);
     for (int j = 0; j < f->count; j++) {
@@ -1558,13 +1570,11 @@ bool QFontDatabase::isBitmapScalable(const QString &family,
                      foundry->styles[k]->styleName == style ||
                      foundry->styles[k]->key == styleKey)
                     && foundry->styles[k]->bitmapScalable && !foundry->styles[k]->smoothScalable) {
-                    bitmapScalable = true;
-                    goto end;
+                    return true;
                 }
         }
     }
- end:
-    return bitmapScalable;
+    return false;
 }
 
 
@@ -1578,7 +1588,6 @@ bool QFontDatabase::isBitmapScalable(const QString &family,
 */
 bool QFontDatabase::isSmoothlyScalable(const QString &family, const QString &style)
 {
-    bool smoothScalable = false;
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
@@ -1595,7 +1604,8 @@ bool QFontDatabase::isSmoothlyScalable(const QString &family, const QString &sty
             }
         }
     }
-    if (!f) return smoothScalable;
+    if (!f)
+        return false;
 
     const QtFontStyle::Key styleKey(style);
     for (int j = 0; j < f->count; j++) {
@@ -1603,7 +1613,7 @@ bool QFontDatabase::isSmoothlyScalable(const QString &family, const QString &sty
         if (foundryName.isEmpty() || foundry->name.compare(foundryName, Qt::CaseInsensitive) == 0) {
             for (int k = 0; k < foundry->count; k++) {
                 const QtFontStyle *fontStyle = foundry->styles[k];
-                smoothScalable =
+                const bool smoothScalable =
                         fontStyle->smoothScalable
                         && ((style.isEmpty()
                              || fontStyle->styleName == style
@@ -1612,12 +1622,11 @@ bool QFontDatabase::isSmoothlyScalable(const QString &family, const QString &sty
                                 && style == styleStringHelper(fontStyle->key.weight,
                                                               QFont::Style(fontStyle->key.style))));
                 if (smoothScalable)
-                    goto end;
+                    return true;
             }
         }
     }
- end:
-    return smoothScalable;
+    return false;
 }
 
 /*!
@@ -1648,7 +1657,6 @@ QList<int> QFontDatabase::pointSizes(const QString &family,
     if (QGuiApplicationPrivate::platformIntegration()->fontDatabase()->fontsAlwaysScalable())
         return standardSizes();
 
-    bool smoothScalable = false;
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
@@ -1670,10 +1678,9 @@ QList<int> QFontDatabase::pointSizes(const QString &family,
             QtFontStyle *style = foundry->style(styleKey, styleName);
             if (!style) continue;
 
-            if (style->smoothScalable) {
-                smoothScalable = true;
-                goto end;
-            }
+            if (style->smoothScalable)
+                return standardSizes();
+
             for (int l = 0; l < style->count; l++) {
                 const QtFontSize *size = style->pixelSizes + l;
 
@@ -1685,9 +1692,6 @@ QList<int> QFontDatabase::pointSizes(const QString &family,
             }
         }
     }
- end:
-    if (smoothScalable)
-        return standardSizes();
 
     std::sort(sizes.begin(), sizes.end());
     return sizes;
@@ -1714,8 +1718,11 @@ QFont QFontDatabase::font(const QString &family, const QString &style,
     for (int j = 0; j < f->count; j++) {
         QtFontFoundry *foundry = f->foundries[j];
         if (foundryName.isEmpty() || foundry->name.compare(foundryName, Qt::CaseInsensitive) == 0) {
-            for (int k = 0; k < foundry->count; k++)
-                allStyles.style(foundry->styles[k]->key, foundry->styles[k]->styleName, true);
+            for (int k = 0; k < foundry->count; k++) {
+                allStyles.style(foundry->styles[k]->key,
+                                foundry->styles[k]->styleName,
+                                QtFontFoundry::AddWhenMissing);
+            }
         }
     }
 
@@ -1747,7 +1754,6 @@ QList<int> QFontDatabase::smoothSizes(const QString &family,
     if (QGuiApplicationPrivate::platformIntegration()->fontDatabase()->fontsAlwaysScalable())
         return standardSizes();
 
-    bool smoothScalable = false;
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
@@ -1769,10 +1775,9 @@ QList<int> QFontDatabase::smoothSizes(const QString &family,
             QtFontStyle *style = foundry->style(styleKey, styleName);
             if (!style) continue;
 
-            if (style->smoothScalable) {
-                smoothScalable = true;
-                goto end;
-            }
+            if (style->smoothScalable)
+                return QFontDatabase::standardSizes();
+
             for (int l = 0; l < style->count; l++) {
                 const QtFontSize *size = style->pixelSizes + l;
 
@@ -1784,9 +1789,6 @@ QList<int> QFontDatabase::smoothSizes(const QString &family,
             }
         }
     }
- end:
-    if (smoothScalable)
-        return QFontDatabase::standardSizes();
 
     std::sort(sizes.begin(), sizes.end());
     return sizes;
@@ -1825,8 +1827,11 @@ bool QFontDatabase::italic(const QString &family, const QString &style)
     for (int j = 0; j < f->count; j++) {
         QtFontFoundry *foundry = f->foundries[j];
         if (foundryName.isEmpty() || foundry->name.compare(foundryName, Qt::CaseInsensitive) == 0) {
-            for (int k = 0; k < foundry->count; k++)
-                allStyles.style(foundry->styles[k]->key, foundry->styles[k]->styleName, true);
+            for (int k = 0; k < foundry->count; k++) {
+                allStyles.style(foundry->styles[k]->key,
+                                foundry->styles[k]->styleName,
+                                QtFontFoundry::AddWhenMissing);
+            }
         }
     }
 
@@ -1859,8 +1864,11 @@ bool QFontDatabase::bold(const QString &family,
         QtFontFoundry *foundry = f->foundries[j];
         if (foundryName.isEmpty() ||
             foundry->name.compare(foundryName, Qt::CaseInsensitive) == 0) {
-            for (int k = 0; k < foundry->count; k++)
-                allStyles.style(foundry->styles[k]->key, foundry->styles[k]->styleName, true);
+            for (int k = 0; k < foundry->count; k++) {
+                allStyles.style(foundry->styles[k]->key,
+                                foundry->styles[k]->styleName,
+                                QtFontFoundry::AddWhenMissing);
+            }
         }
     }
 
@@ -1894,8 +1902,11 @@ int QFontDatabase::weight(const QString &family,
         QtFontFoundry *foundry = f->foundries[j];
         if (foundryName.isEmpty() ||
             foundry->name.compare(foundryName, Qt::CaseInsensitive) == 0) {
-            for (int k = 0; k < foundry->count; k++)
-                allStyles.style(foundry->styles[k]->key, foundry->styles[k]->styleName, true);
+            for (int k = 0; k < foundry->count; k++) {
+                allStyles.style(foundry->styles[k]->key,
+                                foundry->styles[k]->styleName,
+                                QtFontFoundry::AddWhenMissing);
+            }
         }
     }
 

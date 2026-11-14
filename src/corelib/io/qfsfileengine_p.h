@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QFSFILEENGINE_P_H
 #define QFSFILEENGINE_P_H
@@ -50,7 +51,6 @@ public:
     ~QFSFileEngine();
 
     bool open(QIODevice::OpenMode openMode, std::optional<QFile::Permissions> permissions) override;
-    bool open(QIODevice::OpenMode flags, FILE *fh);
     bool close() override;
     bool flush() override;
     bool syncToDisk() override;
@@ -102,7 +102,6 @@ public:
     bool supportsExtension(Extension extension) const override;
 
     //FS only!!
-    bool open(QIODevice::OpenMode flags, int fd);
     bool open(QIODevice::OpenMode flags, int fd, QFile::FileHandleFlags handleFlags);
     bool open(QIODevice::OpenMode flags, FILE *fh, QFile::FileHandleFlags handleFlags);
     static bool setCurrentPath(const QString &path);

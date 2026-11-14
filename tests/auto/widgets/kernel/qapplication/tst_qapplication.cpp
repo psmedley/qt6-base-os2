@@ -46,6 +46,9 @@
 #include <private/qevent_p.h>
 #include <private/qhighdpiscaling_p.h>
 
+#include "../../../corelib/kernel/qcoreapplication/apphelper.h"
+#include "../../../../../shared/androidutils.h"
+
 #include <algorithm>
 
 Q_LOGGING_CATEGORY(lcTests, "qt.widgets.tests")
@@ -59,7 +62,6 @@ class tst_QApplication : public QObject
 {
 Q_OBJECT
 
-    void runHelperTest();
 private slots:
     void cleanup();
     void sendEventsOnProcessEvents(); // this must be the first test
@@ -100,18 +102,12 @@ private slots:
     void sendPostedEvents();
 #endif  // ifdef QT_BUILD_INTERNAL
 
-#if QT_CONFIG(process)
-    void exitFromEventLoop() { runHelperTest(); }
-    void exitFromThread() { runHelperTest(); }
-    void exitFromThreadedEventLoop() { runHelperTest(); }
-#  if defined(Q_OS_APPLE)
-    // QGuiApplication in a thread fails inside Apple libs:
-    // *** Assertion failure in -[NSMenu _setMenuName:], NSMenu.m:777
-    // *** Terminating app due to uncaught exception 'NSInternalInconsistencyException', reason: 'API misuse: setting the main menu on a non-main thread. Main menu contents should only be modified from the main thread.'
-#  else
-    void mainAppInAThread() { runHelperTest(); }
-#  endif
-#endif
+    void exitFromEventLoop() { QCoreApplicationTestHelper::run(); }
+    void exitFromThread() { QCoreApplicationTestHelper::run(); }
+    void exitFromThreadedEventLoop() { QCoreApplicationTestHelper::run(); }
+    void exitWithPlugins() { QCoreApplicationTestHelper::run(); }
+    void mainAppInAThread() { QCoreApplicationTestHelper::run(); }
+
     void thread();
     void desktopSettingsAware();
 
@@ -144,7 +140,7 @@ private slots:
     void wheelEventPropagation_data();
     void wheelEventPropagation();
 
-    void qtbug_12673();
+    void modalDialog();
     void qtbug_103611();
     void noQuitOnHide();
 
@@ -1206,29 +1202,6 @@ void tst_QApplication::sendPostedEvents()
     (void) QCoreApplication::exec();
     QVERIFY(p.isNull());
 }
-#endif
-
-#if QT_CONFIG(process)
-#if defined(Q_OS_WIN)
-#  define EXE ".exe"
-#else
-#  define EXE ""
-#endif
-void tst_QApplication::runHelperTest()
-{
-#  ifdef Q_OS_ANDROID
-    QSKIP("Skipped on Android: helper not present");
-#  endif
-    int argc = 0;
-    QCoreApplication app(argc, nullptr);
-    QProcess process;
-    process.start(QFINDTESTDATA("apphelper" EXE), { QTest::currentTestFunction() });
-    QVERIFY2(process.waitForFinished(5000), qPrintable(process.errorString()));
-    QCOMPARE(process.readAllStandardError(), QString());
-    QCOMPARE(process.exitStatus(), QProcess::NormalExit);
-    QCOMPARE(process.exitCode(), 0);
-}
-#undef EXE
 #endif
 
 void tst_QApplication::thread()
@@ -2670,12 +2643,24 @@ void tst_QApplication::wheelEventPropagation()
     }
 }
 
-void tst_QApplication::qtbug_12673()
+QString modalHelperPath()
+{
+#ifdef Q_OS_ANDROID
+    int argc = 1;
+    QApplication app(argc, &argv0);
+    return app.applicationDirPath() + QString("/libmodal_helper_%1.so").arg(androidAbi());
+#else
+    return "./modal_helper";
+#endif
+}
+
+// QTBUG-133037, QTBUG-12673
+void tst_QApplication::modalDialog()
 {
 #if QT_CONFIG(process)
     QProcess testProcess;
     QStringList arguments;
-    testProcess.start("./modal_helper", arguments);
+    testProcess.start(modalHelperPath(), arguments);
     QVERIFY2(testProcess.waitForStarted(),
              qPrintable(QString::fromLatin1("Cannot start 'modal_helper': %1").arg(testProcess.errorString())));
     QVERIFY(testProcess.waitForFinished(20000));

@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qwindowsfontenginedirectwrite_p.h"
 #include "qwindowsfontdatabase_p.h"
@@ -367,6 +368,14 @@ void QWindowsFontEngineDirectWrite::collectMetrics()
     m_directWriteFontFace->GetMetrics(&metrics);
     m_unitsPerEm = metrics.designUnitsPerEm;
 
+    // Something is wrong with this font. Set the em square size to the minimum value in
+    // the spec.
+    if (m_unitsPerEm == 0) {
+        qCWarning(lcQpaFonts) << "Font" << fontDef.families << "reports an em square size of 0."
+                              << "Clamping to minimum value.";
+        m_unitsPerEm = 16;
+    }
+
     m_lineThickness = DESIGN_TO_LOGICAL(metrics.underlineThickness);
     m_capHeight = DESIGN_TO_LOGICAL(metrics.capHeight);
     m_xHeight = DESIGN_TO_LOGICAL(metrics.xHeight);
@@ -434,10 +443,7 @@ bool QWindowsFontEngineDirectWrite::getSfntTableData(uint tag, uchar *buffer, ui
 
 QFixed QWindowsFontEngineDirectWrite::emSquareSize() const
 {
-    if (m_unitsPerEm > 0)
-        return m_unitsPerEm;
-    else
-        return QFontEngine::emSquareSize();
+    return m_unitsPerEm;
 }
 
 glyph_t QWindowsFontEngineDirectWrite::glyphIndex(uint ucs4) const
@@ -708,9 +714,7 @@ QImage QWindowsFontEngineDirectWrite::alphaMapForGlyph(glyph_t glyph,
 bool QWindowsFontEngineDirectWrite::supportsHorizontalSubPixelPositions() const
 {
     QFont::HintingPreference hinting = determineHinting(fontDef);
-    return  (!isColorFont()
-            && hinting != QFont::PreferFullHinting
-            && !(fontDef.styleStrategy & QFont::NoAntialias));
+    return (hinting != QFont::PreferFullHinting && !(fontDef.styleStrategy & QFont::NoAntialias));
 }
 
 QFontEngine::Properties QWindowsFontEngineDirectWrite::properties() const

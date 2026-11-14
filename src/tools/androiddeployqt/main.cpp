@@ -143,6 +143,7 @@ struct Options
     QString jdkPath;
 
     // Build paths
+    QString abi;
     QString qtInstallDirectory;
     QHash<QString, QString> qtDirectories;
     QString qtDataDirectory;
@@ -172,7 +173,7 @@ struct Options
     QString versionName;
     QString versionCode;
     QByteArray minSdkVersion{"28"};
-    QByteArray targetSdkVersion{"34"};
+    QByteArray targetSdkVersion{"35"};
 
     // lib c++ path
     QString stdCppPath;
@@ -1013,9 +1014,13 @@ bool readInputFile(Options *options)
     }
     dependenciesForDepfile << options->inputFileName;
 
-    QJsonDocument jsonDocument = QJsonDocument::fromJson(file.readAll());
+    QJsonParseError jsonParseError;
+    QJsonDocument jsonDocument = QJsonDocument::fromJson(file.readAll(), &jsonParseError);
     if (jsonDocument.isNull()) {
-        fprintf(stderr, "Invalid json file: %s\n", qPrintable(options->inputFileName));
+        fprintf(stderr, "Invalid json file: %s. Reason: %s at offset %i.\n",
+            qPrintable(options->inputFileName),
+            qPrintable(jsonParseError.errorString()),
+            jsonParseError.offset);
         return false;
     }
 
@@ -1171,6 +1176,11 @@ bool readInputFile(Options *options)
         const QJsonValue ver = jsonObject.value("android-target-sdk-version"_L1);
         if (!ver.isUndefined())
             options->targetSdkVersion = ver.toString().toUtf8();
+    }
+
+    {
+        if (const auto abi = jsonObject.value("abi"_L1); !abi.isUndefined())
+            options->abi = jsonObject.value("abi"_L1).toString();
     }
 
     {
@@ -1452,6 +1462,10 @@ bool copyFiles(const QDir &sourceDirectory, const QDir &destinationDirectory, co
     for (const QFileInfo &entry : entries) {
         if (entry.isDir()) {
             QDir dir(entry.absoluteFilePath());
+            const bool destinationInCopyDir = destinationDirectory.absolutePath().startsWith(dir.absolutePath());
+            if (sourceDirectory == options.androidSourceDirectory && destinationInCopyDir)
+                continue;
+
             if (!destinationDirectory.mkpath(dir.dirName())) {
                 fprintf(stderr, "Cannot make directory %s in %s\n", qPrintable(dir.dirName()), qPrintable(destinationDirectory.path()));
                 return false;
@@ -2719,6 +2733,9 @@ bool goodToCopy(const Options *options, const QString &file, QStringList *unmetD
     if (!file.endsWith(".so"_L1))
         return true;
 
+    if (!options->abi.isEmpty() && options->abi != options->currentArchitecture)
+        return true;
+
     if (!checkArchitecture(*options, file))
         return false;
 
@@ -3514,6 +3531,7 @@ int generateJavaQmlComponents(const Options &options)
             }
         }
         appImports << qmldirDirectories.values();
+        appImports.removeDuplicates();
 
         return appImports.count() + externalImports.count();
     };
@@ -3640,7 +3658,7 @@ int generateJavaQmlComponents(const Options &options)
     };
 
     const static QHash<QString, QString> qmlToJavaType = {
-        { "qreal"_L1, "Double"_L1 }, { "double"_L1, "Double"_L1 }, { "int"_L1, "Integer"_L1 },
+        { "real"_L1, "Double"_L1 }, { "double"_L1, "Double"_L1 }, { "int"_L1, "Integer"_L1 },
         { "float"_L1, "Float"_L1 },  { "bool"_L1, "Boolean"_L1 },  { "string"_L1, "String"_L1 },
         { "void"_L1, "Void"_L1 }
     };

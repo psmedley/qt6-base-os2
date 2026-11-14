@@ -497,11 +497,8 @@ void QApplicationPrivate::init()
 void qt_init_tooltip_palette()
 {
 #if QT_CONFIG(tooltip)
-    if (const QPalette *toolTipPalette = QGuiApplicationPrivate::platformTheme()->palette(QPlatformTheme::ToolTipPalette)) {
-        QPalette toolTipPal = *toolTipPalette;
-        toolTipPal.setResolveMask(0);
-        QToolTip::setPalette(toolTipPal);
-    }
+    if (const QPalette *toolTipPalette = QGuiApplicationPrivate::platformTheme()->palette(QPlatformTheme::ToolTipPalette))
+        QToolTip::setPalette(*toolTipPalette);
 #endif
 }
 
@@ -1566,14 +1563,18 @@ QWidget *QApplication::activeWindow()
     return QApplicationPrivate::active_window;
 }
 
-#if QT_DEPRECATED_SINCE(6,0)
 /*!
-    \deprecated Use the QFontMetricsF constructor instead.
-    Returns display (screen) font metrics for the application font.
+    \fn QFontMetrics QApplication::fontMetrics()
+    \deprecated [6.0] Use QFontMetricsF(qApp->font()) instead.
+
+    Returns display (screen) font metrics for the application font. For more
+    information about the difference between \l QFontMetrics and \l QFontMetricsF,
+    see the detailed description of \l QFontMetrics.
 
     \sa font(), setFont(), QWidget::fontMetrics(), QPainter::fontMetrics()
 */
 
+#if QT_DEPRECATED_SINCE(6,0)
 QFontMetrics QApplication::fontMetrics()
 {
     return QApplicationPrivate::desktop()->fontMetrics();
@@ -3222,8 +3223,8 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
         typedef void (*RegisterTouchWindowFn)(QWindow *,  bool);
         case QEvent::Enter:
             if (w->testAttribute(Qt::WA_AcceptTouchEvents)) {
-                RegisterTouchWindowFn registerTouchWindow = reinterpret_cast<RegisterTouchWindowFn>
-                        (platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow"));
+                RegisterTouchWindowFn registerTouchWindow = reinterpret_cast<RegisterTouchWindowFn>(
+                    QFunctionPointer(platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow")));
                 if (registerTouchWindow)
                     registerTouchWindow(w->window()->windowHandle(), true);
             }
@@ -3231,8 +3232,8 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
             break;
         case QEvent::Leave:
             if (w->testAttribute(Qt::WA_AcceptTouchEvents)) {
-                RegisterTouchWindowFn registerTouchWindow = reinterpret_cast<RegisterTouchWindowFn>
-                        (platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow"));
+                RegisterTouchWindowFn registerTouchWindow = reinterpret_cast<RegisterTouchWindowFn>(
+                        QFunctionPointer(platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow")));
                 if (registerTouchWindow)
                     registerTouchWindow(w->window()->windowHandle(), false);
             }

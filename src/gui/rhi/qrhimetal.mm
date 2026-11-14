@@ -1855,7 +1855,8 @@ void QRhiMetal::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 {
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     Q_ASSERT(cbD->recordingPass == QMetalCommandBuffer::RenderPass);
-    Q_ASSERT(cbD->currentGraphicsPipeline->m_flags.testFlag(QRhiGraphicsPipeline::UsesScissor));
+    Q_ASSERT(!cbD->currentGraphicsPipeline
+             || cbD->currentGraphicsPipeline->m_flags.testFlag(QRhiGraphicsPipeline::UsesScissor));
     const QSize outputSize = cbD->currentTarget->pixelSize();
 
     // x,y is top-left in MTLScissorRect but bottom-left in QRhiScissor
@@ -6382,7 +6383,13 @@ bool QMetalSwapChain::createOrResize()
         desc.storageMode = MTLStorageModePrivate;
         desc.usage = MTLTextureUsageRenderTarget;
         for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
-            [d->msaaTex[i] release];
+            if (d->msaaTex[i]) {
+                QRhiMetalData::DeferredReleaseEntry e;
+                e.type = QRhiMetalData::DeferredReleaseEntry::RenderBuffer;
+                e.lastActiveFrameSlot = 1; // because currentFrameSlot is reset to 0
+                e.renderbuffer.texture = d->msaaTex[i];
+                rhiD->d->releaseQueue.append(e);
+            }
             d->msaaTex[i] = [rhiD->d->dev newTextureWithDescriptor: desc];
         }
         [desc release];

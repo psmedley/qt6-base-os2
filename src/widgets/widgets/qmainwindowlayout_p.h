@@ -363,7 +363,7 @@ public:
     void restore();
     void apply();
     void childEvent(QChildEvent *event) override;
-    void reparent(QDockWidget *dockWidget);
+    void reparentToMainWindow(QDockWidget *dockWidget);
     void destroyIfSingleItemLeft();
     QList<QDockWidget *> dockWidgets() const { return findChildren<QDockWidget *>(); }
 
@@ -550,8 +550,8 @@ public:
     void setDocumentMode(bool enabled);
 
     QTabBar *getTabBar();
+    void unuseTabBar(QTabBar *bar);
     QSet<QTabBar*> usedTabBars;
-    QList<QTabBar*> unusedTabBars;
     bool verticalTabsEnabled;
 
     QWidget *getSeparatorWidget();

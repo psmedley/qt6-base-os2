@@ -315,6 +315,7 @@ function(qt_internal_get_qt_build_public_files_to_install out_var)
     set(${out_var}
         QtCopyFileIfDifferent.cmake
         QtInitProject.cmake
+        QtPublicCMakeEarlyPolicyHelpers.cmake
 
         # Public CMake files that are installed next Qt6Config.cmake, but are NOT included by it.
         # Instead they are included by the generated CMake toolchain file.
@@ -355,7 +356,8 @@ endfunction()
 
 macro(qt_internal_setup_find_host_info_package)
     _qt_internal_determine_if_host_info_package_needed(__qt_build_requires_host_info_package)
-    _qt_internal_find_host_info_package("${__qt_build_requires_host_info_package}")
+    _qt_internal_find_host_info_package("${__qt_build_requires_host_info_package}"
+        ${INSTALL_CMAKE_NAMESPACE})
 endmacro()
 
 macro(qt_internal_setup_poor_mans_scope_finalizer)
@@ -483,4 +485,3 @@ macro(qt_internal_setup_build_and_global_variables)
 
     qt_internal_detect_dirty_features()
 endmacro()
-

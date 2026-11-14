@@ -381,6 +381,22 @@ public:
     bool m_bMultiLine = false;
 };
 
+static Qt::LayoutDirection otherLayoutDirection(Qt::LayoutDirection current)
+{
+    switch (current) {
+    case Qt::LayoutDirection::LeftToRight: return Qt::LayoutDirection::RightToLeft;
+    case Qt::LayoutDirection::RightToLeft: return Qt::LayoutDirection::LeftToRight;
+    case Qt::LayoutDirection::LayoutDirectionAuto:
+        ;
+    }
+    Q_UNREACHABLE_RETURN(Qt::LayoutDirection::LayoutDirectionAuto);
+}
+
+static void swapLayoutDirection(QWidget &w)
+{
+    w.setLayoutDirection(otherLayoutDirection(w.layoutDirection()));
+}
+
 // Testing get/set functions
 void tst_QHeaderView::getSetCheck()
 {
@@ -426,9 +442,20 @@ void tst_QHeaderView::getSetCheck()
     QCOMPARE(0, obj1.offset());
     obj1.setOffset(std::numeric_limits<int>::min());
     QCOMPARE(std::numeric_limits<int>::min(), obj1.offset());
+    QTest::ignoreMessage(QtWarningMsg, // one of the INT_MAX will hit this; not necessarily the first one
+                         "Integer argument 2147483647 causes overflow in QHeaderView::setOffset "
+                         "when calling QWidget::scroll, results may not be as you expect");
     obj1.setOffset(std::numeric_limits<int>::max());
     QCOMPARE(std::numeric_limits<int>::max(), obj1.offset());
 
+    // and again with RTL (or LTR, if it was RTL before):
+    swapLayoutDirection(obj1);
+    obj1.setOffset(0);
+    QCOMPARE(0, obj1.offset());
+    obj1.setOffset(std::numeric_limits<int>::min());
+    QCOMPARE(std::numeric_limits<int>::min(), obj1.offset());
+    obj1.setOffset(std::numeric_limits<int>::max());
+    QCOMPARE(std::numeric_limits<int>::max(), obj1.offset());
 }
 
 tst_QHeaderView::tst_QHeaderView()
@@ -3325,32 +3352,30 @@ void tst_QHeaderView::testStylePosition()
     topLevel->show();
     QVERIFY(QTest::qWaitForWindowExposed(topLevel));
 
-    protected_QHeaderView *header = static_cast<protected_QHeaderView *>(view);
-
     TestStyle proxy;
-    header->setStyle(&proxy);
+    view->setStyle(&proxy);
 
     QImage image(1, 1, QImage::Format_ARGB32);
     QPainter p(&image);
 
     // 0, 1, 2, 3
-    header->paintSection(&p, view->rect(), 0);
+    view->paintSection(&p, view->rect(), 0);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Beginning);
-    header->paintSection(&p, view->rect(), 1);
+    view->paintSection(&p, view->rect(), 1);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Middle);
-    header->paintSection(&p, view->rect(), 2);
+    view->paintSection(&p, view->rect(), 2);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Middle);
-    header->paintSection(&p, view->rect(), 3);
+    view->paintSection(&p, view->rect(), 3);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::End);
 
     // (0),2,1,3
     view->setSectionHidden(0, true);
     view->swapSections(1, 2);
-    header->paintSection(&p, view->rect(), 1);
+    view->paintSection(&p, view->rect(), 1);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Middle);
-    header->paintSection(&p, view->rect(), 2);
+    view->paintSection(&p, view->rect(), 2);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Beginning);
-    header->paintSection(&p, view->rect(), 3);
+    view->paintSection(&p, view->rect(), 3);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::End);
 
     // (1),2,0,(3)
@@ -3358,14 +3383,14 @@ void tst_QHeaderView::testStylePosition()
     view->setSectionHidden(0, false);
     view->setSectionHidden(1, true);
     view->swapSections(0, 1);
-    header->paintSection(&p, view->rect(), 0);
+    view->paintSection(&p, view->rect(), 0);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::End);
-    header->paintSection(&p, view->rect(), 2);
+    view->paintSection(&p, view->rect(), 2);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Beginning);
 
     // (1),2,(0),(3)
     view->setSectionHidden(0, true);
-    header->paintSection(&p, view->rect(), 2);
+    view->paintSection(&p, view->rect(), 2);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::OnlyOneSection);
 }
 

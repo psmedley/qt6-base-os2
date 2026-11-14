@@ -535,6 +535,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_accessibility
         accessible/qaccessiblebridge.cpp accessible/qaccessiblebridge.h
         accessible/qaccessiblebridgeutils.cpp accessible/qaccessiblebridgeutils_p.h
         accessible/qaccessiblecache.cpp accessible/qaccessiblecache_p.h
+        accessible/qaccessiblehelper.cpp accessible/qaccessiblehelper_p.h
         accessible/qaccessibleobject.cpp accessible/qaccessibleobject.h
         accessible/qaccessibleplugin.cpp accessible/qaccessibleplugin.h
         accessible/qplatformaccessibility.cpp
@@ -982,6 +983,7 @@ add_custom_command(
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
     VERBATIM
 )
+set_source_files_properties(${vulkan_fun_outputs} PROPERTIES _qt_syncqt_exclude_from_docs TRUE)
 
 qt_internal_extend_target(Gui CONDITION WASM
     SOURCES
@@ -1028,7 +1030,7 @@ qt_internal_extend_target(Gui CONDITION OS2
         platform/os2/qos2guieventdispatcher.cpp platform/os2/qos2guieventdispatcher_p.h
 )
 
-qt_internal_extend_target(Gui CONDITION UNIX AND (QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)
+qt_internal_extend_target(Gui CONDITION UNIX AND (((QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)) OR QT_FEATURE_wayland)
     SOURCES
         platform/unix/qgenericunixthemes.cpp platform/unix/qgenericunixthemes_p.h
 )

@@ -276,7 +276,7 @@ private:
     QString m_previousCurrent;
 };
 
-static int NColorRoles[] = {
+static constexpr int NColorRoles[] = {
     QPalette::NoRole,              // No Version
     QPalette::NoRole,              // Qt_1_0
     QPalette::HighlightedText + 1, // Qt_2_0
@@ -300,8 +300,10 @@ static int NColorRoles[] = {
     QPalette::PlaceholderText + 1, // Qt_6_0
     QPalette::Accent + 1,     // Qt_6_6
     QPalette::Accent + 1,     // Qt_6_7
-    0                              // add the correct value for Qt_5_14 here later
 };
+
+// +1, because we start from "No Version"
+static_assert(std::size(NColorRoles) == QDataStream::Qt_DefaultCompiledVersion + 1);
 
 // Testing get/set functions
 void tst_QDataStream::getSetCheck()
@@ -3026,7 +3028,7 @@ void tst_QDataStream::status_QBitArray_data()
     QTest::newRow("new badsize 9") << QDataStream::Qt_6_0 << QByteArray("\x00\x00\x00\x00\x00\x00\x00\x09\xff", 9) << (int) QDataStream::ReadPastEnd << QBitArray();
     QTest::newRow("new badsize 0x10000") << QDataStream::Qt_6_0 << QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00", 9) << (int) QDataStream::ReadPastEnd << QBitArray();
 
-    // corrupt data
+    // corrupt data: bits in positions outsize [0, size()[
     QTest::newRow("junk 1a") << QDataStream::Qt_5_15 << QByteArray("\x00\x00\x00\x01\x02", 5) << (int) QDataStream::ReadCorruptData << QBitArray();
     QTest::newRow("junk 1b") << QDataStream::Qt_5_15 << QByteArray("\x00\x00\x00\x01\x04", 5) << (int) QDataStream::ReadCorruptData << QBitArray();
     QTest::newRow("junk 1c") << QDataStream::Qt_5_15 << QByteArray("\x00\x00\x00\x01\x08", 5) << (int) QDataStream::ReadCorruptData << QBitArray();

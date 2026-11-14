@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 #include "qtreeview.h"
 
 #include <qheaderview.h>
@@ -2185,7 +2186,12 @@ void QTreeView::doItemsLayout()
     }
     QAbstractItemView::doItemsLayout();
     d->header->doItemsLayout();
-    d->updateAccessibility();
+    // reset the accessibility representation of the view once control has
+    // returned to the event loop. This avoids that we destroy UI tree elements
+    // in the platform layer as part of a model-reset notification, while those
+    // elements respond to a query (i.e. of rect, which results in a call to
+    // doItemsLayout().
+    QMetaObject::invokeMethod(this, [d]{ d->updateAccessibility(); }, Qt::QueuedConnection);
 }
 
 /*!

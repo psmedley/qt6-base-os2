@@ -1,5 +1,6 @@
 // Copyright (C) 2020 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qcborvalue.h"
 #include "qcborvalue_p.h"
@@ -55,7 +56,7 @@ static QString encodeByteArray(const QCborContainerPrivate *d, qsizetype idx, QC
     else
         data = data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
 
-    return QString::fromLatin1(data, data.size());
+    return QString::fromLatin1(data);
 }
 
 static QString makeString(const QCborContainerPrivate *d, qsizetype idx,
@@ -717,12 +718,15 @@ QCborValue QCborValue::fromVariant(const QVariant &variant)
     case QMetaType::UShort:
     case QMetaType::Int:
     case QMetaType::LongLong:
+    case QMetaType::Long:
     case QMetaType::UInt:
         return variant.toLongLong();
+    case QMetaType::ULong:
     case QMetaType::ULongLong:
         if (variant.toULongLong() <= static_cast<uint64_t>(std::numeric_limits<qint64>::max()))
             return variant.toLongLong();
         Q_FALLTHROUGH();
+    case QMetaType::Float16:
     case QMetaType::Float:
     case QMetaType::Double:
         return variant.toDouble();

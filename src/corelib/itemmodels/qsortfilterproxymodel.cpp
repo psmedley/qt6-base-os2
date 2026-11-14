@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qsortfilterproxymodel.h"
 #include "qitemselectionmodel.h"
@@ -568,7 +569,9 @@ QModelIndex QSortFilterProxyModelPrivate::source_to_proxy(const QModelIndex &sou
         return QModelIndex();
     }
     QModelIndex source_parent = source_index.parent();
-    IndexMap::const_iterator it = create_mapping(source_parent);
+    IndexMap::const_iterator it = create_mapping_recursive(source_parent);
+    if (it == source_index_mapping.constEnd())
+        return QModelIndex();
     Mapping *m = it.value();
     if ((source_index.row() >= m->proxy_rows.size()) || (source_index.column() >= m->proxy_columns.size()))
         return QModelIndex();
@@ -2106,6 +2109,13 @@ void QSortFilterProxyModel::setSourceModel(QAbstractItemModel *sourceModel)
         QObjectPrivate::connect(d->model, &QAbstractItemModel::modelReset, d,
                                 &QSortFilterProxyModelPrivate::_q_sourceReset)
     };
+    /* check whether we are connecting to a model that is undergoing a reset currently.
+       If it is, _q_sourceReset will take care of calling endResetModel, and of
+       calling sort if necessary.
+    */
+    auto modelPrivate = d->model ? QAbstractItemModelPrivate::get(d->model) : nullptr;
+    if (modelPrivate && modelPrivate->resetting)
+        return;
     endResetModel();
     if (d->update_source_sort_column() && d->dynamic_sortfilter)
         d->sort();

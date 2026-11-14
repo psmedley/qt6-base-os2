@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qheaderview.h"
 
@@ -30,7 +31,17 @@
 #include <qdatastream.h>
 #endif
 
+#include <QtCore/q26numeric.h>
+
 QT_BEGIN_NAMESPACE
+
+Q_DECL_COLD_FUNCTION
+static void warn_overflow(const char *caller, const char *callee, int value)
+{
+    qWarning("Integer argument %d causes overflow in %s when calling %s, "
+             "results may not be as you expect",
+             value, caller, callee);
+}
 
 #ifndef QT_NO_DATASTREAM
 QDataStream &operator<<(QDataStream &out, const QHeaderViewPrivate::SectionItem &section)
@@ -403,12 +414,21 @@ void QHeaderView::setOffset(int newOffset)
     Q_D(QHeaderView);
     if (d->headerOffset == newOffset)
         return;
-    int ndelta = d->headerOffset - newOffset;
+    // don't overflow; this function is checked with both INT_MIN and INT_MAX...
+    const int ndelta = q26::saturate_cast<int>(d->headerOffset - qint64{newOffset});
     d->headerOffset = newOffset;
-    if (d->orientation == Qt::Horizontal)
-        d->viewport->scroll(isRightToLeft() ? -ndelta : ndelta, 0);
-    else
+    if (d->orientation == Qt::Horizontal) {
+        if (isRightToLeft()) {
+            if (int r; !qMulOverflow<-1>(ndelta, &r))
+                d->viewport->scroll(r, 0);
+            else
+                warn_overflow("QHeaderView::setOffset", "QWidget::scroll", newOffset);
+        } else {
+            d->viewport->scroll(ndelta, 0);
+        }
+    } else {
         d->viewport->scroll(0, ndelta);
+    }
     if (d->state == QHeaderViewPrivate::ResizeSection && !d->preventCursorChangeInSetOffset) {
         QPoint cursorPos = QCursor::pos();
         if (d->orientation == Qt::Horizontal)

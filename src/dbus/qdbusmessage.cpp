@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qdbusmessage.h"
 #include "qdbusmessage_p.h"
@@ -540,6 +541,18 @@ QDBusMessage::~QDBusMessage()
     if (!d_ptr->ref.deref())
         delete d_ptr;
 }
+
+/*!
+    \fn QDBusMessage &QDBusMessage::operator=(QDBusMessage &&other)
+
+    Move-assigns \a other into this object.
+
+//! [partially-formed]
+    \note The moved-from object \a other is placed in a partially-formed state,
+    in which the only valid operations are destruction and assignment of a new
+    value.
+//! [partially-formed]
+*/
 
 /*!
     Copies the contents of the object given by \a other.

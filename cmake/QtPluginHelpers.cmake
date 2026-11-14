@@ -160,7 +160,8 @@ function(qt_internal_add_plugin target)
 
     qt_set_common_target_properties("${target}")
     qt_internal_add_target_aliases("${target}")
-    qt_skip_warnings_are_errors_when_repo_unclean("${target}")
+
+    qt_internal_default_warnings_are_errors("${target}")
 
     set_target_properties("${target}" PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${output_directory}"
@@ -215,10 +216,7 @@ endif()
         set(plugin_install_package_suffix "${qt_module}")
 
 
-        get_target_property(aliased_target ${qt_module_target} ALIASED_TARGET)
-        if(aliased_target)
-            set(qt_module_target ${aliased_target})
-        endif()
+        _qt_internal_dealias_target(qt_module_target)
         get_target_property(is_imported_qt_module ${qt_module_target} IMPORTED)
 
         if(NOT is_imported_qt_module)
@@ -337,7 +335,15 @@ endif()
         endif()
     endforeach()
 
-    qt_register_target_dependencies("${target}" "${arg_PUBLIC_LIBRARIES}" "${qt_libs_private}")
+    set(qt_register_target_dependencies_args "")
+    if(arg_PUBLIC_LIBRARIES)
+        list(APPEND qt_register_target_dependencies_args PUBLIC ${arg_PUBLIC_LIBRARIES})
+    endif()
+    if(qt_libs_private)
+        list(APPEND qt_register_target_dependencies_args PRIVATE ${qt_libs_private})
+    endif()
+    qt_internal_register_target_dependencies("${target}"
+        ${qt_register_target_dependencies_args})
 
     if(target_type STREQUAL STATIC_LIBRARY)
         if(qt_module_target)
@@ -426,7 +432,7 @@ endif()
 
     if(QT_GENERATE_SBOM)
         set(sbom_args "")
-        list(APPEND sbom_args TYPE QT_PLUGIN)
+        list(APPEND sbom_args DEFAULT_SBOM_ENTITY_TYPE QT_PLUGIN)
 
         qt_get_cmake_configurations(configs)
         foreach(config IN LISTS configs)
@@ -528,6 +534,7 @@ function(qt_internal_add_darwin_permission_plugin permission)
         DEFAULT_IF FALSE
         SOURCES
             ${permission_source_file}
+            platform/darwin/qdarwinpermissionplugin_p_p.h
         DEFINES
             QT_DARWIN_PERMISSION_PLUGIN=${permission}
         LIBRARIES

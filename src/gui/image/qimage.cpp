@@ -1,5 +1,6 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qimage.h"
 
@@ -2157,6 +2158,11 @@ void QImage::setColorCount(int colorCount)
 */
 QImage::Format QImage::format() const
 {
+    if (d) {
+        // Class Invariant Check
+        Q_ASSERT(d->format < NImageFormats);
+        Q_ASSERT(d->format > Format_Invalid);
+    }
     return d ? d->format : Format_Invalid;
 }
 
@@ -2360,6 +2366,8 @@ QImage QImage::convertToFormat(Format format, const QList<QRgb> &colorTable, Qt:
 
 bool QImage::reinterpretAsFormat(Format format)
 {
+    if (format <= Format_Invalid || format >= NImageFormats)
+        return false;
     if (!d)
         return false;
     if (d->format == format)
@@ -6131,7 +6139,7 @@ static constexpr QPixelFormat pixelformats[] = {
                      /*FIFTH*/              0,
                      /*ALPHA*/              4,
                      /*ALPHA USAGE*/       QPixelFormat::UsesAlpha,
-                     /*ALPHA POSITION*/    QPixelFormat::AtEnd,
+                     /*ALPHA POSITION*/    QPixelFormat::AtBeginning,
                      /*PREMULTIPLIED*/     QPixelFormat::Premultiplied,
                      /*INTERPRETATION*/    QPixelFormat::UnsignedShort,
                      /*BYTE ORDER*/        QPixelFormat::CurrentSystemEndian),

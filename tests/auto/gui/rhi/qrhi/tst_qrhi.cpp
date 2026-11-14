@@ -159,6 +159,7 @@ private slots:
 
 private:
     void setWindowType(QWindow *window, QRhi::Implementation impl);
+    bool isAndroidOpenGLSwiftShader(QRhi::Implementation impl, const QRhi *rhi);
 
     struct {
         QRhiNullInitParams null;
@@ -253,6 +254,15 @@ void tst_QRhi::rhiTestData()
 #ifdef TST_MTL
     QTest::newRow("Metal") << QRhi::Metal << static_cast<QRhiInitParams *>(&initParams.mtl);
 #endif
+}
+
+bool tst_QRhi::isAndroidOpenGLSwiftShader(QRhi::Implementation impl, const QRhi *rhi)
+{
+#ifdef Q_OS_ANDROID
+    if (impl == QRhi::OpenGLES2 && rhi->driverInfo().deviceName.contains("SwiftShader"))
+        return true;
+#endif
+    return false;
 }
 
 void tst_QRhi::create_data()
@@ -2084,6 +2094,11 @@ void tst_QRhi::renderToTextureTextureArray()
     if (!rhi->isFeatureSupported(QRhi::TextureArrays))
         QSKIP("TextureArrays is not supported with this backend, skipping test");
 
+    if (isAndroidOpenGLSwiftShader(impl, rhi.get())) {
+        QSKIP("SwiftShader software acceleration is used which does not support this OpenGLES "
+              "feature. See QTBUG-132934");
+    }
+
     const QSize outputSize(512, 256);
     const int ARRAY_SIZE = 8;
     QScopedPointer<QRhiTexture> texture(rhi->newTextureArray(QRhiTexture::RGBA8,
@@ -2450,6 +2465,11 @@ void tst_QRhi::renderToTextureArrayOfTexturedQuad()
     QScopedPointer<QRhi> rhi(QRhi::create(impl, initParams, QRhi::Flags(), nullptr));
     if (!rhi)
         QSKIP("QRhi could not be created, skipping testing rendering");
+
+    if (isAndroidOpenGLSwiftShader(impl, rhi.get())) {
+        QSKIP("SwiftShader software acceleration is used which does not support this OpenGLES "
+              "feature. See QTBUG-132934");
+    }
 
     QImage inputImage;
     inputImage.load(QLatin1String(":/data/qt256.png"));
@@ -5125,6 +5145,11 @@ void tst_QRhi::threeDimTexture()
     if (!rhi->isFeatureSupported(QRhi::ThreeDimensionalTextures))
         QSKIP("Skipping testing 3D textures because they are reported as unsupported");
 
+    if (isAndroidOpenGLSwiftShader(impl, rhi.get())) {
+        QSKIP("SwiftShader software acceleration is used which does not support this OpenGLES "
+            "feature. See QTBUG-132934");
+    }
+
     const int WIDTH = 512;
     const int HEIGHT = 256;
     const int DEPTH = 128;
@@ -5880,6 +5905,11 @@ void tst_QRhi::renderToFloatTexture()
     if (!rhi->isTextureFormatSupported(QRhiTexture::RGBA16F))
         QSKIP("RGBA16F is not supported, skipping test");
 
+    if (isAndroidOpenGLSwiftShader(impl, rhi.get())) {
+        QSKIP("SwiftShader software acceleration is used which does not support this OpenGLES "
+              "feature. See QTBUG-132934");
+    }
+
     const QSize outputSize(1920, 1080);
     QScopedPointer<QRhiTexture> texture(rhi->newTexture(QRhiTexture::RGBA16F, outputSize, 1,
                                                         QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
@@ -5969,12 +5999,10 @@ void tst_QRhi::renderToRgb10Texture()
     if (!rhi->isTextureFormatSupported(QRhiTexture::RGB10A2))
         QSKIP("RGB10A2 is not supported, skipping test");
 
-#ifdef Q_OS_ANDROID
-    if (impl == QRhi::OpenGLES2) {
-        if (rhi->driverInfo().deviceName.contains("SwiftShader"))
-            QSKIP("SwiftShader software acceleration is used which does not support this OpenGLES feature. See QTBUG-132934");
+    if (isAndroidOpenGLSwiftShader(impl, rhi.get())) {
+        QSKIP("SwiftShader software acceleration is used which does not support this OpenGLES "
+              "feature. See QTBUG-132934");
     }
-#endif
 
     const QSize outputSize(1920, 1080);
     QScopedPointer<QRhiTexture> texture(rhi->newTexture(QRhiTexture::RGB10A2, outputSize, 1,
@@ -6791,6 +6819,9 @@ void tst_QRhi::storageBufferRuntimeSizeGraphics()
     QScopedPointer<QRhi> rhi(QRhi::create(impl, initParams, QRhi::Flags(), nullptr));
     if (!rhi)
         QSKIP("QRhi could not be created, skipping testing rendering");
+
+    if (!rhi->isFeatureSupported(QRhi::Compute)) // also indicates storage buffers and image load/store
+        QSKIP("Storage buffers are not supported with this graphics API, skipping test");
 
     if (!rhi->isFeatureSupported(QRhi::Tessellation)) {
         // From a Vulkan or Metal implementation we expect tessellation to work,

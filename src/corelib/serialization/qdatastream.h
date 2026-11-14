@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #ifndef QDATASTREAM_H
 #define QDATASTREAM_H
@@ -27,7 +28,6 @@ class QIODevice;
 class QString;
 
 #if !defined(QT_NO_DATASTREAM)
-class QDataStreamPrivate;
 namespace QtPrivate {
 class StreamStateSaver;
 template <typename Container>
@@ -215,7 +215,9 @@ public:
 private:
     Q_DISABLE_COPY(QDataStream)
 
-    QScopedPointer<QDataStreamPrivate> d;
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+    void* const d = nullptr;
+#endif
 
     QIODevice *dev = nullptr;
     bool owndev = false;
@@ -265,7 +267,8 @@ class StreamStateSaver
 {
     Q_DISABLE_COPY_MOVE(StreamStateSaver)
 public:
-    inline StreamStateSaver(QDataStream *s) : stream(s), oldStatus(s->status())
+    Q_NODISCARD_CTOR
+    explicit StreamStateSaver(QDataStream *s) : stream(s), oldStatus(s->status())
     {
         if (!stream->isDeviceTransactionStarted())
             stream->resetStatus();
@@ -290,7 +293,7 @@ QDataStream &readArrayBasedContainer(QDataStream &s, Container &c)
 
     c.clear();
     qint64 size = QDataStream::readQSizeType(s);
-    qsizetype n = size;
+    const auto n = qsizetype(size);
     if (size != n || size < 0) {
         s.setStatus(QDataStream::SizeLimitExceeded);
         return s;
@@ -316,7 +319,7 @@ QDataStream &readListBasedContainer(QDataStream &s, Container &c)
 
     c.clear();
     qint64 size = QDataStream::readQSizeType(s);
-    qsizetype n = size;
+    const auto n = qsizetype(size);
     if (size != n || size < 0) {
         s.setStatus(QDataStream::SizeLimitExceeded);
         return s;
@@ -341,7 +344,7 @@ QDataStream &readAssociativeContainer(QDataStream &s, Container &c)
 
     c.clear();
     qint64 size = QDataStream::readQSizeType(s);
-    qsizetype n = size;
+    const auto n = qsizetype(size);
     if (size != n || size < 0) {
         s.setStatus(QDataStream::SizeLimitExceeded);
         return s;

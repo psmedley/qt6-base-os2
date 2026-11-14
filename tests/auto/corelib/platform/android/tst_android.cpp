@@ -12,7 +12,10 @@
 #include <qpa/qplatformscreen.h>
 #include <qpa/qplatformnativeinterface.h>
 #include <QtCore/qdiriterator.h>
+#include <private/qglobal_p.h>  // for widgets feature test
+#if QT_CONFIG(widgets)
 #include <QWidget>
+#endif
 #include <QSignalSpy>
 
 using namespace Qt::StringLiterals;
@@ -25,6 +28,7 @@ Q_DECLARE_JNI_CLASS(Window, "android/view/Window")
 Q_DECLARE_JNI_CLASS(WindowInsets, "android/view/WindowInsets")
 Q_DECLARE_JNI_CLASS(WindowManager, "android/view/WindowManager")
 Q_DECLARE_JNI_CLASS(WindowMetrics, "android/view/WindowMetrics")
+Q_DECLARE_JNI_CLASS(ApplicationInfo, "android/content/pm/ApplicationInfo")
 
 class tst_Android : public QObject
 {
@@ -36,9 +40,10 @@ private slots:
     void testAndroidSdkVersion();
     void testAndroidActivity();
     void testRunOnAndroidMainThread();
+#if QT_CONFIG(widgets)
     void testFullScreenDimensions();
-    void orientationChange_data();
     void orientationChange();
+#endif
 };
 
 void tst_Android::assetsRead()
@@ -212,6 +217,7 @@ void tst_Android::testRunOnAndroidMainThread()
     }
 }
 
+#if QT_CONFIG(widgets)
 // QTBUG-107604
 void tst_Android::testFullScreenDimensions()
 {
@@ -249,27 +255,41 @@ void tst_Android::testFullScreenDimensions()
         // available geometry == app size (system bars visible and removed from available geometry)
         widget.showNormal();
         QCoreApplication::processEvents();
-        QJniObject window = activity.callMethod<QtJniTypes::Window>("getWindow");
-        QVERIFY(window.isValid());
 
-        QJniObject decorView = window.callMethod<QtJniTypes::View>("getDecorView");
-        QVERIFY(decorView.isValid());
+        int expectedWidth;
+        int expectedHeight;
 
-        QJniObject insets = decorView.callMethod<QtJniTypes::WindowInsets>("getRootWindowInsets");
-        QVERIFY(insets.isValid());
+        const auto appContext = activity.callMethod<QtJniTypes::Context>("getApplicationContext");
+        const auto appInfo = appContext.callMethod<QtJniTypes::ApplicationInfo>("getApplicationInfo");
+        const int targetSdkVersion = appInfo.getField<jint>("targetSdkVersion");
+        const int sdkVersion = QNativeInterface::QAndroidApplication::sdkVersion();
 
-        int insetRight = insets.callMethod<jint>("getSystemWindowInsetRight");
-        int insetLeft = insets.callMethod<jint>("getSystemWindowInsetLeft");
-        int insetsWidth = insetRight + insetLeft;
+        if (sdkVersion > __ANDROID_API_V__  && targetSdkVersion > __ANDROID_API_V__) {
+            expectedWidth = appSize.width();
+            expectedHeight = appSize.height();
+        } else {
+            QJniObject window = activity.callMethod<QtJniTypes::Window>("getWindow");
+            QVERIFY(window.isValid());
 
-        int insetTop = insets.callMethod<jint>("getSystemWindowInsetTop");
-        int insetBottom = insets.callMethod<jint>("getSystemWindowInsetBottom");
-        int insetsHeight = insetTop + insetBottom;
+            QJniObject decorView = window.callMethod<QtJniTypes::View>("getDecorView");
+            QVERIFY(decorView.isValid());
 
-        int expectedWidth = appSize.width() - insetsWidth;
+            auto insets = decorView.callMethod<QtJniTypes::WindowInsets>("getRootWindowInsets");
+            QVERIFY(insets.isValid());
+
+            int insetRight = insets.callMethod<jint>("getSystemWindowInsetRight");
+            int insetLeft = insets.callMethod<jint>("getSystemWindowInsetLeft");
+            int insetsWidth = insetRight + insetLeft;
+
+            int insetTop = insets.callMethod<jint>("getSystemWindowInsetTop");
+            int insetBottom = insets.callMethod<jint>("getSystemWindowInsetBottom");
+            int insetsHeight = insetTop + insetBottom;
+
+            expectedWidth = appSize.width() - insetsWidth;
+            expectedHeight = appSize.height() - insetsHeight;
+        }
+
         QTRY_COMPARE(screen->availableGeometry().width(), expectedWidth);
-
-        int expectedHeight = appSize.height() - insetsHeight;
         QTRY_COMPARE(screen->availableGeometry().height(), expectedHeight);
 
         QTRY_COMPARE(screen->geometry().width(), realSize.getField<jint>("x"));
@@ -316,75 +336,85 @@ void tst_Android::testFullScreenDimensions()
     }
 }
 
-void tst_Android::orientationChange_data()
-{
-    QTest::addColumn<int>("nativeOrientation");
-    QTest::addColumn<Qt::ScreenOrientation>("expected");
-    QTest::addColumn<QSize>("screenSize");
-
-    const QSize portraitSize = QGuiApplication::primaryScreen()->size();
-    const QSize landscapeSize = QSize(portraitSize.height(), portraitSize.width());
-
-    // Rotations without 180 degree or inverted portrait, assuming that the device is in portrait
-    // position. These are ok for Android 6(API 23), 8 (API 27) and 14 (API 34)
-    QTest::newRow("InvertedLandscape") << 8 << Qt::InvertedLandscapeOrientation << landscapeSize;
-    QTest::newRow("Portrait") << 1 << Qt::PortraitOrientation << portraitSize;
-    QTest::newRow("Landscape") << 0 << Qt::LandscapeOrientation << landscapeSize;
-    QTest::newRow("Portrait2") << 1 << Qt::PortraitOrientation << portraitSize;
-
-    // Rotations over inverted portrait doing only 90 degree turns.
-    QTest::newRow("InvertedLandscape2") << 8 << Qt::InvertedLandscapeOrientation << landscapeSize;
-    QTest::newRow("InvertedPortrait") << 9 << Qt::InvertedPortraitOrientation << portraitSize;
-    QTest::newRow("Landscape2") << 0 << Qt::LandscapeOrientation << landscapeSize;
-    QTest::newRow("InvertedPortrait2") << 9 << Qt::InvertedPortraitOrientation << portraitSize;
-    QTest::newRow("InvertedLandscape3") << 8 << Qt::InvertedLandscapeOrientation << landscapeSize;
-
-    // Rotations with 180 degree turns.
-    // Android 6 (API23) Does not understand these transitions.
-    if (QNativeInterface::QAndroidApplication::sdkVersion() > __ANDROID_API_M__) {
-        QTest::newRow("Landscape3") << 0 << Qt::LandscapeOrientation << landscapeSize;
-        QTest::newRow("InvertedLandscape4")
-                << 8 << Qt::InvertedLandscapeOrientation << landscapeSize;
-        QTest::newRow("Portrait3") << 1 << Qt::PortraitOrientation << portraitSize;
-    } else {
-        qWarning() << "180 degree turn rotation test cases are not run on Android 6 (API 23) and "
-                      "below.";
-    }
-    // Android 8 (API 27) does not understand portrait-'inverted portrait'-portrait transition.
-    if (QNativeInterface::QAndroidApplication::sdkVersion() > __ANDROID_API_O_MR1__) {
-        QTest::newRow("InvertedPortrait3") << 9 << Qt::InvertedPortraitOrientation << portraitSize;
-        QTest::newRow("Portrait4") << 1 << Qt::PortraitOrientation << portraitSize;
-    } else {
-        qWarning() << "Portrait-'Inverted portrait'-Portrait rotation test cases are not run on "
-                      "Android 8 (API 27) and below.";
-    }
-}
-
 void tst_Android::orientationChange()
 {
-    QFETCH(int, nativeOrientation);
-    QFETCH(Qt::ScreenOrientation, expected);
-    QFETCH(QSize, screenSize);
-
     if (QNativeInterface::QAndroidApplication::sdkVersion() == __ANDROID_API_P__)
         QSKIP("Android 9 orientation changes callbacks are buggy (QTBUG-124890).");
 
-    // For QTBUG-94459 to check that the widget size are consistent after orientation changes
     QWidget widget;
     widget.show();
 
     QScreen *screen = QGuiApplication::primaryScreen();
-    QSignalSpy orientationSpy(screen, SIGNAL(orientationChanged(Qt::ScreenOrientation)));
+    QSignalSpy orientationSpy(screen, &QScreen::orientationChanged);
 
     auto context = QNativeInterface::QAndroidApplication::context();
-    context.callMethod<void>("setRequestedOrientation", nativeOrientation);
 
-    orientationSpy.wait();
-    QTRY_COMPARE(screen->orientation(), expected);
-    QCOMPARE(orientationSpy.size(), 1);
-    QCOMPARE(screen->size(), screenSize);
-    QCOMPARE(widget.size(), screen->availableSize());
+    enum NativeOrientation {
+        Landscape = 0,
+        Portrait = 1,
+        InvertedLandscape = 8,
+        InvertedPortrait = 9
+    };
+
+    auto nativeOrientation = [](Qt::ScreenOrientation orientation) {
+        switch (orientation) {
+        case(Qt::LandscapeOrientation):
+            return Landscape;
+        case(Qt::PortraitOrientation):
+            return Portrait;
+        case(Qt::InvertedLandscapeOrientation):
+            return InvertedLandscape;
+        case(Qt::InvertedPortraitOrientation):
+            return InvertedPortrait;
+        default:
+            return Portrait;
+        }
+    };
+
+    auto requestOrientation = [nativeOrientation, context](Qt::ScreenOrientation expected) {
+        context.callMethod<void>("setRequestedOrientation", nativeOrientation(expected));
+    };
+
+    auto restoreOrientation = qScopeGuard([&] {
+        requestOrientation(Qt::PortraitOrientation);
+        orientationSpy.wait();
+        QTRY_COMPARE(screen->orientation(), Qt::PortraitOrientation);
+    });
+
+    auto testOrientation = [&](Qt::ScreenOrientation expected, const QSize &screenSize) {
+        requestOrientation(expected);
+        orientationSpy.wait();
+        QTRY_COMPARE(screen->orientation(), expected);
+        QCOMPARE(orientationSpy.size(), 1);
+        // For QTBUG-94459 to verify widget size consistency after orientation changes.
+        // In general we can't guarantee the order though, since Android might send the
+        // orientation and size change at any order, so we need to use QTRY_COMPARE().
+        QTRY_COMPARE(screen->size(), screenSize);
+        QTRY_COMPARE(widget.size(), screen->availableSize());
+        orientationSpy.clear();
+    };
+
+    const QSize portraitSize = screen->size();
+    const QSize landscapeSize = QSize(portraitSize.height(), portraitSize.width());
+
+    // Sequential 90 degrees clock-wise rotations
+    testOrientation(Qt::InvertedLandscapeOrientation, landscapeSize);
+    testOrientation(Qt::InvertedPortraitOrientation, portraitSize);
+    testOrientation(Qt::LandscapeOrientation, landscapeSize);
+    testOrientation(Qt::PortraitOrientation, portraitSize);
+
+    // Sequential 90 degrees counter-clockwise rotations
+    testOrientation(Qt::LandscapeOrientation, landscapeSize);
+    testOrientation(Qt::InvertedPortraitOrientation, portraitSize);
+    testOrientation(Qt::InvertedLandscapeOrientation, landscapeSize);
+
+    // 180 degree rotations
+    testOrientation(Qt::InvertedPortraitOrientation, portraitSize);
+    testOrientation(Qt::PortraitOrientation, portraitSize);
+    testOrientation(Qt::InvertedLandscapeOrientation, landscapeSize);
+    testOrientation(Qt::LandscapeOrientation, landscapeSize);
 }
+#endif // QT_CONFIG(widgets)
 
 QTEST_MAIN(tst_Android)
 #include "tst_android.moc"

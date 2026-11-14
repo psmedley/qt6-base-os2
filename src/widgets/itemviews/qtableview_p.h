@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QTABLEVIEW_P_H
 #define QTABLEVIEW_P_H
@@ -138,6 +139,8 @@ public:
     inline int logicalColumn(int visualCol) const {
         return horizontalHeader->logicalIndex(visualCol);
     }
+
+    QStyleOptionViewItem::ViewItemPosition viewItemPosition(const QModelIndex &index) const;
 
     inline int accessibleTable2Index(const QModelIndex &index) const {
         const int vHeader = verticalHeader ? 1 : 0;

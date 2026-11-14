@@ -1,6 +1,7 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // Copyright (C) 2021 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #ifndef QT_BOOTSTRAPPED
 #include <qcoreapplication.h>
@@ -194,12 +195,11 @@ private:
     QExplicitlySharedDataPointer<QCborContainerPrivate> *current;
 };
 
-Parser::Parser(const char *json, int length)
-    : head(json), json(json)
+Parser::Parser(QUtf8StringView json)
+    : head(json.data()), json(head), end(json.end())
     , nestingLevel(0)
     , lastError(QJsonParseError::NoError)
 {
-    end = json + length;
 }
 
 
@@ -840,13 +840,13 @@ static inline bool scanEscapeSequence(const char *&json, const char *end, char32
 
 static inline bool scanUtf8Char(const char *&json, const char *end, char32_t *result)
 {
-    const auto *usrc = reinterpret_cast<const uchar *>(json);
-    const auto *uend = reinterpret_cast<const uchar *>(end);
-    const uchar b = *usrc++;
-    qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, result, usrc, uend);
-    if (res < 0)
+    auto usrc = reinterpret_cast<const qchar8_t*>(json);
+    const auto uend = reinterpret_cast<const qchar8_t*>(end);
+    constexpr char32_t Invalid = ~U'\0';
+    const char32_t ch = QUtf8Functions::nextUcs4FromUtf8(usrc, uend, Invalid);
+    if (ch == Invalid)
         return false;
-
+    *result = ch;
     json = reinterpret_cast<const char *>(usrc);
     return true;
 }

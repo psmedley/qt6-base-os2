@@ -64,7 +64,7 @@ macro(_qt_internal_find_third_party_dependencies target target_dep_list)
 
                 _qt_internal_sbom_record_system_library_usage(
                     "${__qt_${target}_provided_target}"
-                    TYPE SYSTEM_LIBRARY
+                    SBOM_ENTITY_TYPE SYSTEM_LIBRARY
                     FRIENDLY_PACKAGE_NAME "${__qt_${target}_pkg}"
                     ${__qt_${target}_sbom_args}
                 )
@@ -239,9 +239,9 @@ function(_qt_internal_determine_if_host_info_package_needed out_var)
     set(${out_var} "${needed}" PARENT_SCOPE)
 endfunction()
 
-macro(_qt_internal_find_host_info_package platform_requires_host_info)
+macro(_qt_internal_find_host_info_package platform_requires_host_info install_namespace)
     if(${platform_requires_host_info})
-        find_package(Qt6HostInfo
+        find_package(${install_namespace}HostInfo
                      CONFIG
                      REQUIRED
                      PATHS "${QT_HOST_PATH}"

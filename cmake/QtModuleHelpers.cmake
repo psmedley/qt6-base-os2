@@ -319,7 +319,8 @@ endif()
     endif()
 
     qt_internal_add_target_aliases("${target}")
-    qt_skip_warnings_are_errors_when_repo_unclean("${target}")
+
+    qt_internal_default_warnings_are_errors("${target}")
 
     # No need to compile Q_IMPORT_PLUGIN-containing files for non-executables.
     if(is_static_lib)
@@ -952,9 +953,9 @@ set(QT_ALLOW_MISSING_TOOLS_PACKAGES TRUE)")
 
         # 3rd party header modules should not be treated as Qt modules.
         if(arg_IS_QT_3RD_PARTY_HEADER_MODULE)
-            list(APPEND sbom_args TYPE QT_THIRD_PARTY_MODULE)
+            list(APPEND sbom_args DEFAULT_SBOM_ENTITY_TYPE QT_THIRD_PARTY_MODULE)
         else()
-            list(APPEND sbom_args TYPE QT_MODULE)
+            list(APPEND sbom_args DEFAULT_SBOM_ENTITY_TYPE QT_MODULE)
         endif()
 
         qt_get_cmake_configurations(configs)
@@ -1033,8 +1034,11 @@ function(qt_finalize_module target)
     # property which supposed to be updated inside every qt_internal_install_module_headers
     # call.
     qt_internal_add_headersclean_target(${target} "${module_headers_public}")
-    qt_internal_target_sync_headers(${target} "${module_headers_all}"
-        "${module_headers_generated}")
+    qt_internal_target_sync_headers(${target}
+        "${module_headers_all}"
+        "${module_headers_generated}"
+        "${module_headers_exclude_from_docs}"
+    )
     get_target_property(module_depends_header ${target} _qt_module_depends_header)
     qt_internal_install_module_headers(${target}
         PUBLIC ${module_headers_public} "${module_depends_header}"
@@ -1284,6 +1288,7 @@ function(qt_describe_module target)
         string(APPEND extra_build_information "
         \"android\": {
             \"api_version\": \"${QT_ANDROID_API_VERSION}\",
+            \"android_platform\": \"${ANDROID_PLATFORM}\",
             \"ndk\": {
                 \"version\": \"${ANDROID_NDK_REVISION}\"
             }
@@ -1378,6 +1383,7 @@ endfunction()
 function(qt_internal_collect_module_headers out_var target)
     set(${out_var}_public "")
     set(${out_var}_private "")
+    set(${out_var}_exclude_from_docs "")
     set(${out_var}_qpa "")
     set(${out_var}_rhi "")
     set(${out_var}_ssg "")
@@ -1452,6 +1458,12 @@ function(qt_internal_collect_module_headers out_var target)
             set(is_3rdparty_header FALSE)
         endif()
         list(APPEND ${out_var}_all "${file_path}")
+
+        get_source_file_property(exclude_from_docs "${file_path}" _qt_syncqt_exclude_from_docs)
+        if(exclude_from_docs)
+            list(APPEND ${out_var}_exclude_from_docs "${file_path}")
+        endif()
+
         if(qpa_filter AND file_name MATCHES "${qpa_filter}")
             list(APPEND ${out_var}_qpa "${file_path}")
         elseif(rhi_filter AND file_name MATCHES "${rhi_filter}")
@@ -1494,6 +1506,7 @@ function(qt_internal_collect_module_headers out_var target)
     endforeach()
     set(${out_var}_all "${${out_var}_all}" PARENT_SCOPE)
     set(${out_var}_generated "${${out_var}_generated}" PARENT_SCOPE)
+    set(${out_var}_exclude_from_docs "${${out_var}_exclude_from_docs}" PARENT_SCOPE)
 
     if(has_header_types_properties)
         set_target_properties(${target} PROPERTIES ${has_header_types_properties})

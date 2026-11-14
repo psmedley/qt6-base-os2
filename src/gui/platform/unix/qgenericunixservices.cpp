@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:execute-external-code
 
 #include "qgenericunixservices_p.h"
 #include <QtGui/private/qtguiglobal_p.h>
@@ -397,7 +398,7 @@ QGenericUnixServices::QGenericUnixServices()
 
     QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(message);
     auto watcher = new QDBusPendingCallWatcher(pendingCall);
-    m_watcherConnection =
+    m_watcher = watcher;
             QObject::connect(watcher, &QDBusPendingCallWatcher::finished, watcher,
                      [this](QDBusPendingCallWatcher *watcher) {
                          watcher->deleteLater();
@@ -412,7 +413,7 @@ QGenericUnixServices::QGenericUnixServices()
 QGenericUnixServices::~QGenericUnixServices()
 {
 #if QT_CONFIG(dbus)
-    QObject::disconnect(m_watcherConnection);
+    delete m_watcher;
 #endif
 }
 
