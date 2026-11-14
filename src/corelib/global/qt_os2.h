@@ -42,6 +42,11 @@
 #ifndef QT_OS2_H
 #define QT_OS2_H
 
+#if 0
+#pragma qt_sync_skip_header_check
+#pragma qt_sync_stop_processing
+#endif
+
 #ifdef __EMX__
 #define OS2EMX_PLAIN_CHAR
 #endif
