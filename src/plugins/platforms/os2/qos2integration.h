@@ -76,6 +76,8 @@ public:
 
     QPlatformServices *services() const override;
 
+    QPlatformNativeInterface *nativeInterface() const override;
+
     void beep() const override;
 
     // OS/2 specifics
@@ -96,6 +98,11 @@ private:
 #endif
 
     QOS2Services  *mplatformServices = nullptr;
+
+    // Qt code calls QGuiApplication::platformNativeInterface() without a null check (e.g.
+    // QFontconfigDatabase::setupFontEngine), so we must provide one even though OS/2 doesn't
+    // expose any native resources (the base class returns nullptr for all of them).
+    QPlatformNativeInterface *mNativeInterface = nullptr;
 
     static QOS2Integration * sInstance;
 };

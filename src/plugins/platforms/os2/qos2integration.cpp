@@ -50,6 +50,7 @@
 #include "qos2clipboard.h"
 #endif
 
+#include <qpa/qplatformnativeinterface.h>
 #include <qpa/qwindowsysteminterface.h>
 
 #include <QtGui/private/qos2guieventdispatcher_p.h>
@@ -92,6 +93,8 @@ QOS2Integration::QOS2Integration(const QStringList &paramList)
     mKeyMapper = new QOS2KeyMapper();
 
     mplatformServices = new QOS2Services();
+
+    mNativeInterface = new QPlatformNativeInterface();
 }
 
 QOS2Integration::~QOS2Integration()
@@ -103,6 +106,7 @@ QOS2Integration::~QOS2Integration()
 #endif
 
     delete mplatformServices;
+    delete mNativeInterface;
     QWindowSystemInterface::handleScreenRemoved(mScreen);
     delete mFontDatabase;
 
@@ -191,6 +195,11 @@ Qt::KeyboardModifiers QOS2Integration::queryKeyboardModifiers() const
 QList<int> QOS2Integration::possibleKeys(const QKeyEvent *e) const
 {
     return mKeyMapper->possibleKeys(e);
+}
+
+QPlatformNativeInterface *QOS2Integration::nativeInterface() const
+{
+    return mNativeInterface;
 }
 
 QPlatformServices *QOS2Integration::services() const
