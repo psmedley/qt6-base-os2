@@ -102,8 +102,15 @@ QThreadData *QThreadData::current(bool createIfNecessary)
         threadData->isAdopted = true;
         threadData->threadId.storeRelaxed(reinterpret_cast<Qt::HANDLE>(_gettid()));
 
-        if (!QCoreApplicationPrivate::theMainThread) {
-            QCoreApplicationPrivate::theMainThread = threadData->thread.loadRelaxed();
+        // Note: Qt 6.8 identifies the main thread by theMainThreadId (see QThread::isMainThread()
+        // and ~QThreadData()), so it must be set together with theMainThread, like on other
+        // platforms. Otherwise no thread is considered the main one and destroying any QThread
+        // that never ran (its threadId is null as well) resets theMainThread.
+        if (!QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
+            auto *mainThread = threadData->thread.loadRelaxed();
+            mainThread->setObjectName("Qt mainThread");
+            QCoreApplicationPrivate::theMainThread.storeRelease(mainThread);
+            QCoreApplicationPrivate::theMainThreadId.storeRelaxed(threadData->threadId.loadRelaxed());
         } else {
             qt_watch_adopted_thread(_gettid(), threadData->thread);
         }
