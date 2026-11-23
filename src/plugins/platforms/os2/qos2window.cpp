@@ -303,6 +303,7 @@ QOS2Window::QOS2Window(QWindow *window)
 
     if (type == Qt::Desktop) {
         mHwnd = WinQueryDesktopWindow(NULLHANDLE, NULLHANDLE);
+        setFlag(IsDesktop);
         return;
     }
 
@@ -330,13 +331,13 @@ QOS2Window::QOS2Window(QWindow *window)
         className = "Qt6.QPopup";
         static bool IsClassNameRegistered = false;
         if (Q_UNLIKELY(!IsClassNameRegistered))
-            WinRegisterClass(NULLHANDLE, className, QtWindowProc, CS_SAVEBITS, WinDataSize);
+            IsClassNameRegistered = WinRegisterClass(NULLHANDLE, className, QtWindowProc, CS_SAVEBITS, WinDataSize);
 
     } else {
         className = "Qt6.QWindow";
         static bool IsClassNameRegistered = false;
         if (Q_UNLIKELY(!IsClassNameRegistered))
-            WinRegisterClass(NULLHANDLE, className, QtWindowProc, 0, WinDataSize);
+            IsClassNameRegistered = WinRegisterClass(NULLHANDLE, className, QtWindowProc, 0, WinDataSize);
     }
 
     HWND hwndOwner = os2parent ? os2parent->mainHwnd() : NULLHANDLE;
@@ -551,6 +552,10 @@ QOS2Window::~QOS2Window()
 {
     qCInfo(lcQpaWindows) << this;
 
+    // The desktop window is not ours, don't touch it.
+    if (testFlag(IsDesktop))
+        return;
+
     if (hasMouseCapture())
         setMouseGrabEnabled(false);
 
@@ -564,9 +569,22 @@ QOS2Window::~QOS2Window()
     // Deassociate mHwnd window from the instnace (we don't need any messages after this point).
     WinSetWindowPtr(mHwnd, WinData_QOS2Window, nullptr);
 
-    // Only destroy top-level windows; children will be implicitly destroyed by their parents.
+    // Remove the window list entry we added in #setVisible (PM doesn't do that automatically).
+    if (mSwEntry != NULLHANDLE) {
+        WinRemoveSwitchEntry(mSwEntry);
+        mSwEntry = NULLHANDLE;
+    }
+
+    // Destroy the native window. For top-level windows, destroying the frame also destroys the
+    // client (and all its children). Child windows must be destroyed explicitly as well: Qt may
+    // destroy a child platform window while its parent stays alive (QWindow::destroy, reparenting,
+    // deleting a native child widget) and the PM window would otherwise stay on screen. Note that
+    // when a parent is destroyed, Qt destroys the platform windows of its children first, so we
+    // never destroy an HWND that PM has already destroyed implicitly.
     if (mHwndFrame != NULLHANDLE)
         WinDestroyWindow(mHwndFrame);
+    else if (mHwnd != NULLHANDLE)
+        WinDestroyWindow(mHwnd);
 }
 
 void QOS2Window::initialize()
@@ -826,10 +844,10 @@ void QOS2Window::setWindowState(Qt::WindowStates state)
         SWP swp;
         WinQueryWindowPos(mHwndFrame, &swp);
         if (swp.fl & (SWP_MINIMIZE | SWP_MAXIMIZE)) {
-            normX = WinQueryWindowUShort(mHwndFrame, QWS_XRESTORE);
-            normY = WinQueryWindowUShort(mHwndFrame, QWS_YRESTORE);
-            normCX = WinQueryWindowUShort(mHwndFrame, QWS_CXRESTORE);
-            normCY = WinQueryWindowUShort(mHwndFrame, QWS_CYRESTORE);
+            normX = (SHORT)WinQueryWindowUShort(mHwndFrame, QWS_XRESTORE);
+            normY = (SHORT)WinQueryWindowUShort(mHwndFrame, QWS_YRESTORE);
+            normCX = (SHORT)WinQueryWindowUShort(mHwndFrame, QWS_CXRESTORE);
+            normCY = (SHORT)WinQueryWindowUShort(mHwndFrame, QWS_CYRESTORE);
         } else {
             normX = swp.x;
             normY = swp.y;
@@ -854,10 +872,10 @@ void QOS2Window::setWindowState(Qt::WindowStates state)
             if (!leaveFS && fl & (SWP_MAXIMIZE | SWP_MINIMIZE) ) {
                 // Remember the normal geometry when going to min/max (will be used e.g. when
                 // moving/sizing a minimized window).
-                normX = WinQueryWindowUShort(mHwndFrame, QWS_XRESTORE);
-                normY = WinQueryWindowUShort(mHwndFrame, QWS_YRESTORE);
-                normCX = WinQueryWindowUShort(mHwndFrame, QWS_CXRESTORE);
-                normCY = WinQueryWindowUShort(mHwndFrame, QWS_CYRESTORE);
+                normX = (SHORT)WinQueryWindowUShort(mHwndFrame, QWS_XRESTORE);
+                normY = (SHORT)WinQueryWindowUShort(mHwndFrame, QWS_YRESTORE);
+                normCX = (SHORT)WinQueryWindowUShort(mHwndFrame, QWS_CXRESTORE);
+                normCY = (SHORT)WinQueryWindowUShort(mHwndFrame, QWS_CYRESTORE);
             }
             WinSetWindowPos(mHwndFrame, 0, 0, 0, 0, 0, fl);
             if (leaveFS && fl & (SWP_MAXIMIZE | SWP_MINIMIZE) ) {
@@ -1082,8 +1100,12 @@ void QOS2Window::handleWmAdjustWindowPos(MPARAM mp1)
         // Forward activation requests for blocked windows to the current modal window forbid
         // placing them above it in Z-order.
         QWindow *modal = QGuiApplication::modalWindow();
-        QOS2Window *os2modal = static_cast<QOS2Window *>(modal->handle());
+        QOS2Window *os2modal = modal ? static_cast<QOS2Window *>(modal->handle()) : nullptr;
         qCDebug(lcQpaEvents) << DV(modal) << DV(os2modal);
+        // The modal window may be already gone (or not yet created) while we are still flagged
+        // as blocked (WindowUnblocked is delivered asynchronously), nothing to forward to then.
+        if (!os2modal)
+            return;
         if (pswp->fl & SWP_ACTIVATE) {
             pswp->fl &= ~SWP_ACTIVATE;
             WinSetActiveWindow(HWND_DESKTOP, os2modal->mainHwnd());
@@ -1459,8 +1481,9 @@ void QOS2Window::handleWheel(ULONG msg, MPARAM mp1, MPARAM mp2)
     if (extraKeyState & Qt::MetaModifier)
         modifiers |= Qt::MetaModifier;
 
-    // Alt inverts scroll orientation (Qt/Win32 behavior)
-    const QPoint point = (msg == WM_VSCROLL || modifiers & Qt::AltModifier) ? QPoint(0, delta) : QPoint(delta, 0);
+    // Alt turns vertical scrolling into horizontal (Qt/Win32 behavior)
+    const bool vertical = msg == WM_VSCROLL && !(modifiers & Qt::AltModifier);
+    const QPoint point = vertical ? QPoint(0, delta) : QPoint(delta, 0);
 
     qCDebug(lcQpaEvents) << this << Qt::hex << DV (msg) << DV (mp2) << Qt::dec << DV (ptl.x) << DV (ptl.y)
                          << DV (globalPos) << DV (localPos) << DV (point) << DV (modifiers);

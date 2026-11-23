@@ -63,6 +63,9 @@ static void qt_create_tls()
         return;
     static QBasicMutex mutex;
     QMutexLocker locker(&mutex);
+    // Re-check under the lock: another thread may have allocated it meanwhile.
+    if (qt_tls != NULL)
+        return;
     APIRET arc = DosAllocThreadLocalMemory((sizeof(QThreadData *) + 3)/4,
                                            (PULONG *)&qt_tls);
     if (arc != NO_ERROR)
@@ -321,7 +324,8 @@ void QThread::yieldCurrentThread()
 void QThread::sleep(std::chrono::nanoseconds nsecs)
 {
     using namespace std::chrono;
-    DosSleep((unsigned long)(duration_cast<milliseconds>(nsecs).count()));
+    // Round up: DosSleep has millisecond granularity (0 merely yields).
+    DosSleep(ULONG(ceil<milliseconds>(nsecs).count()));
 }
 
 void QThread::sleep(unsigned long secs)
@@ -336,61 +340,127 @@ void QThread::msleep(unsigned long msecs)
 
 void QThread::usleep(unsigned long usecs)
 {
-    DosSleep((usecs / 1000) + 1);
+    sleep(std::chrono::microseconds(usecs));
+}
+
+// Returns the current priority of the given thread of this process in the
+// tib2_ulpri format (class in bits 8-15, level 0-31 in bits 0-7) or false if
+// the thread doesn't exist (anymore) or the query fails.
+static bool qt_query_thread_priority(TID tid, ULONG *priority)
+{
+    PTIB ptib;
+    PPIB ppib;
+    DosGetInfoBlocks(&ptib, &ppib);
+
+    // Fast path for the current thread.
+    if (ptib->tib_ptib2->tib2_ultid == tid) {
+        *priority = ptib->tib_ptib2->tib2_ulpri;
+        return true;
+    }
+
+    // QS_PROCESS returns the process record followed by its thread records.
+    enum { SysStateSize = 64 * 1024 };
+    QByteArray buf(SysStateSize, Qt::Uninitialized);
+    APIRET arc = DosQuerySysState(QS_PROCESS, 0, ppib->pib_ulpid, 0, buf.data(), SysStateSize);
+    if (arc != NO_ERROR) {
+        qWarning("qt_query_thread_priority: DosQuerySysState returned %lu", arc);
+        return false;
+    }
+
+    const QSPTRREC *pPtrRec = reinterpret_cast<const QSPTRREC *>(buf.constData());
+    const QSPREC *pProcRec = pPtrRec->pProcRec;
+    if (!pProcRec || pProcRec->RecType != QS_PROCESS || !pProcRec->pThrdRec)
+        return false;
+
+    for (USHORT i = 0; i < pProcRec->cTCB; ++i) {
+        const QSTREC &rec = pProcRec->pThrdRec[i];
+        if (rec.tid == tid) {
+            *priority = rec.priority;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // NOTE: Caller must hold the mutex.
-void QThreadPrivate::setPriority(QThread::Priority priority)
+void QThreadPrivate::setPriority(QThread::Priority threadPriority)
 {
-    this->priority = priority;
+    priority = threadPriority;
 
+    // Target priority class and absolute level (0-31) within this class. Note that the
+    // IdleTime class has three Qt priorities so they use distinct levels to stay ordered.
     ULONG prioClass = 0;
-    LONG prioDelta = 0;
-    switch (priority) {
-        case QThread::IdlePriority:
-            prioClass = PRTYC_IDLETIME;
-            prioDelta = PRTYD_MINIMUM;
-            break;
-
-        case QThread::LowestPriority:
-            prioClass = PRTYC_IDLETIME;
-            break;
-
-        case QThread::LowPriority:
-            prioClass = PRTYC_IDLETIME;
-            prioDelta = PRTYD_MAXIMUM;
-            break;
-
-        case QThread::NormalPriority:
-        	prioClass = PRTYC_REGULAR;
-        	break;
-
-        case QThread::HighPriority:
-            prioClass = PRTYC_REGULAR;
-            prioDelta = PRTYD_MAXIMUM;
-            break;
-
-        case QThread::HighestPriority:
-        	prioClass = PRTYC_TIMECRITICAL;
-        	break;
-
-        case QThread::TimeCriticalPriority:
-            prioClass = PRTYC_TIMECRITICAL;
-            prioDelta = PRTYD_MAXIMUM;
-            break;
-
-        case QThread::InheritPriority:
-        default:
-            PTIB ptib;
-            DosGetInfoBlocks(&ptib, NULL);
-            prioClass = (ptib->tib_ptib2->tib2_ulpri >> 8) & 0xFF;
-            prioDelta = (ptib->tib_ptib2->tib2_ulpri) & 0xFF;
-            break;
+    LONG prioLevel = 0;
+    switch (threadPriority) {
+    case QThread::IdlePriority:
+        prioClass = PRTYC_IDLETIME;
+        prioLevel = 0;
+        break;
+    case QThread::LowestPriority:
+        prioClass = PRTYC_IDLETIME;
+        prioLevel = PRTYD_MAXIMUM / 2;
+        break;
+    case QThread::LowPriority:
+        prioClass = PRTYC_IDLETIME;
+        prioLevel = PRTYD_MAXIMUM;
+        break;
+    case QThread::NormalPriority:
+        prioClass = PRTYC_REGULAR;
+        prioLevel = 0;
+        break;
+    case QThread::HighPriority:
+        prioClass = PRTYC_REGULAR;
+        prioLevel = PRTYD_MAXIMUM;
+        break;
+    case QThread::HighestPriority:
+        prioClass = PRTYC_TIMECRITICAL;
+        prioLevel = 0;
+        break;
+    case QThread::TimeCriticalPriority:
+        prioClass = PRTYC_TIMECRITICAL;
+        prioLevel = PRTYD_MAXIMUM;
+        break;
+    case QThread::InheritPriority:
+    default:
+        // Threads created with _beginthread already inherit the priority of the creator.
+        return;
     }
 
-    APIRET rc = DosSetPriority(PRTYS_THREAD, prioClass, prioDelta, tid);
-    if (rc != NO_ERROR)
-        qWarning("QThreadPrivate::setPriority: DosSetPriority returned %lu", rc);
+    // NOTE: The delta argument of DosSetPriority is relative to the current level of the
+    // thread, so passing the target level directly only works if the thread is at level 0
+    // (e.g. switching from Low to Lowest would otherwise be a no-op). Query the current
+    // level and compute the delta. Since it's not obvious whether changing the class resets
+    // the level, do the class change first and query the level again afterwards.
+
+    APIRET rc;
+    ULONG cur = 0;
+    if (!qt_query_thread_priority(tid, &cur)) {
+        // Can't query (e.g. the thread has already ended), use the old approach which is
+        // correct at least for threads that are at level 0.
+        rc = DosSetPriority(PRTYS_THREAD, prioClass, prioLevel, tid);
+        if (rc != NO_ERROR && rc != ERROR_INVALID_THREADID)
+            qWarning("QThreadPrivate::setPriority: DosSetPriority returned %lu", rc);
+        return;
+    }
+
+    if (((cur >> 8) & 0xFF) != prioClass) {
+        rc = DosSetPriority(PRTYS_THREAD, prioClass, 0, tid);
+        if (rc != NO_ERROR) {
+            if (rc != ERROR_INVALID_THREADID)
+                qWarning("QThreadPrivate::setPriority: DosSetPriority returned %lu", rc);
+            return;
+        }
+        if (!qt_query_thread_priority(tid, &cur))
+            return; // the thread is gone
+    }
+
+    const LONG delta = prioLevel - LONG(cur & 0xFF);
+    if (delta != 0) {
+        rc = DosSetPriority(PRTYS_THREAD, PRTYC_NOCHANGE, delta, tid);
+        if (rc != NO_ERROR && rc != ERROR_INVALID_THREADID)
+            qWarning("QThreadPrivate::setPriority: DosSetPriority returned %lu", rc);
+    }
 }
 
 void QThread::start(Priority priority)
@@ -449,69 +519,64 @@ bool QThread::wait(QDeadlineTimer deadline)
     Q_D(QThread);
     QMutexLocker locker(&d->mutex);
 
-    if (d->tid == (TID)QThread::currentThreadId()) {
+    if (d->tid == TID(_gettid())) {
         qWarning("QThread::wait: Thread tried to wait on itself");
         return false;
     }
     if (d->finished || !d->running)
         return true;
+    return d->wait(locker, deadline);
+}
+
+// NOTE: Called with the mutex locked, also by ~QThread while the thread is still in #finish.
+bool QThreadPrivate::wait(QMutexLocker<QMutex> &locker, QDeadlineTimer deadline)
+{
+    Q_ASSERT(locker.isLocked());
+    QThreadPrivate *d = this;
+
+    // Never pass 0 to DosWaitThread as it would wait for *any* thread.
+    TID waitTid = d->tid;
+    if (waitTid == 0)
+        return true;
 
     locker.mutex()->unlock();
 
-    unsigned long time = deadline.remainingTime();
-    bool ret = true;
-    TID tid = d->tid;
     APIRET rc = NO_ERROR;
-    if (time == ULONG_MAX) {
-        qDosNI(rc = DosWaitThread(&tid, DCWW_WAIT));
+    if (deadline.isForever()) {
+        qDosNI(rc = DosWaitThread(&waitTid, DCWW_WAIT));
     } else {
-        ULONG sleep;
-        do {
-            // OS/2 doesn't support specifying a maximum time to wait for a
-            // thread to end other than infininty, so we run a loop of small
-            // wait intervals (in ms)
-            constexpr ULONG THREAD_WAIT_INTERVAL = 1000;
-            sleep = time > THREAD_WAIT_INTERVAL ? THREAD_WAIT_INTERVAL : time;
-            DosSleep(sleep);
-            qDosNI(rc = DosWaitThread(&tid, DCWW_NOWAIT));
+        // OS/2 can't wait for a thread with a timeout, so poll at short intervals. Note that
+        // reading finished without the lock is only an optimization (it's re-checked below).
+        constexpr qint64 PollIntervalMs = 10;
+        forever {
+            qDosNI(rc = DosWaitThread(&waitTid, DCWW_NOWAIT));
             if (rc != ERROR_THREAD_NOT_TERMINATED)
                 break;
-            if (d->finished || !d->running) {
-                rc = 0;
+            if (d->finished) {
+                rc = NO_ERROR;
                 break;
             }
-            time -= sleep;
-        } while (time);
+            const qint64 remaining = deadline.remainingTime();
+            if (remaining <= 0)
+                break;
+            DosSleep(ULONG(qMin(remaining, PollIntervalMs)));
+        }
     }
-    if (rc != NO_ERROR && rc != ERROR_INVALID_THREADID) {
-        if (rc != ERROR_THREAD_NOT_TERMINATED)
-            qWarning("QThread::wait: DosWaitThread returned %lu", rc);
-        ret = false;
-    }
+
+    // ERROR_INVALID_THREADID means the thread is already gone (e.g. reaped by the adopted
+    // thread watcher's DosWaitThread call).
+    bool ret = rc == NO_ERROR || rc == ERROR_INVALID_THREADID;
+    if (!ret && rc != ERROR_THREAD_NOT_TERMINATED)
+        qWarning("QThread::wait: DosWaitThread returned %lu", rc);
 
     locker.mutex()->lock();
 
     if (ret && !d->finished) {
         // thread was terminated by someone else
-        QThreadPrivate::finish(this, false);
+        QThreadPrivate::finish(q_func(), false);
     }
 
     return ret;
-}
-
-bool QThreadPrivate::wait(QMutexLocker<QMutex> &locker, QDeadlineTimer deadline)
-{
-#if 0 // FIXME 6.8
-    Q_ASSERT(locker.isLocked());
-    QThreadPrivate *d = this;
-
-    while (d->running) {
-        if (!d->thread_done.wait(locker.mutex(), deadline))
-            return false;
-    }
-    Q_ASSERT(d->data->threadId.loadRelaxed() == nullptr);
-#endif
-    return true;
 }
 
 void QThread::setTerminationEnabled(bool enabled)

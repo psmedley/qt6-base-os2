@@ -253,7 +253,7 @@ bool QOS2ClipboardData::setClipboard(QOS2Mime *converter, ULONG format,
     if (!src)
         return false;
 
-    bool ok, ok2;
+    bool ok = false, ok2 = false;
     ULONG flags = 0, data = 0;
 
     if (isDelayed) {
@@ -269,7 +269,7 @@ bool QOS2ClipboardData::setClipboard(QOS2Mime *converter, ULONG format,
         if (ok)
             ok2 = WinSetClipbrdData(NULLHANDLE, data, format, flags);
     }
-    qCWarning(lcQpaMime) << "convert to format" << Qt::hex << format
+    qCDebug(lcQpaMime) << "convert to format" << Qt::hex << format
                          << QOS2Mime::formatName(format)
                          << DV(flags) << DV(data) << Qt::dec
                          << DV(isDelayed) << DV(ok);
@@ -282,7 +282,7 @@ bool QOS2ClipboardData::setClipboard(QOS2Mime *converter, ULONG format,
 
 void QOS2ClipboardData::putAllMimeToClipboard(bool isDelayed)
 {
-    qCWarning(lcQpaMime) << DV(isDelayed);
+    qCDebug(lcQpaMime) << DV(isDelayed);
 
     if (!WinOpenClipbrd(NULLHANDLE)) {
         qCWarning(lcQpaMime) << "WinOpenClipbrd failed with" << Qt::hex << WinGetLastError(NULLHANDLE);

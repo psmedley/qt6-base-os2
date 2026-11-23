@@ -662,7 +662,7 @@ static QStringList findAllLibSsl()
 static QStringList findAllLibCrypto()
 {
 #ifdef Q_OS_OS2
-    return findAllLibs(("crypto*.dll"_L1);
+    return findAllLibs("crypto*.dll"_L1);
 #else
     return findAllLibs("libcrypto.*"_L1);
 #endif

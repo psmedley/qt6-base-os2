@@ -146,19 +146,25 @@ public:
     void startThread();
     void stopThread();
 
+    // The select thread is needed for sockets and for non-zero timers (zero timers are fired
+    // directly from processEvents, see #processTimersAndSockets).
+    inline bool needThread() const {
+        return !socketNotifiers.isEmpty() || timerList.size() > timerList.zeroTimerCount();
+    }
+
     inline void maybeStartThread() {
-        if (!socketNotifiers.isEmpty() /*|| timerList.count() > timerList.zeroTimerCount()*/) // FIXME 6.7
+        if (needThread())
             startThread();
     }
 
     inline void maybeStopThread() {
-        if (tid != -1 && socketNotifiers.isEmpty() /* && timerList.count() == timerList.zeroTimerCount()*/) // FIXME 6.7
+        if (tid != -1 && !needThread())
             stopThread();
     }
 
     inline void maybeStopOrStartThread() {
         if (tid != -1) {
-            if (socketNotifiers.isEmpty() /*&& timerList.count() == timerList.zeroTimerCount()*/) // FIXME 6.7
+            if (!needThread())
                 stopThread();
             else
                 startThread();
@@ -389,13 +395,10 @@ void QEventDispatcherOS2Private::prepareForSelect(bool wakeUp)
     // Get the maximum time we can wait.
     timeout = nullptr;
     waitTime = { 0l, 0l };
-    timespec waitTimeTS = { 0l, 0l };
-#if 0  // FIXME 6.7
-    if (timerList.timerWait(waitTimeTS)) {
-        waitTime = timespecToTimeval(waitTimeTS);
+    if (std::optional<QAbstractEventDispatcher::Duration> wait = timerList.timerWait()) {
+        waitTime = timespecToTimeval(durationToTimespec(*wait));
         timeout = &waitTime;
     }
-#endif
     // Inform the select thread we have new data. Note that there may be no new data because all
     // exising sockets are pending and there are no timers. In this case we will leave the select
     // thread Waiting: #maybeStartThread called on any socket/timer change (and also after
@@ -434,7 +437,7 @@ int QEventDispatcherOS2Private::processTimersAndSockets()
 
 void QEventDispatcherOS2Private::startThread()
 {
-    Q_ASSERT(!socketNotifiers.isEmpty()/* || timerList.count() > timerList.zeroTimerCount()*/); // FIXME 6.7
+    Q_ASSERT(needThread());
 
     QMutexLocker locker(&mutex);
 
@@ -604,7 +607,7 @@ void QEventDispatcherOS2Private::threadMain(void *arg)
             }
         } else if (timeout) {
             // No sockets, simply wait for the next timer.
-            unsigned long msecs = timeout->tv_sec * 1000ul + timeout->tv_usec / 1000ul;
+            unsigned long msecs = timeout->tv_sec * 1000ul + (timeout->tv_usec + 999ul) / 1000ul; // round up to avoid spinning before expiry
             d->cond.wait(locker.mutex(), msecs);
         }
 
@@ -711,12 +714,15 @@ bool QEventDispatcherOS2::processEvents(QEventLoop::ProcessEventsFlags flags)
                 // Process queued user input events.
                 haveMessage = true;
                 msg = d->queuedUserInputEvents.takeFirst();
-            } else if(!(flags & QEventLoop::ExcludeSocketNotifiers) && d->queuedSockets) {
-                // Process queued socket events.
-                haveMessage = true;
-                memset(&msg, 0, sizeof(msg));
-                msg.msg = WM_QT_TIMER_OR_SOCKET;
+            } else if (!(flags & QEventLoop::ExcludeSocketNotifiers) && d->queuedSockets) {
+                // Deliver socket events left pending by an event loop that excluded socket
+                // notifiers (see WM_QT_TIMER_OR_SOCKET handling below) and let the select thread
+                // pick up these sockets again (pending ones are excluded from select).
                 d->queuedSockets = false;
+                d->processTimersAndSockets();
+                d->maybeStartThread();
+                retVal = true;
+                break;
             } else {
                 if (haveWaitMsg) {
                     haveMessage = true;
@@ -738,12 +744,13 @@ bool QEventDispatcherOS2::processEvents(QEventLoop::ProcessEventsFlags flags)
                         // Queue user input events for later processing.
                         d->queuedUserInputEvents.append(msg);
                         continue;
-                    } else if ((flags & QEventLoop::ExcludeSocketNotifiers) &&
-                        (msg.msg == WM_QT_TIMER_OR_SOCKET)) {
-                        // Queue socket events for later processing.
-                        d->queuedSockets = true;
-                        continue;
                     }
+                    // Note: WM_QT_TIMER_OR_SOCKET is never held back here, even with
+                    // ExcludeSocketNotifiers. It also drives timers and must be dispatched to the
+                    // aux window to fetch select results and let the select thread go on (otherwise
+                    // timers would stop firing and the stashed results would be lost when the
+                    // thread is restarted). processTimersAndSockets honors ExcludeSocketNotifiers by
+                    // leaving socket events pending; they are delivered later via queuedSockets.
                 }
             }
             if (haveMessage) {
@@ -768,6 +775,8 @@ bool QEventDispatcherOS2::processEvents(QEventLoop::ProcessEventsFlags flags)
                     // Qt (and tst_QTimer::timerFiresOnlyOncePerProcessEvents) requires that timers
                     // are run only once per processEvents invocation.
                     if (msg.msg == WM_QT_TIMER_OR_SOCKET) {
+                        if ((flags & QEventLoop::ExcludeSocketNotifiers) && !d->pendingNotifiers.isEmpty())
+                            d->queuedSockets = true;
                         retVal = true;
                         break;
                     }
